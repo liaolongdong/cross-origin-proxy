@@ -1,0 +1,18 @@
+{
+  "extensionName": "Cross-Origin Proxy",
+  "confirm": "OK",
+  "cancel": "Cancel",
+  "save": "Save",
+  "edit": "Edit",
+  "delete": "Delete",
+  "operationFailed": "Operation failed",
+  "justNow": "just now",
+  "minutesAgo": "$1 min ago",
+  "hoursAgo": "$1 hr ago",
+  "daysAgo": "$1 d ago",
+  "matchTypeWildcard": "Wildcard",
+  "matchTypePrefix": "Prefix",
+  "matchTypeRegex": "Regex",
+  "statusEnabled": "Enabled",
+  "statusDisabled": "Disabled"
+}

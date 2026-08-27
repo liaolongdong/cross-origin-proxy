@@ -1,0 +1,14 @@
+{
+  "popupTitle": "Cross-Origin Proxy",
+  "proxySwitch": "Proxy Switch",
+  "activeRules": "Active Rules",
+  "todayRequests": "Today's Requests",
+  "recentRequests": "Recent Requests",
+  "noRecentRequests": "No requests yet",
+  "actionOpenConfig": "Manage Rules",
+  "actionOpenConfigDesc": "Add and manage proxy rules",
+  "actionViewLogs": "Request Logs",
+  "actionViewLogsDesc": "View recent proxied requests",
+  "actionImportExport": "Import / Export",
+  "actionImportExportDesc": "Back up or restore rule config"
+}

@@ -1,0 +1,14 @@
+{
+  "popupTitle": "跨域代理助手",
+  "proxySwitch": "代理开关",
+  "activeRules": "活跃规则",
+  "todayRequests": "今日请求",
+  "recentRequests": "最近请求",
+  "noRecentRequests": "暂无请求记录",
+  "actionOpenConfig": "规则管理",
+  "actionOpenConfigDesc": "添加与管理代理规则",
+  "actionViewLogs": "请求日志",
+  "actionViewLogsDesc": "查看最近的代理请求",
+  "actionImportExport": "导入导出",
+  "actionImportExportDesc": "备份或恢复规则配置"
+}

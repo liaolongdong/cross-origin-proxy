@@ -1,0 +1,18 @@
+{
+  "extensionName": "跨域代理助手",
+  "confirm": "确定",
+  "cancel": "取消",
+  "save": "保存",
+  "edit": "编辑",
+  "delete": "删除",
+  "operationFailed": "操作失败",
+  "justNow": "刚刚",
+  "minutesAgo": "$1分钟前",
+  "hoursAgo": "$1小时前",
+  "daysAgo": "$1天前",
+  "matchTypeWildcard": "通配符",
+  "matchTypePrefix": "前缀",
+  "matchTypeRegex": "正则",
+  "statusEnabled": "已启用",
+  "statusDisabled": "已关闭"
+}

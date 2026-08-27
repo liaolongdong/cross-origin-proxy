@@ -1,0 +1,49 @@
+{
+  "name": "web-cross-origin",
+  "author": "Better",
+  "version": "1.0.0",
+  "description": "跨环境API请求代理，支持FAT/UAT/PROD等环境间请求转发",
+  "keywords": ["cross-origin", "proxy", "chrome-extension", "跨域代理", "请求转发"],
+  "packageManager": "pnpm@10.12.1",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp"]
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:zip": "wxt zip",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "lint:style": "stylelint \"**/*.{css,vue}\"",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "element-plus": "^2.13.7",
+    "vue": "^3.5.33"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/chrome": "^0.1.40",
+    "@vue/eslint-config-typescript": "^14.7.0",
+    "@wxt-dev/module-vue": "^1.0.1",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.9.0",
+    "postcss-html": "^1.8.1",
+    "prettier": "^3.8.3",
+    "sharp": "^0.35.3",
+    "stylelint": "^17.14.1",
+    "stylelint-config-recess-order": "^7.7.0",
+    "stylelint-config-standard": "^40.0.0",
+    "typescript": "^6.0.3",
+    "unplugin-auto-import": "^21.0.0",
+    "unplugin-vue-components": "^32.0.0",
+    "vitest": "^4.1.10",
+    "wxt": "^0.20.25"
+  }
+}

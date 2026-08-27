@@ -1,0 +1,336 @@
+/**
+ * 主题设计令牌层
+ *
+ * - `:root` 定义默认主题「晴空蓝」的令牌 + 语义层（背景/文字/边框/阴影）
+ * - `:root[data-theme='xxx']` 覆盖品牌令牌，并同步重写 Element Plus 主色梯度
+ * - `:root[data-mode='dark']` + `@media (prefers-color-scheme: dark)` 暗色变体
+ *
+ * 前缀: --cop- (cross-origin-proxy)
+ */
+
+:root {
+  /* 品牌主色及其状态 */
+  --cop-primary: #409eff;
+  --cop-primary-hover: #66b3ff;
+  --cop-primary-rgb: 64 158 255;
+
+  /* 品牌浅色填充 / 边框 */
+  --cop-primary-bg: #ecf5ff;
+  --cop-primary-bg-hover: #f0f7ff;
+  --cop-primary-border: #d9ecff;
+
+  /* 品牌背景面（页面渐变、分隔线、行悬浮） */
+  --cop-surface: #e8f4fd;
+  --cop-surface-2: #f8fbff;
+  --cop-surface-line: #e3f2fd;
+  --cop-surface-hover: #f0f9ff;
+
+  /* ====== 语义层：背景 ====== */
+  --cop-bg-color: #ffffff;
+  --cop-bg-color-secondary: #fafafa;
+  --cop-bg-color-tertiary: #f5f5f5;
+  --cop-bg-color-overlay: #ffffff;
+
+  /* ====== 语义层：文字 ====== */
+  --cop-text-color-primary: #303133;
+  --cop-text-color-regular: #606266;
+  --cop-text-color-secondary: #909399;
+  --cop-text-color-placeholder: #c0c4cc;
+  --cop-text-color-on-primary: #ffffff;
+
+  /* ====== 语义层：边框 ====== */
+  --cop-border-color: #ebeef5;
+  --cop-border-color-light: #f0f0f0;
+
+  /* ====== 语义层：阴影 ====== */
+  --cop-shadow-color: rgb(0 0 0 / 8%);
+  --cop-shadow-sm: 0 2px 8px rgb(0 0 0 / 6%);
+  --cop-shadow-md: 0 2px 12px rgb(0 0 0 / 8%);
+
+  /* ====== 语义层：滚动条 ====== */
+  --cop-scrollbar-thumb: #cbd5e1;
+  --cop-scrollbar-thumb-hover: #94a3b8;
+
+  /* ====== 语义层：表单 ====== */
+  --cop-form-label-color: #2c3e50;
+
+  /* 默认主题同步覆盖 Element Plus 主色梯度 */
+  --el-color-primary: #409eff;
+  --el-color-primary-light-3: #79bbff;
+  --el-color-primary-light-5: #a0cfff;
+  --el-color-primary-light-7: #c6e2ff;
+  --el-color-primary-light-8: #d9ecff;
+  --el-color-primary-light-9: #ecf5ff;
+  --el-color-primary-dark-2: #337ecc;
+}
+
+/* ==================== 青竹绿 ==================== */
+:root[data-theme='green'] {
+  --cop-primary: #69b599;
+  --cop-primary-hover: #88c5ae;
+  --cop-primary-rgb: 105 181 153;
+  --cop-primary-bg: #f2f9f6;
+  --cop-primary-bg-hover: #f5faf8;
+  --cop-primary-border: #e5f2ee;
+  --cop-surface: #eef7f4;
+  --cop-surface-2: #fafdfc;
+  --cop-surface-line: #ebf5f1;
+  --cop-surface-hover: #f5faf8;
+  --el-color-primary: #69b599;
+  --el-color-primary-light-3: #96cbb8;
+  --el-color-primary-light-5: #b4dacc;
+  --el-color-primary-light-7: #d2e9e0;
+  --el-color-primary-light-8: #e1f0eb;
+  --el-color-primary-light-9: #f0f8f5;
+  --el-color-primary-dark-2: #54917a;
+}
+
+/* ==================== 桃花粉 ==================== */
+:root[data-theme='pink'] {
+  --cop-primary: #d87998;
+  --cop-primary-hover: #e199b1;
+  --cop-primary-rgb: 216 121 152;
+  --cop-primary-bg: #fbf0f4;
+  --cop-primary-bg-hover: #fcf4f6;
+  --cop-primary-border: #f6e1e8;
+  --cop-surface: #f9ecf0;
+  --cop-surface-2: #fdf9fb;
+  --cop-surface-line: #f8e8ed;
+  --cop-surface-hover: #fcf4f6;
+  --el-color-primary: #d87998;
+  --el-color-primary-light-3: #e4a1b7;
+  --el-color-primary-light-5: #ecbccc;
+  --el-color-primary-light-7: #f3d7e0;
+  --el-color-primary-light-8: #f7e4ea;
+  --el-color-primary-light-9: #fbf2f5;
+  --el-color-primary-dark-2: #ad617a;
+}
+
+/* ==================== 樱粉紫 ==================== */
+:root[data-theme='mauve'] {
+  --cop-primary: #ad84cd;
+  --cop-primary-hover: #c0a0da;
+  --cop-primary-rgb: 173 132 205;
+  --cop-primary-bg: #f6f2fa;
+  --cop-primary-bg-hover: #f8f4fb;
+  --cop-primary-border: #ede4f4;
+  --cop-surface: #f3edf8;
+  --cop-surface-2: #fcfafd;
+  --cop-surface-line: #f1eaf6;
+  --cop-surface-hover: #f8f4fb;
+  --el-color-primary: #ad84cd;
+  --el-color-primary-light-3: #c6a9dc;
+  --el-color-primary-light-5: #d6c2e6;
+  --el-color-primary-light-7: #e6daf0;
+  --el-color-primary-light-8: #efe6f5;
+  --el-color-primary-light-9: #f7f3fa;
+  --el-color-primary-dark-2: #8a6aa4;
+}
+
+/* ==================== 落霞橙 ==================== */
+:root[data-theme='orange'] {
+  --cop-primary: #e28e65;
+  --cop-primary-hover: #eaa886;
+  --cop-primary-rgb: 226 142 101;
+  --cop-primary-bg: #fcf3ef;
+  --cop-primary-bg-hover: #fdf6f3;
+  --cop-primary-border: #f9e7df;
+  --cop-surface: #fbf0ea;
+  --cop-surface-2: #fefbf9;
+  --cop-surface-line: #faece6;
+  --cop-surface-hover: #fdf6f3;
+  --el-color-primary: #e28e65;
+  --el-color-primary-light-3: #ebb093;
+  --el-color-primary-light-5: #f0c6b2;
+  --el-color-primary-light-7: #f6ddd1;
+  --el-color-primary-light-8: #f9e8e0;
+  --el-color-primary-light-9: #fcf4f0;
+  --el-color-primary-dark-2: #b57251;
+}
+
+/* ==================== 雾墨灰 ==================== */
+:root[data-theme='slate'] {
+  --cop-primary: #7f92b4;
+  --cop-primary-hover: #98a7c2;
+  --cop-primary-rgb: 127 146 180;
+  --cop-primary-bg: #f3f5f8;
+  --cop-primary-bg-hover: #f6f7fa;
+  --cop-primary-border: #e7eaf1;
+  --cop-surface: #eff2f6;
+  --cop-surface-2: #fafbfc;
+  --cop-surface-line: #eceff4;
+  --cop-surface-hover: #f6f7fa;
+  --el-color-primary: #7f92b4;
+  --el-color-primary-light-3: #a5b3ca;
+  --el-color-primary-light-5: #bfc8da;
+  --el-color-primary-light-7: #d9dee8;
+  --el-color-primary-light-8: #e5e9f0;
+  --el-color-primary-light-9: #f2f4f8;
+  --el-color-primary-dark-2: #667590;
+}
+
+/* ==================== 暗色模式 ==================== */
+
+/* 手动暗色 */
+:root[data-mode='dark'] {
+  --cop-primary: #66b3ff;
+  --cop-primary-hover: #85c1ff;
+  --cop-primary-rgb: 102 179 255;
+  --cop-primary-bg: rgb(102 179 255 / 12%);
+  --cop-primary-bg-hover: rgb(102 179 255 / 18%);
+  --cop-primary-border: rgb(102 179 255 / 25%);
+  --cop-surface: #1a1a2e;
+  --cop-surface-2: #16213e;
+  --cop-surface-line: #2a2a3e;
+  --cop-surface-hover: rgb(102 179 255 / 8%);
+
+  --cop-bg-color: #1a1a2e;
+  --cop-bg-color-secondary: #16213e;
+  --cop-bg-color-tertiary: #0f3460;
+  --cop-bg-color-overlay: #1e1e36;
+
+  --cop-text-color-primary: #e0e0e0;
+  --cop-text-color-regular: #b0b0c0;
+  --cop-text-color-secondary: #808098;
+  --cop-text-color-placeholder: #5a5a70;
+  --cop-text-color-on-primary: #ffffff;
+
+  --cop-border-color: #2a2a3e;
+  --cop-border-color-light: #232338;
+
+  --cop-shadow-color: rgb(0 0 0 / 30%);
+  --cop-shadow-sm: 0 2px 8px rgb(0 0 0 / 25%);
+  --cop-shadow-md: 0 2px 12px rgb(0 0 0 / 35%);
+
+  --cop-scrollbar-thumb: #3a3a50;
+  --cop-scrollbar-thumb-hover: #4a4a60;
+
+  --cop-form-label-color: #c0c0d0;
+
+  --el-color-primary: #66b3ff;
+  --el-color-primary-light-3: #85c1ff;
+  --el-color-primary-light-5: #a0cfff;
+  --el-color-primary-light-7: rgb(102 179 255 / 30%);
+  --el-color-primary-light-8: rgb(102 179 255 / 20%);
+  --el-color-primary-light-9: rgb(102 179 255 / 12%);
+  --el-color-primary-dark-2: #4d9ae0;
+
+  /* Element Plus 暗色适配 */
+  --el-bg-color: #1a1a2e;
+  --el-bg-color-overlay: #1e1e36;
+  --el-bg-color-page: #141428;
+  --el-text-color-primary: #e0e0e0;
+  --el-text-color-regular: #b0b0c0;
+  --el-text-color-secondary: #808098;
+  --el-text-color-placeholder: #5a5a70;
+  --el-border-color: #2a2a3e;
+  --el-border-color-light: #232338;
+  --el-border-color-lighter: #1e1e32;
+  --el-fill-color-light: #16213e;
+  --el-fill-color: #1a1a2e;
+  --el-fill-color-blank: #1a1a2e;
+  --el-mask-color: rgb(0 0 0 / 60%);
+}
+
+/* 系统偏好暗色（仅在未手动设置 data-mode 时生效） */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode]) {
+    --cop-primary: #66b3ff;
+    --cop-primary-hover: #85c1ff;
+    --cop-primary-rgb: 102 179 255;
+    --cop-primary-bg: rgb(102 179 255 / 12%);
+    --cop-primary-bg-hover: rgb(102 179 255 / 18%);
+    --cop-primary-border: rgb(102 179 255 / 25%);
+    --cop-surface: #1a1a2e;
+    --cop-surface-2: #16213e;
+    --cop-surface-line: #2a2a3e;
+    --cop-surface-hover: rgb(102 179 255 / 8%);
+
+    --cop-bg-color: #1a1a2e;
+    --cop-bg-color-secondary: #16213e;
+    --cop-bg-color-tertiary: #0f3460;
+    --cop-bg-color-overlay: #1e1e36;
+
+    --cop-text-color-primary: #e0e0e0;
+    --cop-text-color-regular: #b0b0c0;
+    --cop-text-color-secondary: #808098;
+    --cop-text-color-placeholder: #5a5a70;
+    --cop-text-color-on-primary: #ffffff;
+
+    --cop-border-color: #2a2a3e;
+    --cop-border-color-light: #232338;
+
+    --cop-shadow-color: rgb(0 0 0 / 30%);
+    --cop-shadow-sm: 0 2px 8px rgb(0 0 0 / 25%);
+    --cop-shadow-md: 0 2px 12px rgb(0 0 0 / 35%);
+
+    --cop-scrollbar-thumb: #3a3a50;
+    --cop-scrollbar-thumb-hover: #4a4a60;
+
+    --cop-form-label-color: #c0c0d0;
+
+    --el-color-primary: #66b3ff;
+    --el-color-primary-light-3: #85c1ff;
+    --el-color-primary-light-5: #a0cfff;
+    --el-color-primary-light-7: rgb(102 179 255 / 30%);
+    --el-color-primary-light-8: rgb(102 179 255 / 20%);
+    --el-color-primary-light-9: rgb(102 179 255 / 12%);
+    --el-color-primary-dark-2: #4d9ae0;
+
+    --el-bg-color: #1a1a2e;
+    --el-bg-color-overlay: #1e1e36;
+    --el-bg-color-page: #141428;
+    --el-text-color-primary: #e0e0e0;
+    --el-text-color-regular: #b0b0c0;
+    --el-text-color-secondary: #808098;
+    --el-text-color-placeholder: #5a5a70;
+    --el-border-color: #2a2a3e;
+    --el-border-color-light: #232338;
+    --el-border-color-lighter: #1e1e32;
+    --el-fill-color-light: #16213e;
+    --el-fill-color: #1a1a2e;
+    --el-fill-color-blank: #1a1a2e;
+    --el-mask-color: rgb(0 0 0 / 60%);
+  }
+}
+
+/* 暗色模式下的品牌主题色覆盖（保持与亮色同色系但调亮） */
+:root[data-mode='dark'][data-theme='green'] {
+  --cop-primary: #88c5ae;
+  --cop-primary-hover: #a0d4c0;
+  --cop-primary-rgb: 136 197 174;
+  --el-color-primary: #88c5ae;
+  --el-color-primary-dark-2: #6ba08e;
+}
+
+:root[data-mode='dark'][data-theme='pink'] {
+  --cop-primary: #e199b1;
+  --cop-primary-hover: #eab3c5;
+  --cop-primary-rgb: 225 153 177;
+  --el-color-primary: #e199b1;
+  --el-color-primary-dark-2: #b57a8e;
+}
+
+:root[data-mode='dark'][data-theme='mauve'] {
+  --cop-primary: #c0a0da;
+  --cop-primary-hover: #d0b8e4;
+  --cop-primary-rgb: 192 160 218;
+  --el-color-primary: #c0a0da;
+  --el-color-primary-dark-2: #9a80ae;
+}
+
+:root[data-mode='dark'][data-theme='orange'] {
+  --cop-primary: #eaa886;
+  --cop-primary-hover: #f0be9e;
+  --cop-primary-rgb: 234 168 134;
+  --el-color-primary: #eaa886;
+  --el-color-primary-dark-2: #bb866b;
+}
+
+:root[data-mode='dark'][data-theme='slate'] {
+  --cop-primary: #98a7c2;
+  --cop-primary-hover: #b0bdd2;
+  --cop-primary-rgb: 152 167 194;
+  --el-color-primary: #98a7c2;
+  --el-color-primary-dark-2: #7a869b;
+}

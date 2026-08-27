@@ -1,0 +1,111 @@
+/**
+ * Options 页全局样式（参照 account-password-helper 的视觉体系）
+ *
+ * - 页面背景：主题 surface 135° 淡渐变
+ * - Element Plus 全局深度定制：输入框主题描边 + 聚焦色环、按钮 hover 微上浮
+ * - 弹窗规范：dialog-body-scroll 滚动容器 + dialog-footer 布局
+ */
+
+.options-page {
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, var(--cop-surface) 0%, var(--cop-surface-2) 100%);
+}
+
+/* ==================== Element Plus 全局深度覆盖 ==================== */
+
+/* 输入框：主题浅色描边，聚焦时 2px 主题色环 */
+.el-input .el-input__wrapper {
+  border: 1px solid var(--cop-primary-border);
+  border-radius: 6px;
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+.el-input .el-input__wrapper:hover {
+  border-color: var(--cop-primary);
+}
+
+.el-input .el-input__wrapper.is-focus {
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 10%);
+}
+
+.el-textarea .el-textarea__inner {
+  border: 1px solid var(--cop-primary-border);
+  border-radius: 6px;
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+.el-textarea .el-textarea__inner:hover {
+  border-color: var(--cop-primary);
+}
+
+.el-textarea .el-textarea__inner:focus {
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 10%);
+}
+
+/* 按钮：统一 6px 圆角 + hover 轻上浮 */
+.el-button {
+  font-weight: 400;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.el-button:hover {
+  transform: translateY(-1px);
+}
+
+.el-button--primary {
+  background: var(--cop-primary);
+  border: 1px solid var(--cop-primary);
+}
+
+.el-button--primary:hover {
+  background: var(--cop-primary-hover);
+  border-color: var(--cop-primary-hover);
+  box-shadow: 0 4px 12px rgb(var(--cop-primary-rgb) / 30%);
+}
+
+/* 表单标签 */
+.el-form-item__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cop-form-label-color);
+}
+
+/* ==================== 弹窗规范 ==================== */
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 弹窗内容滚动容器：限高 + 纤细滚动条 */
+.dialog-body-scroll {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.dialog-body-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dialog-body-scroll::-webkit-scrollbar-thumb {
+  background: var(--cop-scrollbar-thumb);
+  border-radius: 2px;
+}
+
+.dialog-body-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--cop-scrollbar-thumb-hover);
+}
+
+/* 表单提示 */
+.form-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--cop-text-color-secondary);
+}

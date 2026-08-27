@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "Cross-Origin Proxy",
+    "description": "Extension name shown in the Chrome Web Store and browser UI"
+  },
+  "extensionDescription": {
+    "message": "Cross-environment API request proxy, forwarding requests between FAT/UAT/PROD environments",
+    "description": "Extension description for the Chrome Web Store"
+  }
+}
