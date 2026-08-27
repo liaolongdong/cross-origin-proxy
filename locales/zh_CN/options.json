@@ -169,5 +169,19 @@
   "importHarSuccess": "已从 HAR 创建 $1 条规则",
   "importHarFailed": "HAR 导入失败",
   "importHarInvalid": "无效的 HAR 文件",
-  "enabled": "启用"
+  "enabled": "启用",
+  "logDetail": "请求详情",
+  "copyAsCurl": "复制为 cURL",
+  "detailRequest": "请求",
+  "detailResponse": "响应",
+  "detailUrl": "请求 URL",
+  "detailProxiedUrl": "代理后 URL",
+  "detailHeaders": "请求头",
+  "detailBody": "请求体",
+  "detailError": "错误信息",
+  "detailNoData": "此请求未捕获详细数据",
+  "dragToReorder": "拖拽调整优先级",
+  "hasHeaderOverrides": "包含请求头覆盖",
+  "hasBodyOverride": "包含请求体覆盖",
+  "hasResponseOverrides": "包含响应覆盖"
 }

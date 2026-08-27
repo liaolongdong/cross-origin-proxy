@@ -165,6 +165,8 @@
         :data="filteredLogs"
         :row-class-name="rowClassName"
         class="log-table"
+        highlight-current-row
+        @row-click="handleRowClick"
       >
         <el-table-column
           :label="t('colTime')"
@@ -280,13 +282,91 @@
           </div>
         </template>
       </el-table>
+
+      <!-- 日志详情面板 -->
+      <transition name="el-fade-in">
+        <div v-if="selectedLog" class="log-detail-panel">
+          <div class="log-detail-header">
+            <span class="log-detail-title">{{ t('logDetail') }}</span>
+            <div class="log-detail-actions">
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                @click="copyAsCurl"
+              >
+                {{ t('copyAsCurl') }}
+              </el-button>
+              <el-button
+                size="small"
+                @click="selectedLog = null"
+              >
+                <el-icon><Close /></el-icon>
+              </el-button>
+            </div>
+          </div>
+
+          <div class="log-detail-summary">
+            <el-tag :type="methodTagType(selectedLog.method)" size="small">{{ selectedLog.method }}</el-tag>
+            <el-tag v-if="selectedLog.status" :type="statusTagType(selectedLog.status)" size="small">{{ selectedLog.status }}</el-tag>
+            <span class="log-detail-rule">{{ selectedLog.ruleName }}</span>
+            <span v-if="selectedLog.duration" class="log-detail-duration">{{ selectedLog.duration }}ms</span>
+          </div>
+
+          <el-tabs v-model="detailTab" class="log-detail-tabs">
+            <el-tab-pane :label="t('detailRequest')" name="request">
+              <div class="detail-section">
+                <div class="detail-section-label">{{ t('detailUrl') }}</div>
+                <code class="detail-url">{{ selectedLog.originalUrl }}</code>
+                <div v-if="selectedLog.proxiedUrl && selectedLog.proxiedUrl !== selectedLog.originalUrl" class="detail-section-label" style="margin-top: 8px">{{ t('detailProxiedUrl') }}</div>
+                <code v-if="selectedLog.proxiedUrl && selectedLog.proxiedUrl !== selectedLog.originalUrl" class="detail-url detail-url--proxied">{{ selectedLog.proxiedUrl }}</code>
+              </div>
+              <div v-if="selectedLog.requestHeaders && Object.keys(selectedLog.requestHeaders).length > 0" class="detail-section">
+                <div class="detail-section-label">{{ t('detailHeaders') }}</div>
+                <div class="detail-headers">
+                  <div v-for="(value, key) in selectedLog.requestHeaders" :key="key" class="detail-header-row">
+                    <span class="detail-header-key">{{ key }}</span>
+                    <span class="detail-header-val">{{ value }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="selectedLog.requestBody" class="detail-section">
+                <div class="detail-section-label">{{ t('detailBody') }}</div>
+                <pre class="detail-body-content">{{ formatBody(selectedLog.requestBody) }}</pre>
+              </div>
+              <div v-if="!selectedLog.requestHeaders && !selectedLog.requestBody" class="detail-empty">{{ t('detailNoData') }}</div>
+            </el-tab-pane>
+
+            <el-tab-pane :label="t('detailResponse')" name="response">
+              <div v-if="selectedLog.error" class="detail-section">
+                <div class="detail-section-label detail-error-label">{{ t('detailError') }}</div>
+                <code class="detail-error-msg">{{ selectedLog.error }}</code>
+              </div>
+              <div v-if="selectedLog.responseHeaders && Object.keys(selectedLog.responseHeaders).length > 0" class="detail-section">
+                <div class="detail-section-label">{{ t('detailHeaders') }}</div>
+                <div class="detail-headers">
+                  <div v-for="(value, key) in selectedLog.responseHeaders" :key="key" class="detail-header-row">
+                    <span class="detail-header-key">{{ key }}</span>
+                    <span class="detail-header-val">{{ value }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="selectedLog.responseBody" class="detail-section">
+                <div class="detail-section-label">{{ t('detailBody') }}</div>
+                <pre class="detail-body-content">{{ formatBody(selectedLog.responseBody) }}</pre>
+              </div>
+              <div v-if="!selectedLog.responseHeaders && !selectedLog.responseBody && !selectedLog.error" class="detail-empty">{{ t('detailNoData') }}</div>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </transition>
     </div>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Delete, Document, CopyDocument, Refresh } from '@element-plus/icons-vue';
+import { Delete, Document, CopyDocument, Refresh, Close } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
@@ -416,6 +496,44 @@ async function handleClear() {
   } catch {
     // 用户取消
   }
+}
+
+// ─── Log Detail Viewer ───────────────────────────────────────────────────────
+
+const selectedLog = ref<RequestLogEntry | null>(null);
+const detailTab = ref('request');
+
+function handleRowClick(row: RequestLogEntry) {
+  selectedLog.value = selectedLog.value?.id === row.id ? null : row;
+  detailTab.value = 'request';
+}
+
+function formatBody(body: string): string {
+  try {
+    return JSON.stringify(JSON.parse(body), null, 2);
+  } catch {
+    return body;
+  }
+}
+
+function copyAsCurl() {
+  if (!selectedLog.value) return;
+  const log = selectedLog.value;
+  const parts = [`curl -X ${log.method}`];
+  parts.push(`'${log.proxiedUrl || log.originalUrl}'`);
+  if (log.requestHeaders) {
+    for (const [key, value] of Object.entries(log.requestHeaders)) {
+      parts.push(`-H '${key}: ${value}'`);
+    }
+  }
+  if (log.requestBody) {
+    parts.push(`-d '${log.requestBody.replace(/'/g, "'\\''")}'`);
+  }
+  const curl = parts.join(' \\\n  ');
+  navigator.clipboard.writeText(curl).then(
+    () => ElMessage.success(t('urlCopied')),
+    () => ElMessage.error(t('copyFailed')),
+  );
 }
 </script>
 
@@ -587,5 +705,158 @@ async function handleClear() {
 .empty-state p {
   margin-top: 12px;
   font-size: 14px;
+}
+
+/* ─── Log Detail Panel ────────────────────────────────────────────────────── */
+
+.log-table :deep(.el-table__body tr) {
+  cursor: pointer;
+}
+
+.log-detail-panel {
+  border: 1px solid var(--cop-border-color, var(--el-border-color-light, #e4e7ed));
+  border-radius: 10px;
+  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
+  overflow: hidden;
+}
+
+.log-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+  background: var(--cop-bg-color, var(--el-fill-color, #f0f2f5));
+}
+
+.log-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cop-text-color-primary, var(--el-text-color-primary, #303133));
+}
+
+.log-detail-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.log-detail-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+}
+
+.log-detail-rule {
+  flex: 1;
+  font-size: 13px;
+  color: var(--cop-text-color-primary, #303133);
+  font-weight: 500;
+}
+
+.log-detail-duration {
+  font-size: 12px;
+  color: var(--cop-text-color-secondary, #909399);
+}
+
+.log-detail-tabs {
+  padding: 0 16px 12px;
+}
+
+.detail-section {
+  margin-bottom: 14px;
+}
+
+.detail-section-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cop-text-color-secondary, #909399);
+  margin-bottom: 6px;
+}
+
+.detail-url {
+  display: block;
+  font-size: 12px;
+  word-break: break-all;
+  padding: 6px 10px;
+  background: var(--cop-bg-color, #fff);
+  border: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+  border-radius: 4px;
+  line-height: 1.5;
+  color: var(--cop-primary, var(--el-color-primary, #409eff));
+}
+
+.detail-url--proxied {
+  color: var(--el-color-success, #67c23a);
+}
+
+.detail-headers {
+  border: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--cop-bg-color, #fff);
+}
+
+.detail-header-row {
+  display: flex;
+  gap: 12px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--el-border-color-extra-light, #f2f6fc);
+}
+
+.detail-header-row:last-child {
+  border-bottom: none;
+}
+
+.detail-header-key {
+  flex-shrink: 0;
+  width: 160px;
+  font-weight: 500;
+  color: var(--cop-text-color-primary, #303133);
+  word-break: break-all;
+}
+
+.detail-header-val {
+  flex: 1;
+  color: var(--cop-text-color-regular, #606266);
+  word-break: break-all;
+}
+
+.detail-body-content {
+  display: block;
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px 12px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--cop-bg-color, #fff);
+  border: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--cop-text-color-regular, #606266);
+}
+
+.detail-error-label {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.detail-error-msg {
+  display: block;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--el-color-danger, #f56c6c);
+  background: var(--el-color-danger-light-9, #fef0f0);
+  border-radius: 6px;
+}
+
+.detail-empty {
+  padding: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--cop-text-color-placeholder, #c0c4cc);
 }
 </style>

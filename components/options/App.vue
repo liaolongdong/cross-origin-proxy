@@ -40,6 +40,7 @@
       @import-config="showImportExport = true"
       @selection-change="handleSelectionChange"
       @use-template="handleUseTemplate"
+      @reorder="handleReorder"
     />
 
     <!-- 弹窗与抽屉（全部异步组件，首屏不加载） -->
@@ -507,6 +508,15 @@ async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[
   } catch {
     ElMessage.error(t('importHarFailed'));
   }
+}
+
+function handleReorder(fromId: string, toId: string) {
+  const fromRule = rules.value.find(r => r.id === fromId);
+  const toRule = rules.value.find(r => r.id === toId);
+  if (!fromRule || !toRule) return;
+  const fromPriority = fromRule.priority;
+  updateRule(fromId, { priority: toRule.priority });
+  updateRule(toId, { priority: fromPriority });
 }
 </script>
 

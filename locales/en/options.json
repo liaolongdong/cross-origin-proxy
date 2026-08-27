@@ -169,5 +169,19 @@
   "importHarSuccess": "$1 rule(s) created from HAR",
   "importHarFailed": "HAR import failed",
   "importHarInvalid": "Invalid HAR file",
-  "enabled": "Enabled"
+  "enabled": "Enabled",
+  "logDetail": "Request Detail",
+  "copyAsCurl": "Copy as cURL",
+  "detailRequest": "Request",
+  "detailResponse": "Response",
+  "detailUrl": "URL",
+  "detailProxiedUrl": "Proxied URL",
+  "detailHeaders": "Headers",
+  "detailBody": "Body",
+  "detailError": "Error",
+  "detailNoData": "No detail data captured for this request",
+  "dragToReorder": "Drag to reorder priority",
+  "hasHeaderOverrides": "Has header overrides",
+  "hasBodyOverride": "Has request body override",
+  "hasResponseOverrides": "Has response overrides"
 }

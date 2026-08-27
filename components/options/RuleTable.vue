@@ -32,15 +32,48 @@
         width="48"
       />
       <el-table-column
+        width="36"
+        align="center"
+      >
+        <template #header>
+          <el-tooltip :content="t('dragToReorder')" placement="top">
+            <span class="drag-header-icon">⠿</span>
+          </el-tooltip>
+        </template>
+        <template #default="{ row }">
+          <span
+            class="drag-handle"
+            draggable="true"
+            @dragstart="onDragStart($event, row)"
+            @dragend="onDragEnd"
+            @dragover.prevent
+            @drop="onDrop($event, row)"
+          >⠿</span>
+        </template>
+      </el-table-column>
+      <el-table-column
         prop="name"
         :label="t('colName')"
         min-width="120"
       >
         <template #default="{ row }">
-          <span
-            :title="row.name"
-            v-html="highlightText(row.name, searchText)"
-          />
+          <span class="rule-name-cell">
+            <span
+              :title="row.name"
+              v-html="highlightText(row.name, searchText)"
+            />
+            <span class="rule-badges">
+              <el-tooltip v-if="row.headerOverrides && Object.keys(row.headerOverrides).length > 0" :content="t('hasHeaderOverrides')" placement="top">
+                <span class="rule-badge rule-badge--h">H</span>
+              </el-tooltip>
+              <el-tooltip v-if="row.requestBodyOverride" :content="t('hasBodyOverride')" placement="top">
+                <span class="rule-badge rule-badge--b">B</span>
+              </el-tooltip>
+              <el-tooltip v-if="row.responseOverrides" :content="t('hasResponseOverrides')" placement="top">
+                <span class="rule-badge rule-badge--r">R</span>
+              </el-tooltip>
+            </span>
+          </span>
         </template>
       </el-table-column>
       <el-table-column
@@ -190,12 +223,31 @@ const emit = defineEmits<{
   importConfig: [];
   selectionChange: [selection: ProxyRule[]];
   useTemplate: [ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>];
+  reorder: [fromId: string, toId: string];
 }>();
 
 const { t } = useI18n();
 
 /** 正在播放删除动画的行 id 集合 */
 const leavingIds = ref<Set<string>>(new Set());
+
+/** 拖拽中的行 id */
+const dragFromId = ref<string | null>(null);
+
+function onDragStart(_e: DragEvent, row: ProxyRule) {
+  dragFromId.value = row.id;
+}
+
+function onDragEnd() {
+  dragFromId.value = null;
+}
+
+function onDrop(_e: DragEvent, toRow: ProxyRule) {
+  if (dragFromId.value && dragFromId.value !== toRow.id) {
+    emit('reorder', dragFromId.value, toRow.id);
+  }
+  dragFromId.value = null;
+}
 
 /** 删除：先播放右滑出屏动画，再真正移除 */
 function handleDelete(rule: ProxyRule) {
@@ -345,5 +397,77 @@ function highlightText(text: string, keyword: string): string {
   color: var(--cop-primary);
   padding: 0 2px;
   border-radius: 2px;
+}
+
+/* ─── Drag Handle ─────────────────────────────────────────────────────────── */
+
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  color: var(--cop-text-color-placeholder, #c0c4cc);
+  cursor: grab;
+  border-radius: 4px;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.drag-handle:hover {
+  color: var(--cop-primary, #409eff);
+  background: var(--cop-primary-bg, #ecf5ff);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-header-icon {
+  font-size: 14px;
+  color: var(--cop-text-color-placeholder, #c0c4cc);
+  cursor: help;
+}
+
+/* ─── Rule Name Cell with Badges ──────────────────────────────────────────── */
+
+.rule-name-cell {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.rule-badges {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.rule-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.rule-badge--h {
+  color: var(--el-color-primary, #409eff);
+  background: var(--el-color-primary-light-9, #ecf5ff);
+}
+
+.rule-badge--b {
+  color: var(--el-color-warning, #e6a23c);
+  background: var(--el-color-warning-light-9, #fdf6ec);
+}
+
+.rule-badge--r {
+  color: var(--el-color-success, #67c23a);
+  background: var(--el-color-success-light-9, #f0f9eb);
 }
 </style>
