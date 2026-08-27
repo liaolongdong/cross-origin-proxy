@@ -100,6 +100,115 @@
           </div>
         </el-form-item>
 
+        <!-- 请求体覆盖 -->
+        <el-form-item :label="t('requestBodyOverrideLabel')">
+          <div class="override-section">
+            <el-switch
+              v-model="enableRequestBodyOverride"
+              :active-text="t('enabled')"
+            />
+            <el-input
+              v-if="enableRequestBodyOverride"
+              v-model="form.requestBodyOverride"
+              type="textarea"
+              :rows="3"
+              :placeholder="t('requestBodyOverridePlaceholder')"
+              class="override-textarea"
+            />
+          </div>
+        </el-form-item>
+
+        <!-- 响应覆盖 -->
+        <el-form-item :label="t('responseOverridesLabel')">
+          <div class="override-section">
+            <el-switch
+              v-model="enableResponseOverrides"
+              :active-text="t('enabled')"
+            />
+            <div v-if="enableResponseOverrides" class="response-overrides">
+              <div class="response-field">
+                <label class="response-field-label">{{ t('responseStatusOverride') }}</label>
+                <el-input-number
+                  v-model="form.responseStatus"
+                  :min="0"
+                  :max="599"
+                  :placeholder="t('responseStatusPlaceholder')"
+                  controls-position="right"
+                  style="width: 160px"
+                />
+              </div>
+              <div class="response-field">
+                <label class="response-field-label">{{ t('responseHeadersOverride') }}</label>
+                <div
+                  v-for="(header, index) in responseHeaderList"
+                  :key="index"
+                  class="header-pair"
+                >
+                  <el-input
+                    v-model="header.key"
+                    :placeholder="t('headerNamePlaceholder')"
+                    style="width: 40%"
+                  />
+                  <el-input
+                    v-model="header.value"
+                    :placeholder="t('headerValuePlaceholder')"
+                    style="width: 40%"
+                  />
+                  <el-button
+                    type="danger"
+                    link
+                    @click="responseHeaderList.splice(index, 1)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+                <el-button
+                  type="primary"
+                  link
+                  @click="responseHeaderList.push({ key: '', value: '' })"
+                >
+                  <el-icon><Plus /></el-icon>
+                  {{ t('addHeader') }}
+                </el-button>
+              </div>
+              <div class="response-field">
+                <label class="response-field-label">{{ t('responseBodyReplacements') }}</label>
+                <div
+                  v-for="(replacement, index) in bodyReplacementList"
+                  :key="index"
+                  class="header-pair"
+                >
+                  <el-input
+                    v-model="replacement.path"
+                    :placeholder="t('jsonPathPlaceholder')"
+                    style="width: 30%"
+                  />
+                  <el-input
+                    v-model="replacement.value"
+                    :placeholder="t('jsonValuePlaceholder')"
+                    style="width: 50%"
+                  />
+                  <el-button
+                    type="danger"
+                    link
+                    @click="bodyReplacementList.splice(index, 1)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+                <el-button
+                  type="primary"
+                  link
+                  @click="bodyReplacementList.push({ path: '', value: '' })"
+                >
+                  <el-icon><Plus /></el-icon>
+                  {{ t('addReplacement') }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </el-form-item>
+
         <el-form-item :label="t('enabledLabel')">
           <el-switch v-model="form.enabled" />
         </el-form-item>
@@ -206,10 +315,16 @@ const defaultForm = {
   targetUrl: '',
   priority: 10,
   enabled: true,
+  requestBodyOverride: '',
+  responseStatus: undefined as number | undefined,
 };
 
 const form = reactive({ ...defaultForm });
 const headerList = ref<{ key: string; value: string }[]>([]);
+const responseHeaderList = ref<{ key: string; value: string }[]>([]);
+const bodyReplacementList = ref<{ path: string; value: string }[]>([]);
+const enableRequestBodyOverride = ref(false);
+const enableResponseOverrides = ref(false);
 
 // Test panel state
 const showTestPanel = ref(false);
@@ -267,19 +382,34 @@ watch(
           targetUrl: props.rule.targetUrl,
           priority: props.rule.priority,
           enabled: props.rule.enabled,
+          requestBodyOverride: props.rule.requestBodyOverride ?? '',
+          responseStatus: props.rule.responseOverrides?.status,
         });
         headerList.value = props.rule.headerOverrides
           ? Object.entries(props.rule.headerOverrides).map(([key, value]) => ({ key, value }))
           : [];
+        enableRequestBodyOverride.value = props.rule.requestBodyOverride !== undefined;
+        enableResponseOverrides.value = !!props.rule.responseOverrides;
+        responseHeaderList.value = props.rule.responseOverrides?.headers
+          ? Object.entries(props.rule.responseOverrides.headers).map(([key, value]) => ({ key, value }))
+          : [];
+        bodyReplacementList.value = props.rule.responseOverrides?.bodyReplacements
+          ? Object.entries(props.rule.responseOverrides.bodyReplacements).map(([path, value]) => ({
+              path,
+              value: typeof value === 'string' ? value : JSON.stringify(value),
+            }))
+          : [];
       } else {
-        // 使用模板预填充数据或默认值
         const source = props.initialData ?? defaultForm;
         Object.assign(form, source);
         headerList.value = props.initialData?.headerOverrides
           ? Object.entries(props.initialData.headerOverrides).map(([key, value]) => ({ key, value }))
           : [];
+        enableRequestBodyOverride.value = false;
+        enableResponseOverrides.value = false;
+        responseHeaderList.value = [];
+        bodyReplacementList.value = [];
       }
-      // Reset test panel state
       showTestPanel.value = false;
       testUrl.value = '';
       testResult.value = null;
@@ -320,7 +450,7 @@ async function handleSave() {
     }
   });
 
-  emit('save', {
+  const result: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> = {
     name: form.name,
     matchType: form.matchType,
     matchPattern: form.matchPattern,
@@ -328,7 +458,43 @@ async function handleSave() {
     priority: form.priority,
     enabled: form.enabled,
     headerOverrides: Object.keys(headerOverrides).length > 0 ? headerOverrides : undefined,
-  });
+  };
+
+  if (enableRequestBodyOverride.value && form.requestBodyOverride) {
+    result.requestBodyOverride = form.requestBodyOverride;
+  }
+
+  if (enableResponseOverrides.value) {
+    const responseOverrides: ProxyRule['responseOverrides'] = {};
+    if (form.responseStatus !== undefined) {
+      responseOverrides.status = form.responseStatus;
+    }
+    const respHeaders: Record<string, string> = {};
+    responseHeaderList.value.forEach(({ key, value }) => {
+      if (key.trim()) respHeaders[key.trim()] = value;
+    });
+    if (Object.keys(respHeaders).length > 0) {
+      responseOverrides.headers = respHeaders;
+    }
+    const bodyReplacements: Record<string, unknown> = {};
+    bodyReplacementList.value.forEach(({ path, value }) => {
+      if (path.trim()) {
+        try {
+          bodyReplacements[path.trim()] = JSON.parse(value);
+        } catch {
+          bodyReplacements[path.trim()] = value;
+        }
+      }
+    });
+    if (Object.keys(bodyReplacements).length > 0) {
+      responseOverrides.bodyReplacements = bodyReplacements;
+    }
+    if (Object.keys(responseOverrides).length > 0) {
+      result.responseOverrides = responseOverrides;
+    }
+  }
+
+  emit('save', result);
 }
 
 // ─── Test panel matching logic (mirrors utils/urlMatcher.ts) ────────────────
@@ -412,6 +578,40 @@ function runTest() {
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
+}
+
+.override-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.override-textarea {
+  margin-top: 8px;
+}
+
+.response-overrides {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter, #f5f7fa);
+}
+
+.response-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.response-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--el-text-color-regular, #606266);
 }
 
 /* ─── Test Panel ─────────────────────────────────────────────────────────── */

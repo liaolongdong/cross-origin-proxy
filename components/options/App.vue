@@ -53,6 +53,7 @@
       v-model:visible="showImportExport"
       @export="handleExport"
       @import="handleImport"
+      @import-har-rules="handleImportHarRules"
     />
     <SettingsDialog
       v-model:visible="showSettings"
@@ -494,6 +495,17 @@ async function handleImport(data: ExportData) {
     showImportExport.value = false;
   } catch {
     ElMessage.error(t('importFailed'));
+  }
+}
+
+async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[]) {
+  try {
+    for (const rule of harRules) {
+      await addRule(rule);
+    }
+    showImportExport.value = false;
+  } catch {
+    ElMessage.error(t('importHarFailed'));
   }
 }
 </script>

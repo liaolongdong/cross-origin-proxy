@@ -2,7 +2,7 @@ import { findMatchingRule, rewriteUrl } from '@/utils/urlMatcher';
 import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
-import type { ProxyStatus, RequestLogEntry } from '@/utils/types';
+import type { ProxyStatus, RequestLogEntry, ResponseOverrides } from '@/utils/types';
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024;
 
@@ -17,6 +17,68 @@ function sanitizeHeaders(
     if (/[\r\n]/.test(value)) return null;
     result[key] = value;
   }
+  return result;
+}
+
+/**
+ * 按点分隔路径对 JSON 对象做深层字段替换
+ * 如 path="data.token", value="xxx" → obj.data.token = "xxx"
+ */
+function setByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const keys = path.split('.');
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    if (current[key] === undefined || typeof current[key] !== 'object' || current[key] === null) {
+      current[key] = {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  current[keys[keys.length - 1]] = value;
+}
+
+/**
+ * 应用响应覆盖：修改状态码、响应头、响应体
+ */
+function applyResponseOverrides(
+  status: number,
+  statusText: string,
+  headers: Record<string, string>,
+  body: string,
+  isBase64: boolean,
+  overrides: ResponseOverrides,
+): { status: number; statusText: string; headers: Record<string, string>; body: string; isBase64: boolean } {
+  const result = { status, statusText, headers: { ...headers }, body, isBase64 };
+
+  if (overrides.status !== undefined) {
+    result.status = overrides.status;
+  }
+  if (overrides.statusText !== undefined) {
+    result.statusText = overrides.statusText;
+  }
+  if (overrides.headers) {
+    for (const [key, value] of Object.entries(overrides.headers)) {
+      if (HEADER_NAME_RE.test(key) && !/[\r\n]/.test(value)) {
+        result.headers[key] = value;
+      }
+    }
+  }
+
+  if (overrides.bodyRaw !== undefined) {
+    result.body = overrides.bodyRaw;
+    result.isBase64 = false;
+  } else if (overrides.bodyReplacements && !isBase64) {
+    try {
+      const json = JSON.parse(body);
+      for (const [path, value] of Object.entries(overrides.bodyReplacements)) {
+        setByPath(json, path, value);
+      }
+      result.body = JSON.stringify(json);
+    } catch {
+      logger.warn('Response body is not valid JSON, skipping bodyReplacements');
+    }
+  }
+
   return result;
 }
 
@@ -120,6 +182,11 @@ export async function handleProxyRequest(data: {
       fetchOptions.body = data.body;
     }
 
+    // 请求体覆盖：规则指定了 requestBodyOverride 时替换原始请求体
+    if (rule.requestBodyOverride !== undefined) {
+      fetchOptions.body = rule.requestBodyOverride;
+    }
+
     // Execute the proxy request
     const response = await fetch(targetUrl, fetchOptions);
 
@@ -149,7 +216,30 @@ export async function handleProxyRequest(data: {
       responseHeaders[key] = value;
     });
 
-    // Log the request
+    let finalStatus = response.status;
+    let finalStatusText = response.statusText;
+    let finalHeaders = responseHeaders;
+    let finalBody = responseBody;
+    let finalIsBase64 = isBase64;
+
+    // 响应覆盖：修改状态码、响应头、响应体字段
+    if (rule.responseOverrides) {
+      const overridden = applyResponseOverrides(
+        finalStatus,
+        finalStatusText,
+        finalHeaders,
+        finalBody,
+        finalIsBase64,
+        rule.responseOverrides,
+      );
+      finalStatus = overridden.status;
+      finalStatusText = overridden.statusText;
+      finalHeaders = overridden.headers;
+      finalBody = overridden.body;
+      finalIsBase64 = overridden.isBase64;
+    }
+
+    // Log the request (含请求/响应详情，用于 HAR 导出)
     const logEntry: RequestLogEntry = {
       id: generateId(),
       timestamp: Date.now(),
@@ -158,19 +248,24 @@ export async function handleProxyRequest(data: {
       originalUrl: data.url,
       proxiedUrl: targetUrl,
       method: data.method,
-      status: response.status,
+      status: finalStatus,
       duration: Date.now() - startTime,
       proxyType: 'sw',
+      requestHeaders: sanitizedIncoming,
+      requestBody: typeof fetchOptions.body === 'string' ? fetchOptions.body : undefined,
+      responseHeaders: finalHeaders,
+      responseBody: finalIsBase64 ? undefined : finalBody,
+      responseIsBase64: finalIsBase64 || undefined,
     };
     await addRequestLog(logEntry);
 
     return {
       requestId: data.requestId,
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-      body: responseBody,
-      isBase64,
+      status: finalStatus,
+      statusText: finalStatusText,
+      headers: finalHeaders,
+      body: finalBody,
+      isBase64: finalIsBase64,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

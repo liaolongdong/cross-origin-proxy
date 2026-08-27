@@ -1,4 +1,19 @@
 /**
+ * 响应体覆盖配置
+ *
+ * 支持修改响应状态码、响应头、以及 JSON 响应体中的字段替换。
+ * bodyReplacements 为 JSONPath 风格的键值对：key 是点分隔路径（如 "data.token"），value 是替换值。
+ * bodyRaw 为完整的响应体替换（优先级高于 bodyReplacements）。
+ */
+export interface ResponseOverrides {
+  status?: number;
+  statusText?: string;
+  headers?: Record<string, string>;
+  bodyRaw?: string;
+  bodyReplacements?: Record<string, unknown>;
+}
+
+/**
  * 代理规则
  */
 export interface ProxyRule {
@@ -9,6 +24,8 @@ export interface ProxyRule {
   targetUrl: string; // 目标替换 URL，如 "https://uat-api.example.com"
   matchType: 'wildcard' | 'prefix' | 'regex'; // 匹配类型
   headerOverrides?: Record<string, string>; // 可选请求头覆盖
+  requestBodyOverride?: string; // 请求体覆盖（仅 SW 通道）
+  responseOverrides?: ResponseOverrides; // 响应覆盖（仅 SW 通道）
   priority: number; // 优先级（数值越小越先匹配）
   createdAt: number;
   updatedAt: number;
@@ -54,6 +71,10 @@ export enum MessageType {
   // 导入导出
   IMPORT_CONFIG = 'IMPORT_CONFIG',
   EXPORT_CONFIG = 'EXPORT_CONFIG',
+
+  // HAR 报文导入导出
+  EXPORT_HAR = 'EXPORT_HAR',
+  IMPORT_HAR = 'IMPORT_HAR',
 }
 
 /**
@@ -169,6 +190,40 @@ export interface ExportConfigMessage {
   type: MessageType.EXPORT_CONFIG;
 }
 
+/** 导出 HAR */
+export interface ExportHarMessage {
+  type: MessageType.EXPORT_HAR;
+}
+
+/** 导入 HAR */
+export interface ImportHarMessage {
+  type: MessageType.IMPORT_HAR;
+  data: HarImportPayload;
+}
+
+/** HAR 导入载荷 */
+export interface HarImportPayload {
+  log: {
+    entries: HarEntry[];
+  };
+}
+
+/** HAR 条目（简化版，仅保留生成规则所需字段） */
+export interface HarEntry {
+  request: {
+    method: string;
+    url: string;
+    headers?: { name: string; value: string }[];
+    postData?: { text?: string; mimeType?: string };
+  };
+  response: {
+    status: number;
+    statusText?: string;
+    headers?: { name: string; value: string }[];
+    content?: { text?: string; mimeType?: string };
+  };
+}
+
 /** 运行时消息 — 判别联合类型 */
 export type RuntimeMessage =
   | ProxyRequestMessage
@@ -187,7 +242,9 @@ export type RuntimeMessage =
   | ClearRequestLogMessage
   | GetProxyStatusMessage
   | ImportConfigMessage
-  | ExportConfigMessage;
+  | ExportConfigMessage
+  | ExportHarMessage
+  | ImportHarMessage;
 
 /**
  * 请求日志条目
@@ -204,6 +261,11 @@ export interface RequestLogEntry {
   duration?: number; // 毫秒
   error?: string;
   proxyType: 'dnr' | 'sw'; // 代理类型
+  requestHeaders?: Record<string, string>;
+  requestBody?: string;
+  responseHeaders?: Record<string, string>;
+  responseBody?: string;
+  responseIsBase64?: boolean;
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   getRequestLogs,
   clearRequestLogs,
 } from '@/utils/storage';
+import { logsToHar, harEntriesToRules } from '@/utils/har';
 import { logger } from '@/utils/logger';
 
 /**
@@ -79,6 +80,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.BATCH_DELETE_RULES,
   MessageType.BATCH_TOGGLE_RULES,
   MessageType.CLEAR_REQUEST_LOG,
+  MessageType.IMPORT_HAR,
 ]);
 
 /**
@@ -244,6 +246,25 @@ export function setupMessageRouter(): void {
             sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
           );
         return true;
+
+      case MessageType.EXPORT_HAR:
+        getRequestLogs()
+          .then(logs => sendResponse(logsToHar(logs)))
+          .catch((error: unknown) =>
+            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+          );
+        return true;
+
+      case MessageType.IMPORT_HAR: {
+        const entries = message.data?.log?.entries;
+        if (!Array.isArray(entries)) {
+          sendResponse({ success: false, error: 'Invalid HAR data' });
+          return false;
+        }
+        const rules = harEntriesToRules(entries);
+        sendResponse({ success: true, rules });
+        return false;
+      }
 
       default:
         logger.warn('Unknown message type:', message.type);

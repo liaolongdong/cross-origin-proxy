@@ -30,6 +30,14 @@ export default defineContentScript({
       targetUrl: string;
       matchType: 'wildcard' | 'prefix' | 'regex';
       headerOverrides?: Record<string, string>;
+      requestBodyOverride?: string;
+      responseOverrides?: {
+        status?: number;
+        statusText?: string;
+        headers?: Record<string, string>;
+        bodyRaw?: string;
+        bodyReplacements?: Record<string, unknown>;
+      };
       priority: number;
       createdAt: number;
       updatedAt: number;

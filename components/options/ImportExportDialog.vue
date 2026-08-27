@@ -67,6 +67,55 @@
           {{ t('importButton') }}
         </el-button>
       </div>
+
+      <el-divider />
+
+      <!-- HAR 报文导出 -->
+      <div class="section">
+        <h3>{{ t('exportHar') }}</h3>
+        <p class="section-desc">{{ t('exportHarDesc') }}</p>
+        <el-button
+          type="warning"
+          :loading="harExporting"
+          @click="handleExportHar"
+        >
+          <el-icon><Download /></el-icon>
+          {{ t('exportHar') }}
+        </el-button>
+      </div>
+
+      <el-divider />
+
+      <!-- HAR 报文导入 -->
+      <div class="section">
+        <h3>{{ t('importHar') }}</h3>
+        <p class="section-desc">{{ t('importHarDesc') }}</p>
+        <el-upload
+          ref="harUploadRef"
+          :auto-upload="false"
+          :limit="1"
+          accept=".har,.json"
+          :on-change="handleHarFileChange"
+          :on-remove="handleHarFileRemove"
+        >
+          <el-button type="warning">
+            <el-icon><Upload /></el-icon>
+            {{ t('importHar') }}
+          </el-button>
+          <template #tip>
+            <div class="el-upload__tip">.har / .json</div>
+          </template>
+        </el-upload>
+        <el-button
+          v-if="harFileContent"
+          type="success"
+          :loading="harImporting"
+          style="margin-top: 12px"
+          @click="handleImportHar"
+        >
+          {{ t('importButton') }}
+        </el-button>
+      </div>
     </div>
   </el-dialog>
 </template>
@@ -76,7 +125,8 @@ import { ref, computed } from 'vue';
 import { Download, Upload } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadFile } from 'element-plus';
-import type { ExportData } from '@/utils/types';
+import type { ExportData, HarImportPayload, ProxyRule } from '@/utils/types';
+import { MessageType } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
 
 defineProps<{
@@ -87,15 +137,20 @@ const emit = defineEmits<{
   'update:visible': [value: boolean];
   import: [data: ExportData];
   export: [];
+  importHarRules: [rules: ProxyRule[]];
 }>();
 
 const { t } = useI18n();
 
 const uploadRef = ref();
+const harUploadRef = ref();
 const jsonInput = ref('');
 const exporting = ref(false);
 const importing = ref(false);
 const fileContent = ref<string | null>(null);
+const harExporting = ref(false);
+const harImporting = ref(false);
+const harFileContent = ref<string | null>(null);
 
 const canImport = computed(() => {
   return fileContent.value || jsonInput.value.trim();
@@ -157,6 +212,66 @@ async function handleImport() {
     }
   } finally {
     importing.value = false;
+  }
+}
+
+async function handleExportHar() {
+  harExporting.value = true;
+  try {
+    const har = await chrome.runtime.sendMessage({ type: MessageType.EXPORT_HAR });
+    const blob = new Blob([JSON.stringify(har, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cross-origin-proxy-${Date.now()}.har`;
+    a.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success(t('exportHarSuccess'));
+  } catch (error) {
+    ElMessage.error(t('exportFailed'));
+    console.error('HAR export failed:', error);
+  } finally {
+    harExporting.value = false;
+  }
+}
+
+function handleHarFileChange(file: UploadFile) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    harFileContent.value = e.target?.result as string;
+  };
+  reader.readAsText(file.raw!);
+}
+
+function handleHarFileRemove() {
+  harFileContent.value = null;
+}
+
+async function handleImportHar() {
+  if (!harFileContent.value) return;
+  harImporting.value = true;
+  try {
+    const harData: HarImportPayload = JSON.parse(harFileContent.value);
+    if (!harData.log || !Array.isArray(harData.log.entries)) {
+      throw new Error('Invalid HAR format');
+    }
+    const result = await chrome.runtime.sendMessage({
+      type: MessageType.IMPORT_HAR,
+      data: harData,
+    });
+    if (result.success && result.rules) {
+      emit('importHarRules', result.rules);
+      ElMessage.success(t('importHarSuccess', String(result.rules.length)));
+      harFileContent.value = null;
+      harUploadRef.value?.clearFiles();
+    } else {
+      ElMessage.error(t('importHarFailed'));
+    }
+  } catch (error) {
+    ElMessage.error(t('importHarInvalid'));
+    console.error('HAR import failed:', error);
+  } finally {
+    harImporting.value = false;
   }
 }
 </script>
