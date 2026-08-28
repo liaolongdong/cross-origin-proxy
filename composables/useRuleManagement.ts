@@ -96,6 +96,31 @@ export function useRuleManagement() {
     rules.value = rules.value.filter(r => !idSet.has(r.id));
   }
 
+  /** 拖拽排序（单条消息一次写入）：按 orderedIds 重排本地数组并重写 priority */
+  async function reorderRules(orderedIds: string[]) {
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
+      type: MessageType.REORDER_RULES,
+      data: { orderedIds },
+    });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'REORDER_RULES_FAILED');
+    }
+    const byId = new Map(rules.value.map(r => [r.id, r]));
+    const idSet = new Set(orderedIds);
+    const reordered: ProxyRule[] = [];
+    for (const id of orderedIds) {
+      const rule = byId.get(id);
+      if (rule) reordered.push(rule);
+    }
+    for (const rule of rules.value) {
+      if (!idSet.has(rule.id)) reordered.push(rule);
+    }
+    reordered.forEach((rule, index) => {
+      rule.priority = index + 1;
+    });
+    rules.value = reordered;
+  }
+
   async function toggleProxy(value: boolean) {
     await chrome.runtime.sendMessage({
       type: MessageType.TOGGLE_PROXY,
@@ -117,6 +142,7 @@ export function useRuleManagement() {
     toggleRule,
     batchToggleRules,
     batchDeleteRules,
+    reorderRules,
     toggleProxy,
   };
 }

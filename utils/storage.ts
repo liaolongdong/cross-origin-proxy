@@ -155,6 +155,34 @@ export async function batchToggleRules(ruleIds: string[], enabled: boolean): Pro
 }
 
 /**
+ * 拖拽排序：按 orderedIds 重排规则数组，并重写 priority 使其与新顺序一致
+ */
+export async function reorderRules(orderedIds: string[]): Promise<void> {
+  return withStorageLock(async () => {
+    const config = await getProxyConfig();
+    const validIds = orderedIds.filter((id): id is string => typeof id === 'string');
+    const idSet = new Set(validIds);
+    const byId = new Map(config.rules.map(r => [r.id, r]));
+    const reordered: ProxyRule[] = [];
+    for (const id of validIds) {
+      const rule = byId.get(id);
+      if (rule) reordered.push(rule);
+    }
+    // 安全兜底：补充未出现在 orderedIds 中的规则
+    for (const rule of config.rules) {
+      if (!idSet.has(rule.id)) reordered.push(rule);
+    }
+    const now = Date.now();
+    reordered.forEach((rule, index) => {
+      rule.priority = index + 1;
+      rule.updatedAt = now;
+    });
+    config.rules = reordered;
+    await saveProxyConfig(config);
+  });
+}
+
+/**
  * 读取请求日志
  */
 export async function getRequestLogs(): Promise<RequestLogEntry[]> {

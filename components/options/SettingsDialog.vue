@@ -3,9 +3,10 @@
     :model-value="visible"
     :title="t('settingsTitle')"
     width="480px"
+    align-center
     @close="$emit('update:visible', false)"
   >
-    <div class="settings-body">
+    <div class="settings-body dialog-body-scroll">
       <!-- 显示模式 -->
       <div class="setting-section">
         <div class="setting-label">{{ t('themeMode') }}</div>

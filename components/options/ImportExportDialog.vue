@@ -3,6 +3,7 @@
     :model-value="visible"
     :title="t('importExportConfig')"
     width="600px"
+    align-center
     @close="$emit('update:visible', false)"
   >
     <div class="import-export-dialog dialog-body-scroll">

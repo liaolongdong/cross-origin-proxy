@@ -86,6 +86,7 @@ export enum MessageType {
   DELETE_RULE = 'DELETE_RULE',
   BATCH_TOGGLE_RULES = 'BATCH_TOGGLE_RULES', // Options → SW：批量启停规则（一次写入）
   BATCH_DELETE_RULES = 'BATCH_DELETE_RULES', // Options → SW：批量删除规则
+  REORDER_RULES = 'REORDER_RULES', // Options → SW：拖拽排序（一次写入）
 
   // 日志相关
   GET_REQUEST_LOG = 'GET_REQUEST_LOG',
@@ -192,6 +193,12 @@ export interface BatchDeleteRulesMessage {
   data: { ruleIds: string[] };
 }
 
+/** 拖拽排序规则 */
+export interface ReorderRulesMessage {
+  type: MessageType.REORDER_RULES;
+  data: { orderedIds: string[] };
+}
+
 /** 获取 DNR 命中统计 */
 export interface GetDnrStatsMessage {
   type: MessageType.GET_DNR_STATS;
@@ -293,6 +300,7 @@ export type RuntimeMessage =
   | DeleteRuleMessage
   | BatchToggleRulesMessage
   | BatchDeleteRulesMessage
+  | ReorderRulesMessage
   | GetDnrStatsMessage
   | GetRequestLogMessage
   | ClearRequestLogMessage

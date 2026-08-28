@@ -3,8 +3,13 @@
  *
  * - 页面背景：主题 surface 135° 淡渐变
  * - Element Plus 全局深度定制：输入框主题描边 + 聚焦色环、按钮 hover 微上浮
- * - 弹窗规范：dialog-body-scroll 滚动容器 + dialog-footer 布局
+ * - 弹窗规范：el-dialog 限高 + el-dialog__body 内部滚动 + 纤细滚动条
  */
+
+/* 重置 body 默认 margin，防止页面内容未超长时出现垂直滚动条 */
+body {
+  margin: 0;
+}
 
 .options-page {
   min-height: 100vh;
@@ -78,27 +83,61 @@
 
 /* ==================== 弹窗规范 ==================== */
 
+/* 弹窗整体限高 + flex 列布局：header/footer 固定、body 内部滚动；
+   水平垂直居中由 el-dialog 的 align-center 属性实现（margin: auto） */
+.el-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+/* 弹窗 body 内容限高 80vh，超长时出现滚动条 */
+.el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* 弹窗滚动条：4px 宽度浅灰色 */
+.el-dialog__body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.el-dialog__body::-webkit-scrollbar-thumb {
+  background: var(--cop-scrollbar-thumb);
+  border-radius: 2px;
+}
+
+.el-dialog__body::-webkit-scrollbar-thumb:hover {
+  background: var(--cop-scrollbar-thumb-hover);
+}
+
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
 }
 
-/* 弹窗内容滚动容器：限高 + 纤细滚动条 */
+/* 弹窗内容滚动容器（保留兼容）：滚动由 el-dialog__body 统一处理 */
 .dialog-body-scroll {
-  max-height: 70vh;
+  overflow-y: visible;
+}
+
+/* 抽屉 body 滚动：内容超长时出现滚动条 + 4px 浅灰滚动条 */
+.el-drawer__body {
   overflow-y: auto;
 }
 
-.dialog-body-scroll::-webkit-scrollbar {
+.el-drawer__body::-webkit-scrollbar {
   width: 4px;
 }
 
-.dialog-body-scroll::-webkit-scrollbar-thumb {
+.el-drawer__body::-webkit-scrollbar-thumb {
   background: var(--cop-scrollbar-thumb);
   border-radius: 2px;
 }
 
-.dialog-body-scroll::-webkit-scrollbar-thumb:hover {
+.el-drawer__body::-webkit-scrollbar-thumb:hover {
   background: var(--cop-scrollbar-thumb-hover);
 }
 

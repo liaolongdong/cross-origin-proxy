@@ -26,6 +26,8 @@
       row-key="id"
       class="rule-table"
       @selection-change="(selection: ProxyRule[]) => $emit('selectionChange', selection)"
+      @dragover.prevent="onTableDragOver"
+      @drop.prevent="onTableDrop"
     >
       <el-table-column
         type="selection"
@@ -46,8 +48,6 @@
             draggable="true"
             @dragstart="onDragStart($event, row)"
             @dragend="onDragEnd"
-            @dragover.prevent
-            @drop="onDrop($event, row)"
           >⠿</span>
         </template>
       </el-table-column>
@@ -242,20 +242,56 @@ const leavingIds = ref<Set<string>>(new Set());
 
 /** 拖拽中的行 id */
 const dragFromId = ref<string | null>(null);
+/** 拖拽悬停的目标行 id（高亮用） */
+const dragOverId = ref<string | null>(null);
 
-function onDragStart(_e: DragEvent, row: ProxyRule) {
+function onDragStart(e: DragEvent, row: ProxyRule) {
   dragFromId.value = row.id;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', row.id);
+  }
 }
 
 function onDragEnd() {
   dragFromId.value = null;
+  dragOverId.value = null;
 }
 
-function onDrop(_e: DragEvent, toRow: ProxyRule) {
-  if (dragFromId.value && dragFromId.value !== toRow.id) {
+/** 从拖拽事件目标向上找到所属行数据（事件委托，整行可作为放置目标） */
+function findRowFromEvent(e: DragEvent): ProxyRule | null {
+  const target = e.target as HTMLElement;
+  const tr = target.closest('tr.el-table__row');
+  if (tr) {
+    const tbody = tr.closest('tbody');
+    if (!tbody) return null;
+    const rows = Array.from(tbody.querySelectorAll('tr.el-table__row'));
+    const index = rows.indexOf(tr);
+    return props.rules[index] ?? null;
+  }
+  // 拖到最后一行下方的空白区域时，回退到最后一行
+  const tbody = target.closest('tbody');
+  if (tbody && props.rules.length > 0) {
+    return props.rules[props.rules.length - 1];
+  }
+  return null;
+}
+
+function onTableDragOver(e: DragEvent) {
+  const row = findRowFromEvent(e);
+  const newId = row && row.id !== dragFromId.value ? row.id : null;
+  if (newId !== dragOverId.value) {
+    dragOverId.value = newId;
+  }
+}
+
+function onTableDrop(e: DragEvent) {
+  const toRow = findRowFromEvent(e);
+  if (dragFromId.value && toRow && dragFromId.value !== toRow.id) {
     emit('reorder', dragFromId.value, toRow.id);
   }
   dragFromId.value = null;
+  dragOverId.value = null;
 }
 
 /** 删除：先播放右滑出屏动画，再真正移除 */
@@ -270,6 +306,7 @@ function handleDelete(rule: ProxyRule) {
 function rowClassName({ row }: { row: ProxyRule }): string {
   if (leavingIds.value.has(row.id)) return 'row-leaving';
   if (props.highlightRuleId && row.id === props.highlightRuleId) return 'row-entering';
+  if (dragOverId.value && row.id === dragOverId.value) return 'row-drag-over';
   return '';
 }
 
@@ -393,6 +430,15 @@ function highlightText(text: string, keyword: string): string {
   opacity: 0;
   transform: translateX(60px);
   transition: all 0.28s ease;
+}
+
+/* 拖拽悬停目标行：主题色上边框提示 */
+.rule-table :deep(.row-drag-over) {
+  background: var(--cop-primary-bg, #ecf5ff);
+}
+
+.rule-table :deep(.row-drag-over td) {
+  border-top: 2px solid var(--cop-primary, #409eff);
 }
 
 @media (width <= 768px) {

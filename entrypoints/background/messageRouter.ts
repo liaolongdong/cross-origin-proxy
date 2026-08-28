@@ -10,6 +10,7 @@ import {
   deleteRule,
   batchDeleteRules,
   batchToggleRules,
+  reorderRules,
   toggleProxy,
   toggleRule,
   getRequestLogs,
@@ -83,6 +84,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.DELETE_RULE,
   MessageType.BATCH_DELETE_RULES,
   MessageType.BATCH_TOGGLE_RULES,
+  MessageType.REORDER_RULES,
   MessageType.CLEAR_REQUEST_LOG,
   MessageType.IMPORT_HAR,
   MessageType.SAVE_PROFILE,
@@ -199,6 +201,20 @@ export function setupMessageRouter(): void {
             sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
           );
         return true;
+
+      case MessageType.REORDER_RULES: {
+        const orderedIds = message.data.orderedIds;
+        if (!Array.isArray(orderedIds)) {
+          sendResponse({ success: false, error: 'Invalid orderedIds' });
+          return false;
+        }
+        reorderRules(orderedIds)
+          .then(() => sendResponse({ success: true }))
+          .catch((error: unknown) =>
+            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+          );
+        return true;
+      }
 
       case MessageType.GET_DNR_STATS:
         getDnrHitStats()

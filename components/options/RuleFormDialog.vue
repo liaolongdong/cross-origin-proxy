@@ -3,6 +3,7 @@
     :model-value="visible"
     :title="rule ? t('editRule') : t('addRule')"
     width="600px"
+    align-center
     @close="handleClose"
   >
     <div class="dialog-body-scroll">

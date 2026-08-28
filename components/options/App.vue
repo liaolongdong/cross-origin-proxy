@@ -120,6 +120,7 @@ const {
   toggleRule,
   batchToggleRules,
   batchDeleteRules,
+  reorderRules,
   toggleProxy,
 } = useRuleManagement();
 
@@ -510,13 +511,34 @@ async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[
   }
 }
 
-function handleReorder(fromId: string, toId: string) {
-  const fromRule = rules.value.find(r => r.id === fromId);
-  const toRule = rules.value.find(r => r.id === toId);
-  if (!fromRule || !toRule) return;
-  const fromPriority = fromRule.priority;
-  updateRule(fromId, { priority: toRule.priority });
-  updateRule(toId, { priority: fromPriority });
+async function handleReorder(fromId: string, toId: string) {
+  const visibleRules = [...filteredRules.value];
+  const fromIdx = visibleRules.findIndex(r => r.id === fromId);
+  if (fromIdx < 0) return;
+  const [moved] = visibleRules.splice(fromIdx, 1);
+  const toIdx = visibleRules.findIndex(r => r.id === toId);
+  if (toIdx < 0) return;
+  visibleRules.splice(toIdx, 0, moved);
+
+  const visibleIds = new Set(visibleRules.map(r => r.id));
+  const hiddenRules = rules.value.filter(r => !visibleIds.has(r.id));
+  const oldVisiblePositions = rules.value
+    .map((r, i) => (visibleIds.has(r.id) ? i : -1))
+    .filter(i => i >= 0);
+
+  const newFull: ProxyRule[] = new Array(rules.value.length);
+  for (const [i, rule] of hiddenRules.entries()) {
+    newFull[oldVisiblePositions[i]] = rule;
+  }
+  for (const [i, rule] of visibleRules.entries()) {
+    newFull[oldVisiblePositions[i]] = rule;
+  }
+
+  try {
+    await reorderRules(newFull.map(r => r.id));
+  } catch {
+    ElMessage.error(t('operationFailed'));
+  }
 }
 </script>
 
