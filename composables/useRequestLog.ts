@@ -7,6 +7,7 @@ export function useRequestLog() {
   const loading = ref(true);
   const autoRefresh = ref(false);
   const dnrStats = ref<DnrHitStat[]>([]);
+  const swStats = ref<DnrHitStat[]>([]);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   async function fetchLogs() {
@@ -38,7 +39,6 @@ export function useRequestLog() {
     }
   }
 
-  /** 拉取 DNR 规则级命中统计（getMatchedRules 有配额，由用户手动刷新触发） */
   async function fetchDnrStats() {
     try {
       const result: DnrHitStat[] = await chrome.runtime.sendMessage({
@@ -50,11 +50,22 @@ export function useRequestLog() {
     }
   }
 
+  async function fetchSwStats() {
+    try {
+      const result: DnrHitStat[] = await chrome.runtime.sendMessage({
+        type: MessageType.GET_SW_STATS,
+      });
+      swStats.value = result ?? [];
+    } catch (error) {
+      console.error('Failed to fetch SW stats:', error);
+    }
+  }
+
   onMounted(fetchLogs);
 
   onUnmounted(() => {
     if (refreshTimer) clearInterval(refreshTimer);
   });
 
-  return { logs, loading, autoRefresh, dnrStats, fetchLogs, clearLogs, toggleAutoRefresh, fetchDnrStats };
+  return { logs, loading, autoRefresh, dnrStats, swStats, fetchLogs, clearLogs, toggleAutoRefresh, fetchDnrStats, fetchSwStats };
 }

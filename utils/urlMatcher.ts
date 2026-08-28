@@ -42,12 +42,29 @@ function wildcardToRegex(pattern: string): RegExp {
 }
 
 /**
+ * 检测可能导致灾难性回溯的嵌套量词（ReDoS）
+ */
+function isRegexSafe(pattern: string): boolean {
+  const dangerousPatterns = [
+    /\([^)]*[+*][^)]*\)[+*]/, // (a+)+ or (a*)+ 等
+    /\([^)]*[+*][^)]*\)\{/, // (a+){n} 等
+    /(\+|\*)\1/, // ++ 或 **
+  ];
+  return !dangerousPatterns.some(p => p.test(pattern));
+}
+
+/**
  * 获取/缓存编译后的 RegExp（用于 regex 类型规则）
  */
 function getCompiledRegex(pattern: string): RegExp | null {
   const cacheKey = `regex:${pattern}`;
   const cached = compiledRegexCache.get(cacheKey);
   if (cached) return cached;
+
+  // 检查 ReDoS 风险
+  if (!isRegexSafe(pattern)) {
+    return null;
+  }
 
   try {
     const regex = new RegExp(pattern);
@@ -157,5 +174,6 @@ export function isSimpleRule(rule: ProxyRule): boolean {
   if (rule.mockResponse) return false;
   if (rule.delayMs) return false;
   if (rule.blocked) return false;
+  if (rule.retryCount) return false;
   return true;
 }

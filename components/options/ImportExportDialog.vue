@@ -58,6 +58,14 @@
           />
         </div>
 
+        <div style="margin-top: 12px;">
+          <label style="font-size: 13px; color: var(--el-text-color-regular); margin-right: 12px;">{{ t('importMode') }}</label>
+          <el-radio-group v-model="importMode">
+            <el-radio value="replace">{{ t('importModeReplace') }}</el-radio>
+            <el-radio value="merge">{{ t('importModeMerge') }}</el-radio>
+          </el-radio-group>
+        </div>
+
         <el-button
           type="success"
           :loading="importing"
@@ -152,6 +160,7 @@ const fileContent = ref<string | null>(null);
 const harExporting = ref(false);
 const harImporting = ref(false);
 const harFileContent = ref<string | null>(null);
+const importMode = ref<'replace' | 'merge'>('replace');
 
 const canImport = computed(() => {
   return fileContent.value || jsonInput.value.trim();
@@ -190,17 +199,19 @@ async function handleImport() {
   }
 
   try {
-    await ElMessageBox.confirm(t('confirmImport'), t('confirmImportTitle'), {
+    const confirmMsg = importMode.value === 'merge' ? t('confirmImportMerge') : t('confirmImport');
+    await ElMessageBox.confirm(confirmMsg, t('confirmImportTitle'), {
       confirmButtonText: t('confirm'),
       cancelButtonText: t('cancel'),
       type: 'warning',
     });
 
     importing.value = true;
-    const data: ExportData = JSON.parse(jsonString);
+    const data: ExportData & { mode?: 'replace' | 'merge' } = JSON.parse(jsonString);
     if (!data.config || !Array.isArray(data.config.rules)) {
       throw new Error('Invalid config format');
     }
+    data.mode = importMode.value;
     emit('import', data);
     jsonInput.value = '';
     fileContent.value = null;

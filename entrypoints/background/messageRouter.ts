@@ -1,7 +1,8 @@
 import { MessageType } from '@/utils/types';
 import type { RuntimeMessage, ExportData, ProxyRule } from '@/utils/types';
-import { handleProxyRequest, getProxyStatus } from './proxyHandler';
+import { handleProxyRequest, getProxyStatus, getSwHitStats } from './proxyHandler';
 import { getDnrHitStats } from './dnrStats';
+import { MAX_RULES } from '@/utils/constants';
 import {
   getProxyConfig,
   saveProxyConfig,
@@ -39,9 +40,19 @@ function isValidRule(rule: unknown): rule is ProxyRule {
 }
 
 /**
+ * 从导入规则中过滤掉与现有规则重复的条目（按 name + matchPattern 去重）
+ */
+export function deduplicateRules(existing: ProxyRule[], incoming: ProxyRule[]): ProxyRule[] {
+  const existingKeys = new Set(existing.map(r => `${r.name}::${r.matchPattern}`));
+  return incoming.filter(r => !existingKeys.has(`${r.name}::${r.matchPattern}`));
+}
+
+/**
  * 处理导入配置
  */
-async function handleImportConfig(data: ExportData): Promise<{ success: boolean; error?: string }> {
+async function handleImportConfig(
+  data: ExportData & { mode?: 'replace' | 'merge' },
+): Promise<{ success: boolean; error?: string }> {
   try {
     if (!data?.config || !Array.isArray(data.config.rules)) {
       return { success: false, error: 'Invalid config data' };
@@ -53,11 +64,29 @@ async function handleImportConfig(data: ExportData): Promise<{ success: boolean;
       createdAt: typeof rule.createdAt === 'number' ? rule.createdAt : Date.now(),
       updatedAt: typeof rule.updatedAt === 'number' ? rule.updatedAt : Date.now(),
     }));
-    await saveProxyConfig({
-      enabled: data.config.enabled === true,
-      rules: validRules,
-    });
-    logger.info(`Config imported: ${validRules.length}/${data.config.rules.length} rules valid`);
+
+    if (data.mode === 'merge') {
+      const existingConfig = await getProxyConfig();
+      const newRules = deduplicateRules(existingConfig.rules, validRules);
+      const merged = [...existingConfig.rules, ...newRules];
+      if (merged.length > MAX_RULES) {
+        return {
+          success: false,
+          error: `Merge would exceed max rules limit (${MAX_RULES})`,
+        };
+      }
+      await saveProxyConfig({
+        enabled: data.config.enabled === true ? true : existingConfig.enabled,
+        rules: merged,
+      });
+      logger.info(`Config merged: ${newRules.length} new, ${validRules.length - newRules.length} duplicates skipped`);
+    } else {
+      await saveProxyConfig({
+        enabled: data.config.enabled === true,
+        rules: validRules,
+      });
+      logger.info(`Config imported: ${validRules.length}/${data.config.rules.length} rules valid`);
+    }
     return { success: true };
   } catch (error) {
     logger.error('Failed to import config:', error);
@@ -223,6 +252,10 @@ export function setupMessageRouter(): void {
             sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
           );
         return true;
+
+      case MessageType.GET_SW_STATS:
+        sendResponse(getSwHitStats());
+        return false;
 
       case MessageType.GET_REQUEST_LOG:
         getRequestLogs()

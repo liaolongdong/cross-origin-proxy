@@ -71,6 +71,7 @@
       :loading="logLoading"
       :auto-refresh="autoRefresh"
       :dnr-stats="dnrStats"
+      :sw-stats="swStats"
       @clear="handleClearLogs"
       @refresh="toggleAutoRefresh"
       @refresh-dnr-stats="fetchDnrStats"
@@ -130,10 +131,12 @@ const {
   loading: logLoading,
   autoRefresh,
   dnrStats,
+  swStats,
   fetchLogs,
   clearLogs,
   toggleAutoRefresh,
   fetchDnrStats,
+  fetchSwStats,
 } = useRequestLog();
 
 // 导入导出
@@ -204,6 +207,7 @@ watch(showLogs, visible => {
   if (visible) {
     void fetchLogs();
     void fetchDnrStats();
+    void fetchSwStats();
   }
 });
 

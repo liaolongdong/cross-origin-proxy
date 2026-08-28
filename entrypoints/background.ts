@@ -3,6 +3,7 @@ import { setupMessageRouter } from './background/messageRouter';
 import { setupKeepalive } from './background/keepalive';
 import { initDnrManager, syncDnrRules } from './background/dnrManager';
 import { initBadge, updateBadge } from './background/badgeManager';
+import { resetSwHitStats } from './background/proxyHandler';
 import type { ProxyConfig } from '@/utils/types';
 import { logger } from '@/utils/logger';
 import { STORAGE_KEYS, DEFAULT_PROXY_CONFIG } from '@/utils/constants';
@@ -51,6 +52,7 @@ export default defineBackground(() => {
       if (newConfig?.rules) {
         const activeCount = newConfig.rules.filter((r) => r.enabled).length;
         updateBadge(activeCount);
+        resetSwHitStats();
       }
     }
   });

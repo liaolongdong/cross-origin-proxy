@@ -246,6 +246,103 @@
                   :placeholder="t('mockBodyPlaceholder')"
                 />
               </div>
+              <!-- 条件化 Mock 响应 -->
+              <div class="response-field">
+                <label class="response-field-label">{{ t('mockConditions') }}</label>
+                <div
+                  v-for="(cond, index) in mockConditions"
+                  :key="index"
+                  class="mock-condition-card"
+                >
+                  <div class="condition-header">
+                    <span class="condition-index">#{{ index + 1 }}</span>
+                    <el-button
+                      type="danger"
+                      link
+                      @click="mockConditions.splice(index, 1)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                  <el-input
+                    v-model="cond.matchUrl"
+                    :placeholder="t('condMatchUrl')"
+                    style="width: 100%"
+                  />
+                  <el-select
+                    v-model="cond.matchMethod"
+                    clearable
+                    :placeholder="t('condMatchMethod')"
+                    style="width: 160px"
+                  >
+                    <el-option label="GET" value="GET" />
+                    <el-option label="POST" value="POST" />
+                    <el-option label="PUT" value="PUT" />
+                    <el-option label="DELETE" value="DELETE" />
+                  </el-select>
+                  <div
+                    v-for="(qp, qi) in cond.queryPairs"
+                    :key="qi"
+                    class="header-pair"
+                  >
+                    <el-input
+                      v-model="qp.key"
+                      placeholder="Query key"
+                      style="width: 40%"
+                    />
+                    <el-input
+                      v-model="qp.value"
+                      placeholder="Query value"
+                      style="width: 40%"
+                    />
+                    <el-button
+                      type="danger"
+                      link
+                      @click="cond.queryPairs.splice(qi, 1)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                  <el-button
+                    type="primary"
+                    link
+                    @click="cond.queryPairs.push({ key: '', value: '' })"
+                  >
+                    {{ t('addQueryMatch') }}
+                  </el-button>
+                  <el-input
+                    v-model="cond.body"
+                    type="textarea"
+                    :rows="3"
+                    :placeholder="t('condMockBody')"
+                  />
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <el-input-number
+                      v-model="cond.status"
+                      :min="100"
+                      :max="599"
+                      controls-position="right"
+                      style="width: 120px"
+                    />
+                    <el-select
+                      v-model="cond.contentType"
+                      style="width: 200px"
+                    >
+                      <el-option label="application/json" value="application/json" />
+                      <el-option label="text/plain" value="text/plain" />
+                      <el-option label="text/html" value="text/html" />
+                    </el-select>
+                  </div>
+                </div>
+                <el-button
+                  type="primary"
+                  link
+                  @click="mockConditions.push({ matchUrl: '', matchMethod: '', queryPairs: [], body: '', status: 200, contentType: 'application/json' })"
+                >
+                  <el-icon><Plus /></el-icon>
+                  {{ t('addMockCondition') }}
+                </el-button>
+              </div>
             </div>
           </div>
         </el-form-item>
@@ -267,6 +364,40 @@
                 style="width: 160px"
               />
               <span style="font-size: 13px; color: var(--el-text-color-secondary)">ms</span>
+            </div>
+          </div>
+        </el-form-item>
+
+        <!-- 请求重试 -->
+        <el-form-item :label="t('retryLabel')">
+          <div class="override-section">
+            <el-switch
+              v-model="enableRetry"
+              :active-text="t('enabled')"
+            />
+            <div v-if="enableRetry" class="retry-fields">
+              <div class="retry-field-row">
+                <label class="response-field-label">{{ t('retryCount') }}</label>
+                <el-input-number
+                  v-model="form.retryCount"
+                  :min="1"
+                  :max="5"
+                  controls-position="right"
+                  style="width: 120px"
+                />
+              </div>
+              <div class="retry-field-row">
+                <label class="response-field-label">{{ t('retryDelay') }}</label>
+                <el-input-number
+                  v-model="form.retryDelay"
+                  :min="100"
+                  :max="30000"
+                  :step="500"
+                  controls-position="right"
+                  style="width: 160px"
+                />
+                <span style="font-size: 13px; color: var(--el-text-color-secondary)">ms</span>
+              </div>
             </div>
           </div>
         </el-form-item>
@@ -391,6 +522,8 @@ const defaultForm = {
   mockContentType: 'application/json',
   mockBody: '',
   delayMs: 1000,
+  retryCount: 3,
+  retryDelay: 1000,
   blocked: false,
 };
 
@@ -402,6 +535,15 @@ const enableRequestBodyOverride = ref(false);
 const enableResponseOverrides = ref(false);
 const enableMockResponse = ref(false);
 const enableDelay = ref(false);
+const enableRetry = ref(false);
+const mockConditions = ref<{
+  matchUrl: string;
+  matchMethod: string;
+  queryPairs: { key: string; value: string }[];
+  body: string;
+  status: number;
+  contentType: string;
+}[]>([]);
 
 // Test panel state
 const showTestPanel = ref(false);
@@ -469,11 +611,14 @@ watch(
         enableResponseOverrides.value = !!props.rule.responseOverrides;
         enableMockResponse.value = !!props.rule.mockResponse;
         enableDelay.value = !!props.rule.delayMs;
+        enableRetry.value = !!props.rule.retryCount;
         Object.assign(form, {
           mockStatus: props.rule.mockResponse?.status ?? 200,
           mockContentType: props.rule.mockResponse?.contentType ?? 'application/json',
           mockBody: props.rule.mockResponse?.body ?? '',
           delayMs: props.rule.delayMs ?? 1000,
+          retryCount: props.rule.retryCount ?? 3,
+          retryDelay: props.rule.retryDelay ?? 1000,
           blocked: props.rule.blocked ?? false,
         });
         responseHeaderList.value = props.rule.responseOverrides?.headers
@@ -485,6 +630,16 @@ watch(
               value: typeof value === 'string' ? value : JSON.stringify(value),
             }))
           : [];
+        mockConditions.value = props.rule.mockResponse?.conditions?.map(c => ({
+          matchUrl: c.matchUrl ?? '',
+          matchMethod: c.matchMethod ?? '',
+          queryPairs: c.matchQuery
+            ? Object.entries(c.matchQuery).map(([key, value]) => ({ key, value }))
+            : [],
+          body: c.body,
+          status: c.status ?? 200,
+          contentType: c.contentType ?? 'application/json',
+        })) ?? [];
       } else {
         const source = props.initialData ?? defaultForm;
         Object.assign(form, source);
@@ -495,8 +650,10 @@ watch(
         enableResponseOverrides.value = false;
         enableMockResponse.value = false;
         enableDelay.value = false;
+        enableRetry.value = false;
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
+        mockConditions.value = [];
       }
       showTestPanel.value = false;
       testUrl.value = '';
@@ -558,10 +715,33 @@ async function handleSave() {
       contentType: form.mockContentType,
       status: form.mockStatus,
     };
+    // 条件化 Mock
+    const conditions = mockConditions.value
+      .filter(c => c.body || c.matchUrl || c.matchMethod || c.queryPairs.some(q => q.key))
+      .map(c => {
+        const cond: import('@/utils/types').MockCondition = { body: c.body };
+        if (c.matchUrl) cond.matchUrl = c.matchUrl;
+        if (c.matchMethod) cond.matchMethod = c.matchMethod;
+        const queryPairs = c.queryPairs.filter(q => q.key);
+        if (queryPairs.length > 0) {
+          cond.matchQuery = Object.fromEntries(queryPairs.map(q => [q.key, q.value]));
+        }
+        if (c.status !== 200) cond.status = c.status;
+        if (c.contentType !== 'application/json') cond.contentType = c.contentType;
+        return cond;
+      });
+    if (conditions.length > 0) {
+      result.mockResponse.conditions = conditions;
+    }
   }
 
   if (enableDelay.value && form.delayMs > 0) {
     result.delayMs = form.delayMs;
+  }
+
+  if (enableRetry.value) {
+    result.retryCount = form.retryCount;
+    result.retryDelay = form.retryDelay;
   }
 
   if (form.blocked) {
@@ -796,5 +976,44 @@ function runTest() {
 .test-result-no-match {
   display: flex;
   align-items: center;
+}
+
+/* ─── Retry Fields ────────────────────────────────────────────────────────── */
+
+.retry-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.retry-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ─── Mock Condition Cards ────────────────────────────────────────────────── */
+
+.mock-condition-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-radius: 6px;
+  background: var(--el-bg-color, #fff);
+}
+
+.condition-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.condition-index {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary, #909399);
 }
 </style>

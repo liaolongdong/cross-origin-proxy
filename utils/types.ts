@@ -29,9 +29,25 @@ export interface ProxyRule {
   mockResponse?: MockResponseConfig; // Mock 响应（启用后不发真实请求）
   delayMs?: number; // 请求延迟（毫秒），模拟慢网络
   blocked?: boolean; // 拦截请求（匹配后直接阻断，返回网络错误）
+  retryCount?: number; // 失败重试次数（0-5，默认 0 不重试）
+  retryDelay?: number; // 重试间隔（毫秒，默认 1000）
   priority: number; // 优先级（数值越小越先匹配）
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * Mock 条件（条件化 Mock 响应的单个条件条目）
+ *
+ * 所有字段为 AND 逻辑：全部匹配时该条件命中，返回对应的 body/status/contentType。
+ */
+export interface MockCondition {
+  matchUrl?: string; // URL 正则匹配模式
+  matchMethod?: string; // HTTP 方法过滤（GET/POST 等）
+  matchQuery?: Record<string, string>; // 查询参数匹配（key-value）
+  body: string; // 条件命中时的 Mock 响应体
+  contentType?: string; // 条件命中时的 Content-Type
+  status?: number; // 条件命中时的状态码
 }
 
 /**
@@ -39,11 +55,13 @@ export interface ProxyRule {
  *
  * 启用后，匹配的请求不会发送到目标服务器，直接返回配置的 Mock 数据。
  * 适用于前端脱离后端开发、接口联调前的 UI 调试等场景。
+ * conditions 支持按请求属性返回不同的 Mock 响应（首个命中条件生效，无命中则用默认 body）。
  */
 export interface MockResponseConfig {
   body: string; // Mock 响应体（JSON 字符串或纯文本）
   contentType?: string; // 响应 Content-Type，默认 application/json
   status?: number; // 响应状态码，默认 200
+  conditions?: MockCondition[]; // 可选的条件化响应列表
 }
 
 /**
@@ -92,6 +110,7 @@ export enum MessageType {
   GET_REQUEST_LOG = 'GET_REQUEST_LOG',
   CLEAR_REQUEST_LOG = 'CLEAR_REQUEST_LOG',
   GET_DNR_STATS = 'GET_DNR_STATS', // Options → SW：DNR 规则级命中统计
+  GET_SW_STATS = 'GET_SW_STATS', // Options → SW：SW 通道规则级命中统计
 
   // 状态
   GET_PROXY_STATUS = 'GET_PROXY_STATUS',
@@ -204,6 +223,11 @@ export interface GetDnrStatsMessage {
   type: MessageType.GET_DNR_STATS;
 }
 
+/** 获取 SW 通道命中统计 */
+export interface GetSwStatsMessage {
+  type: MessageType.GET_SW_STATS;
+}
+
 /** 获取请求日志 */
 export interface GetRequestLogMessage {
   type: MessageType.GET_REQUEST_LOG;
@@ -222,7 +246,7 @@ export interface GetProxyStatusMessage {
 /** 导入配置 */
 export interface ImportConfigMessage {
   type: MessageType.IMPORT_CONFIG;
-  data: ExportData;
+  data: ExportData & { mode?: 'replace' | 'merge' };
 }
 
 /** 导出配置 */
@@ -302,6 +326,7 @@ export type RuntimeMessage =
   | BatchDeleteRulesMessage
   | ReorderRulesMessage
   | GetDnrStatsMessage
+  | GetSwStatsMessage
   | GetRequestLogMessage
   | ClearRequestLogMessage
   | GetProxyStatusMessage

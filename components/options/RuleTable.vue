@@ -81,6 +81,12 @@
               <el-tooltip v-if="row.blocked" :content="t('hasBlocked')" placement="top">
                 <span class="rule-badge rule-badge--x">X</span>
               </el-tooltip>
+              <el-tooltip v-if="row.retryCount" :content="t('hasRetry')" placement="top">
+                <span class="rule-badge rule-badge--rt">R</span>
+              </el-tooltip>
+              <el-tooltip :content="t('wsRuleHint')" placement="top">
+                <span class="rule-badge rule-badge--ws">WS</span>
+              </el-tooltip>
             </span>
           </span>
         </template>
@@ -539,5 +545,17 @@ function highlightText(text: string, keyword: string): string {
 .rule-badge--x {
   color: var(--el-color-danger, #f56c6c);
   background: var(--el-color-danger-light-9, #fef2f2);
+}
+
+.rule-badge--rt {
+  color: #f59e0b;
+  background: #fffbeb;
+}
+
+.rule-badge--ws {
+  color: #8b5cf6;
+  background: #f5f3ff;
+  font-size: 8px;
+  width: 20px;
 }
 </style>

@@ -2,11 +2,81 @@ import { findMatchingRule, rewriteUrl } from '@/utils/urlMatcher';
 import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
-import type { ProxyStatus, RequestLogEntry, ResponseOverrides } from '@/utils/types';
+import type { ProxyStatus, RequestLogEntry, ResponseOverrides, MockCondition, DnrHitStat } from '@/utils/types';
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024;
 
 const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9a-zA-Z]+$/;
+
+// ─── SW 通道命中统计 ──────────────────────────────────────────────────────────
+
+const swHitStats = new Map<string, { ruleId: string; ruleName: string; hitCount: number }>();
+
+export function getSwHitStats(): DnrHitStat[] {
+  return Array.from(swHitStats.values())
+    .map(({ ruleId, ruleName, hitCount }) => ({ ruleId, ruleName, hitCount }))
+    .sort((a, b) => b.hitCount - a.hitCount);
+}
+
+export function resetSwHitStats(): void {
+  swHitStats.clear();
+}
+
+function trackRuleHit(ruleId: string, ruleName: string): void {
+  const existing = swHitStats.get(ruleId);
+  if (existing) {
+    existing.hitCount++;
+  } else {
+    swHitStats.set(ruleId, { ruleId, ruleName, hitCount: 1 });
+  }
+}
+
+// ─── 重试判定 ─────────────────────────────────────────────────────────────────
+
+/**
+ * 判断错误是否可重试：5xx 状态码、超时（AbortError）、网络错误（TypeError）
+ */
+export function isRetryableError(error: unknown, status?: number): boolean {
+  if (status !== undefined && status >= 500) return true;
+  if (error instanceof Error && error.name === 'AbortError') return true;
+  if (error instanceof TypeError) return true;
+  return false;
+}
+
+// ─── 条件 Mock 匹配 ───────────────────────────────────────────────────────────
+
+/**
+ * 判断请求是否满足单个 Mock 条件（AND 逻辑）
+ */
+export function matchesMockCondition(
+  url: string,
+  method: string,
+  condition: MockCondition,
+): boolean {
+  if (condition.matchUrl) {
+    try {
+      if (!new RegExp(condition.matchUrl).test(url)) return false;
+    } catch {
+      return false;
+    }
+  }
+  if (condition.matchMethod) {
+    if (method.toUpperCase() !== condition.matchMethod.toUpperCase()) return false;
+  }
+  if (condition.matchQuery) {
+    try {
+      const parsed = new URL(url);
+      for (const [key, value] of Object.entries(condition.matchQuery)) {
+        if (parsed.searchParams.get(key) !== value) return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+// ─── Header 校验 ──────────────────────────────────────────────────────────────
 
 function sanitizeHeaders(
   headers: Record<string, string>,
@@ -20,10 +90,8 @@ function sanitizeHeaders(
   return result;
 }
 
-/**
- * 按点分隔路径对 JSON 对象做深层字段替换
- * 如 path="data.token", value="xxx" → obj.data.token = "xxx"
- */
+// ─── 响应覆盖 ─────────────────────────────────────────────────────────────────
+
 function setByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
   const keys = path.split('.');
   let current: Record<string, unknown> = obj;
@@ -37,9 +105,6 @@ function setByPath(obj: Record<string, unknown>, path: string, value: unknown): 
   current[keys[keys.length - 1]] = value;
 }
 
-/**
- * 应用响应覆盖：修改状态码、响应头、响应体
- */
 function applyResponseOverrides(
   status: number,
   statusText: string,
@@ -82,9 +147,8 @@ function applyResponseOverrides(
   return result;
 }
 
-/**
- * Handle a proxy request from content script
- */
+// ─── 代理请求主逻辑 ───────────────────────────────────────────────────────────
+
 export async function handleProxyRequest(data: {
   requestId: string;
   url: string;
@@ -102,8 +166,6 @@ export async function handleProxyRequest(data: {
   const startTime = Date.now();
   const config = await getProxyConfig();
 
-  // 未启用或未命中规则：返回 status 0 旁路响应，
-  // MAIN world 拦截器收到后会回退到原生 fetch/XHR（status 0 无法构造 Response）
   if (!config.enabled) {
     return {
       requestId: data.requestId,
@@ -126,6 +188,9 @@ export async function handleProxyRequest(data: {
       isBase64: false,
     };
   }
+
+  // 记录 SW 通道命中
+  trackRuleHit(rule.id, rule.name);
 
   // ─── 请求阻断 ─────────────────────────────────────────────────────────────
   if (rule.blocked) {
@@ -153,12 +218,25 @@ export async function handleProxyRequest(data: {
     };
   }
 
-  // ─── Mock 响应 ────────────────────────────────────────────────────────────
+  // ─── Mock 响应（含条件化 Mock）─────────────────────────────────────────────
   if (rule.mockResponse) {
-    const mockStatus = rule.mockResponse.status ?? 200;
-    const mockContentType = rule.mockResponse.contentType ?? 'application/json';
-    const mockHeaders: Record<string, string> = { 'content-type': mockContentType };
+    let mockBody = rule.mockResponse.body;
+    let mockStatus = rule.mockResponse.status ?? 200;
+    let mockContentType = rule.mockResponse.contentType ?? 'application/json';
 
+    // 条件化 Mock：首个命中的条件覆盖默认值
+    if (rule.mockResponse.conditions?.length) {
+      for (const condition of rule.mockResponse.conditions) {
+        if (matchesMockCondition(data.url, data.method, condition)) {
+          mockBody = condition.body;
+          mockStatus = condition.status ?? mockStatus;
+          mockContentType = condition.contentType ?? mockContentType;
+          break;
+        }
+      }
+    }
+
+    const mockHeaders: Record<string, string> = { 'content-type': mockContentType };
     logger.info(`Mock: ${data.url} → ${mockStatus} (rule: ${rule.name})`);
 
     if (rule.delayMs) {
@@ -177,7 +255,7 @@ export async function handleProxyRequest(data: {
       duration: rule.delayMs,
       proxyType: 'sw',
       responseHeaders: mockHeaders,
-      responseBody: rule.mockResponse.body,
+      responseBody: mockBody,
     };
     await addRequestLog(logEntry);
 
@@ -186,7 +264,7 @@ export async function handleProxyRequest(data: {
       status: mockStatus,
       statusText: 'Mock',
       headers: mockHeaders,
-      body: rule.mockResponse.body,
+      body: mockBody,
       isBase64: false,
     };
   }
@@ -194,181 +272,205 @@ export async function handleProxyRequest(data: {
   const targetUrl = rewriteUrl(data.url, rule);
   logger.info(`Proxying: ${data.url} → ${targetUrl}`);
 
-  try {
-    // Sanitize incoming headers to prevent HTTP header injection
-    const sanitizedIncoming = sanitizeHeaders(data.headers);
-    if (!sanitizedIncoming) {
-      return {
-        requestId: data.requestId,
-        status: 0,
-        statusText: 'Invalid Headers',
-        headers: {},
-        body: 'Request contains invalid header name or value',
-        isBase64: false,
-      };
-    }
-
-    const sanitizedOverrides = rule.headerOverrides
-      ? sanitizeHeaders(rule.headerOverrides)
-      : {};
-    if (rule.headerOverrides && !sanitizedOverrides) {
-      return {
-        requestId: data.requestId,
-        status: 0,
-        statusText: 'Invalid Rule Headers',
-        headers: {},
-        body: 'Rule contains invalid header override',
-        isBase64: false,
-      };
-    }
-
-    // Build fetch options
-    const fetchOptions: RequestInit = {
-      method: data.method,
-      headers: {
-        ...sanitizedIncoming,
-        ...(sanitizedOverrides || {}),
-      },
-    };
-
-    // Add body for non-GET requests (explicit null/empty check to allow empty-string bodies)
-    if (data.body != null && data.body !== '' && data.method !== 'GET' && data.method !== 'HEAD') {
-      if (data.body.length > MAX_BODY_SIZE) {
-        return {
-          requestId: data.requestId,
-          status: 0,
-          statusText: 'Body Too Large',
-          headers: {},
-          body: `Request body exceeds ${MAX_BODY_SIZE} bytes`,
-          isBase64: false,
-        };
-      }
-      fetchOptions.body = data.body;
-    }
-
-    // 请求体覆盖：规则指定了 requestBodyOverride 时替换原始请求体
-    if (rule.requestBodyOverride !== undefined) {
-      fetchOptions.body = rule.requestBodyOverride;
-    }
-
-    // 请求延迟注入（模拟慢网络）
-    if (rule.delayMs) {
-      await new Promise(resolve => setTimeout(resolve, rule.delayMs));
-    }
-
-    // Execute the proxy request
-    const response = await fetch(targetUrl, fetchOptions);
-
-    // Read response
-    const contentType = response.headers.get('content-type') || '';
-    let responseBody: string;
-    let isBase64 = false;
-
-    if (contentType.includes('application/json') || contentType.includes('text/')) {
-      responseBody = await response.text();
-    } else {
-      // Binary content - encode as base64（分块转换，避免大文件展开参数过多导致栈溢出）
-      const buffer = await response.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      const CHUNK_SIZE = 0x8000;
-      for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
-      }
-      responseBody = btoa(binary);
-      isBase64 = true;
-    }
-
-    // Collect response headers
-    const responseHeaders: Record<string, string> = {};
-    response.headers.forEach((value, key) => {
-      responseHeaders[key] = value;
-    });
-
-    let finalStatus = response.status;
-    let finalStatusText = response.statusText;
-    let finalHeaders = responseHeaders;
-    let finalBody = responseBody;
-    let finalIsBase64 = isBase64;
-
-    // 响应覆盖：修改状态码、响应头、响应体字段
-    if (rule.responseOverrides) {
-      const overridden = applyResponseOverrides(
-        finalStatus,
-        finalStatusText,
-        finalHeaders,
-        finalBody,
-        finalIsBase64,
-        rule.responseOverrides,
-      );
-      finalStatus = overridden.status;
-      finalStatusText = overridden.statusText;
-      finalHeaders = overridden.headers;
-      finalBody = overridden.body;
-      finalIsBase64 = overridden.isBase64;
-    }
-
-    // Log the request (含请求/响应详情，用于 HAR 导出)
-    const logEntry: RequestLogEntry = {
-      id: generateId(),
-      timestamp: Date.now(),
-      ruleId: rule.id,
-      ruleName: rule.name,
-      originalUrl: data.url,
-      proxiedUrl: targetUrl,
-      method: data.method,
-      status: finalStatus,
-      duration: Date.now() - startTime,
-      proxyType: 'sw',
-      requestHeaders: sanitizedIncoming,
-      requestBody: typeof fetchOptions.body === 'string' ? fetchOptions.body : undefined,
-      responseHeaders: finalHeaders,
-      responseBody: finalIsBase64 ? undefined : finalBody,
-      responseIsBase64: finalIsBase64 || undefined,
-    };
-    await addRequestLog(logEntry);
-
-    return {
-      requestId: data.requestId,
-      status: finalStatus,
-      statusText: finalStatusText,
-      headers: finalHeaders,
-      body: finalBody,
-      isBase64: finalIsBase64,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('Proxy request failed:', errorMessage);
-
-    // Log the error
-    const logEntry: RequestLogEntry = {
-      id: generateId(),
-      timestamp: Date.now(),
-      ruleId: rule.id,
-      ruleName: rule.name,
-      originalUrl: data.url,
-      proxiedUrl: targetUrl,
-      method: data.method,
-      duration: Date.now() - startTime,
-      error: errorMessage,
-      proxyType: 'sw',
-    };
-    await addRequestLog(logEntry);
-
+  // ─── 准备请求参数（重试循环外，避免重复计算）────────────────────────────────
+  const sanitizedIncoming = sanitizeHeaders(data.headers);
+  if (!sanitizedIncoming) {
     return {
       requestId: data.requestId,
       status: 0,
-      statusText: 'Proxy Error',
+      statusText: 'Invalid Headers',
       headers: {},
-      body: errorMessage,
+      body: 'Request contains invalid header name or value',
       isBase64: false,
     };
   }
+
+  const sanitizedOverrides = rule.headerOverrides
+    ? sanitizeHeaders(rule.headerOverrides)
+    : {};
+  if (rule.headerOverrides && !sanitizedOverrides) {
+    return {
+      requestId: data.requestId,
+      status: 0,
+      statusText: 'Invalid Rule Headers',
+      headers: {},
+      body: 'Rule contains invalid header override',
+      isBase64: false,
+    };
+  }
+
+  const fetchOptions: RequestInit = {
+    method: data.method,
+    headers: {
+      ...sanitizedIncoming,
+      ...(sanitizedOverrides || {}),
+    },
+  };
+
+  if (data.body != null && data.body !== '' && data.method !== 'GET' && data.method !== 'HEAD') {
+    if (data.body.length > MAX_BODY_SIZE) {
+      return {
+        requestId: data.requestId,
+        status: 0,
+        statusText: 'Body Too Large',
+        headers: {},
+        body: `Request body exceeds ${MAX_BODY_SIZE} bytes`,
+        isBase64: false,
+      };
+    }
+    fetchOptions.body = data.body;
+  }
+
+  if (rule.requestBodyOverride !== undefined) {
+    fetchOptions.body = rule.requestBodyOverride;
+  }
+
+  if (rule.delayMs) {
+    await new Promise(resolve => setTimeout(resolve, rule.delayMs));
+  }
+
+  // ─── 重试循环 ─────────────────────────────────────────────────────────────
+  const maxRetries = rule.retryCount ?? 0;
+  const retryDelay = rule.retryDelay ?? 1000;
+  let lastError: string | undefined;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      logger.info(`Retry ${attempt}/${maxRetries}: ${data.url} (rule: ${rule.name})`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(targetUrl, {
+        ...fetchOptions,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      // 5xx 且还有重试次数：重试
+      if (response.status >= 500 && attempt < maxRetries) {
+        lastError = `Server error ${response.status}`;
+        continue;
+      }
+
+      // Read response
+      const contentType = response.headers.get('content-type') || '';
+      let responseBody: string;
+      let isBase64 = false;
+
+      if (contentType.includes('application/json') || contentType.includes('text/')) {
+        responseBody = await response.text();
+      } else {
+        const buffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        const CHUNK_SIZE = 0x8000;
+        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+        }
+        responseBody = btoa(binary);
+        isBase64 = true;
+      }
+
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+
+      let finalStatus = response.status;
+      let finalStatusText = response.statusText;
+      let finalHeaders = responseHeaders;
+      let finalBody = responseBody;
+      let finalIsBase64 = isBase64;
+
+      if (rule.responseOverrides) {
+        const overridden = applyResponseOverrides(
+          finalStatus,
+          finalStatusText,
+          finalHeaders,
+          finalBody,
+          finalIsBase64,
+          rule.responseOverrides,
+        );
+        finalStatus = overridden.status;
+        finalStatusText = overridden.statusText;
+        finalHeaders = overridden.headers;
+        finalBody = overridden.body;
+        finalIsBase64 = overridden.isBase64;
+      }
+
+      const logEntry: RequestLogEntry = {
+        id: generateId(),
+        timestamp: Date.now(),
+        ruleId: rule.id,
+        ruleName: rule.name,
+        originalUrl: data.url,
+        proxiedUrl: targetUrl,
+        method: data.method,
+        status: finalStatus,
+        duration: Date.now() - startTime,
+        proxyType: 'sw',
+        requestHeaders: sanitizedIncoming,
+        requestBody: typeof fetchOptions.body === 'string' ? fetchOptions.body : undefined,
+        responseHeaders: finalHeaders,
+        responseBody: finalIsBase64 ? undefined : finalBody,
+        responseIsBase64: finalIsBase64 || undefined,
+      };
+      await addRequestLog(logEntry);
+
+      return {
+        requestId: data.requestId,
+        status: finalStatus,
+        statusText: finalStatusText,
+        headers: finalHeaders,
+        body: finalBody,
+        isBase64: finalIsBase64,
+      };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isTimeout = error instanceof Error && error.name === 'AbortError';
+      lastError = isTimeout ? 'Request timeout (30s)' : errorMessage;
+
+      if (isRetryableError(error) && attempt < maxRetries) {
+        continue;
+      }
+      break;
+    }
+  }
+
+  // 所有重试耗尽
+  logger.error('Proxy request failed after retries:', lastError);
+
+  const logEntry: RequestLogEntry = {
+    id: generateId(),
+    timestamp: Date.now(),
+    ruleId: rule.id,
+    ruleName: rule.name,
+    originalUrl: data.url,
+    proxiedUrl: targetUrl,
+    method: data.method,
+    duration: Date.now() - startTime,
+    error: lastError,
+    proxyType: 'sw',
+  };
+  await addRequestLog(logEntry);
+
+  return {
+    requestId: data.requestId,
+    status: 0,
+    statusText: 'Proxy Error',
+    headers: {},
+    body: lastError ?? 'Unknown error',
+    isBase64: false,
+  };
 }
 
-/**
- * Get proxy status for popup
- */
+// ─── 代理状态 ─────────────────────────────────────────────────────────────────
+
 export async function getProxyStatus(): Promise<ProxyStatus> {
   const config = await getProxyConfig();
   const logs = await getRequestLogs();

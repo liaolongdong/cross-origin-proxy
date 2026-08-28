@@ -419,5 +419,81 @@ export default defineContentScript({
 
       originalXHRSend.call(this, body);
     };
+
+    // ---- Intercept WebSocket constructor ----
+
+    const OriginalWebSocket = window.WebSocket;
+
+    /** ws(s):// → http(s):// 归一化，使现有规则可直接匹配 WebSocket URL */
+    function normalizeWsUrl(url: string): string {
+      return url.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
+    }
+
+    /** 将 http(s):// 目标 URL 转回 ws(s):// */
+    function toWsUrl(url: string): string {
+      return url.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+    }
+
+    /** WebSocket URL 重写（复用与 fetch 相同的匹配/重写逻辑） */
+    function rewriteWsUrl(url: string, rule: ProxyRule): string {
+      const httpUrl = normalizeWsUrl(url);
+      const httpTarget = rule.targetUrl.replace(/^https:\/\//, 'http://').replace(/^http(s?):/, 'http$1:');
+
+      switch (rule.matchType) {
+        case 'wildcard': {
+          const patternBase = rule.matchPattern.replace(/\*$/, '');
+          if (httpUrl.startsWith(patternBase)) {
+            const rest = httpUrl.slice(patternBase.length);
+            const target = httpTarget.replace(/\/$/, '');
+            const separator = patternBase.endsWith('/') && rest ? '/' : '';
+            return toWsUrl(target + separator + rest);
+          }
+          return url;
+        }
+        case 'prefix': {
+          if (httpUrl.startsWith(rule.matchPattern)) {
+            const rest = httpUrl.slice(rule.matchPattern.length);
+            const target = httpTarget.replace(/\/$/, '');
+            return toWsUrl(target + rest);
+          }
+          return url;
+        }
+        case 'regex': {
+          const regex = getCompiledRegex(rule);
+          if (!regex) return url;
+          const httpResult = httpUrl.replace(regex, httpTarget);
+          return toWsUrl(httpResult);
+        }
+        default:
+          return url;
+      }
+    }
+
+    function ProxyWebSocket(this: WebSocket, url: string | URL, protocols?: string | string[]) {
+      const wsUrl = typeof url === 'string' ? url : url.href;
+      const httpUrl = normalizeWsUrl(wsUrl);
+      const rule = findMatchingRule(httpUrl);
+
+      if (rule) {
+        const targetUrl = rewriteWsUrl(wsUrl, rule);
+        console.warn('[CrossOriginProxy] WS intercepted:', wsUrl, '→', targetUrl);
+        return protocols
+          ? new OriginalWebSocket(targetUrl, protocols)
+          : new OriginalWebSocket(targetUrl);
+      }
+
+      return protocols
+        ? new OriginalWebSocket(url, protocols)
+        : new OriginalWebSocket(url);
+    }
+
+    // 保留 WebSocket 静态属性和原型
+    ProxyWebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+    ProxyWebSocket.OPEN = OriginalWebSocket.OPEN;
+    ProxyWebSocket.CLOSING = OriginalWebSocket.CLOSING;
+    ProxyWebSocket.CLOSED = OriginalWebSocket.CLOSED;
+    ProxyWebSocket.prototype = OriginalWebSocket.prototype;
+
+    window.WebSocket = ProxyWebSocket as unknown as typeof WebSocket;
   },
 });

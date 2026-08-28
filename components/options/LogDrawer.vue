@@ -159,6 +159,38 @@
         </ul>
       </div>
 
+      <!-- SW 通道命中统计 -->
+      <div class="dnr-stats">
+        <div class="dnr-stats-header">
+          <span class="dnr-stats-title">{{ t('swStatsTitle') }}</span>
+        </div>
+        <p class="dnr-stats-hint">{{ t('swStatsHint') }}</p>
+        <div
+          v-if="swStats.length === 0"
+          class="dnr-stats-empty"
+        >
+          {{ t('swStatsEmpty') }}
+        </div>
+        <ul
+          v-else
+          class="dnr-stats-list"
+        >
+          <li
+            v-for="stat in swStats"
+            :key="stat.ruleId"
+            class="dnr-stats-item"
+          >
+            <el-tag
+              size="small"
+              type="warning"
+              >SW</el-tag
+            >
+            <span class="dnr-stats-name">{{ stat.ruleName }}</span>
+            <span class="dnr-stats-count">{{ t('dnrHitCount', stat.hitCount) }}</span>
+          </li>
+        </ul>
+      </div>
+
       <!-- 日志表格（SW 通道逐条日志） -->
       <el-table
         v-loading="loading"
@@ -383,6 +415,7 @@ const props = defineProps<{
   loading: boolean;
   autoRefresh: boolean;
   dnrStats: DnrHitStat[];
+  swStats: DnrHitStat[];
   methodFilter: string;
   statusFilter: string;
 }>();
