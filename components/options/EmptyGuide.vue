@@ -15,16 +15,30 @@
             fill="var(--cop-primary-bg, #ecf5ff)"
           />
           <path
-            d="M40 55h40M40 65h25"
+            d="M38 50h36"
             stroke="var(--cop-primary, #409eff)"
             stroke-width="3"
             stroke-linecap="round"
           />
           <path
-            d="M55 40v40"
+            d="M68 44l8 6-8 6"
             stroke="var(--cop-primary, #409eff)"
             stroke-width="3"
             stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M82 70H46"
+            stroke="var(--cop-primary, #409eff)"
+            stroke-width="3"
+            stroke-linecap="round"
+          />
+          <path
+            d="M52 64l-8 6 8 6"
+            stroke="var(--cop-primary, #409eff)"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
           />
         </svg>
       </template>
