@@ -51,6 +51,15 @@ export default defineConfig({
     action: {
       default_title: '__MSG_extensionName__',
     },
+    commands: {
+      'toggle-proxy': {
+        suggested_key: {
+          default: 'Ctrl+Shift+P',
+          mac: 'Command+Shift+P',
+        },
+        description: '__MSG_commandToggleProxy__',
+      },
+    },
     content_security_policy: {
       extension_pages: "script-src 'self'; object-src 'self'",
     },

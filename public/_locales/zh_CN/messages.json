@@ -6,5 +6,9 @@
   "extensionDescription": {
     "message": "跨环境API请求代理，支持FAT/UAT/PROD等环境间请求转发",
     "description": "扩展描述，用于 Chrome 应用商店"
+  },
+  "commandToggleProxy": {
+    "message": "切换代理开关",
+    "description": "键盘快捷键描述，用于切换代理开关"
   }
 }

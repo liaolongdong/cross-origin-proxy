@@ -252,7 +252,7 @@ export async function handleProxyRequest(data: {
       proxiedUrl: `mock://${rule.name}`,
       method: data.method,
       status: mockStatus,
-      duration: rule.delayMs,
+      duration: Date.now() - startTime,
       proxyType: 'sw',
       responseHeaders: mockHeaders,
       responseBody: mockBody,

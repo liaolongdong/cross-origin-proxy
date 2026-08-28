@@ -213,5 +213,15 @@
   "condMatchMethod": "HTTP Method",
   "condMockBody": "Mock body for this condition",
   "addQueryMatch": "Add Query Match",
-  "wsRuleHint": "This rule also applies to WebSocket connections"
+  "wsRuleHint": "This rule also applies to WebSocket connections",
+  "toggleAllEnable": "Enable All",
+  "toggleAllDisable": "Disable All",
+  "toggleAllSuccess": "All rules $1",
+  "toggleAllEnabled": "enabled",
+  "toggleAllDisabled": "disabled",
+  "hitCountLabel": "Hits",
+  "refreshStats": "Refresh statistics",
+  "conflictWarningTitle": "Potential Conflict",
+  "conflictWarningMsg": "This rule has the same match pattern as rule \"$1\" which has higher priority. This rule may never fire.",
+  "shortcutToggleProxy": "Toggle Proxy"
 }

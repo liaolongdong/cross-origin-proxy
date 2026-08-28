@@ -7,7 +7,7 @@ import { resetSwHitStats } from './background/proxyHandler';
 import type { ProxyConfig } from '@/utils/types';
 import { logger } from '@/utils/logger';
 import { STORAGE_KEYS, DEFAULT_PROXY_CONFIG } from '@/utils/constants';
-import { flushLogs } from '@/utils/storage';
+import { flushLogs, toggleProxy } from '@/utils/storage';
 
 export default defineBackground(() => {
   logger.info('Background Service Worker started');
@@ -60,5 +60,13 @@ export default defineBackground(() => {
   // Flush pending logs before Service Worker suspends
   chrome.runtime.onSuspend?.addListener(() => {
     void flushLogs();
+  });
+
+  // Keyboard shortcut: toggle proxy on/off
+  chrome.commands.onCommand.addListener(async (command) => {
+    if (command === 'toggle-proxy') {
+      const enabled = await toggleProxy();
+      logger.info(`Proxy toggled via keyboard shortcut: ${enabled}`);
+    }
   });
 });

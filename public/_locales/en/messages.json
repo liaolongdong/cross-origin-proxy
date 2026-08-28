@@ -6,5 +6,9 @@
   "extensionDescription": {
     "message": "Cross-environment API request proxy, forwarding requests between FAT/UAT/PROD environments",
     "description": "Extension description for the Chrome Web Store"
+  },
+  "commandToggleProxy": {
+    "message": "Toggle proxy on/off",
+    "description": "Keyboard shortcut description for toggling the proxy"
   }
 }

@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig, ProxyRule } from '@/utils/types';
 import { generateId } from '@/utils/generateId';
@@ -7,6 +7,50 @@ export function useRuleManagement() {
   const rules = ref<ProxyRule[]>([]);
   const enabled = ref(false);
   const loading = ref(true);
+
+  /**
+   * 查找与给定规则匹配模式冲突的更高优先级规则
+   * 返回第一个 matchPattern + matchType 相同且 priority 更小的已启用规则
+   */
+  function findConflictingRule(
+    ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>,
+    excludeId?: string,
+  ): ProxyRule | null {
+    const sorted = [...rules.value]
+      .filter(r => r.enabled && r.id !== excludeId)
+      .sort((a, b) => a.priority - b.priority);
+
+    for (const existing of sorted) {
+      if (
+        existing.matchPattern === ruleData.matchPattern &&
+        existing.matchType === ruleData.matchType &&
+        existing.priority < (ruleData.priority ?? Infinity)
+      ) {
+        return existing;
+      }
+    }
+    return null;
+  }
+
+  /** 计算被更高优先级同模式规则遮蔽的规则 ID 集合 */
+  const shadowedRuleIds = computed(() => {
+    const sorted = [...rules.value]
+      .filter(r => r.enabled)
+      .sort((a, b) => a.priority - b.priority);
+
+    const seen = new Map<string, string>();
+    const shadowed = new Set<string>();
+
+    for (const rule of sorted) {
+      const key = `${rule.matchType}::${rule.matchPattern}`;
+      if (seen.has(key)) {
+        shadowed.add(rule.id);
+      } else {
+        seen.set(key, rule.id);
+      }
+    }
+    return shadowed;
+  });
 
   async function fetchConfig() {
     loading.value = true;
@@ -86,6 +130,13 @@ export function useRuleManagement() {
     });
   }
 
+  /** 全部启用/停用所有规则 */
+  async function toggleAllRules(enabled: boolean) {
+    const allIds = rules.value.map(r => r.id);
+    if (allIds.length === 0) return;
+    await batchToggleRules(allIds, enabled);
+  }
+
   /** 批量删除（单条消息一次写入，避免循环 sendMessage 触发多次 DNR 重建） */
   async function batchDeleteRules(ids: string[]) {
     await chrome.runtime.sendMessage({
@@ -135,14 +186,17 @@ export function useRuleManagement() {
     rules,
     enabled,
     loading,
+    shadowedRuleIds,
     fetchConfig,
     addRule,
     updateRule,
     deleteRule,
     toggleRule,
     batchToggleRules,
+    toggleAllRules,
     batchDeleteRules,
     reorderRules,
     toggleProxy,
+    findConflictingRule,
   };
 }

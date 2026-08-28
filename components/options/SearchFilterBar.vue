@@ -43,6 +43,12 @@
         {{ t('batchDelete') }} ({{ selectedCount }})
       </el-button>
     </template>
+
+    <!-- 全部启用/停用（始终可见，有规则时显示） -->
+    <template v-if="totalRules > 0 && selectedCount === 0">
+      <el-button @click="$emit('toggleAll', true)">{{ t('toggleAllEnable') }}</el-button>
+      <el-button @click="$emit('toggleAll', false)">{{ t('toggleAllDisable') }}</el-button>
+    </template>
   </div>
 </template>
 
@@ -63,6 +69,8 @@ const props = defineProps<{
   statusFilter: string;
   /** 表格勾选数量（>0 时显示批量按钮） */
   selectedCount: number;
+  /** 规则总数（>0 时显示全部启用/停用按钮） */
+  totalRules: number;
 }>();
 
 const emit = defineEmits<{
@@ -72,6 +80,8 @@ const emit = defineEmits<{
   batchToggle: [enabled: boolean];
   /** 批量删除勾选规则 */
   batchDelete: [];
+  /** 全部启用/停用所有规则 */
+  toggleAll: [enabled: boolean];
 }>();
 
 const { t } = useI18n();

@@ -468,9 +468,10 @@ const logStats = computed(() => {
   let success = 0;
   let error = 0;
   for (const log of logs) {
-    if (log.status! >= 200 && log.status! < 400) {
+    const status = log.status ?? 0;
+    if (status >= 200 && status < 400) {
       success++;
-    } else if (log.status! >= 400) {
+    } else {
       error++;
     }
   }
@@ -553,7 +554,7 @@ function copyAsCurl() {
   if (!selectedLog.value) return;
   const log = selectedLog.value;
   const parts = [`curl -X ${log.method}`];
-  parts.push(`'${log.proxiedUrl || log.originalUrl}'`);
+  parts.push(`'${log.originalUrl}'`);
   if (log.requestHeaders) {
     for (const [key, value] of Object.entries(log.requestHeaders)) {
       parts.push(`-H '${key}: ${value}'`);

@@ -411,8 +411,13 @@ export default defineContentScript({
             xhr.dispatchEvent(new Event('loadend'));
           })
           .catch(error => {
-            console.warn('[CrossOriginProxy] XHR proxy failed, falling back:', error);
-            originalXHRSend.call(xhr, body);
+            console.warn('[CrossOriginProxy] XHR proxy failed, dispatching error:', error);
+            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
+            Object.defineProperty(xhr, 'status', { value: 0, writable: true });
+            Object.defineProperty(xhr, 'statusText', { value: 'Proxy Error', writable: true });
+            xhr.dispatchEvent(new Event('readystatechange'));
+            xhr.dispatchEvent(new Event('error'));
+            xhr.dispatchEvent(new Event('loadend'));
           });
         return; // Don't call original send
       }

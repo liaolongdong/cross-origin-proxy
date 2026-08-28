@@ -62,6 +62,9 @@
               :title="row.name"
               v-html="highlightText(row.name, searchText)"
             />
+            <el-tooltip v-if="shadowedRuleIds.has(row.id)" :content="t('conflictWarningTitle')" placement="top">
+              <span class="shadowed-indicator">!</span>
+            </el-tooltip>
             <span class="rule-badges">
               <el-tooltip v-if="row.headerOverrides && Object.keys(row.headerOverrides).length > 0" :content="t('hasHeaderOverrides')" placement="top">
                 <span class="rule-badge rule-badge--h">H</span>
@@ -82,9 +85,9 @@
                 <span class="rule-badge rule-badge--x">X</span>
               </el-tooltip>
               <el-tooltip v-if="row.retryCount" :content="t('hasRetry')" placement="top">
-                <span class="rule-badge rule-badge--rt">R</span>
+                <span class="rule-badge rule-badge--re">Re</span>
               </el-tooltip>
-              <el-tooltip :content="t('wsRuleHint')" placement="top">
+              <el-tooltip v-if="isWsRule(row)" :content="t('wsRuleHint')" placement="top">
                 <span class="rule-badge rule-badge--ws">WS</span>
               </el-tooltip>
             </span>
@@ -136,6 +139,18 @@
         width="80"
         align="center"
       />
+      <el-table-column
+        :label="t('hitCountLabel')"
+        width="70"
+        align="center"
+      >
+        <template #default="{ row }">
+          <span v-if="(hitStats.get(row.id) ?? 0) > 0" class="hit-count-badge">
+            {{ hitStats.get(row.id) }}
+          </span>
+          <span v-else class="hit-count-zero">-</span>
+        </template>
+      </el-table-column>
       <el-table-column
         :label="t('colStatus')"
         width="80"
@@ -227,6 +242,10 @@ const props = defineProps<{
   highlightRuleId?: string | null;
   /** 搜索关键字（用于高亮） */
   searchText: string;
+  /** 规则命中统计（ruleId → hitCount） */
+  hitStats: Map<string, number>;
+  /** 被更高优先级同模式规则遮蔽的规则 ID 集合 */
+  shadowedRuleIds: Set<string>;
 }>();
 
 const emit = defineEmits<{
@@ -332,6 +351,11 @@ function matchTypeLabel(matchType: string) {
     regex: t('matchTypeRegex'),
   };
   return labelMap[matchType] || matchType;
+}
+
+function isWsRule(rule: ProxyRule): boolean {
+  const wsPattern = /wss?:\/\//i;
+  return wsPattern.test(rule.matchPattern) || wsPattern.test(rule.targetUrl);
 }
 
 /** 缓存高亮正则，避免每次 highlightText 调用都 new RegExp */
@@ -547,7 +571,7 @@ function highlightText(text: string, keyword: string): string {
   background: var(--el-color-danger-light-9, #fef2f2);
 }
 
-.rule-badge--rt {
+.rule-badge--re {
   color: #f59e0b;
   background: #fffbeb;
 }
@@ -557,5 +581,39 @@ function highlightText(text: string, keyword: string): string {
   background: #f5f3ff;
   font-size: 8px;
   width: 20px;
+}
+
+.hit-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-color-primary, #409eff);
+  background: var(--el-color-primary-light-9, #ecf5ff);
+  border-radius: 10px;
+  line-height: 20px;
+}
+
+.hit-count-zero {
+  color: var(--el-text-color-placeholder, #c0c4cc);
+  font-size: 12px;
+}
+
+.shadowed-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--el-color-warning, #e6a23c);
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: help;
 }
 </style>

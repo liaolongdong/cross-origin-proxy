@@ -16,8 +16,10 @@
       v-model:search-text="searchText"
       v-model:status-filter="statusFilter"
       :selected-count="selectedRules.length"
+      :total-rules="rules.length"
       @batch-toggle="handleBatchToggle"
       @batch-delete="handleBatchDelete"
+      @toggle-all="handleToggleAll"
     />
 
     <!-- 规则计数信息行 -->
@@ -32,6 +34,8 @@
       :has-any-rules="rules.length > 0"
       :highlight-rule-id="highlightRuleId"
       :search-text="searchText"
+      :hit-stats="combinedHitStats"
+      :shadowed-rule-ids="shadowedRuleIds"
       @add="handleAddRule"
       @edit="handleEditRule"
       @duplicate="handleDuplicateRule"
@@ -116,13 +120,16 @@ const {
   rules,
   enabled: proxyEnabled,
   loading: ruleLoading,
+  shadowedRuleIds,
   addRule,
   updateRule,
   toggleRule,
   batchToggleRules,
+  toggleAllRules,
   batchDeleteRules,
   reorderRules,
   toggleProxy,
+  findConflictingRule,
 } = useRuleManagement();
 
 // 请求日志 + DNR 命中统计
@@ -182,6 +189,17 @@ const filteredRules = computed(() => {
 
 const enabledCount = computed(() => rules.value.filter(r => r.enabled).length);
 
+const combinedHitStats = computed(() => {
+  const map = new Map<string, number>();
+  for (const stat of dnrStats.value) {
+    map.set(stat.ruleId, (map.get(stat.ruleId) ?? 0) + stat.hitCount);
+  }
+  for (const stat of swStats.value) {
+    map.set(stat.ruleId, (map.get(stat.ruleId) ?? 0) + stat.hitCount);
+  }
+  return map;
+});
+
 // 主题状态
 const currentTheme = ref<ThemeName>('sky');
 const themeMode = ref<ThemeMode>('system');
@@ -215,6 +233,9 @@ onMounted(async () => {
   currentTheme.value = await getStoredTheme();
   themeMode.value = await getStoredThemeMode();
   applyThemeMode(themeMode.value);
+
+  void fetchDnrStats();
+  void fetchSwStats();
 
   // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出；
   // 监听 hashchange：popup 复用已打开的 Options 标签页时通过更新 hash 触发同文档导航
@@ -324,6 +345,11 @@ function showAddFailedMessage(error: unknown) {
 
 async function handleSaveRule(ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
   try {
+    const conflict = findConflictingRule(ruleData, editingRule.value?.id);
+    if (conflict) {
+      ElMessage.warning(t('conflictWarningMsg', [conflict.name]));
+    }
+
     if (editingRule.value) {
       await updateRule(editingRule.value.id, ruleData);
       ElMessage.success(t('ruleUpdated'));
@@ -449,6 +475,21 @@ async function handleBatchToggle(enabled: boolean) {
     ElMessage.error(t('toggleFailed'));
     console.error('Batch toggle failed:', error);
   }
+}
+
+async function handleToggleAll(enabled: boolean) {
+  try {
+    await toggleAllRules(enabled);
+    ElMessage.success(t('toggleAllSuccess', [enabled ? t('toggleAllEnabled') : t('toggleAllDisabled')]));
+  } catch (error) {
+    ElMessage.error(t('toggleFailed'));
+    console.error('Toggle all failed:', error);
+  }
+}
+
+function handleRefreshStats() {
+  void fetchDnrStats();
+  void fetchSwStats();
 }
 
 async function handleBatchDelete() {
