@@ -14,6 +14,10 @@ import {
   toggleRule,
   getRequestLogs,
   clearRequestLogs,
+  getProfiles,
+  saveProfile,
+  loadProfile,
+  deleteProfile,
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules } from '@/utils/har';
 import { logger } from '@/utils/logger';
@@ -81,6 +85,9 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.BATCH_TOGGLE_RULES,
   MessageType.CLEAR_REQUEST_LOG,
   MessageType.IMPORT_HAR,
+  MessageType.SAVE_PROFILE,
+  MessageType.LOAD_PROFILE,
+  MessageType.DELETE_PROFILE,
 ]);
 
 /**
@@ -265,6 +272,38 @@ export function setupMessageRouter(): void {
         sendResponse({ success: true, rules });
         return false;
       }
+
+      case MessageType.GET_PROFILES:
+        getProfiles()
+          .then(profiles => sendResponse(profiles))
+          .catch((error: unknown) =>
+            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+          );
+        return true;
+
+      case MessageType.SAVE_PROFILE:
+        saveProfile(message.data)
+          .then(() => sendResponse({ success: true }))
+          .catch((error: unknown) =>
+            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+          );
+        return true;
+
+      case MessageType.LOAD_PROFILE:
+        loadProfile(message.data.profileId)
+          .then(sendResponse)
+          .catch((error: unknown) =>
+            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+          );
+        return true;
+
+      case MessageType.DELETE_PROFILE:
+        deleteProfile(message.data.profileId)
+          .then(() => sendResponse({ success: true }))
+          .catch((error: unknown) =>
+            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+          );
+        return true;
 
       default:
         logger.warn('Unknown message type:', message.type);

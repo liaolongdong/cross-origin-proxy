@@ -148,11 +148,14 @@ export function findMatchingRule(url: string, rules: ProxyRule[]): ProxyRule | n
 }
 
 /**
- * 判断是否为简单规则（无 headerOverrides / requestBodyOverride / responseOverrides，可使用 DNR）
+ * 判断是否为简单规则（无任何 SW 通道专属功能，可使用 DNR）
  */
 export function isSimpleRule(rule: ProxyRule): boolean {
   if (rule.headerOverrides && Object.keys(rule.headerOverrides).length > 0) return false;
   if (rule.requestBodyOverride !== undefined) return false;
   if (rule.responseOverrides) return false;
+  if (rule.mockResponse) return false;
+  if (rule.delayMs) return false;
+  if (rule.blocked) return false;
   return true;
 }

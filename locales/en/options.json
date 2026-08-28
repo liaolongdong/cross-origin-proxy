@@ -183,5 +183,16 @@
   "dragToReorder": "Drag to reorder priority",
   "hasHeaderOverrides": "Has header overrides",
   "hasBodyOverride": "Has request body override",
-  "hasResponseOverrides": "Has response overrides"
+  "hasResponseOverrides": "Has response overrides",
+  "mockResponseLabel": "Mock Response",
+  "mockStatus": "Status Code",
+  "mockContentType": "Content Type",
+  "mockBody": "Response Body",
+  "mockBodyPlaceholder": "Enter mock response body (JSON, text, etc.)",
+  "delayLabel": "Request Delay",
+  "blockLabel": "Block Request",
+  "blockActiveText": "Block matched requests",
+  "hasMockResponse": "Returns mock response",
+  "hasDelay": "Has request delay",
+  "hasBlocked": "Blocks matched requests"
 }

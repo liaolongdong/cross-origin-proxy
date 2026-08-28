@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   THEME: 'theme',
   THEME_MODE: 'theme_mode', // light | dark | system
   LOCALE: 'locale',
+  PROFILES: 'env_profiles',
 } as const;
 
 // Theme modes

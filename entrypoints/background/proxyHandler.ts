@@ -127,6 +127,70 @@ export async function handleProxyRequest(data: {
     };
   }
 
+  // ─── 请求阻断 ─────────────────────────────────────────────────────────────
+  if (rule.blocked) {
+    logger.info(`Blocked: ${data.url} (rule: ${rule.name})`);
+    const logEntry: RequestLogEntry = {
+      id: generateId(),
+      timestamp: Date.now(),
+      ruleId: rule.id,
+      ruleName: rule.name,
+      originalUrl: data.url,
+      proxiedUrl: data.url,
+      method: data.method,
+      status: 0,
+      error: 'Request blocked by rule',
+      proxyType: 'sw',
+    };
+    await addRequestLog(logEntry);
+    return {
+      requestId: data.requestId,
+      status: 0,
+      statusText: 'Blocked',
+      headers: {},
+      body: 'Request blocked by proxy rule',
+      isBase64: false,
+    };
+  }
+
+  // ─── Mock 响应 ────────────────────────────────────────────────────────────
+  if (rule.mockResponse) {
+    const mockStatus = rule.mockResponse.status ?? 200;
+    const mockContentType = rule.mockResponse.contentType ?? 'application/json';
+    const mockHeaders: Record<string, string> = { 'content-type': mockContentType };
+
+    logger.info(`Mock: ${data.url} → ${mockStatus} (rule: ${rule.name})`);
+
+    if (rule.delayMs) {
+      await new Promise(resolve => setTimeout(resolve, rule.delayMs));
+    }
+
+    const logEntry: RequestLogEntry = {
+      id: generateId(),
+      timestamp: Date.now(),
+      ruleId: rule.id,
+      ruleName: rule.name,
+      originalUrl: data.url,
+      proxiedUrl: `mock://${rule.name}`,
+      method: data.method,
+      status: mockStatus,
+      duration: rule.delayMs,
+      proxyType: 'sw',
+      responseHeaders: mockHeaders,
+      responseBody: rule.mockResponse.body,
+    };
+    await addRequestLog(logEntry);
+
+    return {
+      requestId: data.requestId,
+      status: mockStatus,
+      statusText: 'Mock',
+      headers: mockHeaders,
+      body: rule.mockResponse.body,
+      isBase64: false,
+    };
+  }
+
   const targetUrl = rewriteUrl(data.url, rule);
   logger.info(`Proxying: ${data.url} → ${targetUrl}`);
 
@@ -185,6 +249,11 @@ export async function handleProxyRequest(data: {
     // 请求体覆盖：规则指定了 requestBodyOverride 时替换原始请求体
     if (rule.requestBodyOverride !== undefined) {
       fetchOptions.body = rule.requestBodyOverride;
+    }
+
+    // 请求延迟注入（模拟慢网络）
+    if (rule.delayMs) {
+      await new Promise(resolve => setTimeout(resolve, rule.delayMs));
     }
 
     // Execute the proxy request

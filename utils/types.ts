@@ -26,9 +26,36 @@ export interface ProxyRule {
   headerOverrides?: Record<string, string>; // 可选请求头覆盖
   requestBodyOverride?: string; // 请求体覆盖（仅 SW 通道）
   responseOverrides?: ResponseOverrides; // 响应覆盖（仅 SW 通道）
+  mockResponse?: MockResponseConfig; // Mock 响应（启用后不发真实请求）
+  delayMs?: number; // 请求延迟（毫秒），模拟慢网络
+  blocked?: boolean; // 拦截请求（匹配后直接阻断，返回网络错误）
   priority: number; // 优先级（数值越小越先匹配）
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * Mock 响应配置
+ *
+ * 启用后，匹配的请求不会发送到目标服务器，直接返回配置的 Mock 数据。
+ * 适用于前端脱离后端开发、接口联调前的 UI 调试等场景。
+ */
+export interface MockResponseConfig {
+  body: string; // Mock 响应体（JSON 字符串或纯文本）
+  contentType?: string; // 响应 Content-Type，默认 application/json
+  status?: number; // 响应状态码，默认 200
+}
+
+/**
+ * 环境配置（命名快照）
+ *
+ * 保存当前规则集的命名快照，支持一键切换不同环境。
+ */
+export interface EnvironmentProfile {
+  id: string;
+  name: string;
+  rules: ProxyRule[];
+  createdAt: number;
 }
 
 /**
@@ -75,6 +102,12 @@ export enum MessageType {
   // HAR 报文导入导出
   EXPORT_HAR = 'EXPORT_HAR',
   IMPORT_HAR = 'IMPORT_HAR',
+
+  // 环境配置
+  GET_PROFILES = 'GET_PROFILES',
+  SAVE_PROFILE = 'SAVE_PROFILE',
+  LOAD_PROFILE = 'LOAD_PROFILE',
+  DELETE_PROFILE = 'DELETE_PROFILE',
 }
 
 /**
@@ -201,6 +234,29 @@ export interface ImportHarMessage {
   data: HarImportPayload;
 }
 
+/** 获取环境配置列表 */
+export interface GetProfilesMessage {
+  type: MessageType.GET_PROFILES;
+}
+
+/** 保存环境配置 */
+export interface SaveProfileMessage {
+  type: MessageType.SAVE_PROFILE;
+  data: EnvironmentProfile;
+}
+
+/** 加载环境配置（替换当前规则集） */
+export interface LoadProfileMessage {
+  type: MessageType.LOAD_PROFILE;
+  data: { profileId: string };
+}
+
+/** 删除环境配置 */
+export interface DeleteProfileMessage {
+  type: MessageType.DELETE_PROFILE;
+  data: { profileId: string };
+}
+
 /** HAR 导入载荷 */
 export interface HarImportPayload {
   log: {
@@ -244,7 +300,11 @@ export type RuntimeMessage =
   | ImportConfigMessage
   | ExportConfigMessage
   | ExportHarMessage
-  | ImportHarMessage;
+  | ImportHarMessage
+  | GetProfilesMessage
+  | SaveProfileMessage
+  | LoadProfileMessage
+  | DeleteProfileMessage;
 
 /**
  * 请求日志条目

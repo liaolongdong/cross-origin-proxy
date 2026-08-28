@@ -72,6 +72,15 @@
               <el-tooltip v-if="row.responseOverrides" :content="t('hasResponseOverrides')" placement="top">
                 <span class="rule-badge rule-badge--r">R</span>
               </el-tooltip>
+              <el-tooltip v-if="row.mockResponse" :content="t('hasMockResponse')" placement="top">
+                <span class="rule-badge rule-badge--m">M</span>
+              </el-tooltip>
+              <el-tooltip v-if="row.delayMs" :content="t('hasDelay')" placement="top">
+                <span class="rule-badge rule-badge--d">D</span>
+              </el-tooltip>
+              <el-tooltip v-if="row.blocked" :content="t('hasBlocked')" placement="top">
+                <span class="rule-badge rule-badge--x">X</span>
+              </el-tooltip>
             </span>
           </span>
         </template>
@@ -469,5 +478,20 @@ function highlightText(text: string, keyword: string): string {
 .rule-badge--r {
   color: var(--el-color-success, #67c23a);
   background: var(--el-color-success-light-9, #f0f9eb);
+}
+
+.rule-badge--m {
+  color: #8b5cf6;
+  background: #f5f3ff;
+}
+
+.rule-badge--d {
+  color: #06b6d4;
+  background: #ecfeff;
+}
+
+.rule-badge--x {
+  color: var(--el-color-danger, #f56c6c);
+  background: var(--el-color-danger-light-9, #fef2f2);
 }
 </style>

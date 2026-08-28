@@ -1,4 +1,4 @@
-import type { ProxyConfig, ProxyRule, RequestLogEntry } from '@/utils/types';
+import type { ProxyConfig, ProxyRule, RequestLogEntry, EnvironmentProfile } from '@/utils/types';
 import { STORAGE_KEYS, DEFAULT_PROXY_CONFIG, MAX_LOG_ENTRIES, MAX_RULES } from '@/utils/constants';
 
 // ─── Storage Mutex Lock ─────────────────────────────────────────────────────
@@ -228,4 +228,51 @@ export async function clearRequestLogs(): Promise<void> {
     logFlushTimer = null;
   }
   await chrome.storage.local.set({ [STORAGE_KEYS.REQUEST_LOGS]: [] });
+}
+
+// ─── Environment Profiles ────────────────────────────────────────────────────
+
+/**
+ * 获取所有环境配置
+ */
+export async function getProfiles(): Promise<EnvironmentProfile[]> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.PROFILES);
+  return (result[STORAGE_KEYS.PROFILES] as EnvironmentProfile[] | undefined) ?? [];
+}
+
+/**
+ * 保存一个环境配置（按 id 更新或新增）
+ */
+export async function saveProfile(profile: EnvironmentProfile): Promise<void> {
+  const profiles = await getProfiles();
+  const index = profiles.findIndex(p => p.id === profile.id);
+  if (index >= 0) {
+    profiles[index] = profile;
+  } else {
+    profiles.push(profile);
+  }
+  await chrome.storage.local.set({ [STORAGE_KEYS.PROFILES]: profiles });
+}
+
+/**
+ * 加载环境配置：将指定 profile 的规则集替换当前配置
+ */
+export async function loadProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
+  const profiles = await getProfiles();
+  const profile = profiles.find(p => p.id === profileId);
+  if (!profile) {
+    return { success: false, error: 'Profile not found' };
+  }
+  await saveProxyConfig({ enabled: true, rules: profile.rules });
+  return { success: true };
+}
+
+/**
+ * 删除一个环境配置
+ */
+export async function deleteProfile(profileId: string): Promise<void> {
+  const profiles = await getProfiles();
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.PROFILES]: profiles.filter(p => p.id !== profileId),
+  });
 }

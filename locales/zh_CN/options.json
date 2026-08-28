@@ -183,5 +183,16 @@
   "dragToReorder": "拖拽调整优先级",
   "hasHeaderOverrides": "包含请求头覆盖",
   "hasBodyOverride": "包含请求体覆盖",
-  "hasResponseOverrides": "包含响应覆盖"
+  "hasResponseOverrides": "包含响应覆盖",
+  "mockResponseLabel": "Mock 响应",
+  "mockStatus": "状态码",
+  "mockContentType": "Content-Type",
+  "mockBody": "响应体",
+  "mockBodyPlaceholder": "输入 Mock 响应体（JSON、文本等）",
+  "delayLabel": "请求延迟",
+  "blockLabel": "阻断请求",
+  "blockActiveText": "阻断匹配的请求",
+  "hasMockResponse": "返回 Mock 响应",
+  "hasDelay": "包含请求延迟",
+  "hasBlocked": "阻断匹配的请求"
 }

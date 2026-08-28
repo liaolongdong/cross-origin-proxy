@@ -38,6 +38,13 @@ export default defineContentScript({
         bodyRaw?: string;
         bodyReplacements?: Record<string, unknown>;
       };
+      mockResponse?: {
+        body: string;
+        contentType?: string;
+        status?: number;
+      };
+      delayMs?: number;
+      blocked?: boolean;
       priority: number;
       createdAt: number;
       updatedAt: number;

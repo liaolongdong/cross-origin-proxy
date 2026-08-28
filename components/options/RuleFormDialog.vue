@@ -209,6 +209,75 @@
           </div>
         </el-form-item>
 
+        <!-- Mock 响应 -->
+        <el-form-item :label="t('mockResponseLabel')">
+          <div class="override-section">
+            <el-switch
+              v-model="enableMockResponse"
+              :active-text="t('enabled')"
+            />
+            <div v-if="enableMockResponse" class="response-overrides">
+              <div class="response-field">
+                <label class="response-field-label">{{ t('mockStatus') }}</label>
+                <el-input-number
+                  v-model="form.mockStatus"
+                  :min="100"
+                  :max="599"
+                  controls-position="right"
+                  style="width: 160px"
+                />
+              </div>
+              <div class="response-field">
+                <label class="response-field-label">{{ t('mockContentType') }}</label>
+                <el-select v-model="form.mockContentType" style="width: 220px">
+                  <el-option label="application/json" value="application/json" />
+                  <el-option label="text/plain" value="text/plain" />
+                  <el-option label="text/html" value="text/html" />
+                  <el-option label="application/xml" value="application/xml" />
+                </el-select>
+              </div>
+              <div class="response-field">
+                <label class="response-field-label">{{ t('mockBody') }}</label>
+                <el-input
+                  v-model="form.mockBody"
+                  type="textarea"
+                  :rows="5"
+                  :placeholder="t('mockBodyPlaceholder')"
+                />
+              </div>
+            </div>
+          </div>
+        </el-form-item>
+
+        <!-- 请求延迟 -->
+        <el-form-item :label="t('delayLabel')">
+          <div class="override-section">
+            <el-switch
+              v-model="enableDelay"
+              :active-text="t('enabled')"
+            />
+            <div v-if="enableDelay" style="display: flex; align-items: center; gap: 8px;">
+              <el-input-number
+                v-model="form.delayMs"
+                :min="0"
+                :max="60000"
+                :step="100"
+                controls-position="right"
+                style="width: 160px"
+              />
+              <span style="font-size: 13px; color: var(--el-text-color-secondary)">ms</span>
+            </div>
+          </div>
+        </el-form-item>
+
+        <!-- 请求阻断 -->
+        <el-form-item :label="t('blockLabel')">
+          <el-switch
+            v-model="form.blocked"
+            :active-text="t('blockActiveText')"
+          />
+        </el-form-item>
+
         <el-form-item :label="t('enabledLabel')">
           <el-switch v-model="form.enabled" />
         </el-form-item>
@@ -317,6 +386,11 @@ const defaultForm = {
   enabled: true,
   requestBodyOverride: '',
   responseStatus: undefined as number | undefined,
+  mockStatus: 200,
+  mockContentType: 'application/json',
+  mockBody: '',
+  delayMs: 1000,
+  blocked: false,
 };
 
 const form = reactive({ ...defaultForm });
@@ -325,6 +399,8 @@ const responseHeaderList = ref<{ key: string; value: string }[]>([]);
 const bodyReplacementList = ref<{ path: string; value: string }[]>([]);
 const enableRequestBodyOverride = ref(false);
 const enableResponseOverrides = ref(false);
+const enableMockResponse = ref(false);
+const enableDelay = ref(false);
 
 // Test panel state
 const showTestPanel = ref(false);
@@ -390,6 +466,15 @@ watch(
           : [];
         enableRequestBodyOverride.value = props.rule.requestBodyOverride !== undefined;
         enableResponseOverrides.value = !!props.rule.responseOverrides;
+        enableMockResponse.value = !!props.rule.mockResponse;
+        enableDelay.value = !!props.rule.delayMs;
+        Object.assign(form, {
+          mockStatus: props.rule.mockResponse?.status ?? 200,
+          mockContentType: props.rule.mockResponse?.contentType ?? 'application/json',
+          mockBody: props.rule.mockResponse?.body ?? '',
+          delayMs: props.rule.delayMs ?? 1000,
+          blocked: props.rule.blocked ?? false,
+        });
         responseHeaderList.value = props.rule.responseOverrides?.headers
           ? Object.entries(props.rule.responseOverrides.headers).map(([key, value]) => ({ key, value }))
           : [];
@@ -407,6 +492,8 @@ watch(
           : [];
         enableRequestBodyOverride.value = false;
         enableResponseOverrides.value = false;
+        enableMockResponse.value = false;
+        enableDelay.value = false;
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
       }
@@ -462,6 +549,22 @@ async function handleSave() {
 
   if (enableRequestBodyOverride.value && form.requestBodyOverride) {
     result.requestBodyOverride = form.requestBodyOverride;
+  }
+
+  if (enableMockResponse.value && form.mockBody) {
+    result.mockResponse = {
+      body: form.mockBody,
+      contentType: form.mockContentType,
+      status: form.mockStatus,
+    };
+  }
+
+  if (enableDelay.value && form.delayMs > 0) {
+    result.delayMs = form.delayMs;
+  }
+
+  if (form.blocked) {
+    result.blocked = true;
   }
 
   if (enableResponseOverrides.value) {
