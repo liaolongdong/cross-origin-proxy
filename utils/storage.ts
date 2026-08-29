@@ -7,7 +7,10 @@ let storageMutex: Promise<void> = Promise.resolve();
 
 function withStorageLock<T>(fn: () => Promise<T>): Promise<T> {
   const next = storageMutex.then(fn, fn);
-  storageMutex = next.then(() => {}, () => {});
+  storageMutex = next.then(
+    () => {},
+    () => {},
+  );
   return next;
 }
 
@@ -37,8 +40,7 @@ export async function getProxyConfig(): Promise<ProxyConfig> {
     return cachedConfig;
   }
   const result = await chrome.storage.local.get(STORAGE_KEYS.PROXY_CONFIG);
-  const config =
-    (result[STORAGE_KEYS.PROXY_CONFIG] as ProxyConfig | undefined) ?? DEFAULT_PROXY_CONFIG;
+  const config = (result[STORAGE_KEYS.PROXY_CONFIG] as ProxyConfig | undefined) ?? DEFAULT_PROXY_CONFIG;
   cachedConfig = config;
   return config;
 }
@@ -67,10 +69,7 @@ export async function toggleProxy(enabled?: boolean): Promise<boolean> {
 /**
  * 切换单条规则开关（带锁，避免并发竞态）
  */
-export async function toggleRule(
-  ruleId: string,
-  enabled?: boolean,
-): Promise<{ success: boolean; error?: string }> {
+export async function toggleRule(ruleId: string, enabled?: boolean): Promise<{ success: boolean; error?: string }> {
   return withStorageLock(async () => {
     const config = await getProxyConfig();
     const rule = config.rules.find(r => r.id === ruleId);
@@ -204,9 +203,24 @@ let logBuffer: RequestLogEntry[] = [];
 let logFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * 将缓冲区日志刷写到 storage
+ * 刷写串行队列：阈值触发与防抖定时器可能交叠，若两个 flush 并发执行，
+ * 各自读到旧日志后先后写入会互相覆盖导致日志丢失，因此串行化
  */
-export async function flushLogs(): Promise<void> {
+let flushQueue: Promise<void> = Promise.resolve();
+
+/**
+ * 将缓冲区日志刷写到 storage（并发安全）
+ */
+export function flushLogs(): Promise<void> {
+  const next = flushQueue.then(doFlushLogs, doFlushLogs);
+  flushQueue = next.then(
+    () => {},
+    () => {},
+  );
+  return next;
+}
+
+async function doFlushLogs(): Promise<void> {
   if (logFlushTimer !== null) {
     clearTimeout(logFlushTimer);
     logFlushTimer = null;

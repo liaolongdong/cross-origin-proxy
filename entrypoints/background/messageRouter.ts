@@ -22,6 +22,7 @@ import {
   deleteProfile,
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules } from '@/utils/har';
+import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
 
 /**
@@ -48,6 +49,22 @@ export function deduplicateRules(existing: ProxyRule[], incoming: ProxyRule[]): 
 }
 
 /**
+ * 规范化导入的规则列表：过滤结构非法的条目、重新生成 id、补全默认值。
+ * 重新生成 id 是必要的：文件中的旧 id 可能与现有规则冲突（合并模式下
+ * 会造成重复 id，引发列表 key 冲突与按 id 操作误中其他规则）。
+ */
+export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
+  return rawRules.filter(isValidRule).map(rule => ({
+    ...rule,
+    id: generateId(),
+    priority: typeof rule.priority === 'number' ? rule.priority : 100,
+    enabled: rule.enabled === true,
+    createdAt: typeof rule.createdAt === 'number' ? rule.createdAt : Date.now(),
+    updatedAt: typeof rule.updatedAt === 'number' ? rule.updatedAt : Date.now(),
+  }));
+}
+
+/**
  * 处理导入配置
  */
 async function handleImportConfig(
@@ -57,13 +74,7 @@ async function handleImportConfig(
     if (!data?.config || !Array.isArray(data.config.rules)) {
       return { success: false, error: 'Invalid config data' };
     }
-    const validRules: ProxyRule[] = data.config.rules.filter(isValidRule).map(rule => ({
-      ...rule,
-      priority: typeof rule.priority === 'number' ? rule.priority : 100,
-      enabled: rule.enabled === true,
-      createdAt: typeof rule.createdAt === 'number' ? rule.createdAt : Date.now(),
-      updatedAt: typeof rule.updatedAt === 'number' ? rule.updatedAt : Date.now(),
-    }));
+    const validRules = normalizeImportedRules(data.config.rules);
 
     if (data.mode === 'merge') {
       const existingConfig = await getProxyConfig();

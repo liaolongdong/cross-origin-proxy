@@ -24,7 +24,9 @@
             :placeholder="t('filterMethod')"
             clearable
             style="width: 120px"
-            @update:model-value="(val: string | number | undefined) => emit('update:methodFilter', (val as string) ?? '')"
+            @update:model-value="
+              (val: string | number | undefined) => emit('update:methodFilter', (val as string) ?? '')
+            "
           >
             <el-option
               :label="t('allMethods')"
@@ -52,7 +54,9 @@
             :placeholder="t('filterStatus')"
             clearable
             style="width: 140px"
-            @update:model-value="(val: string | number | undefined) => emit('update:statusFilter', (val as string) ?? '')"
+            @update:model-value="
+              (val: string | number | undefined) => emit('update:statusFilter', (val as string) ?? '')
+            "
           >
             <el-option
               :label="t('allStatus')"
@@ -317,10 +321,22 @@
 
       <!-- 日志详情面板 -->
       <transition name="el-fade-in">
-        <div v-if="selectedLog" class="log-detail-panel">
+        <div
+          v-if="selectedLog"
+          class="log-detail-panel"
+        >
           <div class="log-detail-header">
             <span class="log-detail-title">{{ t('logDetail') }}</span>
             <div class="log-detail-actions">
+              <el-button
+                size="small"
+                type="success"
+                plain
+                @click="handleCreateRuleFromLog"
+              >
+                <el-icon style="margin-right: 4px"><Plus /></el-icon>
+                {{ t('createRuleFromLog') }}
+              </el-button>
               <el-button
                 size="small"
                 type="primary"
@@ -339,55 +355,120 @@
           </div>
 
           <div class="log-detail-summary">
-            <el-tag :type="methodTagType(selectedLog.method)" size="small">{{ selectedLog.method }}</el-tag>
-            <el-tag v-if="selectedLog.status" :type="statusTagType(selectedLog.status)" size="small">{{ selectedLog.status }}</el-tag>
+            <el-tag
+              :type="methodTagType(selectedLog.method)"
+              size="small"
+              >{{ selectedLog.method }}</el-tag
+            >
+            <el-tag
+              v-if="selectedLog.status"
+              :type="statusTagType(selectedLog.status)"
+              size="small"
+              >{{ selectedLog.status }}</el-tag
+            >
             <span class="log-detail-rule">{{ selectedLog.ruleName }}</span>
-            <span v-if="selectedLog.duration" class="log-detail-duration">{{ selectedLog.duration }}ms</span>
+            <span
+              v-if="selectedLog.duration"
+              class="log-detail-duration"
+              >{{ selectedLog.duration }}ms</span
+            >
           </div>
 
-          <el-tabs v-model="detailTab" class="log-detail-tabs">
-            <el-tab-pane :label="t('detailRequest')" name="request">
+          <el-tabs
+            v-model="detailTab"
+            class="log-detail-tabs"
+          >
+            <el-tab-pane
+              :label="t('detailRequest')"
+              name="request"
+            >
               <div class="detail-section">
                 <div class="detail-section-label">{{ t('detailUrl') }}</div>
                 <code class="detail-url">{{ selectedLog.originalUrl }}</code>
-                <div v-if="selectedLog.proxiedUrl && selectedLog.proxiedUrl !== selectedLog.originalUrl" class="detail-section-label" style="margin-top: 8px">{{ t('detailProxiedUrl') }}</div>
-                <code v-if="selectedLog.proxiedUrl && selectedLog.proxiedUrl !== selectedLog.originalUrl" class="detail-url detail-url--proxied">{{ selectedLog.proxiedUrl }}</code>
+                <div
+                  v-if="selectedLog.proxiedUrl && selectedLog.proxiedUrl !== selectedLog.originalUrl"
+                  class="detail-section-label"
+                  style="margin-top: 8px"
+                >
+                  {{ t('detailProxiedUrl') }}
+                </div>
+                <code
+                  v-if="selectedLog.proxiedUrl && selectedLog.proxiedUrl !== selectedLog.originalUrl"
+                  class="detail-url detail-url--proxied"
+                  >{{ selectedLog.proxiedUrl }}</code
+                >
               </div>
-              <div v-if="selectedLog.requestHeaders && Object.keys(selectedLog.requestHeaders).length > 0" class="detail-section">
+              <div
+                v-if="selectedLog.requestHeaders && Object.keys(selectedLog.requestHeaders).length > 0"
+                class="detail-section"
+              >
                 <div class="detail-section-label">{{ t('detailHeaders') }}</div>
                 <div class="detail-headers">
-                  <div v-for="(value, key) in selectedLog.requestHeaders" :key="key" class="detail-header-row">
+                  <div
+                    v-for="(value, key) in selectedLog.requestHeaders"
+                    :key="key"
+                    class="detail-header-row"
+                  >
                     <span class="detail-header-key">{{ key }}</span>
                     <span class="detail-header-val">{{ value }}</span>
                   </div>
                 </div>
               </div>
-              <div v-if="selectedLog.requestBody" class="detail-section">
+              <div
+                v-if="selectedLog.requestBody"
+                class="detail-section"
+              >
                 <div class="detail-section-label">{{ t('detailBody') }}</div>
                 <pre class="detail-body-content">{{ formatBody(selectedLog.requestBody) }}</pre>
               </div>
-              <div v-if="!selectedLog.requestHeaders && !selectedLog.requestBody" class="detail-empty">{{ t('detailNoData') }}</div>
+              <div
+                v-if="!selectedLog.requestHeaders && !selectedLog.requestBody"
+                class="detail-empty"
+              >
+                {{ t('detailNoData') }}
+              </div>
             </el-tab-pane>
 
-            <el-tab-pane :label="t('detailResponse')" name="response">
-              <div v-if="selectedLog.error" class="detail-section">
+            <el-tab-pane
+              :label="t('detailResponse')"
+              name="response"
+            >
+              <div
+                v-if="selectedLog.error"
+                class="detail-section"
+              >
                 <div class="detail-section-label detail-error-label">{{ t('detailError') }}</div>
                 <code class="detail-error-msg">{{ selectedLog.error }}</code>
               </div>
-              <div v-if="selectedLog.responseHeaders && Object.keys(selectedLog.responseHeaders).length > 0" class="detail-section">
+              <div
+                v-if="selectedLog.responseHeaders && Object.keys(selectedLog.responseHeaders).length > 0"
+                class="detail-section"
+              >
                 <div class="detail-section-label">{{ t('detailHeaders') }}</div>
                 <div class="detail-headers">
-                  <div v-for="(value, key) in selectedLog.responseHeaders" :key="key" class="detail-header-row">
+                  <div
+                    v-for="(value, key) in selectedLog.responseHeaders"
+                    :key="key"
+                    class="detail-header-row"
+                  >
                     <span class="detail-header-key">{{ key }}</span>
                     <span class="detail-header-val">{{ value }}</span>
                   </div>
                 </div>
               </div>
-              <div v-if="selectedLog.responseBody" class="detail-section">
+              <div
+                v-if="selectedLog.responseBody"
+                class="detail-section"
+              >
                 <div class="detail-section-label">{{ t('detailBody') }}</div>
                 <pre class="detail-body-content">{{ formatBody(selectedLog.responseBody) }}</pre>
               </div>
-              <div v-if="!selectedLog.responseHeaders && !selectedLog.responseBody && !selectedLog.error" class="detail-empty">{{ t('detailNoData') }}</div>
+              <div
+                v-if="!selectedLog.responseHeaders && !selectedLog.responseBody && !selectedLog.error"
+                class="detail-empty"
+              >
+                {{ t('detailNoData') }}
+              </div>
             </el-tab-pane>
           </el-tabs>
         </div>
@@ -398,7 +479,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Delete, Document, CopyDocument, Refresh, Close } from '@element-plus/icons-vue';
+import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
@@ -427,6 +508,8 @@ const emit = defineEmits<{
   clear: [];
   refresh: [value: boolean];
   refreshDnrStats: [];
+  /** 基于某条日志快速创建规则（父组件预填充规则表单） */
+  createRuleFromLog: [log: RequestLogEntry];
 }>();
 
 const { t, locale } = useI18n();
@@ -455,9 +538,7 @@ const filteredLogs = computed(() => {
       (props.statusFilter === '5xx' && log.status! >= 500);
     const matchesRule = !ruleFilter.value || log.ruleName === ruleFilter.value;
     const matchesUrl =
-      !keyword ||
-      log.originalUrl.toLowerCase().includes(keyword) ||
-      log.proxiedUrl.toLowerCase().includes(keyword);
+      !keyword || log.originalUrl.toLowerCase().includes(keyword) || log.proxiedUrl.toLowerCase().includes(keyword);
     return matchesMethod && matchesStatus && matchesRule && matchesUrl;
   });
 });
@@ -542,6 +623,12 @@ function handleRowClick(row: RequestLogEntry) {
   detailTab.value = 'request';
 }
 
+/** 基于当前日志创建规则：交由父组件解析 URL 并预填充规则表单 */
+function handleCreateRuleFromLog() {
+  if (!selectedLog.value) return;
+  emit('createRuleFromLog', selectedLog.value);
+}
+
 function formatBody(body: string): string {
   try {
     return JSON.stringify(JSON.parse(body), null, 2);
@@ -550,18 +637,23 @@ function formatBody(body: string): string {
   }
 }
 
+/** shell 单引号包裹：内部单引号转为 '\'' ，防止命令断裂或注入 */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 function copyAsCurl() {
   if (!selectedLog.value) return;
   const log = selectedLog.value;
   const parts = [`curl -X ${log.method}`];
-  parts.push(`'${log.originalUrl}'`);
+  parts.push(shellQuote(log.originalUrl));
   if (log.requestHeaders) {
     for (const [key, value] of Object.entries(log.requestHeaders)) {
-      parts.push(`-H '${key}: ${value}'`);
+      parts.push(`-H ${shellQuote(`${key}: ${value}`)}`);
     }
   }
   if (log.requestBody) {
-    parts.push(`-d '${log.requestBody.replace(/'/g, "'\\''")}'`);
+    parts.push(`-d ${shellQuote(log.requestBody)}`);
   }
   const curl = parts.join(' \\\n  ');
   navigator.clipboard.writeText(curl).then(
@@ -748,10 +840,10 @@ function copyAsCurl() {
 }
 
 .log-detail-panel {
+  overflow: hidden;
+  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
   border: 1px solid var(--cop-border-color, var(--el-border-color-light, #e4e7ed));
   border-radius: 10px;
-  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
-  overflow: hidden;
 }
 
 .log-detail-header {
@@ -759,8 +851,8 @@ function copyAsCurl() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
   background: var(--cop-bg-color, var(--el-fill-color, #f0f2f5));
+  border-bottom: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
 }
 
 .log-detail-title {
@@ -785,8 +877,8 @@ function copyAsCurl() {
 .log-detail-rule {
   flex: 1;
   font-size: 13px;
-  color: var(--cop-text-color-primary, #303133);
   font-weight: 500;
+  color: var(--cop-text-color-primary, #303133);
 }
 
 .log-detail-duration {
@@ -803,22 +895,22 @@ function copyAsCurl() {
 }
 
 .detail-section-label {
+  margin-bottom: 6px;
   font-size: 12px;
   font-weight: 500;
   color: var(--cop-text-color-secondary, #909399);
-  margin-bottom: 6px;
 }
 
 .detail-url {
   display: block;
-  font-size: 12px;
-  word-break: break-all;
   padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-primary, var(--el-color-primary, #409eff));
+  word-break: break-all;
   background: var(--cop-bg-color, #fff);
   border: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
   border-radius: 4px;
-  line-height: 1.5;
-  color: var(--cop-primary, var(--el-color-primary, #409eff));
 }
 
 .detail-url--proxied {
@@ -826,10 +918,10 @@ function copyAsCurl() {
 }
 
 .detail-headers {
-  border: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
-  border-radius: 6px;
   overflow: hidden;
   background: var(--cop-bg-color, #fff);
+  border: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+  border-radius: 6px;
 }
 
 .detail-header-row {
@@ -861,17 +953,17 @@ function copyAsCurl() {
 .detail-body-content {
   display: block;
   max-height: 300px;
-  overflow: auto;
   padding: 10px 12px;
   margin: 0;
+  overflow: auto;
   font-size: 12px;
   line-height: 1.6;
+  color: var(--cop-text-color-regular, #606266);
+  word-break: break-all;
+  white-space: pre-wrap;
   background: var(--cop-bg-color, #fff);
   border: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
   border-radius: 6px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--cop-text-color-regular, #606266);
 }
 
 .detail-error-label {
@@ -889,8 +981,8 @@ function copyAsCurl() {
 
 .detail-empty {
   padding: 24px 0;
-  text-align: center;
   font-size: 13px;
   color: var(--cop-text-color-placeholder, #c0c4cc);
+  text-align: center;
 }
 </style>

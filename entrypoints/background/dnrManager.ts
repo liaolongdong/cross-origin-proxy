@@ -2,6 +2,7 @@ import { getProxyConfig } from '@/utils/storage';
 import { buildDnrRules } from '@/utils/dnrRules';
 import { logger } from '@/utils/logger';
 import { MessageType } from '@/utils/types';
+import { STORAGE_KEYS } from '@/utils/constants';
 import { invalidateMatcherCache, isSimpleRule } from '@/utils/urlMatcher';
 import type { ProxyRule, ProxyConfig } from '@/utils/types';
 import { setDnrRuleIdMap } from './dnrStats';
@@ -53,10 +54,19 @@ let pendingSyncCount = 0;
 export function syncDnrRules(rules: ProxyRule[]): Promise<void> {
   pendingSyncCount++;
   const next = syncQueue.then(
-    () => doSyncDnrRules(rules).finally(() => { pendingSyncCount--; }),
-    () => doSyncDnrRules(rules).finally(() => { pendingSyncCount--; }),
+    () =>
+      doSyncDnrRules(rules).finally(() => {
+        pendingSyncCount--;
+      }),
+    () =>
+      doSyncDnrRules(rules).finally(() => {
+        pendingSyncCount--;
+      }),
   );
-  syncQueue = next.then(() => {}, () => {});
+  syncQueue = next.then(
+    () => {},
+    () => {},
+  );
 
   // Reset queue when all pending syncs are done to prevent unbounded growth
   next.finally(() => {
@@ -96,6 +106,7 @@ async function doSyncDnrRules(rules: ProxyRule[]): Promise<void> {
  */
 async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> {
   try {
+    if (!Array.isArray(config.rules)) return;
     const tabs = await chrome.tabs.query({});
     const interceptorConfig: ProxyConfig = {
       enabled: config.enabled,
@@ -122,12 +133,13 @@ async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> {
 export async function initDnrManager(): Promise<void> {
   try {
     const config = await getProxyConfig();
-    await syncDnrRules(config.rules);
+    // 防御存储损坏：rules 非数组时按空集处理
+    await syncDnrRules(Array.isArray(config.rules) ? config.rules : []);
 
     chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === 'local' && changes.proxy_config) {
-        const newConfig = changes.proxy_config.newValue as ProxyConfig | undefined;
-        if (newConfig) {
+      if (areaName === 'local' && STORAGE_KEYS.PROXY_CONFIG in changes) {
+        const newConfig = changes[STORAGE_KEYS.PROXY_CONFIG].newValue as ProxyConfig | undefined;
+        if (newConfig && Array.isArray(newConfig.rules)) {
           invalidateMatcherCache();
           void syncDnrRules(newConfig.rules);
           void broadcastConfigToTabs(newConfig);

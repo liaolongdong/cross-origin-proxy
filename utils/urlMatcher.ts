@@ -99,22 +99,51 @@ export function matchRule(url: string, rule: ProxyRule): boolean {
 }
 
 /**
+ * 提取 wildcard 模式末尾 * 匹配到的内容（带缓存）
+ *
+ * 将模式转为正则：末尾 * 变为捕获组 (.*)，其余 * 变为 .*，整串锚定。
+ * 多 * 模式（如 "*://*.example.com/*"）无法用 startsWith 判断，必须正则捕获，
+ * 否则 SW 通道重写失效，与 DNR 通道（引用最后一个捕获组）行为不一致。
+ * 模式不以 * 结尾时重写语义不明确，返回 null 表示不重写。
+ */
+function wildcardTailRegex(pattern: string): RegExp | null {
+  if (!pattern.endsWith('*')) return null;
+  const cacheKey = `wildcard-tail:${pattern}`;
+  const cached = compiledRegexCache.get(cacheKey);
+  if (cached) return cached;
+
+  const base = pattern.slice(0, -1);
+  const escaped = base.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  let regex: RegExp;
+  try {
+    regex = new RegExp(`^${escaped}(.*)$`);
+  } catch {
+    return null;
+  }
+  setCacheEntry(cacheKey, regex);
+  return regex;
+}
+
+/**
  * 根据匹配规则重写 URL
  */
 export function rewriteUrl(url: string, rule: ProxyRule): string {
+  // 空目标表示不改写地址（如仅注入请求头的规则），直接代理原 URL
+  if (!rule.targetUrl) return url;
   switch (rule.matchType) {
     case 'wildcard': {
-      // 将 matchPattern 中末尾 * 匹配到的部分拼接到 targetUrl 后
-      const patternBase = rule.matchPattern.replace(/\*$/, ''); // 去掉末尾的 *
-      if (url.startsWith(patternBase)) {
-        const rest = url.slice(patternBase.length);
-        // targetUrl 去掉末尾的 /；若 patternBase 以 / 结尾，需补回分隔斜杠，
-        // 否则 "https://a.com/*" 会拼出 "https://b.comapi/x" 这样的坏 URL
-        const target = rule.targetUrl.replace(/\/$/, '');
-        const separator = patternBase.endsWith('/') && rest ? '/' : '';
-        return target + separator + rest;
-      }
-      return url;
+      // 提取模式末尾 * 匹配到的部分，拼接到 targetUrl 后
+      const regex = wildcardTailRegex(rule.matchPattern);
+      if (!regex) return url;
+      const matched = regex.exec(url);
+      if (!matched) return url;
+      const rest = matched[1];
+      const patternBase = rule.matchPattern.slice(0, -1);
+      // targetUrl 去掉末尾的 /；若 patternBase 以 / 结尾，需补回分隔斜杠，
+      // 否则 "https://a.com/*" 会拼出 "https://b.comapi/x" 这样的坏 URL
+      const target = rule.targetUrl.replace(/\/$/, '');
+      const separator = patternBase.endsWith('/') && rest ? '/' : '';
+      return target + separator + rest;
     }
     case 'prefix': {
       if (url.startsWith(rule.matchPattern)) {
@@ -175,5 +204,9 @@ export function isSimpleRule(rule: ProxyRule): boolean {
   if (rule.delayMs) return false;
   if (rule.blocked) return false;
   if (rule.retryCount) return false;
+  // 不以 * 结尾的 wildcard：DNR 的 regexSubstitution 只能引用捕获组，
+  // 会丢失模式末尾的固定文本（如 "a.com/*/x" 的 "/x"）产生错误重定向，
+  // 改走 SW 通道（重写语义为不改写地址，仅代理转发）
+  if (rule.matchType === 'wildcard' && !rule.matchPattern.endsWith('*')) return false;
   return true;
 }

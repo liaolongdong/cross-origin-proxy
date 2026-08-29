@@ -59,14 +59,44 @@
         </el-radio-group>
       </div>
 
+      <!-- 自动关闭代理 -->
+      <div class="setting-section">
+        <div class="setting-label">{{ t('autoOffLabel') }}</div>
+        <p class="setting-hint">{{ t('autoOffHint') }}</p>
+        <el-select
+          :model-value="autoOffMinutes"
+          style="width: 200px"
+          @update:model-value="handleAutoOffChange"
+        >
+          <el-option
+            :label="t('autoOffNever')"
+            :value="0"
+          />
+          <el-option
+            :label="t('autoOff30m')"
+            :value="30"
+          />
+          <el-option
+            :label="t('autoOff1h')"
+            :value="60"
+          />
+          <el-option
+            :label="t('autoOff2h')"
+            :value="120"
+          />
+          <el-option
+            :label="t('autoOff4h')"
+            :value="240"
+          />
+        </el-select>
+      </div>
+
       <!-- 键盘快捷键 -->
       <div class="setting-section">
         <div class="setting-label">{{ t('keyboardShortcuts') }}</div>
         <div class="shortcut-list">
           <div class="shortcut-item">
             <span class="shortcut-desc">{{ t('shortcutAddRule') }}</span>
-            <kbd>{{ isMac ? '⌘' : 'Ctrl' }}</kbd>
-            <span class="shortcut-plus">+</span>
             <kbd>N</kbd>
           </div>
           <div class="shortcut-item">
@@ -88,10 +118,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { Sunny, Moon, Monitor } from '@element-plus/icons-vue';
 import { THEME_OPTIONS, THEME_MODE_OPTIONS, type ThemeName } from '@/utils/theme';
-import { type ThemeMode } from '@/utils/constants';
+import { type ThemeMode, STORAGE_KEYS } from '@/utils/constants';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
 import { useI18n } from '@/composables/useI18n';
 
@@ -102,9 +132,10 @@ defineOptions({
 /**
  * 偏好设置弹窗（替代原设置 Tab）
  *
- * 显示模式切换 + 六色主题圆形色板 + 应用内中英文切换，均即时生效并跨扩展页同步。
+ * 显示模式切换 + 六色主题圆形色板 + 应用内中英文切换 + 代理自动关闭时长，
+ * 均即时生效并跨扩展页同步。
  */
-defineProps<{
+const props = defineProps<{
   visible: boolean;
   /** 当前主题名 */
   currentTheme: ThemeName;
@@ -124,6 +155,34 @@ const { t, locale, setLocale } = useI18n();
 
 /** 平台检测：用于快捷键提示展示 ⌘ / Ctrl */
 const isMac = ref(navigator.platform.includes('Mac'));
+
+/** 代理自动关闭时长（分钟，0 = 从不） */
+const autoOffMinutes = ref(0);
+
+// 打开弹窗时读取自动关闭配置
+watch(
+  () => props.visible,
+  async val => {
+    if (!val) return;
+    try {
+      const result = await chrome.storage.local.get(STORAGE_KEYS.AUTO_OFF_MINUTES);
+      const minutes = result[STORAGE_KEYS.AUTO_OFF_MINUTES];
+      autoOffMinutes.value = typeof minutes === 'number' ? minutes : 0;
+    } catch {
+      autoOffMinutes.value = 0;
+    }
+  },
+);
+
+async function handleAutoOffChange(val: string | number) {
+  const minutes = Number(val) || 0;
+  autoOffMinutes.value = minutes;
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.AUTO_OFF_MINUTES]: minutes });
+  } catch (error) {
+    console.error('Failed to save auto-off setting:', error);
+  }
+}
 
 function handleModeChange(val: string | number | boolean | undefined) {
   if (val === 'light' || val === 'dark' || val === 'system') {
@@ -153,6 +212,13 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   color: var(--cop-text-color-primary);
 }
 
+.setting-hint {
+  margin: -6px 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-text-color-secondary);
+}
+
 .mode-icon {
   margin-right: 4px;
   font-size: 14px;
@@ -172,12 +238,14 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   outline: none;
   border: 2px solid transparent;
   border-radius: 50%;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .theme-swatch:hover {
-  transform: scale(1.12);
   box-shadow: 0 2px 8px rgb(var(--cop-primary-rgb) / 25%);
+  transform: scale(1.12);
 }
 
 .theme-swatch:focus-visible {
@@ -205,8 +273,8 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
 
 .shortcut-item {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
 .shortcut-desc {
@@ -228,8 +296,8 @@ kbd {
   font-family: inherit;
   font-size: 12px;
   line-height: 20px;
-  text-align: center;
   color: var(--cop-text-color-regular);
+  text-align: center;
   background: var(--cop-fill-color-light);
   border: 1px solid var(--cop-border-color);
   border-radius: 4px;

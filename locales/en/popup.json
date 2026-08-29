@@ -10,5 +10,7 @@
   "actionViewLogs": "Request Logs",
   "actionViewLogsDesc": "View recent proxied requests",
   "actionImportExport": "Import / Export",
-  "actionImportExportDesc": "Back up or restore rule config"
+  "actionImportExportDesc": "Back up or restore rule config",
+  "actionProfiles": "Env Profiles",
+  "actionProfilesDesc": "Switch environment rule snapshots"
 }

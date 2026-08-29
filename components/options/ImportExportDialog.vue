@@ -59,7 +59,7 @@
         </div>
 
         <div style="margin-top: 12px;">
-          <label style="font-size: 13px; color: var(--el-text-color-regular); margin-right: 12px;">{{ t('importMode') }}</label>
+          <label style=" margin-right: 12px;font-size: 13px; color: var(--el-text-color-regular);">{{ t('importMode') }}</label>
           <el-radio-group v-model="importMode">
             <el-radio value="replace">{{ t('importModeReplace') }}</el-radio>
             <el-radio value="merge">{{ t('importModeMerge') }}</el-radio>

@@ -97,9 +97,7 @@ export default defineContentScript({
 
       let regex: RegExp | null = null;
       if (rule.matchType === 'wildcard') {
-        const escaped = rule.matchPattern
-          .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-          .replace(/\*/g, '.*');
+        const escaped = rule.matchPattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
         try {
           regex = new RegExp(`^${escaped}$`);
         } catch {
@@ -202,9 +200,14 @@ export default defineContentScript({
             clearTimeout(timeout);
             // status 0 无法构造 Response（合法范围 200-599）：
             // 含旁路（Proxy Bypass）、代理失败（Proxy Error）、桥接层错误，
-            // 统一 reject 交由外层回退到原生 fetch/XHR
+            // 统一 reject；其中"规则阻断"必须真正拦截（打标记），
+            // 不能回退原生 fetch，否则被阻断的请求会实际发出
             if (data.status === 0 || data.status < 200 || data.status > 599) {
-              reject(new Error(data.body || data.statusText || 'Proxy bypassed'));
+              const err = new Error(data.body || data.statusText || 'Proxy bypassed') as Error & {
+                __proxyBlocked?: boolean;
+              };
+              err.__proxyBlocked = data.statusText === 'Blocked';
+              reject(err);
               return;
             }
 
@@ -301,6 +304,11 @@ export default defineContentScript({
 
         return await proxyFetch(url, { method, headers, body: (body ?? null) as BodyInit | null });
       } catch (error) {
+        // 规则阻断：不得回退原生 fetch（否则被阻断的请求会实际发出），
+        // 抛出模拟网络错误的 TypeError，与原生 fetch 被阻断时的行为一致
+        if ((error as { __proxyBlocked?: boolean })?.__proxyBlocked) {
+          throw new TypeError('Failed to fetch', { cause: error });
+        }
         console.warn('[CrossOriginProxy] Proxy failed, falling back to original fetch:', error);
         return originalFetch.call(window, input, init);
       }
@@ -441,24 +449,35 @@ export default defineContentScript({
 
     /** WebSocket URL 重写（复用与 fetch 相同的匹配/重写逻辑） */
     function rewriteWsUrl(url: string, rule: ProxyRule): string {
+      if (!rule.targetUrl) return url;
       const httpUrl = normalizeWsUrl(url);
-      const httpTarget = rule.targetUrl.replace(/^https:\/\//, 'http://').replace(/^http(s?):/, 'http$1:');
+      // toWsUrl 负责协议映射（https→wss、http→ws）；wss://、ws:// 目标原样保留。
+      // 注意不能先把 https 降级为 http，否则 wss 目标会被错误降级为不安全的 ws
+      const wsTarget = rule.targetUrl;
 
       switch (rule.matchType) {
         case 'wildcard': {
-          const patternBase = rule.matchPattern.replace(/\*$/, '');
-          if (httpUrl.startsWith(patternBase)) {
-            const rest = httpUrl.slice(patternBase.length);
-            const target = httpTarget.replace(/\/$/, '');
-            const separator = patternBase.endsWith('/') && rest ? '/' : '';
-            return toWsUrl(target + separator + rest);
+          if (!rule.matchPattern.endsWith('*')) return url;
+          const patternBase = rule.matchPattern.slice(0, -1);
+          // 多 * 模式（如 "*://*.example.com/*"）无法用 startsWith 判断，
+          // 需正则捕获末尾 * 匹配的内容，与 SW 通道重写语义保持一致
+          const escaped = patternBase.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+          let matched: RegExpExecArray | null;
+          try {
+            matched = new RegExp(`^${escaped}(.*)$`).exec(httpUrl);
+          } catch {
+            return url;
           }
-          return url;
+          if (!matched) return url;
+          const rest = matched[1];
+          const target = wsTarget.replace(/\/$/, '');
+          const separator = patternBase.endsWith('/') && rest ? '/' : '';
+          return toWsUrl(target + separator + rest);
         }
         case 'prefix': {
           if (httpUrl.startsWith(rule.matchPattern)) {
             const rest = httpUrl.slice(rule.matchPattern.length);
-            const target = httpTarget.replace(/\/$/, '');
+            const target = wsTarget.replace(/\/$/, '');
             return toWsUrl(target + rest);
           }
           return url;
@@ -466,7 +485,7 @@ export default defineContentScript({
         case 'regex': {
           const regex = getCompiledRegex(rule);
           if (!regex) return url;
-          const httpResult = httpUrl.replace(regex, httpTarget);
+          const httpResult = httpUrl.replace(regex, wsTarget);
           return toWsUrl(httpResult);
         }
         default:
@@ -482,14 +501,10 @@ export default defineContentScript({
       if (rule) {
         const targetUrl = rewriteWsUrl(wsUrl, rule);
         console.warn('[CrossOriginProxy] WS intercepted:', wsUrl, '→', targetUrl);
-        return protocols
-          ? new OriginalWebSocket(targetUrl, protocols)
-          : new OriginalWebSocket(targetUrl);
+        return protocols ? new OriginalWebSocket(targetUrl, protocols) : new OriginalWebSocket(targetUrl);
       }
 
-      return protocols
-        ? new OriginalWebSocket(url, protocols)
-        : new OriginalWebSocket(url);
+      return protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
     }
 
     // 保留 WebSocket 静态属性和原型

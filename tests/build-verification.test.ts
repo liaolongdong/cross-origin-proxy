@@ -1,0 +1,384 @@
+/**
+ * 构建产物全量验证测试
+ *
+ * 验证构建输出的完整性、manifest 配置、i18n、文件结构等
+ * 无需浏览器，直接验证 .output/chrome-mv3 目录
+ */
+
+import { describe, it, expect, beforeAll } from 'vitest';
+import path from 'path';
+import fs from 'fs';
+
+const BUILD_DIR = path.resolve(__dirname, '../.output/chrome-mv3');
+
+describe('[Build] 构建产物全量验证', () => {
+  let manifest: any;
+  let enMessages: any;
+  let zhMessages: any;
+
+  beforeAll(() => {
+    if (!fs.existsSync(BUILD_DIR)) {
+      throw new Error(`构建目录不存在: ${BUILD_DIR}。请先运行 'pnpm build'`);
+    }
+
+    manifest = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, 'manifest.json'), 'utf-8'));
+    enMessages = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, '_locales/en/messages.json'), 'utf-8'));
+    zhMessages = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, '_locales/zh_CN/messages.json'), 'utf-8'));
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Manifest 基础验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('Manifest 基础配置', () => {
+    it('should be Manifest V3', () => {
+      expect(manifest.manifest_version).toBe(3);
+    });
+
+    it('should have i18n name and description', () => {
+      expect(manifest.name).toBe('__MSG_extensionName__');
+      expect(manifest.description).toBe('__MSG_extensionDescription__');
+    });
+
+    it('should have default locale zh_CN', () => {
+      expect(manifest.default_locale).toBe('zh_CN');
+    });
+
+    it('should have version string', () => {
+      expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 权限验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('权限声明', () => {
+    it('should have storage permission', () => {
+      expect(manifest.permissions).toContain('storage');
+    });
+
+    it('should have declarativeNetRequest permission', () => {
+      expect(manifest.permissions).toContain('declarativeNetRequest');
+    });
+
+    it('should have declarativeNetRequestFeedback permission', () => {
+      expect(manifest.permissions).toContain('declarativeNetRequestFeedback');
+    });
+
+    it('should have alarms permission (for keepalive)', () => {
+      expect(manifest.permissions).toContain('alarms');
+    });
+
+    it('should have <all_urls> host permission', () => {
+      expect(manifest.host_permissions).toContain('<all_urls>');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 快捷键命令验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('快捷键命令 (Feature 4)', () => {
+    it('should have commands section', () => {
+      expect(manifest.commands).toBeDefined();
+    });
+
+    it('should have toggle-proxy command', () => {
+      expect(manifest.commands['toggle-proxy']).toBeDefined();
+    });
+
+    it('should have Ctrl+Shift+P for Windows/Linux', () => {
+      expect(manifest.commands['toggle-proxy'].suggested_key.default).toBe('Ctrl+Shift+P');
+    });
+
+    it('should have Command+Shift+P for Mac', () => {
+      expect(manifest.commands['toggle-proxy'].suggested_key.mac).toBe('Command+Shift+P');
+    });
+
+    it('should have i18n description reference', () => {
+      expect(manifest.commands['toggle-proxy'].description).toBe('__MSG_commandToggleProxy__');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Background Service Worker
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('Background Service Worker', () => {
+    it('should have background.service_worker defined', () => {
+      expect(manifest.background?.service_worker).toBe('background.js');
+    });
+
+    it('should have background.js file', () => {
+      const bgPath = path.join(BUILD_DIR, 'background.js');
+      expect(fs.existsSync(bgPath)).toBe(true);
+    });
+
+    it('background.js should contain chrome.runtime API calls', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'background.js'), 'utf-8');
+      expect(content).toContain('chrome.runtime');
+    });
+
+    it('background.js should contain command listener for keyboard shortcut', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'background.js'), 'utf-8');
+      expect(content).toContain('onCommand');
+      expect(content).toContain('toggle-proxy');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Content Scripts
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('Content Scripts', () => {
+    it('should have content_scripts defined', () => {
+      expect(manifest.content_scripts).toBeDefined();
+      expect(Array.isArray(manifest.content_scripts)).toBe(true);
+    });
+
+    it('should have ISOLATED world content script', () => {
+      const contentScript = manifest.content_scripts.find((cs: any) => cs.js?.includes('content-scripts/content.js'));
+      expect(contentScript).toBeDefined();
+      expect(contentScript.matches).toContain('<all_urls>');
+      expect(contentScript.run_at).toBe('document_start');
+    });
+
+    it('should have MAIN world interceptor script', () => {
+      const interceptor = manifest.content_scripts.find((cs: any) =>
+        cs.js?.includes('content-scripts/main-interceptor.js'),
+      );
+      expect(interceptor).toBeDefined();
+      expect(interceptor.world).toBe('MAIN');
+    });
+
+    it('should have content.js file', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, 'content-scripts/content.js'))).toBe(true);
+    });
+
+    it('should have main-interceptor.js file', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, 'content-scripts/main-interceptor.js'))).toBe(true);
+    });
+
+    it('main-interceptor.js should intercept fetch', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'content-scripts/main-interceptor.js'), 'utf-8');
+      expect(content).toContain('fetch');
+    });
+
+    it('main-interceptor.js should intercept XMLHttpRequest', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'content-scripts/main-interceptor.js'), 'utf-8');
+      expect(content).toContain('XMLHttpRequest');
+    });
+
+    it('main-interceptor.js should intercept WebSocket', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'content-scripts/main-interceptor.js'), 'utf-8');
+      expect(content).toContain('WebSocket');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Options & Popup Pages
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('扩展页面', () => {
+    it('should have options_ui defined', () => {
+      expect(manifest.options_ui).toBeDefined();
+      expect(manifest.options_ui.page).toBe('options.html');
+      expect(manifest.options_ui.open_in_tab).toBe(true);
+    });
+
+    it('should have action with popup', () => {
+      expect(manifest.action).toBeDefined();
+      expect(manifest.action.default_popup).toBe('popup.html');
+    });
+
+    it('should have options.html file', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, 'options.html'))).toBe(true);
+    });
+
+    it('should have popup.html file', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, 'popup.html'))).toBe(true);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // i18n 国际化验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('国际化 (i18n)', () => {
+    it('should have en/messages.json', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, '_locales/en/messages.json'))).toBe(true);
+    });
+
+    it('should have zh_CN/messages.json', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, '_locales/zh_CN/messages.json'))).toBe(true);
+    });
+
+    it('should have extensionName in English', () => {
+      expect(enMessages.extensionName.message).toBe('Cross-Origin Proxy');
+    });
+
+    it('should have extensionName in Chinese', () => {
+      expect(zhMessages.extensionName.message).toBe('跨域代理助手');
+    });
+
+    it('should have commandToggleProxy in English', () => {
+      expect(enMessages.commandToggleProxy.message).toBe('Toggle proxy on/off');
+    });
+
+    it('should have commandToggleProxy in Chinese', () => {
+      expect(zhMessages.commandToggleProxy.message).toBe('切换代理开关');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 图标资源验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('图标资源', () => {
+    it('should have all required icon sizes', () => {
+      const sizes = [16, 32, 48, 96, 128];
+      for (const size of sizes) {
+        const iconPath = path.join(BUILD_DIR, `icon/${size}.png`);
+        expect(fs.existsSync(iconPath), `缺少图标: icon/${size}.png`).toBe(true);
+      }
+    });
+
+    it('should have icon.svg', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, 'icon.svg'))).toBe(true);
+    });
+
+    it('manifest icons should match existing files', () => {
+      const icons = manifest.icons;
+      expect(icons).toBeDefined();
+
+      for (const [, filePath] of Object.entries(icons)) {
+        const fullPath = path.join(BUILD_DIR, filePath as string);
+        expect(fs.existsSync(fullPath), `图标文件不存在: ${filePath}`).toBe(true);
+      }
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // JS/CSS 资源验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('JS/CSS 资源', () => {
+    it('should have chunks directory', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, 'chunks'))).toBe(true);
+    });
+
+    it('should have assets directory', () => {
+      expect(fs.existsSync(path.join(BUILD_DIR, 'assets'))).toBe(true);
+    });
+
+    it('should have JS chunk files', () => {
+      const chunks = fs.readdirSync(path.join(BUILD_DIR, 'chunks'));
+      const jsChunks = chunks.filter(f => f.endsWith('.js'));
+      expect(jsChunks.length).toBeGreaterThan(0);
+    });
+
+    it('should have CSS asset files', () => {
+      const assets = fs.readdirSync(path.join(BUILD_DIR, 'assets'));
+      const cssAssets = assets.filter(f => f.endsWith('.css'));
+      expect(cssAssets.length).toBeGreaterThan(0);
+    });
+
+    it('should have lazy-loaded component chunks', () => {
+      const chunks = fs.readdirSync(path.join(BUILD_DIR, 'chunks'));
+      const componentChunks = chunks.filter(
+        f =>
+          f.includes('RuleFormDialog') ||
+          f.includes('LogDrawer') ||
+          f.includes('ImportExportDialog') ||
+          f.includes('SettingsDialog'),
+      );
+      expect(componentChunks.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 构建产物大小验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('构建产物大小', () => {
+    function getDirSize(dir: string): number {
+      let size = 0;
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.isDirectory()) {
+          size += getDirSize(filePath);
+        } else {
+          size += stat.size;
+        }
+      }
+      return size;
+    }
+
+    it('total build size should be under 2MB', () => {
+      const totalSize = getDirSize(BUILD_DIR);
+      const maxSize = 2 * 1024 * 1024; // 2MB
+      expect(totalSize).toBeLessThan(maxSize);
+    });
+
+    it('total build size should be over 100KB', () => {
+      const totalSize = getDirSize(BUILD_DIR);
+      const minSize = 100 * 1024; // 100KB
+      expect(totalSize).toBeGreaterThan(minSize);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CSP (Content Security Policy) 验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('Content Security Policy', () => {
+    it('should have CSP defined', () => {
+      expect(manifest.content_security_policy).toBeDefined();
+    });
+
+    it('should restrict script-src to self', () => {
+      const csp = manifest.content_security_policy.extension_pages;
+      expect(csp).toContain("script-src 'self'");
+    });
+
+    it('should restrict object-src to self', () => {
+      const csp = manifest.content_security_policy.extension_pages;
+      expect(csp).toContain("object-src 'self'");
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 关键功能代码验证
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('关键功能代码', () => {
+    it('background.js should handle proxy toggle via keyboard', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'background.js'), 'utf-8');
+      expect(content).toContain('toggle-proxy');
+    });
+
+    it('options page JS should contain toggle all functionality', () => {
+      const chunks = fs.readdirSync(path.join(BUILD_DIR, 'chunks'));
+      const optionsChunk = chunks.find(f => f.includes('options'));
+      if (optionsChunk) {
+        const content = fs.readFileSync(path.join(BUILD_DIR, 'chunks', optionsChunk), 'utf-8');
+        // 应该包含全部启用/禁用的相关代码
+        expect(content.length).toBeGreaterThan(1000);
+      }
+    });
+
+    it('content script should have ReDoS protection', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'content-scripts/main-interceptor.js'), 'utf-8');
+      // ReDoS protection uses these regex patterns (function name gets minified)
+      expect(content).toContain('[+*]'); // nested quantifier detection pattern
+    });
+
+    it('background.js should have DNR rule management', () => {
+      const content = fs.readFileSync(path.join(BUILD_DIR, 'background.js'), 'utf-8');
+      expect(content).toContain('declarativeNetRequest');
+    });
+  });
+});

@@ -10,5 +10,7 @@
   "actionViewLogs": "请求日志",
   "actionViewLogsDesc": "查看最近的代理请求",
   "actionImportExport": "导入导出",
-  "actionImportExportDesc": "备份或恢复规则配置"
+  "actionImportExportDesc": "备份或恢复规则配置",
+  "actionProfiles": "环境配置",
+  "actionProfilesDesc": "一键切换多环境规则快照"
 }

@@ -153,8 +153,8 @@ const templates: TemplateItem[] = [
     ruleData: {
       name: 'API v1 → v2',
       enabled: true,
-      matchPattern: '*://*/api/v1/*',
-      targetUrl: 'https://uat-api.example.com/api/v2/',
+      matchPattern: 'https://api-fat.example.com/api/v1',
+      targetUrl: 'https://api-uat.example.com/api/v2',
       matchType: 'prefix',
       priority: 100,
     },
@@ -269,8 +269,8 @@ function handleTemplateClick(tpl: TemplateItem) {
 
 /* 快速模板区域 */
 .templates-section {
-  margin-top: 32px;
   padding-top: 24px;
+  margin-top: 32px;
   border-top: 1px dashed var(--el-border-color-lighter, #ebeef5);
 }
 

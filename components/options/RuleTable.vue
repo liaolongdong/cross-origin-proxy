@@ -478,9 +478,9 @@ function highlightText(text: string, keyword: string): string {
 }
 
 :deep(.search-highlight) {
-  background: var(--cop-primary-bg);
-  color: var(--cop-primary);
   padding: 0 2px;
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg);
   border-radius: 2px;
 }
 
@@ -495,9 +495,9 @@ function highlightText(text: string, keyword: string): string {
   font-size: 16px;
   color: var(--cop-text-color-placeholder, #c0c4cc);
   cursor: grab;
+  user-select: none;
   border-radius: 4px;
   transition: all 0.15s;
-  user-select: none;
 }
 
 .drag-handle:hover {
@@ -525,8 +525,8 @@ function highlightText(text: string, keyword: string): string {
 
 .rule-badges {
   display: inline-flex;
-  gap: 3px;
   flex-shrink: 0;
+  gap: 3px;
 }
 
 .rule-badge {
@@ -537,8 +537,8 @@ function highlightText(text: string, keyword: string): string {
   height: 18px;
   font-size: 10px;
   font-weight: 700;
-  border-radius: 4px;
   line-height: 1;
+  border-radius: 4px;
 }
 
 .rule-badge--h {
@@ -577,10 +577,10 @@ function highlightText(text: string, keyword: string): string {
 }
 
 .rule-badge--ws {
+  width: 20px;
+  font-size: 8px;
   color: #8b5cf6;
   background: #f5f3ff;
-  font-size: 8px;
-  width: 20px;
 }
 
 .hit-count-badge {
@@ -591,19 +591,20 @@ function highlightText(text: string, keyword: string): string {
   padding: 0 6px;
   font-size: 12px;
   font-weight: 600;
+  line-height: 20px;
   color: var(--el-color-primary, #409eff);
   background: var(--el-color-primary-light-9, #ecf5ff);
   border-radius: 10px;
-  line-height: 20px;
 }
 
 .hit-count-zero {
-  color: var(--el-text-color-placeholder, #c0c4cc);
   font-size: 12px;
+  color: var(--el-text-color-placeholder, #c0c4cc);
 }
 
 .shadowed-indicator {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 16px;
@@ -611,9 +612,8 @@ function highlightText(text: string, keyword: string): string {
   font-size: 10px;
   font-weight: 700;
   color: #fff;
+  cursor: help;
   background: var(--el-color-warning, #e6a23c);
   border-radius: 50%;
-  flex-shrink: 0;
-  cursor: help;
 }
 </style>

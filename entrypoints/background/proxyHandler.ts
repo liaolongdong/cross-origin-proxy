@@ -48,11 +48,7 @@ export function isRetryableError(error: unknown, status?: number): boolean {
 /**
  * 判断请求是否满足单个 Mock 条件（AND 逻辑）
  */
-export function matchesMockCondition(
-  url: string,
-  method: string,
-  condition: MockCondition,
-): boolean {
+export function matchesMockCondition(url: string, method: string, condition: MockCondition): boolean {
   if (condition.matchUrl) {
     try {
       if (!new RegExp(condition.matchUrl).test(url)) return false;
@@ -78,13 +74,32 @@ export function matchesMockCondition(
 
 // ─── Header 校验 ──────────────────────────────────────────────────────────────
 
-function sanitizeHeaders(
-  headers: Record<string, string>,
-): Record<string, string> | null {
+function isValidHeaderEntry(key: string, value: string): boolean {
+  return HEADER_NAME_RE.test(key) && !/[\r\n]/.test(value);
+}
+
+/**
+ * 过滤页面传入的请求头：跳过非法条目（非法名称或含换行的值），
+ * 避免个别脏头部导致整个代理请求被拒绝
+ */
+function filterIncomingHeaders(headers: Record<string, string>): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
-    if (!HEADER_NAME_RE.test(key)) return null;
-    if (/[\r\n]/.test(value)) return null;
+    if (typeof value === 'string' && isValidHeaderEntry(key, value)) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * 校验规则配置的请求头覆盖：任一非法即整体拒绝（返回 null），
+ * 规则由用户直接编辑，应报错促其修正而非静默丢弃
+ */
+function validateRuleHeaders(headers: Record<string, string>): Record<string, string> | null {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value !== 'string' || !isValidHeaderEntry(key, value)) return null;
     result[key] = value;
   }
   return result;
@@ -116,7 +131,9 @@ function applyResponseOverrides(
   const result = { status, statusText, headers: { ...headers }, body, isBase64 };
 
   if (overrides.status !== undefined) {
-    result.status = overrides.status;
+    // 状态码必须在可构造 Response 的合法区间（200-599），
+    // 否则前端无法构造响应会回退原生请求，覆盖静默失效
+    result.status = Math.min(599, Math.max(200, Math.trunc(overrides.status) || 200));
   }
   if (overrides.statusText !== undefined) {
     result.statusText = overrides.statusText;
@@ -236,6 +253,9 @@ export async function handleProxyRequest(data: {
       }
     }
 
+    // 状态码必须在可构造 Response 的合法区间（200-599），否则前端会回退原生请求使 Mock 失效
+    mockStatus = Math.min(599, Math.max(200, Math.trunc(mockStatus) || 200));
+
     const mockHeaders: Record<string, string> = { 'content-type': mockContentType };
     logger.info(`Mock: ${data.url} → ${mockStatus} (rule: ${rule.name})`);
 
@@ -273,21 +293,10 @@ export async function handleProxyRequest(data: {
   logger.info(`Proxying: ${data.url} → ${targetUrl}`);
 
   // ─── 准备请求参数（重试循环外，避免重复计算）────────────────────────────────
-  const sanitizedIncoming = sanitizeHeaders(data.headers);
-  if (!sanitizedIncoming) {
-    return {
-      requestId: data.requestId,
-      status: 0,
-      statusText: 'Invalid Headers',
-      headers: {},
-      body: 'Request contains invalid header name or value',
-      isBase64: false,
-    };
-  }
+  // 传入头宽容过滤（跳过个别非法条目）；规则头严格校验（非法则拒绝并提示修正）
+  const sanitizedIncoming = filterIncomingHeaders(data.headers);
 
-  const sanitizedOverrides = rule.headerOverrides
-    ? sanitizeHeaders(rule.headerOverrides)
-    : {};
+  const sanitizedOverrides = rule.headerOverrides ? validateRuleHeaders(rule.headerOverrides) : {};
   if (rule.headerOverrides && !sanitizedOverrides) {
     return {
       requestId: data.requestId,
@@ -480,9 +489,9 @@ export async function getProxyStatus(): Promise<ProxyStatus> {
   const todayTs = todayTimestamp.getTime();
 
   let todayRequestCount = 0;
+  // 日志按批刷写（批间新到旧、批内旧到新），整体并非严格降序，须全量遍历
   for (const l of logs) {
-    if (l.timestamp < todayTs) break;
-    todayRequestCount++;
+    if (l.timestamp >= todayTs) todayRequestCount++;
   }
 
   return {

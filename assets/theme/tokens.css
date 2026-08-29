@@ -26,17 +26,17 @@
   --cop-surface-hover: #f0f9ff;
 
   /* ====== 语义层：背景 ====== */
-  --cop-bg-color: #ffffff;
+  --cop-bg-color: #fff;
   --cop-bg-color-secondary: #fafafa;
   --cop-bg-color-tertiary: #f5f5f5;
-  --cop-bg-color-overlay: #ffffff;
+  --cop-bg-color-overlay: #fff;
 
   /* ====== 语义层：文字 ====== */
   --cop-text-color-primary: #303133;
   --cop-text-color-regular: #606266;
   --cop-text-color-secondary: #909399;
   --cop-text-color-placeholder: #c0c4cc;
-  --cop-text-color-on-primary: #ffffff;
+  --cop-text-color-on-primary: #fff;
 
   /* ====== 语义层：边框 ====== */
   --cop-border-color: #ebeef5;
@@ -183,30 +183,23 @@
   --cop-surface-2: #16213e;
   --cop-surface-line: #2a2a3e;
   --cop-surface-hover: rgb(102 179 255 / 8%);
-
   --cop-bg-color: #1a1a2e;
   --cop-bg-color-secondary: #16213e;
   --cop-bg-color-tertiary: #0f3460;
   --cop-bg-color-overlay: #1e1e36;
-
   --cop-text-color-primary: #e0e0e0;
   --cop-text-color-regular: #b0b0c0;
   --cop-text-color-secondary: #808098;
   --cop-text-color-placeholder: #5a5a70;
-  --cop-text-color-on-primary: #ffffff;
-
+  --cop-text-color-on-primary: #fff;
   --cop-border-color: #2a2a3e;
   --cop-border-color-light: #232338;
-
   --cop-shadow-color: rgb(0 0 0 / 30%);
   --cop-shadow-sm: 0 2px 8px rgb(0 0 0 / 25%);
   --cop-shadow-md: 0 2px 12px rgb(0 0 0 / 35%);
-
   --cop-scrollbar-thumb: #3a3a50;
   --cop-scrollbar-thumb-hover: #4a4a60;
-
   --cop-form-label-color: #c0c0d0;
-
   --el-color-primary: #66b3ff;
   --el-color-primary-light-3: #85c1ff;
   --el-color-primary-light-5: #a0cfff;
@@ -245,30 +238,23 @@
     --cop-surface-2: #16213e;
     --cop-surface-line: #2a2a3e;
     --cop-surface-hover: rgb(102 179 255 / 8%);
-
     --cop-bg-color: #1a1a2e;
     --cop-bg-color-secondary: #16213e;
     --cop-bg-color-tertiary: #0f3460;
     --cop-bg-color-overlay: #1e1e36;
-
     --cop-text-color-primary: #e0e0e0;
     --cop-text-color-regular: #b0b0c0;
     --cop-text-color-secondary: #808098;
     --cop-text-color-placeholder: #5a5a70;
-    --cop-text-color-on-primary: #ffffff;
-
+    --cop-text-color-on-primary: #fff;
     --cop-border-color: #2a2a3e;
     --cop-border-color-light: #232338;
-
     --cop-shadow-color: rgb(0 0 0 / 30%);
     --cop-shadow-sm: 0 2px 8px rgb(0 0 0 / 25%);
     --cop-shadow-md: 0 2px 12px rgb(0 0 0 / 35%);
-
     --cop-scrollbar-thumb: #3a3a50;
     --cop-scrollbar-thumb-hover: #4a4a60;
-
     --cop-form-label-color: #c0c0d0;
-
     --el-color-primary: #66b3ff;
     --el-color-primary-light-3: #85c1ff;
     --el-color-primary-light-5: #a0cfff;
@@ -276,7 +262,6 @@
     --el-color-primary-light-8: rgb(102 179 255 / 20%);
     --el-color-primary-light-9: rgb(102 179 255 / 12%);
     --el-color-primary-dark-2: #4d9ae0;
-
     --el-bg-color: #1a1a2e;
     --el-bg-color-overlay: #1e1e36;
     --el-bg-color-page: #141428;

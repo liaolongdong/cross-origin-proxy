@@ -1,7 +1,8 @@
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig, ProxyRule } from '@/utils/types';
 import { generateId } from '@/utils/generateId';
+import { STORAGE_KEYS } from '@/utils/constants';
 
 export function useRuleManagement() {
   const rules = ref<ProxyRule[]>([]);
@@ -34,9 +35,7 @@ export function useRuleManagement() {
 
   /** 计算被更高优先级同模式规则遮蔽的规则 ID 集合 */
   const shadowedRuleIds = computed(() => {
-    const sorted = [...rules.value]
-      .filter(r => r.enabled)
-      .sort((a, b) => a.priority - b.priority);
+    const sorted = [...rules.value].filter(r => r.enabled).sort((a, b) => a.priority - b.priority);
 
     const seen = new Map<string, string>();
     const shadowed = new Set<string>();
@@ -55,9 +54,11 @@ export function useRuleManagement() {
   async function fetchConfig() {
     loading.value = true;
     try {
-      const config: ProxyConfig = await chrome.runtime.sendMessage({
+      const config: ProxyConfig | undefined = await chrome.runtime.sendMessage({
         type: MessageType.GET_PROXY_CONFIG,
       });
+      // SW 异常时响应可能为非标结构，仅接受含数组 rules 的配置
+      if (!config || !Array.isArray(config.rules)) return;
       rules.value = config.rules;
       enabled.value = config.enabled;
     } catch (error) {
@@ -91,10 +92,14 @@ export function useRuleManagement() {
     const existingRule = rules.value.find(r => r.id === ruleId);
     if (!existingRule) return;
     const updatedRule: ProxyRule = { ...existingRule, ...updates, updatedAt: Date.now() };
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.UPDATE_RULE,
       data: { rule: updatedRule },
     });
+    // 后台写入失败时不做乐观更新，抛错交由调用方提示
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'UPDATE_RULE_FAILED');
+    }
     const index = rules.value.findIndex(r => r.id === ruleId);
     if (index !== -1) {
       rules.value[index] = updatedRule;
@@ -102,28 +107,37 @@ export function useRuleManagement() {
   }
 
   async function deleteRule(ruleId: string) {
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.DELETE_RULE,
       data: { ruleId },
     });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'DELETE_RULE_FAILED');
+    }
     rules.value = rules.value.filter(r => r.id !== ruleId);
   }
 
   async function toggleRule(ruleId: string, enabled: boolean) {
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.TOGGLE_RULE,
       data: { ruleId, enabled },
     });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'TOGGLE_RULE_FAILED');
+    }
     const rule = rules.value.find(r => r.id === ruleId);
     if (rule) rule.enabled = enabled;
   }
 
   /** 批量启停（单条消息一次写入，避免循环 sendMessage 触发多次 DNR 重建） */
   async function batchToggleRules(ruleIds: string[], enabled: boolean) {
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.BATCH_TOGGLE_RULES,
       data: { ruleIds, enabled },
     });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'BATCH_TOGGLE_FAILED');
+    }
     const idSet = new Set(ruleIds);
     rules.value.forEach(rule => {
       if (idSet.has(rule.id)) rule.enabled = enabled;
@@ -139,10 +153,13 @@ export function useRuleManagement() {
 
   /** 批量删除（单条消息一次写入，避免循环 sendMessage 触发多次 DNR 重建） */
   async function batchDeleteRules(ids: string[]) {
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string; data?: unknown } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.BATCH_DELETE_RULES,
       data: { ruleIds: ids },
     });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'BATCH_DELETE_FAILED');
+    }
     const idSet = new Set(ids);
     rules.value = rules.value.filter(r => !idSet.has(r.id));
   }
@@ -173,14 +190,32 @@ export function useRuleManagement() {
   }
 
   async function toggleProxy(value: boolean) {
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.TOGGLE_PROXY,
       data: { enabled: value },
     });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'TOGGLE_PROXY_FAILED');
+    }
     enabled.value = value;
   }
 
-  onMounted(fetchConfig);
+  // 外部配置变化同步：快捷键开关代理、环境配置加载、其他扩展页的改动
+  // 都发生在后台存储层，常开的 options 页需监听变化刷新，避免状态过期
+  function handleStorageChanged(changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) {
+    if (areaName === 'local' && STORAGE_KEYS.PROXY_CONFIG in changes) {
+      void fetchConfig();
+    }
+  }
+
+  onMounted(() => {
+    void fetchConfig();
+    chrome.storage.onChanged.addListener(handleStorageChanged);
+  });
+
+  onUnmounted(() => {
+    chrome.storage.onChanged.removeListener(handleStorageChanged);
+  });
 
   return {
     rules,

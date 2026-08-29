@@ -1,6 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { isRetryableError, matchesMockCondition } from '@/entrypoints/background/proxyHandler';
-import { findMatchingRule, rewriteUrl, isSimpleRule } from '@/utils/urlMatcher';
 import type { ProxyRule } from '@/utils/types';
 
 // ─── Bug 4: Mock duration fix verification ──────────────────────────────────
@@ -110,9 +108,7 @@ describe('Feature: Duplicate/conflict rule detection', () => {
     ruleData: Partial<ProxyRule> & { matchPattern: string; matchType: ProxyRule['matchType']; priority: number },
     excludeId?: string,
   ): ProxyRule | null {
-    const sorted = [...allRules]
-      .filter(r => r.enabled && r.id !== excludeId)
-      .sort((a, b) => a.priority - b.priority);
+    const sorted = [...allRules].filter(r => r.enabled && r.id !== excludeId).sort((a, b) => a.priority - b.priority);
 
     for (const existing of sorted) {
       if (
@@ -127,9 +123,7 @@ describe('Feature: Duplicate/conflict rule detection', () => {
   }
 
   function computeShadowedRuleIds(allRules: ProxyRule[]): Set<string> {
-    const sorted = [...allRules]
-      .filter(r => r.enabled)
-      .sort((a, b) => a.priority - b.priority);
+    const sorted = [...allRules].filter(r => r.enabled).sort((a, b) => a.priority - b.priority);
 
     const seen = new Map<string, string>();
     const shadowed = new Set<string>();
@@ -147,21 +141,47 @@ describe('Feature: Duplicate/conflict rule detection', () => {
 
   it('should detect conflict when same pattern exists with higher priority', () => {
     const rules = [
-      makeRule({ id: '1', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 1, enabled: true }),
-      makeRule({ id: '2', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 5, enabled: true }),
+      makeRule({
+        id: '1',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 1,
+        enabled: true,
+      }),
+      makeRule({
+        id: '2',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 5,
+        enabled: true,
+      }),
     ];
 
-    const conflict = findConflictingRule(rules, { matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 5 });
+    const conflict = findConflictingRule(rules, {
+      matchPattern: 'https://api.example.com/*',
+      matchType: 'wildcard',
+      priority: 5,
+    });
     expect(conflict).not.toBeNull();
     expect(conflict!.id).toBe('1');
   });
 
   it('should NOT detect conflict when patterns differ', () => {
     const rules = [
-      makeRule({ id: '1', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 1, enabled: true }),
+      makeRule({
+        id: '1',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 1,
+        enabled: true,
+      }),
     ];
 
-    const conflict = findConflictingRule(rules, { matchPattern: 'https://other.example.com/*', matchType: 'wildcard', priority: 5 });
+    const conflict = findConflictingRule(rules, {
+      matchPattern: 'https://other.example.com/*',
+      matchType: 'wildcard',
+      priority: 5,
+    });
     expect(conflict).toBeNull();
   });
 
@@ -170,13 +190,23 @@ describe('Feature: Duplicate/conflict rule detection', () => {
       makeRule({ id: '1', matchPattern: 'https://api.example.com', matchType: 'prefix', priority: 1, enabled: true }),
     ];
 
-    const conflict = findConflictingRule(rules, { matchPattern: 'https://api.example.com', matchType: 'wildcard', priority: 5 });
+    const conflict = findConflictingRule(rules, {
+      matchPattern: 'https://api.example.com',
+      matchType: 'wildcard',
+      priority: 5,
+    });
     expect(conflict).toBeNull();
   });
 
   it('should exclude the rule being edited from conflict check', () => {
     const rules = [
-      makeRule({ id: '1', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 1, enabled: true }),
+      makeRule({
+        id: '1',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 1,
+        enabled: true,
+      }),
     ];
 
     const conflict = findConflictingRule(
@@ -189,8 +219,20 @@ describe('Feature: Duplicate/conflict rule detection', () => {
 
   it('should compute shadowed rule IDs correctly', () => {
     const rules = [
-      makeRule({ id: '1', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 1, enabled: true }),
-      makeRule({ id: '2', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 5, enabled: true }),
+      makeRule({
+        id: '1',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 1,
+        enabled: true,
+      }),
+      makeRule({
+        id: '2',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 5,
+        enabled: true,
+      }),
       makeRule({ id: '3', matchPattern: 'https://other.com/*', matchType: 'wildcard', priority: 3, enabled: true }),
     ];
 
@@ -202,8 +244,20 @@ describe('Feature: Duplicate/conflict rule detection', () => {
 
   it('should not mark disabled rules as shadowed', () => {
     const rules = [
-      makeRule({ id: '1', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 1, enabled: false }),
-      makeRule({ id: '2', matchPattern: 'https://api.example.com/*', matchType: 'wildcard', priority: 5, enabled: true }),
+      makeRule({
+        id: '1',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 1,
+        enabled: false,
+      }),
+      makeRule({
+        id: '2',
+        matchPattern: 'https://api.example.com/*',
+        matchType: 'wildcard',
+        priority: 5,
+        enabled: true,
+      }),
     ];
 
     const shadowed = computeShadowedRuleIds(rules);

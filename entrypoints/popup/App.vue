@@ -37,7 +37,7 @@
       <el-switch
         v-model="enabled"
         :loading="loading"
-        @change="toggleProxy"
+        @change="handleToggleProxy"
       />
     </div>
 
@@ -52,7 +52,10 @@
       >
         <span class="rules-section-title">{{ t('quickToggleRules') }}</span>
         <span class="rules-section-count">{{ rules.length }}</span>
-        <el-icon class="rules-section-arrow" :class="{ 'is-expanded': rulesExpanded }">
+        <el-icon
+          class="rules-section-arrow"
+          :class="{ 'is-expanded': rulesExpanded }"
+        >
           <ArrowDown />
         </el-icon>
       </div>
@@ -76,7 +79,8 @@
             <span
               class="rule-toggle-name"
               :title="rule.name"
-            >{{ rule.name }}</span>
+              >{{ rule.name }}</span
+            >
             <el-switch
               :model-value="rule.enabled"
               size="small"
@@ -149,6 +153,22 @@
           <div class="action-card__desc">{{ t('actionImportExportDesc') }}</div>
         </div>
       </div>
+
+      <div
+        class="action-card"
+        role="button"
+        tabindex="0"
+        @click="openOptionsPage('#profiles')"
+        @keydown.enter="openOptionsPage('#profiles')"
+      >
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><Collection /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionProfiles') }}</div>
+          <div class="action-card__desc">{{ t('actionProfilesDesc') }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- 最近请求 -->
@@ -202,7 +222,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Promotion, Setting, Document, FolderOpened, ArrowDown } from '@element-plus/icons-vue';
+import { Promotion, Setting, Document, FolderOpened, Collection, ArrowDown } from '@element-plus/icons-vue';
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 
@@ -222,6 +242,7 @@ const {
   loading,
   toggleProxy,
   toggleRule,
+  fetchStatus,
   formatTimeAgo,
   getMethodColor,
   getStatusColor,
@@ -229,6 +250,17 @@ const {
 } = useProxyStatus();
 
 const rulesExpanded = ref(false);
+
+async function handleToggleProxy(value: boolean) {
+  try {
+    await toggleProxy(value);
+  } catch (error) {
+    console.error('Toggle proxy failed:', error);
+    ElMessage.error(t('toggleFailed'));
+    // v-model 已翻转开关显示，从后台重新拉取状态回滚，避免 UI 与实际不一致
+    await fetchStatus();
+  }
+}
 
 async function handleToggleRule(ruleId: string, enabled: boolean) {
   try {
@@ -563,9 +595,9 @@ async function openOptionsPage(hash = '') {
 /* 可折叠规则列表 */
 .rules-section {
   margin-bottom: 12px;
+  overflow: hidden;
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;
-  overflow: hidden;
 }
 
 .rules-section-header {
@@ -591,10 +623,10 @@ async function openOptionsPage(hash = '') {
 }
 
 .rules-section-count {
+  padding: 1px 6px;
   font-size: 11px;
   color: var(--cop-text-color-secondary);
   background: var(--cop-bg-color-tertiary);
-  padding: 1px 6px;
   border-radius: 8px;
 }
 
@@ -638,17 +670,17 @@ async function openOptionsPage(hash = '') {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 13px;
   color: var(--cop-text-color-regular);
+  white-space: nowrap;
 }
 
 /* 折叠动画 */
 .slide-enter-active,
 .slide-leave-active {
-  transition: all 0.2s ease;
   max-height: 300px;
   overflow: hidden;
+  transition: all 0.2s ease;
 }
 
 .slide-enter-from,

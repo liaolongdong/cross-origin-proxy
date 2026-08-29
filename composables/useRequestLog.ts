@@ -13,10 +13,11 @@ export function useRequestLog() {
   async function fetchLogs() {
     loading.value = true;
     try {
-      const result: RequestLogEntry[] = await chrome.runtime.sendMessage({
+      const result: RequestLogEntry[] | undefined = await chrome.runtime.sendMessage({
         type: MessageType.GET_REQUEST_LOG,
       });
-      logs.value = result;
+      // SW 异常时响应可能为非标对象，仅接受数组结构
+      logs.value = Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('Failed to fetch logs:', error);
     } finally {
@@ -25,7 +26,12 @@ export function useRequestLog() {
   }
 
   async function clearLogs() {
-    await chrome.runtime.sendMessage({ type: MessageType.CLEAR_REQUEST_LOG });
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
+      type: MessageType.CLEAR_REQUEST_LOG,
+    });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'CLEAR_LOGS_FAILED');
+    }
     logs.value = [];
   }
 
@@ -67,5 +73,16 @@ export function useRequestLog() {
     if (refreshTimer) clearInterval(refreshTimer);
   });
 
-  return { logs, loading, autoRefresh, dnrStats, swStats, fetchLogs, clearLogs, toggleAutoRefresh, fetchDnrStats, fetchSwStats };
+  return {
+    logs,
+    loading,
+    autoRefresh,
+    dnrStats,
+    swStats,
+    fetchLogs,
+    clearLogs,
+    toggleAutoRefresh,
+    fetchDnrStats,
+    fetchSwStats,
+  };
 }

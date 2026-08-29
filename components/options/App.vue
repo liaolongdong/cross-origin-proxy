@@ -7,6 +7,7 @@
       @add-rule="handleAddRule"
       @open-logs="openLogs"
       @open-import-export="showImportExport = true"
+      @open-profiles="showProfiles = true"
       @open-settings="showSettings = true"
       @toggle-proxy="handleToggleProxy"
     />
@@ -60,6 +61,10 @@
       @import="handleImport"
       @import-har-rules="handleImportHarRules"
     />
+    <ProfilesDialog
+      v-model:visible="showProfiles"
+      @loaded="handleProfilesLoaded"
+    />
     <SettingsDialog
       v-model:visible="showSettings"
       :current-theme="currentTheme"
@@ -79,6 +84,7 @@
       @clear="handleClearLogs"
       @refresh="toggleAutoRefresh"
       @refresh-dnr-stats="fetchDnrStats"
+      @create-rule-from-log="handleCreateRuleFromLog"
     />
   </div>
 </template>
@@ -93,7 +99,15 @@ import { useRuleManagement } from '@/composables/useRuleManagement';
 import { useRequestLog } from '@/composables/useRequestLog';
 import { useImportExport } from '@/composables/useImportExport';
 import { useI18n } from '@/composables/useI18n';
-import { type ThemeName, getStoredTheme, setStoredTheme, applyThemeToRoot, getStoredThemeMode, setStoredThemeMode, applyThemeMode } from '@/utils/theme';
+import {
+  type ThemeName,
+  getStoredTheme,
+  setStoredTheme,
+  applyThemeToRoot,
+  getStoredThemeMode,
+  setStoredThemeMode,
+  applyThemeMode,
+} from '@/utils/theme';
 import { type ThemeMode } from '@/utils/constants';
 import HeaderBar from './HeaderBar.vue';
 import SearchFilterBar from './SearchFilterBar.vue';
@@ -108,6 +122,7 @@ import RuleTable from './RuleTable.vue';
  */
 const RuleFormDialog = defineAsyncComponent(() => import('./RuleFormDialog.vue'));
 const ImportExportDialog = defineAsyncComponent(() => import('./ImportExportDialog.vue'));
+const ProfilesDialog = defineAsyncComponent(() => import('./ProfilesDialog.vue'));
 const SettingsDialog = defineAsyncComponent(() => import('./SettingsDialog.vue'));
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
 
@@ -121,6 +136,7 @@ const {
   enabled: proxyEnabled,
   loading: ruleLoading,
   shadowedRuleIds,
+  fetchConfig,
   addRule,
   updateRule,
   toggleRule,
@@ -152,6 +168,7 @@ const { exportConfig, importConfig } = useImportExport();
 // UI 状态
 const showRuleDialog = ref(false);
 const showImportExport = ref(false);
+const showProfiles = ref(false);
 const showSettings = ref(false);
 const showLogs = ref(false);
 const editingRule = ref<ProxyRule | null>(null);
@@ -166,10 +183,6 @@ const selectedRules = ref<ProxyRule[]>([]);
 // 日志抽屉过滤器（提升到容器层，避免抽屉关闭后重置）
 const logMethodFilter = ref('');
 const logStatusFilter = ref('');
-
-// 删除撤销状态
-const pendingDeleteRule = ref<ProxyRule | null>(null);
-const pendingDeleteTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
 const filteredRules = computed(() => {
   const keyword = searchText.value.toLowerCase();
@@ -253,10 +266,7 @@ onUnmounted(() => {
 /** 全局键盘快捷键处理 */
 function handleKeydown(e: KeyboardEvent) {
   const target = e.target as HTMLElement;
-  const isEditable =
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.isContentEditable;
+  const isEditable = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
   // 在输入框中仅响应 Escape，其余快捷键跳过
   if (isEditable && e.key !== 'Escape') return;
@@ -264,8 +274,10 @@ function handleKeydown(e: KeyboardEvent) {
   const isMac = navigator.platform.includes('Mac');
   const modKey = isMac ? e.metaKey : e.ctrlKey;
 
-  // Ctrl/Cmd + N：打开新增规则弹窗
-  if (modKey && e.key === 'n') {
+  // N（或 Ctrl/Cmd + N）：打开新增规则弹窗。
+  // 注意 Ctrl/Cmd+N 在多数平台是浏览器保留快捷键（新窗口），页面无法捕获，
+  // 因此以单键 N 为主（同 Gmail 风格的单键快捷操作）
+  if (e.key === 'n' || e.key === 'N' || (modKey && e.key === 'n')) {
     e.preventDefault();
     handleAddRule();
     return;
@@ -279,12 +291,14 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Escape：关闭最上层的弹窗/抽屉（优先级：规则弹窗 > 导入导出 > 设置 > 日志）
+  // Escape：关闭最上层的弹窗/抽屉（优先级：规则弹窗 > 导入导出 > 环境配置 > 设置 > 日志）
   if (e.key === 'Escape') {
     if (showRuleDialog.value) {
       showRuleDialog.value = false;
     } else if (showImportExport.value) {
       showImportExport.value = false;
+    } else if (showProfiles.value) {
+      showProfiles.value = false;
     } else if (showSettings.value) {
       showSettings.value = false;
     } else if (showLogs.value) {
@@ -302,6 +316,8 @@ function handleHashNavigation() {
     showLogs.value = true;
   } else if (hash === '#import-export') {
     showImportExport.value = true;
+  } else if (hash === '#profiles') {
+    showProfiles.value = true;
   }
   if (hash) {
     history.replaceState(null, '', window.location.pathname);
@@ -310,8 +326,13 @@ function handleHashNavigation() {
 
 // 代理总开关
 async function handleToggleProxy(val: boolean) {
-  await toggleProxy(val);
-  ElMessage.success(val ? t('proxyEnabledMsg') : t('proxyDisabledMsg'));
+  try {
+    await toggleProxy(val);
+    ElMessage.success(val ? t('proxyEnabledMsg') : t('proxyDisabledMsg'));
+  } catch (error) {
+    ElMessage.error(t('toggleFailed'));
+    console.error('Toggle proxy failed:', error);
+  }
 }
 
 // 规则操作
@@ -398,18 +419,27 @@ function flashHighlight(ruleId: string) {
  *
  * 点击删除后立即从 UI 移除（乐观更新），同时显示含"撤销"操作的提示；
  * 5 秒后才真正向 background 发送删除消息，期间点击撤销可恢复规则。
+ * 每次删除用独立闭包持有规则与定时器，连续删除多条时互不干扰
+ * （单例状态会被后续删除覆盖，导致规则漏删或误删）。
  */
 function handleDeleteRule(ruleId: string) {
-  const rule = rules.value.find(r => r.id === ruleId);
-  if (!rule) return;
-
-  // 保存待删除规则，用于撤销恢复或延迟删除
-  pendingDeleteRule.value = { ...rule };
+  const index = rules.value.findIndex(r => r.id === ruleId);
+  if (index === -1) return;
+  const capturedRule = { ...rules.value[index] };
+  const originalIndex = index;
 
   // 乐观更新：立即从 UI 移除
   rules.value = rules.value.filter(r => r.id !== ruleId);
 
-  const capturedRule = pendingDeleteRule.value;
+  let deleteTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    deleteTimer = null;
+    chrome.runtime
+      .sendMessage({
+        type: MessageType.DELETE_RULE,
+        data: { ruleId: capturedRule.id },
+      })
+      .catch(err => console.error('Delete rule failed:', err));
+  }, 5000);
 
   const message = ElMessage({
     message: h('div', [
@@ -417,16 +447,15 @@ function handleDeleteRule(ruleId: string) {
       h(
         'a',
         {
-          style: 'color: #409EFF; cursor: pointer; text-decoration: underline;',
+          style: 'color: var(--cop-primary, #409EFF); cursor: pointer; text-decoration: underline;',
           onClick: () => {
-            // 撤销：取消定时器，恢复规则
-            if (pendingDeleteTimer.value) {
-              clearTimeout(pendingDeleteTimer.value);
-              pendingDeleteTimer.value = null;
+            // 撤销：取消定时器，恢复规则到原位置
+            if (deleteTimer) {
+              clearTimeout(deleteTimer);
+              deleteTimer = null;
             }
-            pendingDeleteRule.value = null;
             message.close();
-            rules.value.push(capturedRule);
+            rules.value.splice(Math.min(originalIndex, rules.value.length), 0, capturedRule);
             ElMessage.success(t('undoSuccess'));
           },
         },
@@ -436,20 +465,6 @@ function handleDeleteRule(ruleId: string) {
     duration: 5000,
     showClose: false,
   });
-
-  // 5 秒后真正执行后台删除
-  pendingDeleteTimer.value = setTimeout(() => {
-    if (pendingDeleteRule.value) {
-      chrome.runtime
-        .sendMessage({
-          type: MessageType.DELETE_RULE,
-          data: { ruleId: pendingDeleteRule.value.id },
-        })
-        .catch(err => console.error('Delete rule failed:', err));
-      pendingDeleteRule.value = null;
-    }
-    pendingDeleteTimer.value = null;
-  }, 5000);
 }
 
 async function handleToggleRule(ruleId: string, enabled: boolean) {
@@ -487,25 +502,16 @@ async function handleToggleAll(enabled: boolean) {
   }
 }
 
-function handleRefreshStats() {
-  void fetchDnrStats();
-  void fetchSwStats();
-}
-
 async function handleBatchDelete() {
   if (selectedRules.value.length === 0) return;
   const ids = selectedRules.value.map(r => r.id);
   const count = ids.length;
   try {
-    await ElMessageBox.confirm(
-      t('confirmBatchDelete', [count]),
-      t('confirmBatchDeleteTitle'),
-      {
-        confirmButtonText: t('confirm'),
-        cancelButtonText: t('cancel'),
-        type: 'warning',
-      },
-    );
+    await ElMessageBox.confirm(t('confirmBatchDelete', [count]), t('confirmBatchDeleteTitle'), {
+      confirmButtonText: t('confirm'),
+      cancelButtonText: t('cancel'),
+      type: 'warning',
+    });
   } catch {
     return; // 用户取消
   }
@@ -537,7 +543,13 @@ async function handleExport() {
 
 async function handleImport(data: ExportData) {
   try {
-    await importConfig(JSON.stringify(data));
+    const success = await importConfig(JSON.stringify(data));
+    if (!success) {
+      ElMessage.error(t('importFailed'));
+      return;
+    }
+    // 导入由后台整体替换/合并规则，重新拉取配置保持 UI 与存储一致
+    await fetchConfig();
     ElMessage.success(t('importSuccess'));
     showImportExport.value = false;
   } catch {
@@ -556,6 +568,35 @@ async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[
   }
 }
 
+/** 环境配置加载成功后：后台已整体替换规则集，刷新本地列表保持一致 */
+async function handleProfilesLoaded() {
+  await fetchConfig();
+}
+
+/** 从日志详情快速建规则：以请求 URL 的 origin 预填充通配符规则 */
+function handleCreateRuleFromLog(log: import('@/utils/types').RequestLogEntry) {
+  let url: URL;
+  try {
+    url = new URL(log.originalUrl);
+  } catch {
+    ElMessage.error(t('createRuleFromLogFailed'));
+    return;
+  }
+  if (!/^https?:$/.test(url.protocol)) {
+    ElMessage.error(t('createRuleFromLogFailed'));
+    return;
+  }
+  showLogs.value = false;
+  handleUseTemplate({
+    name: `${t('createRuleFromLogPrefix')} ${url.hostname}`,
+    enabled: true,
+    matchType: 'wildcard',
+    matchPattern: `${url.origin}/*`,
+    targetUrl: url.origin,
+    priority: 100,
+  });
+}
+
 async function handleReorder(fromId: string, toId: string) {
   const visibleRules = [...filteredRules.value];
   const fromIdx = visibleRules.findIndex(r => r.id === fromId);
@@ -567,9 +608,7 @@ async function handleReorder(fromId: string, toId: string) {
 
   const visibleIds = new Set(visibleRules.map(r => r.id));
   const hiddenRules = rules.value.filter(r => !visibleIds.has(r.id));
-  const oldVisiblePositions = rules.value
-    .map((r, i) => (visibleIds.has(r.id) ? i : -1))
-    .filter(i => i >= 0);
+  const oldVisiblePositions = rules.value.map((r, i) => (visibleIds.has(r.id) ? i : -1)).filter(i => i >= 0);
 
   const newFull: ProxyRule[] = new Array(rules.value.length);
   for (const [i, rule] of hiddenRules.entries()) {

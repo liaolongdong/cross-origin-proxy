@@ -15,13 +15,15 @@ export function useProxyStatus() {
   async function fetchStatus() {
     loading.value = true;
     try {
-      const status: ProxyStatus = await chrome.runtime.sendMessage({
+      const status: ProxyStatus | undefined = await chrome.runtime.sendMessage({
         type: MessageType.GET_PROXY_STATUS,
       });
+      // SW 异常时响应可能为 { success:false } 等非标结构，做防御处理
+      if (!status || typeof status.enabled !== 'boolean') return;
       enabled.value = status.enabled;
       activeRuleCount.value = status.activeRuleCount;
       todayRequestCount.value = status.todayRequestCount;
-      recentLogs.value = status.recentLogs;
+      recentLogs.value = Array.isArray(status.recentLogs) ? status.recentLogs : [];
       rules.value = status.rules ?? [];
     } catch (error) {
       console.error('Failed to fetch status:', error);
@@ -31,18 +33,24 @@ export function useProxyStatus() {
   }
 
   async function toggleProxy(value: boolean) {
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.TOGGLE_PROXY,
       data: { enabled: value },
     });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'TOGGLE_PROXY_FAILED');
+    }
     enabled.value = value;
   }
 
   async function toggleRule(id: string, enabled: boolean) {
-    await chrome.runtime.sendMessage({
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.TOGGLE_RULE,
       data: { ruleId: id, enabled },
     });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'TOGGLE_RULE_FAILED');
+    }
     await fetchStatus();
   }
 

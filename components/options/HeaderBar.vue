@@ -43,6 +43,12 @@
           {{ t('importExportConfig') }}
         </el-button>
         <el-button
+          :icon="Collection"
+          @click="$emit('openProfiles')"
+        >
+          {{ t('openProfiles') }}
+        </el-button>
+        <el-button
           :icon="Setting"
           @click="$emit('openSettings')"
         >
@@ -65,14 +71,14 @@
 </template>
 
 <script setup lang="ts">
-import { Plus, Document, FolderOpened, Setting, Promotion } from '@element-plus/icons-vue';
+import { Plus, Document, FolderOpened, Collection, Setting, Promotion } from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
 
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
  * 包含标题、版本号、代理状态信号灯、主操作按钮（添加规则）
- * 与毛玻璃半透明按钮（日志/导入导出/设置），右侧为代理总开关 pill。
+ * 与毛玻璃半透明按钮（日志/导入导出/环境配置/设置），右侧为代理总开关 pill。
  */
 defineProps<{
   /** 当前插件版本号 */
@@ -88,6 +94,8 @@ defineEmits<{
   openLogs: [];
   /** 打开导入导出弹窗 */
   openImportExport: [];
+  /** 打开环境配置弹窗 */
+  openProfiles: [];
   /** 打开偏好设置弹窗 */
   openSettings: [];
   /** 切换代理总开关 */

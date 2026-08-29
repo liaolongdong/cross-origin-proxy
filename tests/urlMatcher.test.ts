@@ -7,7 +7,7 @@ function makeRule(overrides: Partial<ProxyRule>): ProxyRule {
     id: 'r1',
     name: 'test',
     enabled: true,
-    matchPattern: '',
+    matchPattern: 'https://a.com/*',
     targetUrl: '',
     matchType: 'wildcard',
     priority: 10,
@@ -97,5 +97,10 @@ describe('isSimpleRule', () => {
     expect(isSimpleRule(makeRule({}))).toBe(true);
     expect(isSimpleRule(makeRule({ headerOverrides: {} }))).toBe(true);
     expect(isSimpleRule(makeRule({ headerOverrides: { 'X-Env': 'uat' } }))).toBe(false);
+  });
+
+  it('不以 * 结尾的 wildcard 非简单规则（DNR 重写会丢失末尾固定文本）', () => {
+    expect(isSimpleRule(makeRule({ matchPattern: 'https://a.com/*/suffix' }))).toBe(false);
+    expect(isSimpleRule(makeRule({ matchPattern: 'https://a.com/*' }))).toBe(true);
   });
 });

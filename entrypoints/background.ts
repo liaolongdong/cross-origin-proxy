@@ -1,6 +1,7 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { setupMessageRouter } from './background/messageRouter';
 import { setupKeepalive } from './background/keepalive';
+import { setupAutoOff } from './background/autoOff';
 import { initDnrManager, syncDnrRules } from './background/dnrManager';
 import { initBadge, updateBadge } from './background/badgeManager';
 import { resetSwHitStats } from './background/proxyHandler';
@@ -41,6 +42,9 @@ export default defineBackground(() => {
   // Setup keepalive
   setupKeepalive();
 
+  // Setup proxy auto-off countdown
+  setupAutoOff();
+
   // Initialize badge with active rule count
   initBadge();
 
@@ -50,8 +54,8 @@ export default defineBackground(() => {
     if (STORAGE_KEYS.PROXY_CONFIG in changes) {
       const newConfig = changes[STORAGE_KEYS.PROXY_CONFIG].newValue as ProxyConfig | undefined;
       if (newConfig?.rules) {
-        const activeCount = newConfig.rules.filter((r) => r.enabled).length;
-        updateBadge(activeCount);
+        const activeCount = newConfig.rules.filter(r => r.enabled).length;
+        updateBadge(newConfig.enabled, activeCount);
         resetSwHitStats();
       }
     }
@@ -63,7 +67,7 @@ export default defineBackground(() => {
   });
 
   // Keyboard shortcut: toggle proxy on/off
-  chrome.commands.onCommand.addListener(async (command) => {
+  chrome.commands.onCommand.addListener(async command => {
     if (command === 'toggle-proxy') {
       const enabled = await toggleProxy();
       logger.info(`Proxy toggled via keyboard shortcut: ${enabled}`);

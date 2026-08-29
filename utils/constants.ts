@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   THEME_MODE: 'theme_mode', // light | dark | system
   LOCALE: 'locale',
   PROFILES: 'env_profiles',
+  AUTO_OFF_MINUTES: 'auto_off_minutes', // 代理自动关闭时长（分钟），0 表示不自动关闭
 } as const;
 
 // Theme modes
@@ -41,3 +42,5 @@ export const CONTENT_SCRIPT_CHANNEL = 'cross-origin-proxy';
 export const KEEPALIVE_ALARM = 'sw-keepalive';
 // Chrome 120+ 允许的最小周期为 1 分钟（低于下限会被浏览器钳制并告警）
 export const KEEPALIVE_INTERVAL_MINUTES = 1;
+// 代理自动关闭：开启代理后倒计时到期自动关闭，防止忘记关闭代理
+export const AUTO_OFF_ALARM = 'proxy-auto-off';

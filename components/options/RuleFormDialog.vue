@@ -126,12 +126,15 @@
               v-model="enableResponseOverrides"
               :active-text="t('enabled')"
             />
-            <div v-if="enableResponseOverrides" class="response-overrides">
+            <div
+              v-if="enableResponseOverrides"
+              class="response-overrides"
+            >
               <div class="response-field">
                 <label class="response-field-label">{{ t('responseStatusOverride') }}</label>
                 <el-input-number
                   v-model="form.responseStatus"
-                  :min="0"
+                  :min="200"
                   :max="599"
                   :placeholder="t('responseStatusPlaceholder')"
                   controls-position="right"
@@ -217,12 +220,15 @@
               v-model="enableMockResponse"
               :active-text="t('enabled')"
             />
-            <div v-if="enableMockResponse" class="response-overrides">
+            <div
+              v-if="enableMockResponse"
+              class="response-overrides"
+            >
               <div class="response-field">
                 <label class="response-field-label">{{ t('mockStatus') }}</label>
                 <el-input-number
                   v-model="form.mockStatus"
-                  :min="100"
+                  :min="200"
                   :max="599"
                   controls-position="right"
                   style="width: 160px"
@@ -230,11 +236,26 @@
               </div>
               <div class="response-field">
                 <label class="response-field-label">{{ t('mockContentType') }}</label>
-                <el-select v-model="form.mockContentType" style="width: 220px">
-                  <el-option label="application/json" value="application/json" />
-                  <el-option label="text/plain" value="text/plain" />
-                  <el-option label="text/html" value="text/html" />
-                  <el-option label="application/xml" value="application/xml" />
+                <el-select
+                  v-model="form.mockContentType"
+                  style="width: 220px"
+                >
+                  <el-option
+                    label="application/json"
+                    value="application/json"
+                  />
+                  <el-option
+                    label="text/plain"
+                    value="text/plain"
+                  />
+                  <el-option
+                    label="text/html"
+                    value="text/html"
+                  />
+                  <el-option
+                    label="application/xml"
+                    value="application/xml"
+                  />
                 </el-select>
               </div>
               <div class="response-field">
@@ -275,10 +296,22 @@
                     :placeholder="t('condMatchMethod')"
                     style="width: 160px"
                   >
-                    <el-option label="GET" value="GET" />
-                    <el-option label="POST" value="POST" />
-                    <el-option label="PUT" value="PUT" />
-                    <el-option label="DELETE" value="DELETE" />
+                    <el-option
+                      label="GET"
+                      value="GET"
+                    />
+                    <el-option
+                      label="POST"
+                      value="POST"
+                    />
+                    <el-option
+                      label="PUT"
+                      value="PUT"
+                    />
+                    <el-option
+                      label="DELETE"
+                      value="DELETE"
+                    />
                   </el-select>
                   <div
                     v-for="(qp, qi) in cond.queryPairs"
@@ -316,10 +349,10 @@
                     :rows="3"
                     :placeholder="t('condMockBody')"
                   />
-                  <div style="display: flex; gap: 8px; align-items: center;">
+                  <div style="display: flex; gap: 8px; align-items: center">
                     <el-input-number
                       v-model="cond.status"
-                      :min="100"
+                      :min="200"
                       :max="599"
                       controls-position="right"
                       style="width: 120px"
@@ -328,16 +361,34 @@
                       v-model="cond.contentType"
                       style="width: 200px"
                     >
-                      <el-option label="application/json" value="application/json" />
-                      <el-option label="text/plain" value="text/plain" />
-                      <el-option label="text/html" value="text/html" />
+                      <el-option
+                        label="application/json"
+                        value="application/json"
+                      />
+                      <el-option
+                        label="text/plain"
+                        value="text/plain"
+                      />
+                      <el-option
+                        label="text/html"
+                        value="text/html"
+                      />
                     </el-select>
                   </div>
                 </div>
                 <el-button
                   type="primary"
                   link
-                  @click="mockConditions.push({ matchUrl: '', matchMethod: '', queryPairs: [], body: '', status: 200, contentType: 'application/json' })"
+                  @click="
+                    mockConditions.push({
+                      matchUrl: '',
+                      matchMethod: '',
+                      queryPairs: [],
+                      body: '',
+                      status: 200,
+                      contentType: 'application/json',
+                    })
+                  "
                 >
                   <el-icon><Plus /></el-icon>
                   {{ t('addMockCondition') }}
@@ -354,7 +405,10 @@
               v-model="enableDelay"
               :active-text="t('enabled')"
             />
-            <div v-if="enableDelay" style="display: flex; align-items: center; gap: 8px;">
+            <div
+              v-if="enableDelay"
+              style="display: flex; gap: 8px; align-items: center"
+            >
               <el-input-number
                 v-model="form.delayMs"
                 :min="0"
@@ -375,7 +429,10 @@
               v-model="enableRetry"
               :active-text="t('enabled')"
             />
-            <div v-if="enableRetry" class="retry-fields">
+            <div
+              v-if="enableRetry"
+              class="retry-fields"
+            >
               <div class="retry-field-row">
                 <label class="response-field-label">{{ t('retryCount') }}</label>
                 <el-input-number
@@ -417,7 +474,10 @@
 
       <!-- Pattern Match Test Panel -->
       <transition name="el-fade-in">
-        <div v-if="showTestPanel" class="test-panel">
+        <div
+          v-if="showTestPanel"
+          class="test-panel"
+        >
           <div class="test-panel-header">
             <span class="test-panel-title">{{ t('patternTest') }}</span>
             <el-button
@@ -446,10 +506,19 @@
               </el-button>
             </div>
 
-            <div v-if="testResult !== null" class="test-result">
+            <div
+              v-if="testResult !== null"
+              class="test-result"
+            >
               <div class="test-result-label">{{ t('matchResult') }}</div>
-              <div v-if="testResult.matched" class="test-result-matched">
-                <el-tag type="success" effect="dark">
+              <div
+                v-if="testResult.matched"
+                class="test-result-matched"
+              >
+                <el-tag
+                  type="success"
+                  effect="dark"
+                >
                   ✓ {{ t('matched') }}
                 </el-tag>
                 <div class="test-result-rewrite">
@@ -457,8 +526,14 @@
                   <code class="test-result-url">{{ testResult.rewrittenUrl }}</code>
                 </div>
               </div>
-              <div v-else class="test-result-no-match">
-                <el-tag type="danger" effect="dark">
+              <div
+                v-else
+                class="test-result-no-match"
+              >
+                <el-tag
+                  type="danger"
+                  effect="dark"
+                >
                   ✗ {{ t('noMatch') }}
                 </el-tag>
               </div>
@@ -480,7 +555,8 @@
         <el-button
           type="primary"
           @click="handleSave"
-        >{{ t('save') }}</el-button>
+          >{{ t('save') }}</el-button
+        >
       </div>
     </template>
   </el-dialog>
@@ -536,14 +612,16 @@ const enableResponseOverrides = ref(false);
 const enableMockResponse = ref(false);
 const enableDelay = ref(false);
 const enableRetry = ref(false);
-const mockConditions = ref<{
-  matchUrl: string;
-  matchMethod: string;
-  queryPairs: { key: string; value: string }[];
-  body: string;
-  status: number;
-  contentType: string;
-}[]>([]);
+const mockConditions = ref<
+  {
+    matchUrl: string;
+    matchMethod: string;
+    queryPairs: { key: string; value: string }[];
+    body: string;
+    status: number;
+    contentType: string;
+  }[]
+>([]);
 
 // Test panel state
 const showTestPanel = ref(false);
@@ -630,16 +708,15 @@ watch(
               value: typeof value === 'string' ? value : JSON.stringify(value),
             }))
           : [];
-        mockConditions.value = props.rule.mockResponse?.conditions?.map(c => ({
-          matchUrl: c.matchUrl ?? '',
-          matchMethod: c.matchMethod ?? '',
-          queryPairs: c.matchQuery
-            ? Object.entries(c.matchQuery).map(([key, value]) => ({ key, value }))
-            : [],
-          body: c.body,
-          status: c.status ?? 200,
-          contentType: c.contentType ?? 'application/json',
-        })) ?? [];
+        mockConditions.value =
+          props.rule.mockResponse?.conditions?.map(c => ({
+            matchUrl: c.matchUrl ?? '',
+            matchMethod: c.matchMethod ?? '',
+            queryPairs: c.matchQuery ? Object.entries(c.matchQuery).map(([key, value]) => ({ key, value })) : [],
+            body: c.body,
+            status: c.status ?? 200,
+            contentType: c.contentType ?? 'application/json',
+          })) ?? [];
       } else {
         const source = props.initialData ?? defaultForm;
         Object.assign(form, source);
@@ -809,17 +886,29 @@ function testMatchRule(url: string, matchType: ProxyRule['matchType'], matchPatt
   }
 }
 
-function testRewriteUrl(url: string, matchType: ProxyRule['matchType'], matchPattern: string, targetUrl: string): string {
+function testRewriteUrl(
+  url: string,
+  matchType: ProxyRule['matchType'],
+  matchPattern: string,
+  targetUrl: string,
+): string {
+  if (!targetUrl) return url;
   switch (matchType) {
     case 'wildcard': {
-      const patternBase = matchPattern.replace(/\*$/, '');
-      if (url.startsWith(patternBase)) {
-        const rest = url.slice(patternBase.length);
-        const target = targetUrl.replace(/\/$/, '');
-        const separator = patternBase.endsWith('/') && rest ? '/' : '';
-        return target + separator + rest;
+      if (!matchPattern.endsWith('*')) return url;
+      const patternBase = matchPattern.slice(0, -1);
+      const escaped = patternBase.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+      let matched: RegExpExecArray | null;
+      try {
+        matched = new RegExp(`^${escaped}(.*)$`).exec(url);
+      } catch {
+        return url;
       }
-      return url;
+      if (!matched) return url;
+      const rest = matched[1];
+      const target = targetUrl.replace(/\/$/, '');
+      const separator = patternBase.endsWith('/') && rest ? '/' : '';
+      return target + separator + rest;
     }
     case 'prefix': {
       if (url.startsWith(matchPattern)) {
@@ -865,10 +954,10 @@ function runTest() {
 }
 
 .override-section {
-  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
 }
 
 .override-textarea {
@@ -879,11 +968,11 @@ function runTest() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-top: 8px;
   padding: 12px;
+  margin-top: 8px;
+  background: var(--el-fill-color-lighter, #f5f7fa);
   border: 1px solid var(--el-border-color-lighter, #ebeef5);
   border-radius: 8px;
-  background: var(--el-fill-color-lighter, #f5f7fa);
 }
 
 .response-field {
@@ -901,10 +990,10 @@ function runTest() {
 /* ─── Test Panel ─────────────────────────────────────────────────────────── */
 .test-panel {
   margin-top: 16px;
+  overflow: hidden;
+  background: var(--el-fill-color-lighter, #f5f7fa);
   border: 1px solid var(--el-border-color-light, #e4e7ed);
   border-radius: 8px;
-  background: var(--el-fill-color-lighter, #f5f7fa);
-  overflow: hidden;
 }
 
 .test-panel-header {
@@ -912,8 +1001,8 @@ function runTest() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
   background: var(--el-fill-color, #f0f2f5);
+  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
 }
 
 .test-panel-title {
@@ -933,17 +1022,17 @@ function runTest() {
 }
 
 .test-result {
-  margin-top: 16px;
   padding: 12px;
-  border-radius: 6px;
+  margin-top: 16px;
   background: var(--el-bg-color, #fff);
   border: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-radius: 6px;
 }
 
 .test-result-label {
+  margin-bottom: 8px;
   font-size: 12px;
   color: var(--el-text-color-secondary, #909399);
-  margin-bottom: 8px;
 }
 
 .test-result-matched {
@@ -964,13 +1053,13 @@ function runTest() {
 }
 
 .test-result-url {
+  padding: 6px 10px;
   font-size: 13px;
+  line-height: 1.5;
   color: var(--el-color-primary, #409eff);
   word-break: break-all;
   background: var(--el-fill-color-lighter, #f5f7fa);
-  padding: 6px 10px;
   border-radius: 4px;
-  line-height: 1.5;
 }
 
 .test-result-no-match {
@@ -988,8 +1077,8 @@ function runTest() {
 
 .retry-field-row {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
 }
 
 /* ─── Mock Condition Cards ────────────────────────────────────────────────── */
@@ -1000,9 +1089,9 @@ function runTest() {
   gap: 8px;
   padding: 10px;
   margin-bottom: 8px;
+  background: var(--el-bg-color, #fff);
   border: 1px solid var(--el-border-color-lighter, #ebeef5);
   border-radius: 6px;
-  background: var(--el-bg-color, #fff);
 }
 
 .condition-header {
