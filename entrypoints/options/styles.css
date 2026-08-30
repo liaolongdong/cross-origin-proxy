@@ -66,12 +66,57 @@ body {
 .el-button--primary {
   background: var(--cop-primary);
   border: 1px solid var(--cop-primary);
+  color: var(--cop-text-color-on-primary);
 }
 
 .el-button--primary:hover {
   background: var(--cop-primary-hover);
   border-color: var(--cop-primary-hover);
   box-shadow: 0 4px 12px rgb(var(--cop-primary-rgb) / 30%);
+}
+
+/* 暗色模式下主按钮文字强制白色，避免主色文字在深色背景上不可见 */
+:root[data-mode='dark'] .el-button--primary {
+  color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode]) .el-button--primary {
+    color: #fff;
+  }
+}
+
+/* 复选框暗色模式：提升边框与勾选标记对比度 */
+:root[data-mode='dark'] .el-checkbox__inner {
+  border-color: var(--el-border-color);
+  background-color: var(--el-bg-color);
+}
+
+:root[data-mode='dark'] .el-checkbox__input.is-checked .el-checkbox__inner {
+  background-color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+
+:root[data-mode='dark'] .el-checkbox__input.is-checked .el-checkbox__inner::after {
+  border-color: #fff;
+  border-width: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode]) .el-checkbox__inner {
+    border-color: var(--el-border-color);
+    background-color: var(--el-bg-color);
+  }
+
+  :root:not([data-mode]) .el-checkbox__input.is-checked .el-checkbox__inner {
+    background-color: var(--el-color-primary);
+    border-color: var(--el-color-primary);
+  }
+
+  :root:not([data-mode]) .el-checkbox__input.is-checked .el-checkbox__inner::after {
+    border-color: #fff;
+    border-width: 2px;
+  }
 }
 
 /* 表单标签 */
