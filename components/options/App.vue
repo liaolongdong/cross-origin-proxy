@@ -138,6 +138,7 @@ const {
   shadowedRuleIds,
   fetchConfig,
   addRule,
+  batchAddRules,
   updateRule,
   toggleRule,
   batchToggleRules,
@@ -559,12 +560,11 @@ async function handleImport(data: ExportData) {
 
 async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[]) {
   try {
-    for (const rule of harRules) {
-      await addRule(rule);
-    }
+    // 批量一次写入，避免逐条 sendMessage 触发 N 次 DNR 重建
+    await batchAddRules(harRules);
     showImportExport.value = false;
-  } catch {
-    ElMessage.error(t('importHarFailed'));
+  } catch (error) {
+    showAddFailedMessage(error);
   }
 }
 

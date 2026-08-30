@@ -98,6 +98,21 @@ export async function addRule(rule: ProxyRule): Promise<void> {
 }
 
 /**
+ * 批量添加规则（单次写入，超过 MAX_RULES 上限时整体拒绝）
+ */
+export async function batchAddRules(rules: ProxyRule[]): Promise<void> {
+  if (rules.length === 0) return;
+  return withStorageLock(async () => {
+    const config = await getProxyConfig();
+    if (config.rules.length + rules.length > MAX_RULES) {
+      throw new Error('MAX_RULES_EXCEEDED');
+    }
+    config.rules.push(...rules);
+    await saveProxyConfig(config);
+  });
+}
+
+/**
  * 更新一条规则
  */
 export async function updateRule(ruleId: string, updates: Partial<ProxyRule>): Promise<void> {

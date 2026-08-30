@@ -88,6 +88,27 @@ export function useRuleManagement() {
     return rule;
   }
 
+  /** 批量新增（单条消息一次写入，避免逐条 sendMessage 触发多次 DNR 重建） */
+  async function batchAddRules(ruleDataList: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>[]): Promise<ProxyRule[]> {
+    if (ruleDataList.length === 0) return [];
+    const now = Date.now();
+    const newRules: ProxyRule[] = ruleDataList.map(data => ({
+      ...data,
+      id: generateId(),
+      createdAt: now,
+      updatedAt: now,
+    }));
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
+      type: MessageType.BATCH_ADD_RULES,
+      data: { rules: newRules },
+    });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'BATCH_ADD_RULES_FAILED');
+    }
+    rules.value.push(...newRules);
+    return newRules;
+  }
+
   async function updateRule(ruleId: string, updates: Partial<ProxyRule>) {
     const existingRule = rules.value.find(r => r.id === ruleId);
     if (!existingRule) return;
@@ -224,6 +245,7 @@ export function useRuleManagement() {
     shadowedRuleIds,
     fetchConfig,
     addRule,
+    batchAddRules,
     updateRule,
     deleteRule,
     toggleRule,

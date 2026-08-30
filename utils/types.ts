@@ -100,6 +100,7 @@ export enum MessageType {
 
   // 规则 CRUD
   ADD_RULE = 'ADD_RULE',
+  BATCH_ADD_RULES = 'BATCH_ADD_RULES', // Options → SW：批量新增规则（一次写入，HAR 导入用）
   UPDATE_RULE = 'UPDATE_RULE',
   DELETE_RULE = 'DELETE_RULE',
   BATCH_TOGGLE_RULES = 'BATCH_TOGGLE_RULES', // Options → SW：批量启停规则（一次写入）
@@ -186,6 +187,12 @@ export interface ToggleRuleMessage {
 export interface AddRuleMessage {
   type: MessageType.ADD_RULE;
   data: { rule: ProxyRule };
+}
+
+/** 批量新增规则（一次写入） */
+export interface BatchAddRulesMessage {
+  type: MessageType.BATCH_ADD_RULES;
+  data: { rules: ProxyRule[] };
 }
 
 /** 更新规则 */
@@ -320,6 +327,7 @@ export type RuntimeMessage =
   | ToggleProxyMessage
   | ToggleRuleMessage
   | AddRuleMessage
+  | BatchAddRulesMessage
   | UpdateRuleMessage
   | DeleteRuleMessage
   | BatchToggleRulesMessage

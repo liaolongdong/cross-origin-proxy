@@ -579,14 +579,16 @@ function truncateUrl(url: string, maxLen = 50): string {
   return url.length > maxLen ? url.substring(0, maxLen) + '...' : url;
 }
 
+/** HTTP 方法 → el-tag 类型（静态映射，模块级避免逐行重建） */
+const METHOD_TAG_TYPES: Record<string, 'primary' | 'success' | 'warning' | 'danger' | 'info'> = {
+  GET: 'primary',
+  POST: 'success',
+  PUT: 'warning',
+  DELETE: 'danger',
+};
+
 function methodTagType(method: string) {
-  const typeMap: Record<string, 'primary' | 'success' | 'warning' | 'danger' | 'info'> = {
-    GET: 'primary',
-    POST: 'success',
-    PUT: 'warning',
-    DELETE: 'danger',
-  };
-  return typeMap[method] || 'info';
+  return METHOD_TAG_TYPES[method] || 'info';
 }
 
 function statusTagType(status: number) {

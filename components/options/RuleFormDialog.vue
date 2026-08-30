@@ -568,6 +568,7 @@ import { Delete, Plus, Close } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { ProxyRule } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
+import { matchRule, rewriteUrl } from '@/utils/urlMatcher';
 
 const props = defineProps<{
   visible: boolean;
@@ -681,6 +682,13 @@ watch(
           enabled: props.rule.enabled,
           requestBodyOverride: props.rule.requestBodyOverride ?? '',
           responseStatus: props.rule.responseOverrides?.status,
+          mockStatus: props.rule.mockResponse?.status ?? 200,
+          mockContentType: props.rule.mockResponse?.contentType ?? 'application/json',
+          mockBody: props.rule.mockResponse?.body ?? '',
+          delayMs: props.rule.delayMs ?? 1000,
+          retryCount: props.rule.retryCount ?? 3,
+          retryDelay: props.rule.retryDelay ?? 1000,
+          blocked: props.rule.blocked ?? false,
         });
         headerList.value = props.rule.headerOverrides
           ? Object.entries(props.rule.headerOverrides).map(([key, value]) => ({ key, value }))
@@ -690,15 +698,6 @@ watch(
         enableMockResponse.value = !!props.rule.mockResponse;
         enableDelay.value = !!props.rule.delayMs;
         enableRetry.value = !!props.rule.retryCount;
-        Object.assign(form, {
-          mockStatus: props.rule.mockResponse?.status ?? 200,
-          mockContentType: props.rule.mockResponse?.contentType ?? 'application/json',
-          mockBody: props.rule.mockResponse?.body ?? '',
-          delayMs: props.rule.delayMs ?? 1000,
-          retryCount: props.rule.retryCount ?? 3,
-          retryDelay: props.rule.retryDelay ?? 1000,
-          blocked: props.rule.blocked ?? false,
-        });
         responseHeaderList.value = props.rule.responseOverrides?.headers
           ? Object.entries(props.rule.responseOverrides.headers).map(([key, value]) => ({ key, value }))
           : [];
@@ -858,85 +857,27 @@ async function handleSave() {
   emit('save', result);
 }
 
-// ─── Test panel matching logic (mirrors utils/urlMatcher.ts) ────────────────
-
-function wildcardToRegex(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  return new RegExp(`^${escaped}$`);
-}
-
-function testMatchRule(url: string, matchType: ProxyRule['matchType'], matchPattern: string): boolean {
-  switch (matchType) {
-    case 'wildcard': {
-      const regex = wildcardToRegex(matchPattern);
-      return regex.test(url);
-    }
-    case 'prefix':
-      return url.startsWith(matchPattern);
-    case 'regex': {
-      try {
-        const regex = new RegExp(matchPattern);
-        return regex.test(url);
-      } catch {
-        return false;
-      }
-    }
-    default:
-      return false;
-  }
-}
-
-function testRewriteUrl(
-  url: string,
-  matchType: ProxyRule['matchType'],
-  matchPattern: string,
-  targetUrl: string,
-): string {
-  if (!targetUrl) return url;
-  switch (matchType) {
-    case 'wildcard': {
-      if (!matchPattern.endsWith('*')) return url;
-      const patternBase = matchPattern.slice(0, -1);
-      const escaped = patternBase.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-      let matched: RegExpExecArray | null;
-      try {
-        matched = new RegExp(`^${escaped}(.*)$`).exec(url);
-      } catch {
-        return url;
-      }
-      if (!matched) return url;
-      const rest = matched[1];
-      const target = targetUrl.replace(/\/$/, '');
-      const separator = patternBase.endsWith('/') && rest ? '/' : '';
-      return target + separator + rest;
-    }
-    case 'prefix': {
-      if (url.startsWith(matchPattern)) {
-        const rest = url.slice(matchPattern.length);
-        const target = targetUrl.replace(/\/$/, '');
-        return target + rest;
-      }
-      return url;
-    }
-    case 'regex': {
-      try {
-        const regex = new RegExp(matchPattern);
-        return url.replace(regex, targetUrl);
-      } catch {
-        return url;
-      }
-    }
-    default:
-      return url;
-  }
-}
+// ─── Test panel matching logic（直接复用 utils/urlMatcher，与生产通道语义一致）───
 
 function runTest() {
   const url = testUrl.value.trim();
   if (!url || !form.matchPattern || !form.targetUrl) return;
 
-  const matched = testMatchRule(url, form.matchType, form.matchPattern);
-  const rewrittenUrl = matched ? testRewriteUrl(url, form.matchType, form.matchPattern, form.targetUrl) : '';
+  // 构造临时规则供 matcher 使用（仅用于测试，不写入存储）
+  const testRule: ProxyRule = {
+    id: '__test__',
+    name: '__test__',
+    enabled: true,
+    matchType: form.matchType,
+    matchPattern: form.matchPattern,
+    targetUrl: form.targetUrl,
+    priority: 1,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+
+  const matched = matchRule(url, testRule);
+  const rewrittenUrl = matched ? rewriteUrl(url, testRule) : '';
   testResult.value = { matched, rewrittenUrl };
 }
 </script>

@@ -262,6 +262,16 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
+/** matchType → el-tag 类型（静态映射，模块级避免逐行重建） */
+const MATCH_TYPE_TAG_TYPES: Record<string, 'primary' | 'success' | 'warning' | 'info'> = {
+  wildcard: 'primary',
+  prefix: 'success',
+  regex: 'warning',
+};
+
+/** WebSocket 规则识别（匹配模式或目标含 ws:// / wss://） */
+const WS_PATTERN_RE = /wss?:\/\//i;
+
 /** 正在播放删除动画的行 id 集合 */
 const leavingIds = ref<Set<string>>(new Set());
 
@@ -336,12 +346,7 @@ function rowClassName({ row }: { row: ProxyRule }): string {
 }
 
 function matchTypeTagType(matchType: string) {
-  const typeMap: Record<string, 'primary' | 'success' | 'warning' | 'info'> = {
-    wildcard: 'primary',
-    prefix: 'success',
-    regex: 'warning',
-  };
-  return typeMap[matchType] || 'info';
+  return MATCH_TYPE_TAG_TYPES[matchType] || 'info';
 }
 
 function matchTypeLabel(matchType: string) {
@@ -354,8 +359,7 @@ function matchTypeLabel(matchType: string) {
 }
 
 function isWsRule(rule: ProxyRule): boolean {
-  const wsPattern = /wss?:\/\//i;
-  return wsPattern.test(rule.matchPattern) || wsPattern.test(rule.targetUrl);
+  return WS_PATTERN_RE.test(rule.matchPattern) || WS_PATTERN_RE.test(rule.targetUrl);
 }
 
 /** 缓存高亮正则，避免每次 highlightText 调用都 new RegExp */

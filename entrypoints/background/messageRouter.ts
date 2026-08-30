@@ -7,6 +7,7 @@ import {
   getProxyConfig,
   saveProxyConfig,
   addRule,
+  batchAddRules,
   updateRule,
   deleteRule,
   batchDeleteRules,
@@ -120,6 +121,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.TOGGLE_PROXY,
   MessageType.TOGGLE_RULE,
   MessageType.ADD_RULE,
+  MessageType.BATCH_ADD_RULES,
   MessageType.UPDATE_RULE,
   MessageType.DELETE_RULE,
   MessageType.BATCH_DELETE_RULES,
@@ -131,6 +133,19 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.LOAD_PROFILE,
   MessageType.DELETE_PROFILE,
 ]);
+
+/**
+ * 统一处理异步消息响应：resolve 时回传结果，reject 时回传 { success: false, error }
+ * @returns true（告知 chrome 需保持消息通道开放以异步响应）
+ */
+function respondAsync(sendResponse: (response?: unknown) => void, promise: Promise<unknown>): boolean {
+  promise
+    .then(sendResponse)
+    .catch((error: unknown) =>
+      sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
+    );
+  return true;
+}
 
 /**
  * 设置消息路由
@@ -147,78 +162,57 @@ export function setupMessageRouter(): void {
 
     switch (message.type) {
       case MessageType.PROXY_REQUEST:
-        handleProxyRequest(message.data).then(sendResponse);
-        return true; // async response
+        return respondAsync(sendResponse, handleProxyRequest(message.data));
 
       case MessageType.GET_PROXY_CONFIG:
-        getProxyConfig()
-          .then(config => sendResponse(config))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, getProxyConfig());
 
       case MessageType.UPDATE_PROXY_CONFIG:
-        saveProxyConfig(message.data)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, saveProxyConfig(message.data).then(() => ({ success: true })));
 
       case MessageType.TOGGLE_PROXY:
-        toggleProxy(message.data.enabled)
-          .then(enabled => {
+        return respondAsync(
+          sendResponse,
+          toggleProxy(message.data.enabled).then(enabled => {
             logger.info(`Proxy ${enabled ? 'enabled' : 'disabled'}`);
-            sendResponse({ success: true });
-          })
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+            return { success: true };
+          }),
+        );
 
-      case MessageType.TOGGLE_RULE:
+      case MessageType.TOGGLE_RULE: {
         if (!message.data.ruleId) {
           sendResponse({ success: false, error: 'Invalid ruleId' });
           return false;
         }
-        toggleRule(message.data.ruleId, message.data.enabled)
-          .then(result => {
+        return respondAsync(
+          sendResponse,
+          toggleRule(message.data.ruleId, message.data.enabled).then(result => {
             if (result.success) {
               logger.info(`Rule toggled: ${message.data.ruleId}`);
             }
-            sendResponse(result);
-          })
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+            return result;
+          }),
+        );
+      }
 
       case MessageType.ADD_RULE:
-        addRule(message.data.rule)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, addRule(message.data.rule).then(() => ({ success: true })));
+
+      case MessageType.BATCH_ADD_RULES: {
+        if (!Array.isArray(message.data.rules)) {
+          sendResponse({ success: false, error: 'Invalid rules' });
+          return false;
+        }
+        return respondAsync(sendResponse, batchAddRules(message.data.rules).then(() => ({ success: true })));
+      }
 
       case MessageType.UPDATE_RULE: {
         const { id, ...updates } = message.data.rule;
-        updateRule(id, updates)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, updateRule(id, updates).then(() => ({ success: true })));
       }
 
       case MessageType.DELETE_RULE:
-        deleteRule(message.data.ruleId)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, deleteRule(message.data.ruleId).then(() => ({ success: true })));
 
       case MessageType.BATCH_DELETE_RULES: {
         const ruleIds = message.data.ruleIds;
@@ -226,21 +220,17 @@ export function setupMessageRouter(): void {
           sendResponse({ success: false, error: 'Invalid ruleIds' });
           return false;
         }
-        batchDeleteRules(ruleIds)
-          .then(updatedConfig => sendResponse({ success: true, data: updatedConfig }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(
+          sendResponse,
+          batchDeleteRules(ruleIds).then(updatedConfig => ({ success: true, data: updatedConfig })),
+        );
       }
 
       case MessageType.BATCH_TOGGLE_RULES:
-        batchToggleRules(message.data.ruleIds, message.data.enabled)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(
+          sendResponse,
+          batchToggleRules(message.data.ruleIds, message.data.enabled).then(() => ({ success: true })),
+        );
 
       case MessageType.REORDER_RULES: {
         const orderedIds = message.data.orderedIds;
@@ -248,79 +238,40 @@ export function setupMessageRouter(): void {
           sendResponse({ success: false, error: 'Invalid orderedIds' });
           return false;
         }
-        reorderRules(orderedIds)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, reorderRules(orderedIds).then(() => ({ success: true })));
       }
 
       case MessageType.GET_DNR_STATS:
-        getDnrHitStats()
-          .then(stats => sendResponse(stats))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, getDnrHitStats());
 
       case MessageType.GET_SW_STATS:
         sendResponse(getSwHitStats());
         return false;
 
       case MessageType.GET_REQUEST_LOG:
-        getRequestLogs()
-          .then(logs => sendResponse(logs))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, getRequestLogs());
 
       case MessageType.CLEAR_REQUEST_LOG:
-        clearRequestLogs()
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, clearRequestLogs().then(() => ({ success: true })));
 
       case MessageType.GET_PROXY_STATUS:
-        getProxyStatus()
-          .then(status => sendResponse(status))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, getProxyStatus());
 
       case MessageType.EXPORT_CONFIG:
-        getProxyConfig()
-          .then(config =>
-            sendResponse({
-              version: chrome.runtime.getManifest().version,
-              exportTime: Date.now(),
-              config,
-            }),
-          )
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(
+          sendResponse,
+          getProxyConfig().then(config => ({
+            version: chrome.runtime.getManifest().version,
+            exportTime: Date.now(),
+            config,
+          })),
+        );
 
       case MessageType.IMPORT_CONFIG:
-        handleImportConfig(message.data)
-          .then(sendResponse)
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, handleImportConfig(message.data));
 
       case MessageType.EXPORT_HAR:
-        getRequestLogs()
-          .then(logs => sendResponse(logsToHar(logs)))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, getRequestLogs().then(logs => logsToHar(logs)));
 
       case MessageType.IMPORT_HAR: {
         const entries = message.data?.log?.entries;
@@ -334,36 +285,16 @@ export function setupMessageRouter(): void {
       }
 
       case MessageType.GET_PROFILES:
-        getProfiles()
-          .then(profiles => sendResponse(profiles))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, getProfiles());
 
       case MessageType.SAVE_PROFILE:
-        saveProfile(message.data)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, saveProfile(message.data).then(() => ({ success: true })));
 
       case MessageType.LOAD_PROFILE:
-        loadProfile(message.data.profileId)
-          .then(sendResponse)
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, loadProfile(message.data.profileId));
 
       case MessageType.DELETE_PROFILE:
-        deleteProfile(message.data.profileId)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) =>
-            sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
-          );
-        return true;
+        return respondAsync(sendResponse, deleteProfile(message.data.profileId).then(() => ({ success: true })));
 
       default:
         logger.warn('Unknown message type:', message.type);
