@@ -197,6 +197,9 @@ export function findMatchingRule(url: string, rules: ProxyRule[]): ProxyRule | n
  * 判断是否为简单规则（无任何 SW 通道专属功能，可使用 DNR）
  */
 export function isSimpleRule(rule: ProxyRule): boolean {
+  // 空目标表示不改写地址（仅代理转发/注入请求头），DNR 的 regexSubstitution
+  // 无法表达该语义（空/相对替换是非法值，会导致 updateDynamicRules 整批失败），必须走 SW 通道
+  if (!rule.targetUrl) return false;
   if (rule.headerOverrides && Object.keys(rule.headerOverrides).length > 0) return false;
   if (rule.requestBodyOverride !== undefined) return false;
   if (rule.responseOverrides) return false;

@@ -722,7 +722,9 @@ watch(
         headerList.value = props.initialData?.headerOverrides
           ? Object.entries(props.initialData.headerOverrides).map(([key, value]) => ({ key, value }))
           : [];
-        enableRequestBodyOverride.value = false;
+        // 预填数据（模板/日志建规则等）可能携带请求体覆盖，按其存在与否初始化开关，
+        // 硬编码 false 会让保存逻辑丢弃已赋值的 requestBodyOverride
+        enableRequestBodyOverride.value = props.initialData?.requestBodyOverride !== undefined;
         enableResponseOverrides.value = false;
         enableMockResponse.value = false;
         enableDelay.value = false;

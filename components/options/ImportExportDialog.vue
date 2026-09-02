@@ -79,6 +79,30 @@
 
       <el-divider />
 
+      <!-- cURL 导入 -->
+      <div class="section">
+        <h3>{{ t('importCurlTitle') }}</h3>
+        <p class="section-desc">{{ t('importCurlDesc') }}</p>
+        <el-input
+          v-model="curlInput"
+          type="textarea"
+          :rows="5"
+          class="curl-input"
+          spellcheck="false"
+          :placeholder="t('importCurlPlaceholder')"
+        />
+        <el-button
+          type="success"
+          :disabled="!curlInput.trim()"
+          style="margin-top: 12px"
+          @click="handleImportCurl"
+        >
+          {{ t('importCurlButton') }}
+        </el-button>
+      </div>
+
+      <el-divider />
+
       <!-- HAR 报文导出 -->
       <div class="section">
         <h3>{{ t('exportHar') }}</h3>
@@ -136,6 +160,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadFile } from 'element-plus';
 import type { ExportData, HarImportPayload, ProxyRule } from '@/utils/types';
 import { MessageType } from '@/utils/types';
+import { parseCurlCommand } from '@/utils/curlParser';
+import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
 
 defineProps<{
@@ -147,6 +173,7 @@ const emit = defineEmits<{
   import: [data: ExportData];
   export: [];
   importHarRules: [rules: ProxyRule[]];
+  importCurl: [data: ParsedCurl];
 }>();
 
 const { t } = useI18n();
@@ -154,6 +181,7 @@ const { t } = useI18n();
 const uploadRef = ref();
 const harUploadRef = ref();
 const jsonInput = ref('');
+const curlInput = ref('');
 const exporting = ref(false);
 const importing = ref(false);
 const fileContent = ref<string | null>(null);
@@ -225,6 +253,18 @@ async function handleImport() {
   } finally {
     importing.value = false;
   }
+}
+
+function handleImportCurl() {
+  const parsed = parseCurlCommand(curlInput.value);
+  if (!parsed) {
+    ElMessage.error(t('importCurlFailed'));
+    return;
+  }
+  emit('importCurl', parsed);
+  ElMessage.success(t('importCurlSuccess'));
+  curlInput.value = '';
+  emit('update:visible', false);
 }
 
 async function handleExportHar() {
@@ -312,6 +352,11 @@ async function handleImportHar() {
 
 .paste-section {
   margin-top: 16px;
+}
+
+.curl-input :deep(textarea) {
+  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
 }
 
 .paste-section p {

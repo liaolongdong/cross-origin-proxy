@@ -25,7 +25,11 @@ export default defineContentScript({
       };
     }
 
+    /** 最近一次下发的配置缓存（供 MAIN world 主动请求时回放，消除注入时序竞态） */
+    let lastConfig: ProxyConfig | null = null;
+
     function postSyncRules(config: ProxyConfig): void {
+      lastConfig = config;
       window.postMessage(
         {
           channel: CONTENT_SCRIPT_CHANNEL,
@@ -41,6 +45,22 @@ export default defineContentScript({
       // Only accept messages from same window and our channel
       if (event.source !== window) return;
       if (event.data?.channel !== CONTENT_SCRIPT_CHANNEL) return;
+
+      // MAIN world 监听器就绪后主动请求配置：有缓存直接回放，否则向 SW 拉取
+      if (event.data?.type === 'REQUEST_CONFIG') {
+        if (lastConfig) {
+          postSyncRules(lastConfig);
+        } else {
+          void chrome.runtime
+            .sendMessage({ type: MessageType.GET_PROXY_CONFIG })
+            .then((config: ProxyConfig | undefined) => {
+              if (config) postSyncRules(config);
+            })
+            .catch(error => logger.debug('Config request on demand failed:', error));
+        }
+        return;
+      }
+
       if (event.data?.type !== MessageType.PROXY_REQUEST) return;
 
       const { data } = event.data;

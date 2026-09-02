@@ -115,6 +115,9 @@ describe('getProxyStatus — todayRequestCount', () => {
         },
         onChanged: { addListener: vi.fn() },
       },
+      alarms: {
+        get: vi.fn(async () => undefined),
+      },
     });
     vi.resetModules();
   });

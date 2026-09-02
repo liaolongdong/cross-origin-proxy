@@ -387,6 +387,8 @@ export interface ProxyStatus {
   todayRequestCount: number;
   recentLogs: RequestLogEntry[];
   rules: { id: string; name: string; enabled: boolean }[];
+  /** 自动关闭时间点（epoch ms），未配置自动关闭时为 undefined */
+  autoOffAt?: number;
 }
 
 /**

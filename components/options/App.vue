@@ -60,6 +60,7 @@
       @export="handleExport"
       @import="handleImport"
       @import-har-rules="handleImportHarRules"
+      @import-curl="handleImportCurl"
     />
     <ProfilesDialog
       v-model:visible="showProfiles"
@@ -566,6 +567,34 @@ async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[
   } catch (error) {
     showAddFailedMessage(error);
   }
+}
+
+/** cURL 导入：按请求 origin 预填通配符规则，头/体进入对应覆盖项，交由表单确认保存 */
+function handleImportCurl(parsed: import('@/utils/curlParser').ParsedCurl) {
+  let url: URL;
+  try {
+    url = new URL(parsed.url);
+  } catch {
+    ElMessage.error(t('importCurlFailed'));
+    return;
+  }
+  showImportExport.value = false;
+
+  const prefill: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> = {
+    name: `cURL: ${url.hostname}`,
+    enabled: true,
+    matchType: 'wildcard',
+    matchPattern: `${url.origin}/*`,
+    targetUrl: url.origin,
+    priority: 100,
+  };
+  if (Object.keys(parsed.headers).length > 0) {
+    prefill.headerOverrides = { ...parsed.headers };
+  }
+  if (parsed.body !== undefined) {
+    prefill.requestBodyOverride = parsed.body;
+  }
+  handleUseTemplate(prefill);
 }
 
 /** 环境配置加载成功后：后台已整体替换规则集，刷新本地列表保持一致 */

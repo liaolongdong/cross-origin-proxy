@@ -74,6 +74,61 @@ export function buildRegexSubstitution(rule: ProxyRule): string {
 }
 
 /**
+ * 统计 regexFilter 中的捕获组数量（转义感知）
+ * - `(` 后不跟 `?` → 捕获组
+ * - `(?<name>` → 命名捕获组（计入）
+ * - `(?:` `(?=` `(?!` `(?<=` `(?<!` 及 `(?` 其他构造 → 非捕获（不计入）
+ * - `\(` 为转义的字面量括号，不产生捕获组
+ */
+export function countCaptureGroups(regexFilter: string): number {
+  let count = 0;
+  for (let i = 0; i < regexFilter.length; i++) {
+    const ch = regexFilter[i];
+    if (ch === '\\') {
+      i++;
+      continue;
+    }
+    if (ch !== '(') continue;
+    if (regexFilter[i + 1] !== '?') {
+      count++;
+      continue;
+    }
+    if (regexFilter[i + 2] === '<' && /[A-Za-z]/.test(regexFilter[i + 3] || '')) {
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * 提取 regexSubstitution 中最大的捕获组引用编号（`\0`-`\9`）
+ * `\\` 为转义的字面量反斜杠，其后的数字不构成引用；无引用返回 -1
+ */
+export function maxSubstitutionRef(substitution: string): number {
+  let max = -1;
+  for (let i = 0; i < substitution.length; i++) {
+    if (substitution[i] !== '\\') continue;
+    const next = substitution[i + 1];
+    if (next === undefined) break;
+    i++;
+    if (next >= '0' && next <= '9') {
+      max = Math.max(max, Number(next));
+    }
+  }
+  return max;
+}
+
+/**
+ * 校验替换串的捕获引用是否越界（引用编号不得超过捕获组数量）
+ * DNR 对越界引用会拒绝整批规则，需在同步前过滤
+ */
+export function isSubstitutionValid(regexFilter: string, substitution: string): boolean {
+  const maxRef = maxSubstitutionRef(substitution);
+  if (maxRef < 0) return true;
+  return maxRef <= countCaptureGroups(regexFilter);
+}
+
+/**
  * 业务优先级 → DNR 优先级
  * 业务语义为数值越小越先匹配，DNR 为数值越大越优先，需反转（下限 1）
  */

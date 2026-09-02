@@ -128,6 +128,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.BATCH_TOGGLE_RULES,
   MessageType.REORDER_RULES,
   MessageType.CLEAR_REQUEST_LOG,
+  MessageType.IMPORT_CONFIG,
   MessageType.IMPORT_HAR,
   MessageType.SAVE_PROFILE,
   MessageType.LOAD_PROFILE,

@@ -252,5 +252,11 @@
   "autoOff4h": "4 小时后",
   "createRuleFromLog": "创建规则",
   "createRuleFromLogPrefix": "代理",
-  "createRuleFromLogFailed": "创建规则失败：无法解析请求 URL"
+  "createRuleFromLogFailed": "创建规则失败：无法解析请求 URL",
+  "importCurlTitle": "cURL 导入",
+  "importCurlDesc": "粘贴 cURL 命令（如浏览器 DevTools 的「复制为 cURL」），自动解析为预填规则",
+  "importCurlPlaceholder": "curl 'https://api.example.com/users' -H 'Authorization: Bearer xxx' ...",
+  "importCurlButton": "解析并创建规则",
+  "importCurlSuccess": "cURL 解析成功，请在规则表单中确认保存",
+  "importCurlFailed": "cURL 解析失败：未识别到有效请求"
 }

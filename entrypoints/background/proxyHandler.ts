@@ -1,6 +1,7 @@
 import { findMatchingRule, rewriteUrl } from '@/utils/urlMatcher';
 import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
 import { generateId } from '@/utils/generateId';
+import { AUTO_OFF_ALARM } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import type { ProxyStatus, RequestLogEntry, ResponseOverrides, MockCondition, DnrHitStat } from '@/utils/types';
 
@@ -494,11 +495,19 @@ export async function getProxyStatus(): Promise<ProxyStatus> {
     if (l.timestamp >= todayTs) todayRequestCount++;
   }
 
+  // 代理关闭时倒计时已被清除，无需查询
+  let autoOffAt: number | undefined;
+  if (config.enabled) {
+    const alarm = await chrome.alarms.get(AUTO_OFF_ALARM);
+    autoOffAt = alarm?.scheduledTime;
+  }
+
   return {
     enabled: config.enabled,
     activeRuleCount: config.rules.filter(r => r.enabled).length,
     todayRequestCount,
     recentLogs: logs.slice(0, 10),
     rules: config.rules.map(r => ({ id: r.id, name: r.name, enabled: r.enabled })),
+    autoOffAt,
   };
 }

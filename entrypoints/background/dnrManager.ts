@@ -1,5 +1,5 @@
 import { getProxyConfig } from '@/utils/storage';
-import { buildDnrRules } from '@/utils/dnrRules';
+import { buildDnrRules, buildRegexFilter, buildRegexSubstitution, isSubstitutionValid } from '@/utils/dnrRules';
 import { logger } from '@/utils/logger';
 import { MessageType } from '@/utils/types';
 import { STORAGE_KEYS } from '@/utils/constants';
@@ -19,24 +19,31 @@ import { setDnrRuleIdMap } from './dnrStats';
  */
 
 /**
- * 校验 regex 规则的 RE2 兼容性，过滤掉 DNR 不支持的规则
+ * 过滤掉 DNR 无法应用的规则，避免单条非法规则导致 updateDynamicRules 整批拒绝：
+ * - regex 规则的匹配模式需经 RE2 兼容性校验（DNR 与 JS 正则语法不完全一致）
+ * - 所有规则的替换串捕获引用不得越界（越界引用是非法值）
  */
 async function filterRegexSupported(rules: ProxyRule[]): Promise<ProxyRule[]> {
   const results = await Promise.all(
     rules.map(async rule => {
-      if (rule.matchType !== 'regex') return rule;
-      try {
-        const { isSupported } = await chrome.declarativeNetRequest.isRegexSupported({
-          regex: rule.matchPattern,
-        });
-        if (!isSupported) {
-          logger.warn(`Rule "${rule.name}" regex not RE2-compatible, skipped in DNR:`, rule.matchPattern);
+      if (rule.matchType === 'regex') {
+        try {
+          const { isSupported } = await chrome.declarativeNetRequest.isRegexSupported({
+            regex: rule.matchPattern,
+          });
+          if (!isSupported) {
+            logger.warn(`Rule "${rule.name}" regex not RE2-compatible, skipped in DNR:`, rule.matchPattern);
+            return null;
+          }
+        } catch {
           return null;
         }
-        return rule;
-      } catch {
+      }
+      if (!isSubstitutionValid(buildRegexFilter(rule), buildRegexSubstitution(rule))) {
+        logger.warn(`Rule "${rule.name}" substitution references missing capture group, skipped in DNR`);
         return null;
       }
+      return rule;
     }),
   );
   return results.filter((r): r is ProxyRule => r !== null);

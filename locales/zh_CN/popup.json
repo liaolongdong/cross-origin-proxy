@@ -12,5 +12,6 @@
   "actionImportExport": "导入导出",
   "actionImportExportDesc": "备份或恢复规则配置",
   "actionProfiles": "环境配置",
-  "actionProfilesDesc": "一键切换多环境规则快照"
+  "actionProfilesDesc": "一键切换多环境规则快照",
+  "autoOffCountdown": "$1 后自动关闭"
 }

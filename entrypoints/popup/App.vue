@@ -21,18 +21,27 @@
       class="toggle-section"
       :class="{ 'is-active': enabled }"
     >
-      <div class="toggle-label">
-        <span
-          class="status-dot"
-          :class="{ active: enabled }"
-        ></span>
-        <span class="toggle-text">{{ t('proxySwitch') }}</span>
-        <span
-          class="toggle-status"
-          :class="{ 'is-active': enabled }"
+      <div class="toggle-label-col">
+        <div class="toggle-label">
+          <span
+            class="status-dot"
+            :class="{ active: enabled }"
+          ></span>
+          <span class="toggle-text">{{ t('proxySwitch') }}</span>
+          <span
+            class="toggle-status"
+            :class="{ 'is-active': enabled }"
+          >
+            {{ enabled ? t('statusEnabled') : t('statusDisabled') }}
+          </span>
+        </div>
+        <div
+          v-if="autoOffText"
+          class="auto-off-countdown"
         >
-          {{ enabled ? t('statusEnabled') : t('statusDisabled') }}
-        </span>
+          <el-icon><Timer /></el-icon>
+          {{ autoOffText }}
+        </div>
       </div>
       <el-switch
         v-model="enabled"
@@ -220,9 +229,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Promotion, Setting, Document, FolderOpened, Collection, ArrowDown } from '@element-plus/icons-vue';
+import { Promotion, Setting, Document, FolderOpened, Collection, ArrowDown, Timer } from '@element-plus/icons-vue';
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 
@@ -240,6 +249,7 @@ const {
   recentLogs,
   rules,
   loading,
+  autoOffAt,
   toggleProxy,
   toggleRule,
   fetchStatus,
@@ -250,6 +260,46 @@ const {
 } = useProxyStatus();
 
 const rulesExpanded = ref(false);
+
+// ─── 自动关闭倒计时 ─────────────────────────────────────────────────────────
+
+/** 剩余时间格式化：超过 1 小时显示 "Xh Ym"，否则 "m:ss" */
+function formatRemaining(ms: number): string {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+const autoOffText = ref('');
+
+function tickAutoOff() {
+  if (!autoOffAt.value || !enabled.value) {
+    autoOffText.value = '';
+    return;
+  }
+  const remaining = autoOffAt.value - Date.now();
+  if (remaining <= 0) {
+    autoOffText.value = '';
+    // 到期后 SW 可能已自动关闭代理，刷新状态保持一致
+    void fetchStatus();
+    return;
+  }
+  autoOffText.value = t('autoOffCountdown', formatRemaining(remaining));
+}
+
+let autoOffTimer: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  tickAutoOff();
+  autoOffTimer = setInterval(tickAutoOff, 1000);
+});
+
+onUnmounted(() => {
+  if (autoOffTimer) clearInterval(autoOffTimer);
+});
 
 async function handleToggleProxy(value: boolean) {
   try {
@@ -361,10 +411,26 @@ async function openOptionsPage(hash = '') {
   border-color: var(--cop-primary-border);
 }
 
+.toggle-label-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .toggle-label {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.auto-off-countdown {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--el-color-warning);
+  user-select: none;
 }
 
 .status-dot {

@@ -12,5 +12,6 @@
   "actionImportExport": "Import / Export",
   "actionImportExportDesc": "Back up or restore rule config",
   "actionProfiles": "Env Profiles",
-  "actionProfilesDesc": "Switch environment rule snapshots"
+  "actionProfilesDesc": "Switch environment rule snapshots",
+  "autoOffCountdown": "Auto-off in $1"
 }

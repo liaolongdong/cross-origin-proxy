@@ -94,13 +94,17 @@ describe('findMatchingRule', () => {
 
 describe('isSimpleRule', () => {
   it('无 headerOverrides 为简单规则', () => {
-    expect(isSimpleRule(makeRule({}))).toBe(true);
-    expect(isSimpleRule(makeRule({ headerOverrides: {} }))).toBe(true);
-    expect(isSimpleRule(makeRule({ headerOverrides: { 'X-Env': 'uat' } }))).toBe(false);
+    expect(isSimpleRule(makeRule({ targetUrl: 'https://b.com' }))).toBe(true);
+    expect(isSimpleRule(makeRule({ targetUrl: 'https://b.com', headerOverrides: {} }))).toBe(true);
+    expect(isSimpleRule(makeRule({ targetUrl: 'https://b.com', headerOverrides: { 'X-Env': 'uat' } }))).toBe(false);
   });
 
   it('不以 * 结尾的 wildcard 非简单规则（DNR 重写会丢失末尾固定文本）', () => {
-    expect(isSimpleRule(makeRule({ matchPattern: 'https://a.com/*/suffix' }))).toBe(false);
-    expect(isSimpleRule(makeRule({ matchPattern: 'https://a.com/*' }))).toBe(true);
+    expect(isSimpleRule(makeRule({ targetUrl: 'https://b.com', matchPattern: 'https://a.com/*/suffix' }))).toBe(false);
+    expect(isSimpleRule(makeRule({ targetUrl: 'https://b.com', matchPattern: 'https://a.com/*' }))).toBe(true);
+  });
+
+  it('空目标规则非简单（仅注入请求头场景走 SW 通道）', () => {
+    expect(isSimpleRule(makeRule({ targetUrl: '' }))).toBe(false);
   });
 });

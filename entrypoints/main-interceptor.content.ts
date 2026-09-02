@@ -19,6 +19,7 @@ export default defineContentScript({
     const PROXY_REQUEST = 'PROXY_REQUEST';
     const PROXY_RESPONSE = 'PROXY_RESPONSE';
     const SYNC_RULES = 'SYNC_RULES';
+    const REQUEST_CONFIG = 'REQUEST_CONFIG';
 
     // ---- Proxy rule types (duplicated from types.ts — must be self-contained) ----
 
@@ -45,6 +46,8 @@ export default defineContentScript({
       };
       delayMs?: number;
       blocked?: boolean;
+      retryCount?: number;
+      retryDelay?: number;
       priority: number;
       createdAt: number;
       updatedAt: number;
@@ -158,6 +161,10 @@ export default defineContentScript({
       }
     });
 
+    // 监听器就绪后主动请求配置：ISOLATED world 的初始 SYNC_RULES 可能早于本监听器注册
+    // （两 world 注入时序竞态），主动拉取保证拦截器不会空规则运行
+    window.postMessage({ channel: CHANNEL, type: REQUEST_CONFIG }, window.location.origin);
+
     // ---- URL matching (uses cached rules and pre-compiled RegExp) ----
 
     function matchUrl(url: string, rule: ProxyRule): boolean {
@@ -185,15 +192,24 @@ export default defineContentScript({
 
     // ---- Proxy fetch via content script bridge ----
 
-    function proxyFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    /**
+     * 计算代理超时上限：请求延迟 + 每次尝试 30s 超时 ×（重试次数+1）+ 重试间隔 × 重试次数 + 桥接余量。
+     * 固定 30s 会误杀配置了延迟或重试的慢请求
+     */
+    function computeProxyTimeout(rule: ProxyRule): number {
+      const retries = rule.retryCount ?? 0;
+      return (rule.delayMs || 0) + 30000 * (retries + 1) + (rule.retryDelay ?? 1000) * retries + 5000;
+    }
+
+    function proxyFetch(url: string, rule: ProxyRule, options: RequestInit = {}): Promise<Response> {
       return new Promise((resolve, reject) => {
         const requestId = `req-${++requestCounter}-${Date.now()}`;
 
-        // 30 second timeout
+        // 超时上限按规则配置动态计算（延迟/重试会拉长 SW 侧总耗时）
         const timeout = setTimeout(() => {
           pendingRequests.delete(requestId);
           reject(new Error('Proxy request timeout'));
-        }, 30000);
+        }, computeProxyTimeout(rule));
 
         pendingRequests.set(requestId, {
           resolve: (data: any) => {
@@ -278,7 +294,15 @@ export default defineContentScript({
 
     window.fetch = async function patchedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       const request = input instanceof Request ? input : null;
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+      // 相对路径（如 '/api/x'）基于页面 URL 解析为绝对地址再匹配；绝对 URL 解析后不变
+      let url = rawUrl;
+      try {
+        url = new URL(rawUrl, window.location.href).href;
+      } catch {
+        // 无法解析时按原值匹配
+      }
 
       const rule = findMatchingRule(url);
       if (!rule) {
@@ -297,12 +321,15 @@ export default defineContentScript({
           body = body.toString();
         }
         // 非字符串 body（FormData / Blob / ArrayBuffer 等）无法跨 postMessage 序列化，
-        // 回退到原生 fetch，避免静默丢失请求体
+        // 回退到原生 fetch，避免静默丢失请求体；但阻断规则不得回退，否则请求会实际发出
         if (body !== undefined && body !== null && typeof body !== 'string') {
+          if (rule.blocked) {
+            throw new TypeError('Failed to fetch', { cause: new Error('Request blocked by proxy rule') });
+          }
           return originalFetch.call(window, input, init);
         }
 
-        return await proxyFetch(url, { method, headers, body: (body ?? null) as BodyInit | null });
+        return await proxyFetch(url, rule, { method, headers, body: (body ?? null) as BodyInit | null });
       } catch (error) {
         // 规则阻断：不得回退原生 fetch（否则被阻断的请求会实际发出），
         // 抛出模拟网络错误的 TypeError，与原生 fetch 被阻断时的行为一致
@@ -319,12 +346,21 @@ export default defineContentScript({
     const originalXHROpen = XMLHttpRequest.prototype.open;
     const originalXHRSend = XMLHttpRequest.prototype.send;
     const originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+    const originalXHRAbort = XMLHttpRequest.prototype.abort;
 
     XMLHttpRequest.prototype.open = function (method: string, url: string | URL, ...rest: any[]) {
       (this as any).__proxyMethod = method;
       (this as any).__proxyUrl = typeof url === 'string' ? url : url.href;
       (this as any).__proxyHeaders = {};
+      (this as any).__proxyCancel = false;
+      (this as any).__proxySettled = false;
       return originalXHROpen.apply(this, [method, url, ...rest] as any);
+    };
+
+    XMLHttpRequest.prototype.abort = function (...args: any[]) {
+      // 标记取消：迟到的代理响应不再写回该实例（否则会在 abort 后错误派发 load 事件）
+      (this as any).__proxyCancel = true;
+      return originalXHRAbort.apply(this, args as any);
     };
 
     // Collect request headers so the proxied fetch carries them
@@ -335,14 +371,37 @@ export default defineContentScript({
     };
 
     XMLHttpRequest.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null) {
-      const url: string = (this as any).__proxyUrl;
+      const rawUrl: string = (this as any).__proxyUrl;
       const method: string = (this as any).__proxyMethod;
 
-      if (url && findMatchingRule(url)) {
+      // 与 fetch 一致：相对路径解析为绝对地址后再匹配
+      let url = rawUrl;
+      try {
+        url = new URL(rawUrl, window.location.href).href;
+      } catch {
+        // 无法解析时按原值匹配
+      }
+
+      const rule = url ? findMatchingRule(url) : null;
+
+      if (rule) {
         // Non-string bodies (FormData / Blob / ArrayBuffer / Document) cannot be
         // serialized across postMessage; fall back to the original XHR instead
-        // of silently dropping the body.
+        // of silently dropping the body. 但阻断规则不得回退，否则请求会实际发出
         if (body !== undefined && body !== null && typeof body !== 'string') {
+          if (rule.blocked) {
+            // eslint-disable-next-line @typescript-eslint/no-this-alias
+            const xhr = this;
+            setTimeout(() => {
+              Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
+              Object.defineProperty(xhr, 'status', { value: 0, writable: true });
+              Object.defineProperty(xhr, 'statusText', { value: '', writable: true });
+              xhr.dispatchEvent(new Event('readystatechange'));
+              xhr.dispatchEvent(new Event('error'));
+              xhr.dispatchEvent(new Event('loadend'));
+            }, 0);
+            return;
+          }
           originalXHRSend.call(this, body);
           return;
         }
@@ -351,12 +410,29 @@ export default defineContentScript({
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         const xhr = this;
 
-        proxyFetch(url, {
+        // 尊重页面设置的 xhr.timeout：到期派发 timeout 事件，此后迟到的响应一律丢弃
+        if (xhr.timeout > 0) {
+          setTimeout(() => {
+            if ((xhr as any).__proxyCancel || (xhr as any).__proxySettled) return;
+            (xhr as any).__proxyCancel = true;
+            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
+            Object.defineProperty(xhr, 'status', { value: 0, writable: true });
+            Object.defineProperty(xhr, 'statusText', { value: '', writable: true });
+            xhr.dispatchEvent(new Event('readystatechange'));
+            xhr.dispatchEvent(new Event('timeout'));
+            xhr.dispatchEvent(new Event('loadend'));
+          }, xhr.timeout);
+        }
+
+        proxyFetch(url, rule, {
           method: method || 'GET',
           headers,
           body: body ?? null,
         })
           .then(async response => {
+            // 已被 abort/timeout 的实例：迟到的响应一律丢弃
+            if ((xhr as any).__proxyCancel) return;
+            (xhr as any).__proxySettled = true;
             // Honor responseType: '', text, json, blob, arraybuffer
             let responseValue: any;
             let responseTextValue: string | undefined;
@@ -380,6 +456,9 @@ export default defineContentScript({
                 responseTextValue = await response.text();
                 responseValue = responseTextValue;
             }
+
+            // await 期间实例可能被 abort/timeout，二次检查
+            if ((xhr as any).__proxyCancel) return;
 
             // Build raw headers string for getAllResponseHeaders()
             const headerLines: string[] = [];
@@ -419,6 +498,8 @@ export default defineContentScript({
             xhr.dispatchEvent(new Event('loadend'));
           })
           .catch(error => {
+            if ((xhr as any).__proxyCancel) return;
+            (xhr as any).__proxySettled = true;
             console.warn('[CrossOriginProxy] XHR proxy failed, dispatching error:', error);
             Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
             Object.defineProperty(xhr, 'status', { value: 0, writable: true });
@@ -499,6 +580,12 @@ export default defineContentScript({
       const rule = findMatchingRule(httpUrl);
 
       if (rule) {
+        // 阻断规则：连向必然拒绝的本地端口，让页面收到标准 error 事件，
+        // 而不是继续建立真实连接（否则阻断对 WebSocket 静默失效）
+        if (rule.blocked) {
+          console.warn('[CrossOriginProxy] WS blocked by rule:', rule.name, wsUrl);
+          return new OriginalWebSocket('ws://127.0.0.1:1');
+        }
         const targetUrl = rewriteWsUrl(wsUrl, rule);
         console.warn('[CrossOriginProxy] WS intercepted:', wsUrl, '→', targetUrl);
         return protocols ? new OriginalWebSocket(targetUrl, protocols) : new OriginalWebSocket(targetUrl);

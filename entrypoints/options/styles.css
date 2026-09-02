@@ -64,9 +64,9 @@ body {
 }
 
 .el-button--primary {
+  color: var(--cop-text-color-on-primary);
   background: var(--cop-primary);
   border: 1px solid var(--cop-primary);
-  color: var(--cop-text-color-on-primary);
 }
 
 .el-button--primary:hover {
@@ -88,8 +88,8 @@ body {
 
 /* 复选框暗色模式：提升边框与勾选标记对比度 */
 :root[data-mode='dark'] .el-checkbox__inner {
-  border-color: var(--el-border-color);
   background-color: var(--el-bg-color);
+  border-color: var(--el-border-color);
 }
 
 :root[data-mode='dark'] .el-checkbox__input.is-checked .el-checkbox__inner {
@@ -104,8 +104,8 @@ body {
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-mode]) .el-checkbox__inner {
-    border-color: var(--el-border-color);
     background-color: var(--el-bg-color);
+    border-color: var(--el-border-color);
   }
 
   :root:not([data-mode]) .el-checkbox__input.is-checked .el-checkbox__inner {

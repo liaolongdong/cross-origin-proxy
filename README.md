@@ -49,6 +49,7 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
 
 - **Config import/export** — back up and restore the full rule config as JSON
 - **HAR import/export** — export captured SW-channel logs as standard HAR 1.2 format; import HAR files to auto-create proxy rules from traffic
+- **cURL import** — paste a cURL command (e.g. DevTools "Copy as cURL" output) to auto-parse and prefill a rule, closing the loop with "Copy as cURL" in logs
 
 ### Environment Profiles
 
@@ -57,7 +58,7 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
 
 ### UI / UX
 
-- **Popup quick panel** — global proxy switch, today's stats, recent requests, and one-click deep links into the options page
+- **Popup quick panel** — global proxy switch, today's stats, recent requests, and one-click deep links into the options page; shows a live countdown when auto-off is configured
 - **i18n** — English / 简体中文 UI
 - **6 color themes** with light / dark / system modes
 - **Keyboard shortcuts** — `Cmd+N` add rule, `/` focus search, `Esc` close dialogs
@@ -141,6 +142,10 @@ Drag the ⠿ handle on any rule row to reorder. The table displays rules in arra
 
 - **Export**: Open the Import/Export dialog and click **Export HAR** to download captured request/response logs as a `.har` file.
 - **Import**: Click **Import HAR**, select a `.har` file, and the extension will auto-create proxy rules from the traffic entries.
+
+### cURL Import
+
+Open the Import/Export dialog and paste a cURL command into the **Import cURL** section (DevTools "Copy as cURL" output, line continuations, and single/double quotes are all supported), then click **Parse & Create Rule**. The extension generates a wildcard rule from the request origin and prefills the request headers and body into the rule's override fields — confirm and save to activate it.
 
 ### Log Detail Viewer
 

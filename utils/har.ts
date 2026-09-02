@@ -23,6 +23,15 @@ export function logsToHar(logs: RequestLogEntry[]): object {
   };
 }
 
+function findContentType(headers: Record<string, string> | undefined): string {
+  if (headers) {
+    for (const [name, value] of Object.entries(headers)) {
+      if (name.toLowerCase() === 'content-type') return value;
+    }
+  }
+  return 'application/json';
+}
+
 function logToHarEntry(log: RequestLogEntry): HarEntry {
   const requestHeaders = log.requestHeaders
     ? Object.entries(log.requestHeaders).map(([name, value]) => ({ name, value }))
@@ -38,7 +47,7 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
       url: log.originalUrl,
       headers: requestHeaders,
       postData: log.requestBody
-        ? { text: log.requestBody, mimeType: 'application/json' }
+        ? { text: log.requestBody, mimeType: findContentType(log.requestHeaders) }
         : undefined,
     },
     response: {
@@ -46,7 +55,7 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
       statusText: '',
       headers: responseHeaders,
       content: log.responseBody
-        ? { text: log.responseBody, mimeType: 'application/json' }
+        ? { text: log.responseBody, mimeType: findContentType(log.responseHeaders) }
         : undefined,
     },
   };

@@ -252,5 +252,11 @@
   "autoOff4h": "After 4 hours",
   "createRuleFromLog": "Create Rule",
   "createRuleFromLogPrefix": "Proxy",
-  "createRuleFromLogFailed": "Failed to create rule: cannot parse request URL"
+  "createRuleFromLogFailed": "Failed to create rule: cannot parse request URL",
+  "importCurlTitle": "Import cURL",
+  "importCurlDesc": "Paste a cURL command (e.g. DevTools \"Copy as cURL\") to prefill a rule automatically",
+  "importCurlPlaceholder": "curl 'https://api.example.com/users' -H 'Authorization: Bearer xxx' ...",
+  "importCurlButton": "Parse & Create Rule",
+  "importCurlSuccess": "cURL parsed. Confirm and save in the rule form",
+  "importCurlFailed": "Failed to parse cURL: no valid request found"
 }
