@@ -1,4 +1,4 @@
-# 跨域代理助手（web-cross-origin）项目规则
+# AGENTS.md · Web Proxy
 
 ## 适用范围与优先级
 
