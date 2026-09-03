@@ -88,12 +88,8 @@ describe('matchesMockCondition', () => {
       matchMethod: 'POST',
       matchQuery: { action: 'create' },
     };
-    expect(
-      matchesMockCondition('https://api.example.com/api/test?action=create', 'POST', cond),
-    ).toBe(true);
-    expect(
-      matchesMockCondition('https://api.example.com/api/test?action=create', 'GET', cond),
-    ).toBe(false);
+    expect(matchesMockCondition('https://api.example.com/api/test?action=create', 'POST', cond)).toBe(true);
+    expect(matchesMockCondition('https://api.example.com/api/test?action=create', 'GET', cond)).toBe(false);
   });
 
   it('invalid regex returns false', () => {

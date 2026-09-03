@@ -91,7 +91,7 @@ describe('Optimization - Large rule sets', () => {
         matchPattern: `https://api${i}.example.com/*`,
         targetUrl: `https://new-api${i}.example.com`,
         priority: i + 1,
-      })
+      }),
     );
 
     const start = Date.now();

@@ -18,25 +18,45 @@ import {
 
 export default function DeepCodeReviewReport() {
   return (
-    <Stack gap={24} style={{ padding: 24 }}>
+    <Stack
+      gap={24}
+      style={{ padding: 24 }}
+    >
       <H1>Chrome Extension Deep Code Review</H1>
       <Text tone="secondary">web-cross-origin | MV3 Cross-Origin Proxy</Text>
 
       <Divider />
 
       <H2>Execution Summary</H2>
-      <Grid columns={4} gap={16}>
-        <Stat value="13" label="Tasks Completed" tone="success" />
-        <Stat value="25+" label="Files Modified" />
-        <Stat value="25/25" label="Tests Passing" tone="success" />
-        <Stat value="0" label="Lint Warnings" tone="success" />
+      <Grid
+        columns={4}
+        gap={16}
+      >
+        <Stat
+          value="13"
+          label="Tasks Completed"
+          tone="success"
+        />
+        <Stat
+          value="25+"
+          label="Files Modified"
+        />
+        <Stat
+          value="25/25"
+          label="Tests Passing"
+          tone="success"
+        />
+        <Stat
+          value="0"
+          label="Lint Warnings"
+          tone="success"
+        />
       </Grid>
 
       <Callout tone="success">
         <Text>
-          All build, test, and lint checks pass. Three independent code reviews
-          (completeness, correctness, impact) confirmed all requirements are met
-          and critical regressions were caught and fixed.
+          All build, test, and lint checks pass. Three independent code reviews (completeness, correctness, impact)
+          confirmed all requirements are met and critical regressions were caught and fixed.
         </Text>
       </Callout>
 
@@ -46,7 +66,12 @@ export default function DeepCodeReviewReport() {
       <Table
         headers={['Issue', 'File', 'Fix', 'Status']}
         rows={[
-          ['postMessage wildcard origin', 'content.ts, main-interceptor', 'Replaced * with window.location.origin', 'Done'],
+          [
+            'postMessage wildcard origin',
+            'content.ts, main-interceptor',
+            'Replaced * with window.location.origin',
+            'Done',
+          ],
           ['ReDoS vulnerability', 'main-interceptor', 'Added isRegexSafe() nested quantifier detection', 'Done'],
           ['Error message leakage', 'content.ts', 'Sanitized to generic error message', 'Done'],
           ['Sender validation missing', 'messageRouter.ts', 'Added isTrustedSender() whitelist', 'Done'],
@@ -69,26 +94,57 @@ export default function DeepCodeReviewReport() {
       <Divider />
 
       <H2>Performance Optimization</H2>
-      <Grid columns={2} gap={16}>
+      <Grid
+        columns={2}
+        gap={16}
+      >
         <Card>
-          <CardHeader><H3>Hot Path Fixes</H3></CardHeader>
+          <CardHeader>
+            <H3>Hot Path Fixes</H3>
+          </CardHeader>
           <CardBody>
             <Stack gap={8}>
-              <Row gap={8}><Tag tone="danger">Critical</Tag><Text>Config cache in storage.ts</Text></Row>
-              <Row gap={8}><Tag tone="danger">Critical</Tag><Text>RegExp cache in urlMatcher + interceptor</Text></Row>
-              <Row gap={8}><Tag tone="warning">High</Tag><Text>Log buffered writes (10 / 1s)</Text></Row>
-              <Row gap={8}><Tag tone="warning">High</Tag><Text>syncQueue reset (memory leak fix)</Text></Row>
+              <Row gap={8}>
+                <Tag tone="danger">Critical</Tag>
+                <Text>Config cache in storage.ts</Text>
+              </Row>
+              <Row gap={8}>
+                <Tag tone="danger">Critical</Tag>
+                <Text>RegExp cache in urlMatcher + interceptor</Text>
+              </Row>
+              <Row gap={8}>
+                <Tag tone="warning">High</Tag>
+                <Text>Log buffered writes (10 / 1s)</Text>
+              </Row>
+              <Row gap={8}>
+                <Tag tone="warning">High</Tag>
+                <Text>syncQueue reset (memory leak fix)</Text>
+              </Row>
             </Stack>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><H3>UI Optimizations</H3></CardHeader>
+          <CardHeader>
+            <H3>UI Optimizations</H3>
+          </CardHeader>
           <CardBody>
             <Stack gap={8}>
-              <Row gap={8}><Tag tone="info">Medium</Tag><Text>Search input 200ms debounce</Text></Row>
-              <Row gap={8}><Tag tone="info">Medium</Tag><Text>LogDrawer computed merge (3 to 1 pass)</Text></Row>
-              <Row gap={8}><Tag tone="info">Low</Tag><Text>RuleTable RegExp cache</Text></Row>
-              <Row gap={8}><Tag tone="info">Low</Tag><Text>Keepalive 0.5 to 1 min</Text></Row>
+              <Row gap={8}>
+                <Tag tone="info">Medium</Tag>
+                <Text>Search input 200ms debounce</Text>
+              </Row>
+              <Row gap={8}>
+                <Tag tone="info">Medium</Tag>
+                <Text>LogDrawer computed merge (3 to 1 pass)</Text>
+              </Row>
+              <Row gap={8}>
+                <Tag tone="info">Low</Tag>
+                <Text>RuleTable RegExp cache</Text>
+              </Row>
+              <Row gap={8}>
+                <Tag tone="info">Low</Tag>
+                <Text>Keepalive 0.5 to 1 min</Text>
+              </Row>
             </Stack>
           </CardBody>
         </Card>
@@ -97,44 +153,59 @@ export default function DeepCodeReviewReport() {
       <Divider />
 
       <H2>New Features</H2>
-      <Grid columns={3} gap={16}>
+      <Grid
+        columns={3}
+        gap={16}
+      >
         <Card>
-          <CardHeader><H3>Rule Testing Tool</H3></CardHeader>
+          <CardHeader>
+            <H3>Rule Testing Tool</H3>
+          </CardHeader>
           <CardBody>
             <Text size="small">Inline test panel in RuleFormDialog. URL match + rewrite preview.</Text>
             <Tag tone="success">Done</Tag>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><H3>Dark Mode</H3></CardHeader>
+          <CardHeader>
+            <H3>Dark Mode</H3>
+          </CardHeader>
           <CardBody>
             <Text size="small">Light / Dark / System. CSS variables. All components updated.</Text>
             <Tag tone="success">Done</Tag>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><H3>Icon Badge</H3></CardHeader>
+          <CardHeader>
+            <H3>Icon Badge</H3>
+          </CardHeader>
           <CardBody>
             <Text size="small">Active rule count on extension icon with debounced updates.</Text>
             <Tag tone="success">Done</Tag>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><H3>Rule Templates</H3></CardHeader>
+          <CardHeader>
+            <H3>Rule Templates</H3>
+          </CardHeader>
           <CardBody>
             <Text size="small">4 quick-start templates for common proxy patterns.</Text>
             <Tag tone="success">Done</Tag>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><H3>Log Enhancement</H3></CardHeader>
+          <CardHeader>
+            <H3>Log Enhancement</H3>
+          </CardHeader>
           <CardBody>
             <Text size="small">Filter by rule name + URL keyword search.</Text>
             <Tag tone="success">Done</Tag>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader><H3>Keyboard Shortcuts</H3></CardHeader>
+          <CardHeader>
+            <H3>Keyboard Shortcuts</H3>
+          </CardHeader>
           <CardBody>
             <Text size="small">Cmd+N / / / Esc. Documented in Settings.</Text>
             <Tag tone="success">Done</Tag>
@@ -162,13 +233,31 @@ export default function DeepCodeReviewReport() {
       <Divider />
 
       <H2>Final Verification</H2>
-      <Grid columns={3} gap={16}>
-        <Stat value="PASS" label="pnpm build" tone="success" />
-        <Stat value="25/25" label="pnpm test" tone="success" />
-        <Stat value="0 issues" label="pnpm lint" tone="success" />
+      <Grid
+        columns={3}
+        gap={16}
+      >
+        <Stat
+          value="PASS"
+          label="pnpm build"
+          tone="success"
+        />
+        <Stat
+          value="25/25"
+          label="pnpm test"
+          tone="success"
+        />
+        <Stat
+          value="0 issues"
+          label="pnpm lint"
+          tone="success"
+        />
       </Grid>
 
-      <Text tone="secondary" size="small">
+      <Text
+        tone="secondary"
+        size="small"
+      >
         3 Research + 12 Coding + 3 CodeReview + 2 Verify agents | 25+ files | 32 improvements
       </Text>
     </Stack>

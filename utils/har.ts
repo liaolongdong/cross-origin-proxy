@@ -7,9 +7,7 @@ import { generateId } from '@/utils/generateId';
  * 仅包含 SW 通道记录的日志（DNR 通道无请求/响应详情）。
  */
 export function logsToHar(logs: RequestLogEntry[]): object {
-  const entries = logs
-    .filter(l => l.proxyType === 'sw' && l.responseBody !== undefined)
-    .map(l => logToHarEntry(l));
+  const entries = logs.filter(l => l.proxyType === 'sw' && l.responseBody !== undefined).map(l => logToHarEntry(l));
 
   return {
     log: {
@@ -46,9 +44,7 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
       method: log.method,
       url: log.originalUrl,
       headers: requestHeaders,
-      postData: log.requestBody
-        ? { text: log.requestBody, mimeType: findContentType(log.requestHeaders) }
-        : undefined,
+      postData: log.requestBody ? { text: log.requestBody, mimeType: findContentType(log.requestHeaders) } : undefined,
     },
     response: {
       status: log.status ?? 0,

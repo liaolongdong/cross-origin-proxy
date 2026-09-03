@@ -41,12 +41,7 @@ export default defineConfig({
     description: '__MSG_extensionDescription__',
     default_locale: 'zh_CN',
     version: '1.0.0',
-    permissions: [
-      'storage',
-      'declarativeNetRequest',
-      'declarativeNetRequestFeedback',
-      'alarms',
-    ],
+    permissions: ['storage', 'declarativeNetRequest', 'declarativeNetRequestFeedback', 'alarms'],
     host_permissions: ['<all_urls>'],
     action: {
       default_title: '__MSG_extensionName__',

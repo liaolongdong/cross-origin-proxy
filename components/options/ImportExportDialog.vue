@@ -58,8 +58,10 @@
           />
         </div>
 
-        <div style="margin-top: 12px;">
-          <label style=" margin-right: 12px;font-size: 13px; color: var(--el-text-color-regular);">{{ t('importMode') }}</label>
+        <div style="margin-top: 12px">
+          <label style="margin-right: 12px; font-size: 13px; color: var(--el-text-color-regular)">{{
+            t('importMode')
+          }}</label>
           <el-radio-group v-model="importMode">
             <el-radio value="replace">{{ t('importModeReplace') }}</el-radio>
             <el-radio value="merge">{{ t('importModeMerge') }}</el-radio>
@@ -163,6 +165,7 @@ import { MessageType } from '@/utils/types';
 import { parseCurlCommand } from '@/utils/curlParser';
 import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
+import { logger } from '@/utils/logger';
 
 defineProps<{
   visible: boolean;
@@ -201,7 +204,7 @@ async function handleExport() {
     ElMessage.success(t('exportSuccess'));
   } catch (error) {
     ElMessage.error(t('exportFailed'));
-    console.error('Export failed:', error);
+    logger.error('Export failed:', error);
   } finally {
     exporting.value = false;
   }

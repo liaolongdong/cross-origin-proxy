@@ -30,7 +30,9 @@ describe('B1: 空目标规则不得进入 DNR 通道', () => {
   it('isSimpleRule 对空目标一律返回 false', () => {
     expect(isSimpleRule(makeRule({ targetUrl: '' }))).toBe(false);
     expect(isSimpleRule(makeRule({ targetUrl: '', matchType: 'prefix', matchPattern: 'https://a.com' }))).toBe(false);
-    expect(isSimpleRule(makeRule({ targetUrl: '', matchType: 'regex', matchPattern: '^https://a\\.com/' }))).toBe(false);
+    expect(isSimpleRule(makeRule({ targetUrl: '', matchType: 'regex', matchPattern: '^https://a\\.com/' }))).toBe(
+      false,
+    );
   });
 
   it('正常目标仍是简单规则（不误伤）', () => {

@@ -6,7 +6,7 @@
       v-if="rules.length === 0 && !hasAnyRules"
       @add-rule="$emit('add')"
       @import-config="$emit('importConfig')"
-      @use-template="(data) => $emit('useTemplate', data)"
+      @use-template="data => $emit('useTemplate', data)"
     />
 
     <!-- 筛选无结果 -->
@@ -38,7 +38,10 @@
         align="center"
       >
         <template #header>
-          <el-tooltip :content="t('dragToReorder')" placement="top">
+          <el-tooltip
+            :content="t('dragToReorder')"
+            placement="top"
+          >
             <span class="drag-header-icon">⠿</span>
           </el-tooltip>
         </template>
@@ -48,7 +51,8 @@
             draggable="true"
             @dragstart="onDragStart($event, row)"
             @dragend="onDragEnd"
-          >⠿</span>
+            >⠿</span
+          >
         </template>
       </el-table-column>
       <el-table-column
@@ -62,32 +66,68 @@
               :title="row.name"
               v-html="highlightText(row.name, searchText)"
             />
-            <el-tooltip v-if="shadowedRuleIds.has(row.id)" :content="t('conflictWarningTitle')" placement="top">
+            <el-tooltip
+              v-if="shadowedRuleIds.has(row.id)"
+              :content="t('conflictWarningTitle')"
+              placement="top"
+            >
               <span class="shadowed-indicator">!</span>
             </el-tooltip>
             <span class="rule-badges">
-              <el-tooltip v-if="row.headerOverrides && Object.keys(row.headerOverrides).length > 0" :content="t('hasHeaderOverrides')" placement="top">
+              <el-tooltip
+                v-if="row.headerOverrides && Object.keys(row.headerOverrides).length > 0"
+                :content="t('hasHeaderOverrides')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--h">H</span>
               </el-tooltip>
-              <el-tooltip v-if="row.requestBodyOverride" :content="t('hasBodyOverride')" placement="top">
+              <el-tooltip
+                v-if="row.requestBodyOverride"
+                :content="t('hasBodyOverride')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--b">B</span>
               </el-tooltip>
-              <el-tooltip v-if="row.responseOverrides" :content="t('hasResponseOverrides')" placement="top">
+              <el-tooltip
+                v-if="row.responseOverrides"
+                :content="t('hasResponseOverrides')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--r">R</span>
               </el-tooltip>
-              <el-tooltip v-if="row.mockResponse" :content="t('hasMockResponse')" placement="top">
+              <el-tooltip
+                v-if="row.mockResponse"
+                :content="t('hasMockResponse')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--m">M</span>
               </el-tooltip>
-              <el-tooltip v-if="row.delayMs" :content="t('hasDelay')" placement="top">
+              <el-tooltip
+                v-if="row.delayMs"
+                :content="t('hasDelay')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--d">D</span>
               </el-tooltip>
-              <el-tooltip v-if="row.blocked" :content="t('hasBlocked')" placement="top">
+              <el-tooltip
+                v-if="row.blocked"
+                :content="t('hasBlocked')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--x">X</span>
               </el-tooltip>
-              <el-tooltip v-if="row.retryCount" :content="t('hasRetry')" placement="top">
+              <el-tooltip
+                v-if="row.retryCount"
+                :content="t('hasRetry')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--re">Re</span>
               </el-tooltip>
-              <el-tooltip v-if="isWsRule(row)" :content="t('wsRuleHint')" placement="top">
+              <el-tooltip
+                v-if="isWsRule(row)"
+                :content="t('wsRuleHint')"
+                placement="top"
+              >
                 <span class="rule-badge rule-badge--ws">WS</span>
               </el-tooltip>
             </span>
@@ -145,10 +185,17 @@
         align="center"
       >
         <template #default="{ row }">
-          <span v-if="(hitStats.get(row.id) ?? 0) > 0" class="hit-count-badge">
+          <span
+            v-if="(hitStats.get(row.id) ?? 0) > 0"
+            class="hit-count-badge"
+          >
             {{ hitStats.get(row.id) }}
           </span>
-          <span v-else class="hit-count-zero">-</span>
+          <span
+            v-else
+            class="hit-count-zero"
+            >-</span
+          >
         </template>
       </el-table-column>
       <el-table-column
@@ -378,8 +425,9 @@ function getHighlightRegex(pattern: string): RegExp | null {
 function highlightText(text: string, keyword: string): string {
   if (!keyword || !text) return text;
   // 先转义 HTML 实体，防止 XSS
-  const escaped = text.replace(/[&<>"']/g, ch =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!,
+  const escaped = text.replace(
+    /[&<>"']/g,
+    ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!,
   );
   const regex = getHighlightRegex(keyword);
   if (!regex) return escaped;

@@ -89,12 +89,12 @@ pnpm dev   # starts WXT dev server with HMR on port 8899
 2. Click **Manage Rules** in the popup — the options page opens with the add-rule form ready.
 3. Create a rule:
 
-   | Field | Description |
-   |---|---|
-   | Match type | `wildcard` (`https://fat-api.example.com/*`), `prefix`, or `regex` |
-   | Match pattern | The URL pattern to intercept |
-   | Target URL | Where matched requests are redirected |
-   | Priority | Lower number = matched first |
+   | Field         | Description                                                        |
+   | ------------- | ------------------------------------------------------------------ |
+   | Match type    | `wildcard` (`https://fat-api.example.com/*`), `prefix`, or `regex` |
+   | Match pattern | The URL pattern to intercept                                       |
+   | Target URL    | Where matched requests are redirected                              |
+   | Priority      | Lower number = matched first                                       |
 
 4. Requests from any page that match an enabled rule are transparently redirected. Check **Request Logs** for what was proxied.
 
@@ -150,6 +150,7 @@ Open the Import/Export dialog and paste a cURL command into the **Import cURL** 
 ### Log Detail Viewer
 
 Click any row in the Request Logs table to expand a detail panel showing:
+
 - Request URL, headers, and body
 - Response headers and body (JSON auto-formatted)
 - Error details (if any)
@@ -175,13 +176,13 @@ Page fetch / XHR
 
 ## Permissions
 
-| Permission | Why |
-|---|---|
-| `storage` | Persist rules, logs, and preferences |
-| `declarativeNetRequest` | Network-layer URL redirection for simple rules |
-| `declarativeNetRequestFeedback` | DNR hit statistics shown in the logs drawer |
-| `alarms` | Periodic Service Worker keepalive ping |
-| `<all_urls>` | Intercept and proxy requests on any site you use it on |
+| Permission                      | Why                                                    |
+| ------------------------------- | ------------------------------------------------------ |
+| `storage`                       | Persist rules, logs, and preferences                   |
+| `declarativeNetRequest`         | Network-layer URL redirection for simple rules         |
+| `declarativeNetRequestFeedback` | DNR hit statistics shown in the logs drawer            |
+| `alarms`                        | Periodic Service Worker keepalive ping                 |
+| `<all_urls>`                    | Intercept and proxy requests on any site you use it on |
 
 ## Limits
 
