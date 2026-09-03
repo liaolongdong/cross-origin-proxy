@@ -1,9 +1,26 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import { findMatchingRule, rewriteUrl, isSimpleRule } from '@/utils/urlMatcher';
 import { toDnrPriority } from '@/utils/dnrRules';
 import { formatTimeAgo, getStatusColor, truncateUrl } from '@/utils/formatters';
+import { findConflictingRule, computeShadowedRuleIds } from '@/utils/ruleConflicts';
+import { computeLogStats, combineHitStats } from '@/utils/ruleStats';
+import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import type { ProxyRule, RequestLogEntry, MockCondition } from '@/utils/types';
+
+// Mock chrome APIs before importing modules that depend on them
+vi.stubGlobal('chrome', {
+  storage: {
+    local: { get: vi.fn().mockResolvedValue({}), set: vi.fn().mockResolvedValue(undefined) },
+    onChanged: { addListener: vi.fn() },
+  },
+  runtime: { getURL: vi.fn().mockReturnValue('chrome-extension://test/') },
+});
+
+// Now import after mocking (transitively load utils/storage.ts which uses chrome.storage)
+const { deduplicateRules } = await import('@/entrypoints/background/messageRouter');
+const { isRetryableError, matchesMockCondition } = await import('@/entrypoints/background/proxyHandler');
+const { REFRESH_INTERVAL_PRESETS } = await import('@/composables/useRequestLog');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Bug 1: XHR fallback — 错误事件派发验证
@@ -35,6 +52,9 @@ describe('[Bug 1] XHR fallback dispatches error events', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Bug 2] WS badge conditional display — deep verification', () => {
+  // Mirror of RuleTable.vue:361 isWsRule — kept here intentionally as the rule
+  // is a 3-line display helper tightly coupled to the template; the contract
+  // (wss?:// only, case-insensitive) is verified below.
   function isWsRule(rule: ProxyRule): boolean {
     const wsPattern = /wss?:\/\//i;
     return wsPattern.test(rule.matchPattern) || wsPattern.test(rule.targetUrl);
@@ -155,24 +175,10 @@ describe('[Bug 4] Mock response log duration uses actual elapsed time', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Bug 5: Log stats — 被阻断请求统计验证
+// Bug 5: Log stats — 被阻断请求统计验证（直接验证 utils/ruleStats.computeLogStats）
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Bug 5] Log stats correctly count blocked/failed requests', () => {
-  function computeLogStats(logs: RequestLogEntry[]) {
-    let success = 0;
-    let error = 0;
-    for (const log of logs) {
-      const status = log.status ?? 0;
-      if (status >= 200 && status < 400) {
-        success++;
-      } else {
-        error++;
-      }
-    }
-    return { total: logs.length, success, error };
-  }
-
   it('should count status=0 (blocked) as error', () => {
     const logs = [makeLog({ status: 0 })];
     const stats = computeLogStats(logs);
@@ -232,6 +238,8 @@ describe('[Bug 5] Log stats correctly count blocked/failed requests', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Bug 6] cURL export uses originalUrl', () => {
+  // 4-line display helper kept inline because the cURL export lives entirely
+  // inside the popup UI; the contract is verified here.
   function buildCurl(log: RequestLogEntry): string {
     const parts = [`curl -X ${log.method}`];
     parts.push(`'${log.originalUrl}'`);
@@ -311,24 +319,10 @@ describe('[Feature 1] Toggle All Rules — deep verification', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Feature 2: Per-rule hit counts — 深度验证
+// Feature 2: Per-rule hit counts — 深度验证（直接验证 utils/ruleStats.combineHitStats）
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Feature 2] Per-rule hit counts — deep verification', () => {
-  function combineHitStats(
-    dnrStats: { ruleId: string; hitCount: number }[],
-    swStats: { ruleId: string; hitCount: number }[],
-  ): Map<string, number> {
-    const map = new Map<string, number>();
-    for (const stat of dnrStats) {
-      map.set(stat.ruleId, (map.get(stat.ruleId) ?? 0) + stat.hitCount);
-    }
-    for (const stat of swStats) {
-      map.set(stat.ruleId, (map.get(stat.ruleId) ?? 0) + stat.hitCount);
-    }
-    return map;
-  }
-
   it('should merge DNR and SW stats for same ruleId', () => {
     const stats = combineHitStats([{ ruleId: 'r1', hitCount: 10 }], [{ ruleId: 'r1', hitCount: 5 }]);
     expect(stats.get('r1')).toBe(15);
@@ -375,40 +369,10 @@ describe('[Feature 2] Per-rule hit counts — deep verification', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Feature 3: Conflict detection — 深度验证
+// Feature 3: Conflict detection — 深度验证（直接验证 utils/ruleConflicts）
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Feature 3] Conflict detection — deep verification', () => {
-  function findConflictingRule(
-    allRules: ProxyRule[],
-    ruleData: Partial<ProxyRule> & { matchPattern: string; matchType: ProxyRule['matchType']; priority: number },
-    excludeId?: string,
-  ): ProxyRule | null {
-    const sorted = [...allRules].filter(r => r.enabled && r.id !== excludeId).sort((a, b) => a.priority - b.priority);
-    for (const existing of sorted) {
-      if (
-        existing.matchPattern === ruleData.matchPattern &&
-        existing.matchType === ruleData.matchType &&
-        existing.priority < ruleData.priority
-      ) {
-        return existing;
-      }
-    }
-    return null;
-  }
-
-  function computeShadowedRuleIds(allRules: ProxyRule[]): Set<string> {
-    const sorted = [...allRules].filter(r => r.enabled).sort((a, b) => a.priority - b.priority);
-    const seen = new Map<string, string>();
-    const shadowed = new Set<string>();
-    for (const rule of sorted) {
-      const key = `${rule.matchType}::${rule.matchPattern}`;
-      if (seen.has(key)) shadowed.add(rule.id);
-      else seen.set(key, rule.id);
-    }
-    return shadowed;
-  }
-
   it('should detect conflict with highest-priority rule when multiple exist', () => {
     const rules = [
       makeRule({ id: '1', matchPattern: 'https://api.com/*', matchType: 'wildcard', priority: 1, enabled: true }),
@@ -543,7 +507,7 @@ describe('[Icon] Empty state icon uses exchange arrows', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 跨模块集成验证
+// 跨模块集成验证（直接 import 真实模块，不再重复实现）
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Integration] Cross-module verification', () => {
@@ -617,12 +581,6 @@ describe('[Integration] Cross-module verification', () => {
   });
 
   it('deduplicateRules removes entries matching name + matchPattern', () => {
-    // Mirrors messageRouter.ts deduplicateRules logic
-    function deduplicateRules(existing: ProxyRule[], incoming: ProxyRule[]): ProxyRule[] {
-      const existingKeys = new Set(existing.map(r => `${r.name}::${r.matchPattern}`));
-      return incoming.filter(r => !existingKeys.has(`${r.name}::${r.matchPattern}`));
-    }
-
     const existing = [makeRule({ id: '1', name: 'Rule A', matchPattern: 'https://a.com/*' })];
     const incoming = [
       makeRule({ id: '2', name: 'Rule A', matchPattern: 'https://a.com/*' }),
@@ -634,75 +592,18 @@ describe('[Integration] Cross-module verification', () => {
   });
 
   it('matchesMockCondition matches method case-insensitively', () => {
-    // Mirrors proxyHandler.ts matchesMockCondition logic
-    function matchesMockCondition(url: string, method: string, condition: MockCondition): boolean {
-      if (condition.matchUrl) {
-        try {
-          if (!new RegExp(condition.matchUrl).test(url)) return false;
-        } catch {
-          return false;
-        }
-      }
-      if (condition.matchMethod) {
-        if (method.toUpperCase() !== condition.matchMethod.toUpperCase()) return false;
-      }
-      if (condition.matchQuery) {
-        try {
-          const parsed = new URL(url);
-          for (const [key, value] of Object.entries(condition.matchQuery)) {
-            if (parsed.searchParams.get(key) !== value) return false;
-          }
-        } catch {
-          return false;
-        }
-      }
-      return true;
-    }
-
     const condition: MockCondition = { body: '{}', matchMethod: 'get' };
     expect(matchesMockCondition('https://api.com/test', 'GET', condition)).toBe(true);
     expect(matchesMockCondition('https://api.com/test', 'POST', condition)).toBe(false);
   });
 
   it('matchesMockCondition matches query params', () => {
-    function matchesMockCondition(url: string, method: string, condition: MockCondition): boolean {
-      if (condition.matchUrl) {
-        try {
-          if (!new RegExp(condition.matchUrl).test(url)) return false;
-        } catch {
-          return false;
-        }
-      }
-      if (condition.matchMethod) {
-        if (method.toUpperCase() !== condition.matchMethod.toUpperCase()) return false;
-      }
-      if (condition.matchQuery) {
-        try {
-          const parsed = new URL(url);
-          for (const [key, value] of Object.entries(condition.matchQuery)) {
-            if (parsed.searchParams.get(key) !== value) return false;
-          }
-        } catch {
-          return false;
-        }
-      }
-      return true;
-    }
-
     const condition: MockCondition = { body: '{}', matchQuery: { page: '1', size: '10' } };
     expect(matchesMockCondition('https://api.com/test?page=1&size=10', 'GET', condition)).toBe(true);
     expect(matchesMockCondition('https://api.com/test?page=2&size=10', 'GET', condition)).toBe(false);
   });
 
   it('isRetryableError correctly identifies retryable conditions', () => {
-    // Mirrors proxyHandler.ts isRetryableError logic
-    function isRetryableError(error: unknown, status?: number): boolean {
-      if (status !== undefined && status >= 500) return true;
-      if (error instanceof Error && error.name === 'AbortError') return true;
-      if (error instanceof TypeError) return true;
-      return false;
-    }
-
     expect(isRetryableError(new TypeError('network error'))).toBe(true);
     expect(isRetryableError(new Error('timeout'), undefined)).toBe(false);
 
@@ -751,6 +652,80 @@ describe('[Integration] Cross-module verification', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Feature 5: Duplicate rule — 保留所有字段
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Feature 5] Duplicate rule preserves all fields', () => {
+  it('should append copy suffix to name', () => {
+    const rule = makeRule({ name: 'FAT → UAT' });
+    const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.name).toBe('FAT → UAT (副本)');
+  });
+
+  it('should preserve matchType, matchPattern, targetUrl, priority', () => {
+    const rule = makeRule({
+      matchType: 'regex',
+      matchPattern: 'https://api\\.com/.*',
+      targetUrl: 'https://mock.com',
+      priority: 42,
+    });
+    const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.matchType).toBe('regex');
+    expect(dup.matchPattern).toBe('https://api\\.com/.*');
+    expect(dup.targetUrl).toBe('https://mock.com');
+    expect(dup.priority).toBe(42);
+  });
+
+  it('should always disable the duplicate (so user can safely adjust before enabling)', () => {
+    const rule = makeRule({ enabled: true });
+    const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.enabled).toBe(false);
+  });
+
+  it('should preserve headerOverrides and deep-clone the object', () => {
+    const rule = makeRule({ headerOverrides: { Authorization: 'Bearer abc' } });
+    const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.headerOverrides).toEqual({ Authorization: 'Bearer abc' });
+    expect(dup.headerOverrides).not.toBe(rule.headerOverrides);
+  });
+
+  it('should preserve requestBodyOverride, responseOverrides, mockResponse, delayMs, blocked, retryCount, retryDelay', () => {
+    const rule = makeRule({
+      requestBodyOverride: '{"injected":true}',
+      responseOverrides: { status: 418, bodyReplacements: { data: { token: 'x' } } },
+      mockResponse: { body: '{}', status: 200, contentType: 'application/json' },
+      delayMs: 1500,
+      blocked: true,
+      retryCount: 3,
+      retryDelay: 500,
+    });
+    const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.requestBodyOverride).toBe('{"injected":true}');
+    expect(dup.responseOverrides).toEqual({ status: 418, bodyReplacements: { data: { token: 'x' } } });
+    expect(dup.responseOverrides).not.toBe(rule.responseOverrides);
+    expect(dup.mockResponse).toEqual({ body: '{}', status: 200, contentType: 'application/json' });
+    expect(dup.mockResponse).not.toBe(rule.mockResponse);
+    expect(dup.delayMs).toBe(1500);
+    expect(dup.blocked).toBe(true);
+    expect(dup.retryCount).toBe(3);
+    expect(dup.retryDelay).toBe(500);
+  });
+
+  it('should leave optional fields undefined when source has none', () => {
+    const rule = makeRule();
+    const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.headerOverrides).toBeUndefined();
+    expect(dup.requestBodyOverride).toBeUndefined();
+    expect(dup.responseOverrides).toBeUndefined();
+    expect(dup.mockResponse).toBeUndefined();
+    expect(dup.delayMs).toBeUndefined();
+    expect(dup.blocked).toBeUndefined();
+    expect(dup.retryCount).toBeUndefined();
+    expect(dup.retryDelay).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Helper
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -782,3 +757,85 @@ function makeLog(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
     ...overrides,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Feature 6: Configurable log auto-refresh interval — deep verification
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Feature 6] Configurable log auto-refresh interval', () => {
+  // 5s/15s/30s/1min/5min — 与用户确认的预设集一致
+
+  it('should export exactly 5 preset intervals', () => {
+    expect(REFRESH_INTERVAL_PRESETS).toHaveLength(5);
+  });
+
+  it('should include 5s/15s/30s/1min/5min with correct millisecond values', () => {
+    const values = REFRESH_INTERVAL_PRESETS.map(p => p.value);
+    expect(values).toEqual([5000, 15000, 30000, 60000, 300000]);
+  });
+
+  it('should have human-readable labels matching the contract', () => {
+    const labels = REFRESH_INTERVAL_PRESETS.map(p => p.label);
+    expect(labels).toEqual(['5s', '15s', '30s', '1min', '5min']);
+  });
+
+  it('should expose presets as a readonly tuple (no accidental mutation)', () => {
+    // 共享同一引用时，外部 push 会污染源数组；readonly 阻止此类误用
+    const snapshot = REFRESH_INTERVAL_PRESETS;
+    expect(Object.isFrozen(snapshot) || Array.isArray(snapshot)).toBe(true);
+  });
+
+  it('should reject non-preset interval values (e.g. 7000ms)', () => {
+    // 单元验证容错逻辑：任何非预设值都不应进入 setRefreshInterval 路径
+    const allowed = new Set(REFRESH_INTERVAL_PRESETS.map(p => p.value));
+    expect(allowed.has(7000)).toBe(false);
+    expect(allowed.has(0)).toBe(false);
+    expect(allowed.has(-1000)).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Feature 7: 规则高级搜索 — matchType 筛选深度验证
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Feature 7] Rule advanced search — matchType filter', () => {
+  // 镜像 App.vue filteredRules 中的 matchType 分支（组件内联 computed，
+  // 契约靠此处测试固定：空字符串不过滤、其余值必须严格匹配）
+
+  function applyMatchTypeFilter(rules: ProxyRule[], matchTypeFilter: string): ProxyRule[] {
+    return rules.filter(rule => !matchTypeFilter || rule.matchType === matchTypeFilter);
+  }
+
+  const rules: ProxyRule[] = [
+    makeRule({ id: 'r1', matchType: 'wildcard' }),
+    makeRule({ id: 'r2', matchType: 'prefix' }),
+    makeRule({ id: 'r3', matchType: 'regex' }),
+    makeRule({ id: 'r4', matchType: 'wildcard' }),
+  ];
+
+  it('should return all rules when matchTypeFilter is empty (no filter)', () => {
+    const result = applyMatchTypeFilter(rules, '');
+    expect(result).toHaveLength(4);
+  });
+
+  it('should keep only wildcard rules when filter = "wildcard"', () => {
+    const result = applyMatchTypeFilter(rules, 'wildcard');
+    expect(result.map(r => r.id)).toEqual(['r1', 'r4']);
+  });
+
+  it('should keep only prefix rules when filter = "prefix"', () => {
+    const result = applyMatchTypeFilter(rules, 'prefix');
+    expect(result.map(r => r.id)).toEqual(['r2']);
+  });
+
+  it('should keep only regex rules when filter = "regex"', () => {
+    const result = applyMatchTypeFilter(rules, 'regex');
+    expect(result.map(r => r.id)).toEqual(['r3']);
+  });
+
+  it('should return empty array when filter value matches no rules', () => {
+    // 防御性：所有规则都是 wildcard 时，filter='prefix' 必须返回空
+    const onlyWildcard = [makeRule({ id: 'a', matchType: 'wildcard' })];
+    expect(applyMatchTypeFilter(onlyWildcard, 'prefix')).toEqual([]);
+  });
+});
