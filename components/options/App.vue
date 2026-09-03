@@ -16,6 +16,7 @@
     <SearchFilterBar
       v-model:search-text="searchText"
       v-model:status-filter="statusFilter"
+      v-model:match-type-filter="matchTypeFilter"
       :selected-count="selectedRules.length"
       :total-rules="rules.length"
       @batch-toggle="handleBatchToggle"
@@ -77,6 +78,7 @@
       v-model:visible="showLogs"
       v-model:method-filter="logMethodFilter"
       v-model:status-filter="logStatusFilter"
+      :refresh-interval="logRefreshInterval"
       :logs="logs"
       :loading="logLoading"
       :auto-refresh="autoRefresh"
@@ -84,6 +86,7 @@
       :sw-stats="swStats"
       @clear="handleClearLogs"
       @refresh="toggleAutoRefresh"
+      @update:refresh-interval="setRefreshInterval"
       @refresh-dnr-stats="fetchDnrStats"
       @create-rule-from-log="handleCreateRuleFromLog"
     />
@@ -110,6 +113,9 @@ import {
   applyThemeMode,
 } from '@/utils/theme';
 import { type ThemeMode } from '@/utils/constants';
+import { logger } from '@/utils/logger';
+import { combineHitStats } from '@/utils/ruleStats';
+import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import HeaderBar from './HeaderBar.vue';
 import SearchFilterBar from './SearchFilterBar.vue';
 import RuleTable from './RuleTable.vue';
@@ -130,6 +136,9 @@ const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
 const { t } = useI18n();
 
 const currentVersion = chrome.runtime.getManifest().version;
+
+/** 批量操作（启用/禁用/删除）涉及超过此条数时弹出二次确认，避免误操作 */
+const BATCH_CONFIRM_THRESHOLD = 5;
 
 // 规则管理
 const {
@@ -155,11 +164,13 @@ const {
   logs,
   loading: logLoading,
   autoRefresh,
+  refreshInterval: logRefreshInterval,
   dnrStats,
   swStats,
   fetchLogs,
   clearLogs,
   toggleAutoRefresh,
+  setRefreshInterval,
   fetchDnrStats,
   fetchSwStats,
 } = useRequestLog();
@@ -180,6 +191,7 @@ const highlightRuleId = ref<string | null>(null);
 // 搜索与筛选（状态在容器层，SearchFilterBar 为受控组件）
 const searchText = ref('');
 const statusFilter = ref('');
+const matchTypeFilter = ref('');
 const selectedRules = ref<ProxyRule[]>([]);
 
 // 日志抽屉过滤器（提升到容器层，避免抽屉关闭后重置）
@@ -198,22 +210,14 @@ const filteredRules = computed(() => {
       !statusFilter.value ||
       (statusFilter.value === 'enabled' && rule.enabled) ||
       (statusFilter.value === 'disabled' && !rule.enabled);
-    return matchesSearch && matchesStatus;
+    const matchesMatchType = !matchTypeFilter.value || rule.matchType === matchTypeFilter.value;
+    return matchesSearch && matchesStatus && matchesMatchType;
   });
 });
 
 const enabledCount = computed(() => rules.value.filter(r => r.enabled).length);
 
-const combinedHitStats = computed(() => {
-  const map = new Map<string, number>();
-  for (const stat of dnrStats.value) {
-    map.set(stat.ruleId, (map.get(stat.ruleId) ?? 0) + stat.hitCount);
-  }
-  for (const stat of swStats.value) {
-    map.set(stat.ruleId, (map.get(stat.ruleId) ?? 0) + stat.hitCount);
-  }
-  return map;
-});
+const combinedHitStats = computed(() => combineHitStats(dnrStats.value, swStats.value));
 
 // 主题状态
 const currentTheme = ref<ThemeName>('sky');
@@ -333,7 +337,7 @@ async function handleToggleProxy(val: boolean) {
     ElMessage.success(val ? t('proxyEnabledMsg') : t('proxyDisabledMsg'));
   } catch (error) {
     ElMessage.error(t('toggleFailed'));
-    console.error('Toggle proxy failed:', error);
+    logger.error('Toggle proxy failed:', error);
   }
 }
 
@@ -384,27 +388,19 @@ async function handleSaveRule(ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'up
     showRuleDialog.value = false;
   } catch (error) {
     showAddFailedMessage(error);
-    console.error('Save rule failed:', error);
+    logger.error('Save rule failed:', error);
   }
 }
 
-/** 复制规则：克隆为停用副本，便于在副本上安全调整 */
+/** 复制规则：克隆为停用副本，便于在副本上安全调整。完整保留所有字段（含 mock/override/delay/block/retry）。 */
 async function handleDuplicateRule(rule: ProxyRule) {
   try {
-    const copy = await addRule({
-      name: `${rule.name}${t('copySuffix')}`,
-      matchType: rule.matchType,
-      matchPattern: rule.matchPattern,
-      targetUrl: rule.targetUrl,
-      priority: rule.priority,
-      enabled: false,
-      headerOverrides: rule.headerOverrides ? { ...rule.headerOverrides } : undefined,
-    });
+    const copy = await addRule(buildDuplicateRuleData(rule, t('copySuffix')));
     flashHighlight(copy.id);
     ElMessage.success(t('ruleDuplicated'));
   } catch (error) {
     showAddFailedMessage(error);
-    console.error('Duplicate rule failed:', error);
+    logger.error('Duplicate rule failed:', error);
   }
 }
 
@@ -440,7 +436,7 @@ function handleDeleteRule(ruleId: string) {
         type: MessageType.DELETE_RULE,
         data: { ruleId: capturedRule.id },
       })
-      .catch(err => console.error('Delete rule failed:', err));
+      .catch(err => logger.error('Delete rule failed:', err));
   }, 5000);
 
   const message = ElMessage({
@@ -474,7 +470,7 @@ async function handleToggleRule(ruleId: string, enabled: boolean) {
     await toggleRule(ruleId, enabled);
   } catch (error) {
     ElMessage.error(t('toggleFailed'));
-    console.error('Toggle rule failed:', error);
+    logger.error('Toggle rule failed:', error);
   }
 }
 
@@ -483,24 +479,52 @@ function handleSelectionChange(selection: ProxyRule[]) {
 }
 
 async function handleBatchToggle(enabled: boolean) {
+  const ids = selectedRules.value.map(r => r.id);
+  const count = ids.length;
+  if (count === 0) return;
+  if (count > BATCH_CONFIRM_THRESHOLD) {
+    try {
+      const action = enabled ? t('toggleAllEnabled') : t('toggleAllDisabled');
+      await ElMessageBox.confirm(t('confirmBatchToggle', [action, count]), t('confirmBatchToggleTitle', [action]), {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning',
+      });
+    } catch {
+      return; // 用户取消
+    }
+  }
   try {
-    await batchToggleRules(
-      selectedRules.value.map(r => r.id),
-      enabled,
-    );
+    await batchToggleRules(ids, enabled);
   } catch (error) {
     ElMessage.error(t('toggleFailed'));
-    console.error('Batch toggle failed:', error);
+    logger.error('Batch toggle failed:', error);
   }
 }
 
 async function handleToggleAll(enabled: boolean) {
+  if (rules.value.length > BATCH_CONFIRM_THRESHOLD) {
+    try {
+      const action = enabled ? t('toggleAllEnabled') : t('toggleAllDisabled');
+      await ElMessageBox.confirm(
+        t('confirmToggleAll', [action, rules.value.length]),
+        t('confirmToggleAllTitle', [action]),
+        {
+          confirmButtonText: t('confirm'),
+          cancelButtonText: t('cancel'),
+          type: 'warning',
+        },
+      );
+    } catch {
+      return; // 用户取消
+    }
+  }
   try {
     await toggleAllRules(enabled);
     ElMessage.success(t('toggleAllSuccess', [enabled ? t('toggleAllEnabled') : t('toggleAllDisabled')]));
   } catch (error) {
     ElMessage.error(t('toggleFailed'));
-    console.error('Toggle all failed:', error);
+    logger.error('Toggle all failed:', error);
   }
 }
 
@@ -523,7 +547,7 @@ async function handleBatchDelete() {
     selectedRules.value = [];
   } catch (error) {
     ElMessage.error(t('batchDeleteFailed'));
-    console.error('Batch delete failed:', error);
+    logger.error('Batch delete failed:', error);
   }
 }
 
@@ -534,7 +558,7 @@ async function handleClearLogs() {
     ElMessage.success(t('logsCleared'));
   } catch (error) {
     ElMessage.error(t('clearFailed'));
-    console.error('Clear logs failed:', error);
+    logger.error('Clear logs failed:', error);
   }
 }
 
