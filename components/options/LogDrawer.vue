@@ -99,11 +99,30 @@
             style="width: 180px"
           />
         </div>
-        <el-switch
-          :model-value="autoRefresh"
-          :active-text="t('autoRefresh')"
-          @change="val => $emit('refresh', val as boolean)"
-        />
+        <div class="toolbar-right">
+          <el-select
+            v-if="autoRefresh"
+            :model-value="refreshInterval"
+            :placeholder="t('refreshInterval')"
+            style="width: 110px"
+            @update:model-value="
+              (val: string | number | undefined) =>
+                emit('update:refreshInterval', Number(val ?? REFRESH_INTERVAL_PRESETS[0].value))
+            "
+          >
+            <el-option
+              v-for="preset in REFRESH_INTERVAL_PRESETS"
+              :key="preset.value"
+              :label="preset.label"
+              :value="preset.value"
+            />
+          </el-select>
+          <el-switch
+            :model-value="autoRefresh"
+            :active-text="t('autoRefresh')"
+            @change="val => $emit('refresh', val as boolean)"
+          />
+        </div>
       </div>
 
       <!-- 统计条 -->
@@ -483,6 +502,8 @@ import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-p
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
+import { computeLogStats } from '@/utils/ruleStats';
+import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
 
 /**
  * 请求日志抽屉（由原 RequestLogPanel 标签页改造）
@@ -495,6 +516,7 @@ const props = defineProps<{
   logs: RequestLogEntry[];
   loading: boolean;
   autoRefresh: boolean;
+  refreshInterval: number;
   dnrStats: DnrHitStat[];
   swStats: DnrHitStat[];
   methodFilter: string;
@@ -505,6 +527,7 @@ const emit = defineEmits<{
   'update:visible': [value: boolean];
   'update:methodFilter': [value: string];
   'update:statusFilter': [value: string];
+  'update:refreshInterval': [value: number];
   clear: [];
   refresh: [value: boolean];
   refreshDnrStats: [];
@@ -544,20 +567,7 @@ const filteredLogs = computed(() => {
 });
 
 // 统计（基于筛选后的数据，单次遍历）
-const logStats = computed(() => {
-  const logs = filteredLogs.value;
-  let success = 0;
-  let error = 0;
-  for (const log of logs) {
-    const status = log.status ?? 0;
-    if (status >= 200 && status < 400) {
-      success++;
-    } else {
-      error++;
-    }
-  }
-  return { total: logs.length, success, error };
-});
+const logStats = computed(() => computeLogStats(filteredLogs.value));
 
 // URL 复制
 const copyUrl = async (url: string) => {
@@ -681,6 +691,13 @@ function copyAsCurl() {
 }
 
 .toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.toolbar-right {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
