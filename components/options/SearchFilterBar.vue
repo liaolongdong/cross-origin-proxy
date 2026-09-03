@@ -31,6 +31,27 @@
       />
     </el-select>
 
+    <el-select
+      :model-value="matchTypeFilter"
+      :placeholder="t('filterAllMatchTypes')"
+      class="match-type-select"
+      clearable
+      @update:model-value="$emit('update:matchTypeFilter', $event ?? '')"
+    >
+      <el-option
+        :label="t('matchTypeWildcard')"
+        value="wildcard"
+      />
+      <el-option
+        :label="t('matchTypePrefix')"
+        value="prefix"
+      />
+      <el-option
+        :label="t('matchTypeRegex')"
+        value="regex"
+      />
+    </el-select>
+
     <!-- 有勾选时出现的批量操作 -->
     <template v-if="selectedCount > 0">
       <el-button @click="$emit('batchToggle', true)"> {{ t('batchEnable') }} ({{ selectedCount }}) </el-button>
@@ -67,6 +88,8 @@ const props = defineProps<{
   searchText: string;
   /** 状态筛选：'' | 'enabled' | 'disabled' */
   statusFilter: string;
+  /** 匹配类型筛选：'' | 'wildcard' | 'prefix' | 'regex' */
+  matchTypeFilter: string;
   /** 表格勾选数量（>0 时显示批量按钮） */
   selectedCount: number;
   /** 规则总数（>0 时显示全部启用/停用按钮） */
@@ -76,6 +99,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:searchText': [value: string];
   'update:statusFilter': [value: string];
+  'update:matchTypeFilter': [value: string];
   /** 批量启用/停用勾选规则 */
   batchToggle: [enabled: boolean];
   /** 批量删除勾选规则 */
@@ -90,7 +114,7 @@ const { t } = useI18n();
 const localSearchText = ref(props.searchText || '');
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-watch(localSearchText, (val) => {
+watch(localSearchText, val => {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     emit('update:searchText', val);
@@ -119,6 +143,11 @@ onUnmounted(() => {
 }
 
 .status-select {
+  flex-shrink: 0;
+  width: 130px;
+}
+
+.match-type-select {
   flex-shrink: 0;
   width: 130px;
 }
