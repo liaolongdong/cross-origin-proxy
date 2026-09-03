@@ -169,7 +169,10 @@ export function setupMessageRouter(): void {
         return respondAsync(sendResponse, getProxyConfig());
 
       case MessageType.UPDATE_PROXY_CONFIG:
-        return respondAsync(sendResponse, saveProxyConfig(message.data).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          saveProxyConfig(message.data).then(() => ({ success: true })),
+        );
 
       case MessageType.TOGGLE_PROXY:
         return respondAsync(
@@ -197,23 +200,35 @@ export function setupMessageRouter(): void {
       }
 
       case MessageType.ADD_RULE:
-        return respondAsync(sendResponse, addRule(message.data.rule).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          addRule(message.data.rule).then(() => ({ success: true })),
+        );
 
       case MessageType.BATCH_ADD_RULES: {
         if (!Array.isArray(message.data.rules)) {
           sendResponse({ success: false, error: 'Invalid rules' });
           return false;
         }
-        return respondAsync(sendResponse, batchAddRules(message.data.rules).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          batchAddRules(message.data.rules).then(() => ({ success: true })),
+        );
       }
 
       case MessageType.UPDATE_RULE: {
         const { id, ...updates } = message.data.rule;
-        return respondAsync(sendResponse, updateRule(id, updates).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          updateRule(id, updates).then(() => ({ success: true })),
+        );
       }
 
       case MessageType.DELETE_RULE:
-        return respondAsync(sendResponse, deleteRule(message.data.ruleId).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          deleteRule(message.data.ruleId).then(() => ({ success: true })),
+        );
 
       case MessageType.BATCH_DELETE_RULES: {
         const ruleIds = message.data.ruleIds;
@@ -239,7 +254,10 @@ export function setupMessageRouter(): void {
           sendResponse({ success: false, error: 'Invalid orderedIds' });
           return false;
         }
-        return respondAsync(sendResponse, reorderRules(orderedIds).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          reorderRules(orderedIds).then(() => ({ success: true })),
+        );
       }
 
       case MessageType.GET_DNR_STATS:
@@ -253,7 +271,10 @@ export function setupMessageRouter(): void {
         return respondAsync(sendResponse, getRequestLogs());
 
       case MessageType.CLEAR_REQUEST_LOG:
-        return respondAsync(sendResponse, clearRequestLogs().then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          clearRequestLogs().then(() => ({ success: true })),
+        );
 
       case MessageType.GET_PROXY_STATUS:
         return respondAsync(sendResponse, getProxyStatus());
@@ -272,7 +293,10 @@ export function setupMessageRouter(): void {
         return respondAsync(sendResponse, handleImportConfig(message.data));
 
       case MessageType.EXPORT_HAR:
-        return respondAsync(sendResponse, getRequestLogs().then(logs => logsToHar(logs)));
+        return respondAsync(
+          sendResponse,
+          getRequestLogs().then(logs => logsToHar(logs)),
+        );
 
       case MessageType.IMPORT_HAR: {
         const entries = message.data?.log?.entries;
@@ -289,13 +313,19 @@ export function setupMessageRouter(): void {
         return respondAsync(sendResponse, getProfiles());
 
       case MessageType.SAVE_PROFILE:
-        return respondAsync(sendResponse, saveProfile(message.data).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          saveProfile(message.data).then(() => ({ success: true })),
+        );
 
       case MessageType.LOAD_PROFILE:
         return respondAsync(sendResponse, loadProfile(message.data.profileId));
 
       case MessageType.DELETE_PROFILE:
-        return respondAsync(sendResponse, deleteProfile(message.data.profileId).then(() => ({ success: true })));
+        return respondAsync(
+          sendResponse,
+          deleteProfile(message.data.profileId).then(() => ({ success: true })),
+        );
 
       default:
         logger.warn('Unknown message type:', message.type);

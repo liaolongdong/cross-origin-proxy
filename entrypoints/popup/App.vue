@@ -234,6 +234,7 @@ import { ElMessage } from 'element-plus';
 import { Promotion, Setting, Document, FolderOpened, Collection, ArrowDown, Timer } from '@element-plus/icons-vue';
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
+import { logger } from '@/utils/logger';
 
 /**
  * Popup 弹窗（动作卡片风格，参照 account-password-helper）
@@ -305,7 +306,7 @@ async function handleToggleProxy(value: boolean) {
   try {
     await toggleProxy(value);
   } catch (error) {
-    console.error('Toggle proxy failed:', error);
+    logger.error('Toggle proxy failed:', error);
     ElMessage.error(t('toggleFailed'));
     // v-model 已翻转开关显示，从后台重新拉取状态回滚，避免 UI 与实际不一致
     await fetchStatus();
@@ -316,7 +317,7 @@ async function handleToggleRule(ruleId: string, enabled: boolean) {
   try {
     await toggleRule(ruleId, enabled);
   } catch (error) {
-    console.error('Toggle rule failed:', error);
+    logger.error('Toggle rule failed:', error);
     ElMessage.error(t('toggleFailed'));
   }
 }
@@ -346,7 +347,7 @@ async function openOptionsPage(hash = '') {
     }
   } catch (error) {
     // 降级处理：直接新建标签页
-    console.warn('Reuse options tab failed, creating a new one:', error);
+    logger.warn('Reuse options tab failed, creating a new one:', error);
     void chrome.tabs.create({ url: `${optionsUrl}${hash}` });
   }
   window.close();

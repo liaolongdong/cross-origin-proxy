@@ -2,6 +2,7 @@ import { ref, onMounted } from 'vue';
 import { MessageType, ProxyStatus, RequestLogEntry } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
 import { formatTimeAgo as _formatTimeAgo, getMethodColor, getStatusColor, truncateUrl } from '@/utils/formatters';
+import { logger } from '@/utils/logger';
 
 export function useProxyStatus() {
   const { t } = useI18n();
@@ -29,7 +30,7 @@ export function useProxyStatus() {
       rules.value = status.rules ?? [];
       autoOffAt.value = typeof status.autoOffAt === 'number' ? status.autoOffAt : undefined;
     } catch (error) {
-      console.error('Failed to fetch status:', error);
+      logger.error('Failed to fetch status:', error);
     } finally {
       loading.value = false;
     }

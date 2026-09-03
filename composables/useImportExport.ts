@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { MessageType } from '@/utils/types';
 import type { ExportData } from '@/utils/types';
+import { logger } from '@/utils/logger';
 
 export function useImportExport() {
   const importing = ref(false);
@@ -32,7 +33,7 @@ export function useImportExport() {
       });
       return result.success;
     } catch (error) {
-      console.error('Import failed:', error);
+      logger.error('Import failed:', error);
       return false;
     } finally {
       importing.value = false;
