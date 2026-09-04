@@ -7,11 +7,14 @@
   "noRecentRequests": "暂无请求记录",
   "actionOpenConfig": "规则管理",
   "actionOpenConfigDesc": "添加与管理代理规则",
+  "actionCreateRuleFromTab": "为当前页创建规则",
+  "actionCreateRuleFromTabDesc": "以当前标签页地址预填代理规则",
   "actionViewLogs": "请求日志",
   "actionViewLogsDesc": "查看最近的代理请求",
   "actionImportExport": "导入导出",
   "actionImportExportDesc": "备份或恢复规则配置",
   "actionProfiles": "环境配置",
   "actionProfilesDesc": "一键切换多环境规则快照",
-  "autoOffCountdown": "$1 后自动关闭"
+  "autoOffCountdown": "$1 后自动关闭",
+  "createRuleFromTabFailed": "无法在当前页面创建规则"
 }

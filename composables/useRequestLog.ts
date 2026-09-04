@@ -112,7 +112,7 @@ export function useRequestLog() {
       const result: DnrHitStat[] = await chrome.runtime.sendMessage({
         type: MessageType.GET_DNR_STATS,
       });
-      dnrStats.value = result ?? [];
+      dnrStats.value = Array.isArray(result) ? result : [];
     } catch (error) {
       logger.error('Failed to fetch DNR stats:', error);
     }
@@ -123,7 +123,7 @@ export function useRequestLog() {
       const result: DnrHitStat[] = await chrome.runtime.sendMessage({
         type: MessageType.GET_SW_STATS,
       });
-      swStats.value = result ?? [];
+      swStats.value = Array.isArray(result) ? result : [];
     } catch (error) {
       logger.error('Failed to fetch SW stats:', error);
     }

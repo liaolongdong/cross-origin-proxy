@@ -317,7 +317,12 @@ export async function handleProxyRequest(data: {
     },
   };
 
-  if (data.body != null && data.body !== '' && data.method !== 'GET' && data.method !== 'HEAD') {
+  // GET/HEAD 不可携带 body（fetch 会直接抛 TypeError 使代理失败）；
+  // method 可能是页面传入的原始小写形式，比较前需归一化
+  const method = data.method.toUpperCase();
+  const canHaveBody = method !== 'GET' && method !== 'HEAD';
+
+  if (data.body != null && data.body !== '' && canHaveBody) {
     if (data.body.length > MAX_BODY_SIZE) {
       return {
         requestId: data.requestId,
@@ -331,7 +336,7 @@ export async function handleProxyRequest(data: {
     fetchOptions.body = data.body;
   }
 
-  if (rule.requestBodyOverride !== undefined) {
+  if (rule.requestBodyOverride !== undefined && canHaveBody) {
     fetchOptions.body = rule.requestBodyOverride;
   }
 

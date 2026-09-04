@@ -7,11 +7,14 @@
   "noRecentRequests": "No requests yet",
   "actionOpenConfig": "Manage Rules",
   "actionOpenConfigDesc": "Add and manage proxy rules",
+  "actionCreateRuleFromTab": "Create Rule for This Page",
+  "actionCreateRuleFromTabDesc": "Prefill a proxy rule from the current tab URL",
   "actionViewLogs": "Request Logs",
   "actionViewLogsDesc": "View recent proxied requests",
   "actionImportExport": "Import / Export",
   "actionImportExportDesc": "Back up or restore rule config",
   "actionProfiles": "Env Profiles",
   "actionProfilesDesc": "Switch environment rule snapshots",
-  "autoOffCountdown": "Auto-off in $1"
+  "autoOffCountdown": "Auto-off in $1",
+  "createRuleFromTabFailed": "Cannot create a rule for this page"
 }

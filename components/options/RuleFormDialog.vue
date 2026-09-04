@@ -320,12 +320,12 @@
                   >
                     <el-input
                       v-model="qp.key"
-                      placeholder="Query key"
+                      :placeholder="t('queryKeyPlaceholder')"
                       style="width: 40%"
                     />
                     <el-input
                       v-model="qp.value"
-                      placeholder="Query value"
+                      :placeholder="t('queryValuePlaceholder')"
                       style="width: 40%"
                     />
                     <el-button
@@ -629,7 +629,8 @@ const showTestPanel = ref(false);
 const testUrl = ref('');
 const testResult = ref<{ matched: boolean; rewrittenUrl: string } | null>(null);
 
-const formRules: FormRules = {
+// computed 保证语言切换后校验消息实时更新（一次性求值会把 t() 结果固化）
+const formRules = computed<FormRules>(() => ({
   name: [{ required: true, message: t('ruleNameRequired'), trigger: 'blur' }],
   matchPattern: [
     { required: true, message: t('matchPatternRequired'), trigger: 'blur' },
@@ -657,7 +658,7 @@ const formRules: FormRules = {
       trigger: 'blur',
     },
   ],
-};
+}));
 
 const matchPatternPlaceholder = computed(() => {
   const placeholders: Record<string, string> = {
@@ -704,7 +705,8 @@ watch(
         bodyReplacementList.value = props.rule.responseOverrides?.bodyReplacements
           ? Object.entries(props.rule.responseOverrides.bodyReplacements).map(([path, value]) => ({
               path,
-              value: typeof value === 'string' ? value : JSON.stringify(value),
+              // 始终 JSON.stringify 保证往返一致：字符串 "123" 若裸显示，下次保存会被 parse 成数字
+              value: JSON.stringify(value),
             }))
           : [];
         mockConditions.value =
@@ -729,6 +731,8 @@ watch(
         enableMockResponse.value = false;
         enableDelay.value = false;
         enableRetry.value = false;
+        // initialData 不含 blocked，Object.assign 不会重置它，需显式清除上一条规则遗留的拦截状态
+        form.blocked = false;
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
         mockConditions.value = [];

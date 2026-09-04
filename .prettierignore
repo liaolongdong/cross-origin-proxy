@@ -1,0 +1,6 @@
+.output
+.wxt
+node_modules
+dist
+public
+.test-tmp

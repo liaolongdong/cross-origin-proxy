@@ -37,6 +37,12 @@
           {{ t('tabLogs') }}
         </el-button>
         <el-button
+          :icon="Search"
+          @click="$emit('openUrlTest')"
+        >
+          {{ t('urlTest') }}
+        </el-button>
+        <el-button
           :icon="FolderOpened"
           @click="$emit('openImportExport')"
         >
@@ -71,14 +77,14 @@
 </template>
 
 <script setup lang="ts">
-import { Plus, Document, FolderOpened, Collection, Setting, Promotion } from '@element-plus/icons-vue';
+import { Plus, Document, Search, FolderOpened, Collection, Setting, Promotion } from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
 
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
  * 包含标题、版本号、代理状态信号灯、主操作按钮（添加规则）
- * 与毛玻璃半透明按钮（日志/导入导出/环境配置/设置），右侧为代理总开关 pill。
+ * 与毛玻璃半透明按钮（日志/URL 测试/导入导出/环境配置/设置），右侧为代理总开关 pill。
  */
 defineProps<{
   /** 当前插件版本号 */
@@ -92,6 +98,8 @@ defineEmits<{
   addRule: [];
   /** 打开请求日志抽屉 */
   openLogs: [];
+  /** 打开 URL 匹配测试弹窗 */
+  openUrlTest: [];
   /** 打开导入导出弹窗 */
   openImportExport: [];
   /** 打开环境配置弹窗 */

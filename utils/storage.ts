@@ -114,15 +114,23 @@ export async function batchAddRules(rules: ProxyRule[]): Promise<void> {
 
 /**
  * 更新一条规则
+ *
+ * 整体替换语义：updates 为完整业务规则体（id 与时间戳除外），未出现的可选字段即被清除。
+ * 不能改回部分合并——表单关闭 mock/拦截等开关后 updates 缺省该 key，合并会保留旧值导致功能无法关闭。
+ * createdAt 保留原值，updatedAt 由存储层重新生成。
  */
-export async function updateRule(ruleId: string, updates: Partial<ProxyRule>): Promise<void> {
+export async function updateRule(
+  ruleId: string,
+  updates: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<void> {
   return withStorageLock(async () => {
     const config = await getProxyConfig();
     const index = config.rules.findIndex(r => r.id === ruleId);
     if (index === -1) {
       throw new Error(`Rule not found: ${ruleId}`);
     }
-    config.rules[index] = { ...config.rules[index], ...updates, updatedAt: Date.now() };
+    const { createdAt } = config.rules[index];
+    config.rules[index] = { ...updates, id: ruleId, createdAt, updatedAt: Date.now() };
     await saveProxyConfig(config);
   });
 }
@@ -276,9 +284,20 @@ export async function addRequestLog(entry: RequestLogEntry): Promise<void> {
 
 /**
  * 清空所有请求日志
+ *
+ * 与 flush 共用串行队列：若 clear 与进行中的 flush（已读旧数据、写入挂起）
+ * 交错执行，flush 会把旧日志写回导致“清空后复活”，故排队串行化
  */
-export async function clearRequestLogs(): Promise<void> {
-  // 同时清空缓冲区
+export function clearRequestLogs(): Promise<void> {
+  const next = flushQueue.then(doClearLogs, doClearLogs);
+  flushQueue = next.then(
+    () => {},
+    () => {},
+  );
+  return next;
+}
+
+async function doClearLogs(): Promise<void> {
   logBuffer = [];
   if (logFlushTimer !== null) {
     clearTimeout(logFlushTimer);

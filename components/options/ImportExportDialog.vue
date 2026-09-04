@@ -13,7 +13,6 @@
         <p class="section-desc">{{ t('exportDesc') }}</p>
         <el-button
           type="primary"
-          :loading="exporting"
           @click="handleExport"
         >
           <el-icon><Download /></el-icon>
@@ -165,7 +164,6 @@ import { MessageType } from '@/utils/types';
 import { parseCurlCommand } from '@/utils/curlParser';
 import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
-import { logger } from '@/utils/logger';
 
 defineProps<{
   visible: boolean;
@@ -185,7 +183,6 @@ const uploadRef = ref();
 const harUploadRef = ref();
 const jsonInput = ref('');
 const curlInput = ref('');
-const exporting = ref(false);
 const importing = ref(false);
 const fileContent = ref<string | null>(null);
 const harExporting = ref(false);
@@ -197,17 +194,10 @@ const canImport = computed(() => {
   return fileContent.value || jsonInput.value.trim();
 });
 
-async function handleExport() {
-  exporting.value = true;
-  try {
-    emit('export');
-    ElMessage.success(t('exportSuccess'));
-  } catch (error) {
-    ElMessage.error(t('exportFailed'));
-    logger.error('Export failed:', error);
-  } finally {
-    exporting.value = false;
-  }
+// 成功/失败反馈由父组件在异步导出完成后发出：emit 是同步调用，
+// 此处的 try/catch 拿不到父组件异步导出的结果，toast 会在导出实际完成前弹出
+function handleExport() {
+  emit('export');
 }
 
 function handleFileChange(file: UploadFile) {

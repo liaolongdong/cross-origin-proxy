@@ -44,6 +44,7 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
 - **Log detail viewer** — click any log row to see full request/response headers and body (JSON auto-formatted)
 - **Copy as cURL** — one-click export of any log entry as a `curl` command
 - **Filter by method, status, rule, URL keyword**
+- **URL match tester** — global entry in the options header bar; type any URL to preview the matched rule, rewritten URL, forwarding channel (DNR / SW), and shadowed rules in real time
 
 ### Import / Export
 
@@ -58,7 +59,7 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
 
 ### UI / UX
 
-- **Popup quick panel** — global proxy switch, today's stats, recent requests, and one-click deep links into the options page; shows a live countdown when auto-off is configured
+- **Popup quick panel** — global proxy switch, today's stats, recent requests, and one-click deep links into the options page; "Create rule for this page" prefills the rule form from the current tab (reusing an open options page); shows a live countdown when auto-off is configured
 - **i18n** — English / 简体中文 UI
 - **6 color themes** with light / dark / system modes
 - **Keyboard shortcuts** — `Cmd+N` add rule, `/` focus search, `Esc` close dialogs

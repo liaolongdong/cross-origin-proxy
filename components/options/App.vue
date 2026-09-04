@@ -6,6 +6,7 @@
       :proxy-enabled="proxyEnabled"
       @add-rule="handleAddRule"
       @open-logs="openLogs"
+      @open-url-test="showUrlTest = true"
       @open-import-export="showImportExport = true"
       @open-profiles="showProfiles = true"
       @open-settings="showSettings = true"
@@ -67,6 +68,11 @@
       v-model:visible="showProfiles"
       @loaded="handleProfilesLoaded"
     />
+    <UrlTestDialog
+      v-model:visible="showUrlTest"
+      :rules="rules"
+      :proxy-enabled="proxyEnabled"
+    />
     <SettingsDialog
       v-model:visible="showSettings"
       :current-theme="currentTheme"
@@ -116,6 +122,7 @@ import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import { combineHitStats } from '@/utils/ruleStats';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
+import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import HeaderBar from './HeaderBar.vue';
 import SearchFilterBar from './SearchFilterBar.vue';
 import RuleTable from './RuleTable.vue';
@@ -131,6 +138,7 @@ const RuleFormDialog = defineAsyncComponent(() => import('./RuleFormDialog.vue')
 const ImportExportDialog = defineAsyncComponent(() => import('./ImportExportDialog.vue'));
 const ProfilesDialog = defineAsyncComponent(() => import('./ProfilesDialog.vue'));
 const SettingsDialog = defineAsyncComponent(() => import('./SettingsDialog.vue'));
+const UrlTestDialog = defineAsyncComponent(() => import('./UrlTestDialog.vue'));
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
 
 const { t } = useI18n();
@@ -183,6 +191,7 @@ const showRuleDialog = ref(false);
 const showImportExport = ref(false);
 const showProfiles = ref(false);
 const showSettings = ref(false);
+const showUrlTest = ref(false);
 const showLogs = ref(false);
 const editingRule = ref<ProxyRule | null>(null);
 const templateInitialData = ref<Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> | null>(null);
@@ -256,7 +265,8 @@ onMounted(async () => {
   void fetchDnrStats();
   void fetchSwStats();
 
-  // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出；
+  // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出，
+  // #add-rule-from-tab=<url> 按当前标签页地址预填通配符规则；
   // 监听 hashchange：popup 复用已打开的 Options 标签页时通过更新 hash 触发同文档导航
   handleHashNavigation();
   window.addEventListener('hashchange', handleHashNavigation);
@@ -283,7 +293,9 @@ function handleKeydown(e: KeyboardEvent) {
   // N（或 Ctrl/Cmd + N）：打开新增规则弹窗。
   // 注意 Ctrl/Cmd+N 在多数平台是浏览器保留快捷键（新窗口），页面无法捕获，
   // 因此以单键 N 为主（同 Gmail 风格的单键快捷操作）
+  // 规则弹窗打开时忽略 N 键：避免编辑中的弹窗被静默重置为新增模式丢失修改
   if (e.key === 'n' || e.key === 'N' || (modKey && e.key === 'n')) {
+    if (showRuleDialog.value) return;
     e.preventDefault();
     handleAddRule();
     return;
@@ -297,7 +309,7 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Escape：关闭最上层的弹窗/抽屉（优先级：规则弹窗 > 导入导出 > 环境配置 > 设置 > 日志）
+  // Escape：关闭最上层的弹窗/抽屉（优先级：规则弹窗 > 导入导出 > 环境配置 > 设置 > URL 测试 > 日志）
   if (e.key === 'Escape') {
     if (showRuleDialog.value) {
       showRuleDialog.value = false;
@@ -307,6 +319,8 @@ function handleKeydown(e: KeyboardEvent) {
       showProfiles.value = false;
     } else if (showSettings.value) {
       showSettings.value = false;
+    } else if (showUrlTest.value) {
+      showUrlTest.value = false;
     } else if (showLogs.value) {
       showLogs.value = false;
     }
@@ -324,6 +338,9 @@ function handleHashNavigation() {
     showImportExport.value = true;
   } else if (hash === '#profiles') {
     showProfiles.value = true;
+  } else if (hash.startsWith('#add-rule-from-tab=')) {
+    // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）
+    handleCreateRuleFromUrl(decodeURIComponent(hash.slice('#add-rule-from-tab='.length)));
   }
   if (hash) {
     history.replaceState(null, '', window.location.pathname);
@@ -562,9 +579,15 @@ async function handleClearLogs() {
   }
 }
 
-// 导入导出
+// 导入导出：exportConfig 的成功/失败反馈统一由本组件发出（子弹窗的 emit 不携带异步结果）
 async function handleExport() {
-  await exportConfig();
+  try {
+    await exportConfig();
+    ElMessage.success(t('exportSuccess'));
+  } catch (error) {
+    ElMessage.error(t('exportFailed'));
+    logger.error('Export failed:', error);
+  }
 }
 
 async function handleImport(data: ExportData) {
@@ -604,14 +627,7 @@ function handleImportCurl(parsed: import('@/utils/curlParser').ParsedCurl) {
   }
   showImportExport.value = false;
 
-  const prefill: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> = {
-    name: `cURL: ${url.hostname}`,
-    enabled: true,
-    matchType: 'wildcard',
-    matchPattern: `${url.origin}/*`,
-    targetUrl: url.origin,
-    priority: 100,
-  };
+  const prefill = buildOriginWildcardDraft(url, `cURL: ${url.hostname}`);
   if (Object.keys(parsed.headers).length > 0) {
     prefill.headerOverrides = { ...parsed.headers };
   }
@@ -626,28 +642,44 @@ async function handleProfilesLoaded() {
   await fetchConfig();
 }
 
-/** 从日志详情快速建规则：以请求 URL 的 origin 预填充通配符规则 */
-function handleCreateRuleFromLog(log: import('@/utils/types').RequestLogEntry) {
-  let url: URL;
-  try {
-    url = new URL(log.originalUrl);
-  } catch {
-    ElMessage.error(t('createRuleFromLogFailed'));
-    return;
-  }
-  if (!/^https?:$/.test(url.protocol)) {
-    ElMessage.error(t('createRuleFromLogFailed'));
-    return;
-  }
-  showLogs.value = false;
-  handleUseTemplate({
-    name: `${t('createRuleFromLogPrefix')} ${url.hostname}`,
+/** 按 origin 预填通配符规则草稿：cURL 导入 / 日志转规则 / Popup 当前页直达共用 */
+function buildOriginWildcardDraft(url: URL, name: string): Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> {
+  return {
+    name,
     enabled: true,
     matchType: 'wildcard',
     matchPattern: `${url.origin}/*`,
     targetUrl: url.origin,
     priority: 100,
-  });
+  };
+}
+
+/**
+ * 从 URL 快速建规则（日志转规则 / Popup 当前页直达共用）：
+ * 校验 http/https 后以请求 origin 预填通配符草稿，交由表单确认保存。
+ * @returns 是否成功打开预填弹窗
+ */
+function handleCreateRuleFromUrl(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    ElMessage.error(t('createRuleFromLogFailed'));
+    return false;
+  }
+  if (!/^https?:$/.test(url.protocol)) {
+    ElMessage.error(t('createRuleFromLogFailed'));
+    return false;
+  }
+  handleUseTemplate(buildOriginWildcardDraft(url, `${t('createRuleFromLogPrefix')} ${url.hostname}`));
+  return true;
+}
+
+/** 从日志详情快速建规则：以请求 URL 的 origin 预填充通配符规则 */
+function handleCreateRuleFromLog(log: import('@/utils/types').RequestLogEntry) {
+  if (handleCreateRuleFromUrl(log.originalUrl)) {
+    showLogs.value = false;
+  }
 }
 
 async function handleReorder(fromId: string, toId: string) {
@@ -659,17 +691,8 @@ async function handleReorder(fromId: string, toId: string) {
   if (toIdx < 0) return;
   visibleRules.splice(toIdx, 0, moved);
 
-  const visibleIds = new Set(visibleRules.map(r => r.id));
-  const hiddenRules = rules.value.filter(r => !visibleIds.has(r.id));
-  const oldVisiblePositions = rules.value.map((r, i) => (visibleIds.has(r.id) ? i : -1)).filter(i => i >= 0);
-
-  const newFull: ProxyRule[] = new Array(rules.value.length);
-  for (const [i, rule] of hiddenRules.entries()) {
-    newFull[oldVisiblePositions[i]] = rule;
-  }
-  for (const [i, rule] of visibleRules.entries()) {
-    newFull[oldVisiblePositions[i]] = rule;
-  }
+  // 筛选态下隐藏规则原地保留，可见规则按拖拽后的新顺序填入原本可见规则的位置
+  const newFull = mergeReorderedVisible(rules.value, visibleRules);
 
   try {
     await reorderRules(newFull.map(r => r.id));

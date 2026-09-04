@@ -88,10 +88,16 @@ export function useRuleManagement() {
     return newRules;
   }
 
-  async function updateRule(ruleId: string, updates: Partial<ProxyRule>) {
+  async function updateRule(ruleId: string, updates: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
     const existingRule = rules.value.find(r => r.id === ruleId);
     if (!existingRule) return;
-    const updatedRule: ProxyRule = { ...existingRule, ...updates, updatedAt: Date.now() };
+    // 整体替换：不与旧规则合并，updates 未包含的可选字段（如已关闭的 mock/拦截开关）即被清除
+    const updatedRule: ProxyRule = {
+      ...updates,
+      id: ruleId,
+      createdAt: existingRule.createdAt,
+      updatedAt: Date.now(),
+    };
     const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
       type: MessageType.UPDATE_RULE,
       data: { rule: updatedRule },

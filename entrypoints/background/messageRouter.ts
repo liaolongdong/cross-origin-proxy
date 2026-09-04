@@ -175,6 +175,10 @@ export function setupMessageRouter(): void {
         );
 
       case MessageType.TOGGLE_PROXY:
+        if (!message.data || typeof message.data.enabled !== 'boolean') {
+          sendResponse({ success: false, error: 'Invalid data' });
+          return false;
+        }
         return respondAsync(
           sendResponse,
           toggleProxy(message.data.enabled).then(enabled => {
@@ -184,7 +188,7 @@ export function setupMessageRouter(): void {
         );
 
       case MessageType.TOGGLE_RULE: {
-        if (!message.data.ruleId) {
+        if (!message.data || !message.data.ruleId || typeof message.data.enabled !== 'boolean') {
           sendResponse({ success: false, error: 'Invalid ruleId' });
           return false;
         }
@@ -200,13 +204,17 @@ export function setupMessageRouter(): void {
       }
 
       case MessageType.ADD_RULE:
+        if (!message.data || typeof message.data.rule !== 'object' || message.data.rule === null) {
+          sendResponse({ success: false, error: 'Invalid rule' });
+          return false;
+        }
         return respondAsync(
           sendResponse,
           addRule(message.data.rule).then(() => ({ success: true })),
         );
 
       case MessageType.BATCH_ADD_RULES: {
-        if (!Array.isArray(message.data.rules)) {
+        if (!message.data || !Array.isArray(message.data.rules)) {
           sendResponse({ success: false, error: 'Invalid rules' });
           return false;
         }
@@ -217,6 +225,10 @@ export function setupMessageRouter(): void {
       }
 
       case MessageType.UPDATE_RULE: {
+        if (!message.data || typeof message.data.rule !== 'object' || message.data.rule === null) {
+          sendResponse({ success: false, error: 'Invalid rule' });
+          return false;
+        }
         const { id, ...updates } = message.data.rule;
         return respondAsync(
           sendResponse,
@@ -225,17 +237,21 @@ export function setupMessageRouter(): void {
       }
 
       case MessageType.DELETE_RULE:
+        if (!message.data || typeof message.data.ruleId !== 'string') {
+          sendResponse({ success: false, error: 'Invalid ruleId' });
+          return false;
+        }
         return respondAsync(
           sendResponse,
           deleteRule(message.data.ruleId).then(() => ({ success: true })),
         );
 
       case MessageType.BATCH_DELETE_RULES: {
-        const ruleIds = message.data.ruleIds;
-        if (!Array.isArray(ruleIds)) {
+        if (!message.data || !Array.isArray(message.data.ruleIds)) {
           sendResponse({ success: false, error: 'Invalid ruleIds' });
           return false;
         }
+        const ruleIds = message.data.ruleIds;
         return respondAsync(
           sendResponse,
           batchDeleteRules(ruleIds).then(updatedConfig => ({ success: true, data: updatedConfig })),
@@ -243,17 +259,21 @@ export function setupMessageRouter(): void {
       }
 
       case MessageType.BATCH_TOGGLE_RULES:
+        if (!message.data || !Array.isArray(message.data.ruleIds) || typeof message.data.enabled !== 'boolean') {
+          sendResponse({ success: false, error: 'Invalid data' });
+          return false;
+        }
         return respondAsync(
           sendResponse,
           batchToggleRules(message.data.ruleIds, message.data.enabled).then(() => ({ success: true })),
         );
 
       case MessageType.REORDER_RULES: {
-        const orderedIds = message.data.orderedIds;
-        if (!Array.isArray(orderedIds)) {
+        if (!message.data || !Array.isArray(message.data.orderedIds)) {
           sendResponse({ success: false, error: 'Invalid orderedIds' });
           return false;
         }
+        const orderedIds = message.data.orderedIds;
         return respondAsync(
           sendResponse,
           reorderRules(orderedIds).then(() => ({ success: true })),
@@ -313,15 +333,27 @@ export function setupMessageRouter(): void {
         return respondAsync(sendResponse, getProfiles());
 
       case MessageType.SAVE_PROFILE:
+        if (!message.data || typeof message.data !== 'object') {
+          sendResponse({ success: false, error: 'Invalid profile' });
+          return false;
+        }
         return respondAsync(
           sendResponse,
           saveProfile(message.data).then(() => ({ success: true })),
         );
 
       case MessageType.LOAD_PROFILE:
+        if (!message.data || typeof message.data.profileId !== 'string') {
+          sendResponse({ success: false, error: 'Invalid profileId' });
+          return false;
+        }
         return respondAsync(sendResponse, loadProfile(message.data.profileId));
 
       case MessageType.DELETE_PROFILE:
+        if (!message.data || typeof message.data.profileId !== 'string') {
+          sendResponse({ success: false, error: 'Invalid profileId' });
+          return false;
+        }
         return respondAsync(
           sendResponse,
           deleteProfile(message.data.profileId).then(() => ({ success: true })),

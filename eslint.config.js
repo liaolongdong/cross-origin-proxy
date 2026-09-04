@@ -5,7 +5,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default [
   {
-    ignores: ['dist/**', '.output/**', '.wxt/**', 'node_modules/**', 'public/**'],
+    ignores: ['dist/**', '.output/**', '.wxt/**', 'node_modules/**', 'public/**', '.test-tmp/**'],
   },
   js.configs.recommended,
   ...pluginVue.configs['flat/recommended'],

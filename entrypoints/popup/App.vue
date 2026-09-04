@@ -135,6 +135,22 @@
         class="action-card"
         role="button"
         tabindex="0"
+        @click="handleCreateRuleFromTab"
+        @keydown.enter="handleCreateRuleFromTab"
+      >
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><Plus /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionCreateRuleFromTab') }}</div>
+          <div class="action-card__desc">{{ t('actionCreateRuleFromTabDesc') }}</div>
+        </div>
+      </div>
+
+      <div
+        class="action-card"
+        role="button"
+        tabindex="0"
         @click="openOptionsPage('#logs')"
         @keydown.enter="openOptionsPage('#logs')"
       >
@@ -231,7 +247,16 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Promotion, Setting, Document, FolderOpened, Collection, ArrowDown, Timer } from '@element-plus/icons-vue';
+import {
+  Promotion,
+  Setting,
+  Document,
+  FolderOpened,
+  Collection,
+  ArrowDown,
+  Timer,
+  Plus,
+} from '@element-plus/icons-vue';
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 import { logger } from '@/utils/logger';
@@ -239,8 +264,8 @@ import { logger } from '@/utils/logger';
 /**
  * Popup 弹窗（动作卡片风格，参照 account-password-helper）
  *
- * 结构：头部 → 开关状态行 → 数据点 → 三张动作卡片（直达不同目标）→ 最近请求列表。
- * 动作卡片通过 URL hash 直达 Options 的日志抽屉与导入导出弹窗。
+ * 结构：头部 → 开关状态行 → 数据点 → 动作卡片（直达不同目标）→ 最近请求列表。
+ * 动作卡片通过 URL hash 直达 Options 的对应弹窗/抽屉，并支持按当前标签页地址预填新规则。
  */
 const { t } = useI18n();
 const {
@@ -325,7 +350,27 @@ async function handleToggleRule(ruleId: string, enabled: boolean) {
 const currentVersion = chrome.runtime.getManifest().version;
 
 /**
- * 打开 Options 页；带 hash 时直达对应弹窗/抽屉（#add-rule / #logs / #import-export）。
+ * 为当前标签页创建规则：读取活动标签页 URL，经 hash 直达 Options 并预填 origin 通配符草稿。
+ * 非 http/https 页面（如浏览器内部页）无法代理，提示后保留 popup 不跳转。
+ */
+async function handleCreateRuleFromTab() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const url = tab?.url;
+    if (!url || !/^https?:/i.test(url)) {
+      ElMessage.error(t('createRuleFromTabFailed'));
+      return;
+    }
+    await openOptionsPage(`#add-rule-from-tab=${encodeURIComponent(url)}`);
+  } catch (error) {
+    logger.error('Create rule from tab failed:', error);
+    ElMessage.error(t('createRuleFromTabFailed'));
+  }
+}
+
+/**
+ * 打开 Options 页；带 hash 时直达对应弹窗/抽屉
+ * （#add-rule / #logs / #import-export / #add-rule-from-tab=<encoded url>）。
  * 优先复用已打开的 Options 标签页（通过 runtime.getContexts 查找，无需 tabs 权限），
  * 避免重复打开；更新 hash 属同文档导航，Options 侧监听 hashchange 响应直达。
  */
