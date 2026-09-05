@@ -177,6 +177,27 @@ export async function batchToggleRules(ruleIds: string[], enabled: boolean): Pro
 }
 
 /**
+ * 批量迁移目标 URL（一次写入）：按 updates 中的 id 定位规则并覆盖其 targetUrl。
+ * 仅更新 targetUrl 确有变化的规则（幂等，避免无谓的 updatedAt 抖动与 DNR 重建）。
+ */
+export async function batchUpdateTargets(updates: { id: string; targetUrl: string }[]): Promise<void> {
+  if (updates.length === 0) return;
+  return withStorageLock(async () => {
+    const config = await getProxyConfig();
+    const byId = new Map(config.rules.map(r => [r.id, r]));
+    const now = Date.now();
+    for (const update of updates) {
+      const rule = byId.get(update.id);
+      if (rule && rule.targetUrl !== update.targetUrl) {
+        rule.targetUrl = update.targetUrl;
+        rule.updatedAt = now;
+      }
+    }
+    await saveProxyConfig(config);
+  });
+}
+
+/**
  * 拖拽排序：按 orderedIds 重排规则数组，并重写 priority 使其与新顺序一致
  */
 export async function reorderRules(orderedIds: string[]): Promise<void> {

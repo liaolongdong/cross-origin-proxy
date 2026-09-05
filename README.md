@@ -17,11 +17,14 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
 - **Mock response** — return custom mock data (JSON/text/HTML) without hitting the target server, perfect for frontend development without a backend
 - **Request delay injection** — add artificial latency (0–60s) to simulate slow networks and test loading/timeout states
 - **Request blocking** — block matched requests entirely (returns network error), for testing error handling and offline fallback behavior
+- **HTTP method filtering** — restrict a rule to specific methods (GET/POST/PUT/...); leave empty to match any. Method-filtered rules are routed through the SW channel because `declarativeNetRequest` cannot filter by method
+- **Query parameter injection** — append or override query parameters on the final proxied URL (e.g. `__env=uat`, gray-release tags) without rewriting the whole URL
+- **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite; works for both `http(s)`-style and `ws(s)`-style patterns, handled in the page interceptor
 
 ### Dual Proxy Channels
 
 - **DNR channel** — simple rules (no header/body/response overrides) run as `declarativeNetRequest` dynamic rules, redirected at the browser network layer with zero JS overhead
-- **SW fetch channel** — complex rules (with any overrides, mock, delay, or blocking) run through a Service Worker `fetch` channel that intercepts page `fetch`/XHR calls
+- **SW fetch channel** — complex rules run through a Service Worker `fetch` channel that intercepts page `fetch`/XHR/WebSocket calls. A rule becomes non-simple (SW-routed) when it has any override/mock/delay/block, an HTTP **method filter**, **query overrides**, or targets **WebSocket** (`DNR` cannot cover these)
 
 ### Rule Management
 
@@ -34,8 +37,10 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
   - **M** (purple) — mock response
   - **D** (cyan) — request delay
   - **X** (red) — request blocking
+  - **WS** (teal) — WebSocket rule (also applies to `ws://` / `wss://` connections)
 - **Priority ordering** — lower number = matched first
 - **Per-rule and batch enable/disable**
+- **Batch migrate target URLs** — select rules and find/replace part of their target URL in one action (e.g. switch the target domain when environments rotate), with a live change preview
 - **Search and filter** by name, pattern, status
 
 ### Request Logs & Debugging
@@ -44,7 +49,7 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
 - **Log detail viewer** — click any log row to see full request/response headers and body (JSON auto-formatted)
 - **Copy as cURL** — one-click export of any log entry as a `curl` command
 - **Filter by method, status, rule, URL keyword**
-- **URL match tester** — global entry in the options header bar; type any URL to preview the matched rule, rewritten URL, forwarding channel (DNR / SW), and shadowed rules in real time
+- **URL match tester** — global entry in the options header bar; type any URL (optionally pick an HTTP method) to preview the matched rule, rewritten URL (including query overrides), forwarding channel (DNR / SW), and shadowed rules in real time
 
 ### Import / Export
 
@@ -59,7 +64,7 @@ Built with [WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript.
 
 ### UI / UX
 
-- **Popup quick panel** — global proxy switch, today's stats, recent requests, and one-click deep links into the options page; "Create rule for this page" prefills the rule form from the current tab (reusing an open options page); shows a live countdown when auto-off is configured
+- **Popup quick panel** — global proxy switch, today's stats, recent requests, and one-click deep links into the options page; "Create rule for this page" prefills the rule form from the current tab (reusing an open options page); shows a live countdown when auto-off is configured, plus a **current-page hit preview** that reveals which rule the open page matches, the rewritten URL, and the forwarding channel
 - **i18n** — English / 简体中文 UI
 - **6 color themes** with light / dark / system modes
 - **Keyboard shortcuts** — `Cmd+N` add rule, `/` focus search, `Esc` close dialogs

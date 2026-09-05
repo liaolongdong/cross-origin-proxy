@@ -22,6 +22,7 @@
       :total-rules="rules.length"
       @batch-toggle="handleBatchToggle"
       @batch-delete="handleBatchDelete"
+      @batch-migrate="showMigrate = true"
       @toggle-all="handleToggleAll"
     />
 
@@ -72,6 +73,11 @@
       v-model:visible="showUrlTest"
       :rules="rules"
       :proxy-enabled="proxyEnabled"
+    />
+    <MigrateTargetsDialog
+      v-model:visible="showMigrate"
+      :selected-rules="selectedRules"
+      @apply="handleMigrateApply"
     />
     <SettingsDialog
       v-model:visible="showSettings"
@@ -140,6 +146,7 @@ const ProfilesDialog = defineAsyncComponent(() => import('./ProfilesDialog.vue')
 const SettingsDialog = defineAsyncComponent(() => import('./SettingsDialog.vue'));
 const UrlTestDialog = defineAsyncComponent(() => import('./UrlTestDialog.vue'));
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
+const MigrateTargetsDialog = defineAsyncComponent(() => import('./MigrateTargetsDialog.vue'));
 
 const { t } = useI18n();
 
@@ -162,6 +169,7 @@ const {
   batchToggleRules,
   toggleAllRules,
   batchDeleteRules,
+  batchUpdateTargets,
   reorderRules,
   toggleProxy,
   findConflictingRule,
@@ -193,6 +201,7 @@ const showProfiles = ref(false);
 const showSettings = ref(false);
 const showUrlTest = ref(false);
 const showLogs = ref(false);
+const showMigrate = ref(false);
 const editingRule = ref<ProxyRule | null>(null);
 const templateInitialData = ref<Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> | null>(null);
 const highlightRuleId = ref<string | null>(null);
@@ -321,6 +330,8 @@ function handleKeydown(e: KeyboardEvent) {
       showSettings.value = false;
     } else if (showUrlTest.value) {
       showUrlTest.value = false;
+    } else if (showMigrate.value) {
+      showMigrate.value = false;
     } else if (showLogs.value) {
       showLogs.value = false;
     }
@@ -565,6 +576,19 @@ async function handleBatchDelete() {
   } catch (error) {
     ElMessage.error(t('batchDeleteFailed'));
     logger.error('Batch delete failed:', error);
+  }
+}
+
+/** 批量迁移目标 URL：接收弹窗预览的变更集，一次写入并提示结果 */
+async function handleMigrateApply(updates: { id: string; targetUrl: string }[]) {
+  if (updates.length === 0) return;
+  try {
+    await batchUpdateTargets(updates);
+    ElMessage.success(t('migrateSuccess', [updates.length]));
+    selectedRules.value = [];
+  } catch (error) {
+    ElMessage.error(t('migrateFailed'));
+    logger.error('Batch migrate targets failed:', error);
   }
 }
 

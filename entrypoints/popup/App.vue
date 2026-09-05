@@ -113,6 +113,68 @@
       </div>
     </div>
 
+    <!-- 当前页命中预览 -->
+    <div
+      v-if="pageUrl"
+      class="page-hit-card"
+    >
+      <div class="page-hit-header">
+        <el-icon><Link /></el-icon>
+        <span class="page-hit-title">{{ t('currentPageHit') }}</span>
+      </div>
+      <p
+        class="page-hit-url"
+        :title="pageUrl"
+      >
+        {{ truncateUrl(pageUrl, 48) }}
+      </p>
+      <div
+        v-if="!pageHitProxiable"
+        class="page-hit-empty"
+      >
+        {{ t('pageHitNotProxiable') }}
+      </div>
+      <div
+        v-else-if="pageHitRuleName"
+        class="page-hit-result"
+      >
+        <div class="page-hit-row">
+          <span class="page-hit-label">{{ t('pageHitRule') }}</span>
+          <el-tag
+            size="small"
+            type="success"
+            effect="light"
+            >{{ pageHitRuleName }}</el-tag
+          >
+          <el-tag
+            size="small"
+            type="info"
+            effect="plain"
+            >{{ pageHitChannelDnr ? t('pageHitChannelDnr') : t('pageHitChannelSw') }}</el-tag
+          >
+        </div>
+        <div
+          v-if="pageHitRewritten && pageHitRewritten !== pageUrl"
+          class="page-hit-row"
+        >
+          <span class="page-hit-label">{{ t('pageHitRewritten') }}</span>
+          <code class="page-hit-rewritten">{{ truncateUrl(pageHitRewritten, 44) }}</code>
+        </div>
+        <div
+          v-if="!enabled"
+          class="page-hit-off"
+        >
+          {{ t('pageHitProxyOff') }}
+        </div>
+      </div>
+      <div
+        v-else
+        class="page-hit-empty"
+      >
+        {{ t('pageHitNoMatch') }}
+      </div>
+    </div>
+
     <!-- 动作卡片列表 -->
     <div class="action-list">
       <div
@@ -256,9 +318,13 @@ import {
   ArrowDown,
   Timer,
   Plus,
+  Link,
 } from '@element-plus/icons-vue';
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
+import { MessageType } from '@/utils/types';
+import type { ProxyConfig } from '@/utils/types';
+import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import { logger } from '@/utils/logger';
 
 /**
@@ -286,6 +352,44 @@ const {
 } = useProxyStatus();
 
 const rulesExpanded = ref(false);
+
+// ─── 当前页命中预览 ────────────────────────────────────────────────────
+
+const pageUrl = ref('');
+const pageHitProxiable = ref(false);
+const pageHitRuleName = ref('');
+const pageHitRewritten = ref('');
+const pageHitChannelDnr = ref(false);
+
+/**
+ * 读取当前活动标签页地址，用与实际代理同一套 urlMatcher 纯函数计算命中预览。
+ * popup 生命周期短，仅在挂载时计算一次；非 http(s) 页面不可代理，仅展示提示。
+ */
+async function computePageHit() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const url = tab?.url ?? '';
+    pageUrl.value = url;
+    if (!/^https?:/i.test(url)) {
+      pageHitProxiable.value = false;
+      return;
+    }
+    pageHitProxiable.value = true;
+    const config: ProxyConfig | undefined = await chrome.runtime.sendMessage({
+      type: MessageType.GET_PROXY_CONFIG,
+    });
+    if (!config || !Array.isArray(config.rules)) return;
+    // 页面导航视为 GET；与实际一致地按方法白名单收窄
+    const rule = findMatchingRule(url, config.rules, 'GET');
+    if (rule) {
+      pageHitRuleName.value = rule.name;
+      pageHitRewritten.value = applyQueryOverrides(rewriteUrl(url, rule), rule.queryOverrides);
+      pageHitChannelDnr.value = isSimpleRule(rule);
+    }
+  } catch (error) {
+    logger.debug('Compute page hit failed:', error);
+  }
+}
 
 // ─── 自动关闭倒计时 ─────────────────────────────────────────────────────────
 
@@ -321,6 +425,7 @@ let autoOffTimer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
   tickAutoOff();
   autoOffTimer = setInterval(tickAutoOff, 1000);
+  void computePageHit();
 });
 
 onUnmounted(() => {
@@ -539,6 +644,74 @@ async function openOptionsPage(hash = '') {
   width: 1px;
   height: 28px;
   background: var(--cop-border-color);
+}
+
+/* 当前页命中预览 */
+.page-hit-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: 8px;
+}
+
+.page-hit-header {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--cop-text-color-secondary);
+}
+
+.page-hit-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.page-hit-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+  white-space: nowrap;
+}
+
+.page-hit-empty {
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+}
+
+.page-hit-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.page-hit-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.page-hit-label {
+  flex: none;
+  color: var(--cop-text-color-secondary);
+}
+
+.page-hit-rewritten {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--cop-primary);
+  white-space: nowrap;
+}
+
+.page-hit-off {
+  font-size: 12px;
+  color: var(--el-color-warning);
 }
 
 /* 动作卡片列表 */

@@ -65,6 +65,65 @@
           />
         </el-form-item>
 
+        <el-form-item :label="t('methodsLabel')">
+          <div class="header-overrides">
+            <el-select
+              v-model="methodsList"
+              multiple
+              clearable
+              collapse-tags
+              collapse-tags-tooltip
+              :placeholder="t('methodsPlaceholder')"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="method in HTTP_METHODS"
+                :key="method"
+                :label="method"
+                :value="method"
+              />
+            </el-select>
+            <div class="field-hint">{{ t('methodsHint') }}</div>
+          </div>
+        </el-form-item>
+
+        <el-form-item :label="t('queryOverridesLabel')">
+          <div class="header-overrides">
+            <div
+              v-for="(query, index) in queryList"
+              :key="index"
+              class="header-pair"
+            >
+              <el-input
+                v-model="query.key"
+                :placeholder="t('queryKeyPlaceholder')"
+                style="width: 40%"
+              />
+              <el-input
+                v-model="query.value"
+                :placeholder="t('queryValuePlaceholder')"
+                style="width: 40%"
+              />
+              <el-button
+                type="danger"
+                link
+                @click="removeQuery(index)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
+            <el-button
+              type="primary"
+              link
+              @click="addQuery"
+            >
+              <el-icon><Plus /></el-icon>
+              {{ t('addQueryParam') }}
+            </el-button>
+            <div class="field-hint">{{ t('queryOverridesHint') }}</div>
+          </div>
+        </el-form-item>
+
         <el-form-item :label="t('headerOverridesLabel')">
           <div class="header-overrides">
             <div
@@ -567,8 +626,9 @@ import { ref, reactive, watch, computed } from 'vue';
 import { Delete, Plus, Close } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { ProxyRule } from '@/utils/types';
+import { HTTP_METHODS } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
-import { matchRule, rewriteUrl } from '@/utils/urlMatcher';
+import { matchRule, rewriteUrl, applyQueryOverrides } from '@/utils/urlMatcher';
 
 const props = defineProps<{
   visible: boolean;
@@ -623,6 +683,10 @@ const mockConditions = ref<
     contentType: string;
   }[]
 >([]);
+
+// 规则级 HTTP 方法白名单（空=任意方法）与查询参数追加/覆盖列表
+const methodsList = ref<string[]>([]);
+const queryList = ref<{ key: string; value: string }[]>([]);
 
 // Test panel state
 const showTestPanel = ref(false);
@@ -718,6 +782,10 @@ watch(
             status: c.status ?? 200,
             contentType: c.contentType ?? 'application/json',
           })) ?? [];
+        methodsList.value = props.rule.methods ? [...props.rule.methods] : [];
+        queryList.value = props.rule.queryOverrides
+          ? Object.entries(props.rule.queryOverrides).map(([key, value]) => ({ key, value }))
+          : [];
       } else {
         const source = props.initialData ?? defaultForm;
         Object.assign(form, source);
@@ -736,6 +804,8 @@ watch(
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
         mockConditions.value = [];
+        methodsList.value = [];
+        queryList.value = [];
       }
       showTestPanel.value = false;
       testUrl.value = '';
@@ -758,6 +828,14 @@ function addHeader() {
 
 function removeHeader(index: number) {
   headerList.value.splice(index, 1);
+}
+
+function addQuery() {
+  queryList.value.push({ key: '', value: '' });
+}
+
+function removeQuery(index: number) {
+  queryList.value.splice(index, 1);
 }
 
 function handleClose() {
@@ -786,6 +864,18 @@ async function handleSave() {
     enabled: form.enabled,
     headerOverrides: Object.keys(headerOverrides).length > 0 ? headerOverrides : undefined,
   };
+
+  if (methodsList.value.length > 0) {
+    result.methods = [...methodsList.value];
+  }
+
+  const queryOverrides: Record<string, string> = {};
+  queryList.value.forEach(({ key, value }) => {
+    if (key.trim()) queryOverrides[key.trim()] = value;
+  });
+  if (Object.keys(queryOverrides).length > 0) {
+    result.queryOverrides = queryOverrides;
+  }
 
   if (enableRequestBodyOverride.value && form.requestBodyOverride) {
     result.requestBodyOverride = form.requestBodyOverride;
@@ -880,10 +970,15 @@ function runTest() {
     priority: 1,
     createdAt: 0,
     updatedAt: 0,
+    methods: methodsList.value.length > 0 ? [...methodsList.value] : undefined,
+    queryOverrides:
+      queryList.value.filter(q => q.key.trim()).length > 0
+        ? Object.fromEntries(queryList.value.filter(q => q.key.trim()).map(q => [q.key.trim(), q.value]))
+        : undefined,
   };
 
   const matched = matchRule(url, testRule);
-  const rewrittenUrl = matched ? rewriteUrl(url, testRule) : '';
+  const rewrittenUrl = matched ? applyQueryOverrides(rewriteUrl(url, testRule), testRule.queryOverrides) : '';
   testResult.value = { matched, rewrittenUrl };
 }
 </script>
@@ -891,6 +986,13 @@ function runTest() {
 <style scoped>
 .header-overrides {
   width: 100%;
+}
+
+.field-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 
 .header-pair {

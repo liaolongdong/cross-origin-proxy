@@ -170,6 +170,23 @@ export function useRuleManagement() {
     rules.value = rules.value.filter(r => !idSet.has(r.id));
   }
 
+  /** 批量迁移目标 URL（单条消息一次写入）：后台提交后本地同步命中项的 targetUrl */
+  async function batchUpdateTargets(updates: { id: string; targetUrl: string }[]) {
+    if (updates.length === 0) return;
+    const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
+      type: MessageType.BATCH_UPDATE_TARGETS,
+      data: { updates },
+    });
+    if (!resp || resp.success === false) {
+      throw new Error(resp?.error || 'BATCH_UPDATE_TARGETS_FAILED');
+    }
+    const byId = new Map(updates.map(u => [u.id, u.targetUrl]));
+    rules.value.forEach(rule => {
+      const next = byId.get(rule.id);
+      if (next !== undefined) rule.targetUrl = next;
+    });
+  }
+
   /** 拖拽排序（单条消息一次写入）：按 orderedIds 重排本地数组并重写 priority */
   async function reorderRules(orderedIds: string[]) {
     const resp: { success: boolean; error?: string } | undefined = await chrome.runtime.sendMessage({
@@ -237,6 +254,7 @@ export function useRuleManagement() {
     batchToggleRules,
     toggleAllRules,
     batchDeleteRules,
+    batchUpdateTargets,
     reorderRules,
     toggleProxy,
     findConflictingRule,

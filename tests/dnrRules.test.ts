@@ -82,4 +82,13 @@ describe('buildDnrRules', () => {
     expect(rules[0].action.redirect?.regexSubstitution).toBe('https://uat-api.example.com/\\1');
     expect(idMap.get(DNR_RULE_ID_PREFIX)).toEqual({ ruleId: 'simple', ruleName: 'test' });
   });
+
+  it('排除 WebSocket / 方法过滤 / 查询参数规则（非简单，不进 DNR）', () => {
+    const ws = makeRule({ id: 'ws', matchPattern: 'wss://fat.example.com/*', targetUrl: 'wss://uat.example.com' });
+    const method = makeRule({ id: 'm', targetUrl: 'https://uat.example.com', methods: ['POST'] });
+    const query = makeRule({ id: 'q', targetUrl: 'https://uat.example.com', queryOverrides: { env: 'uat' } });
+
+    const { rules } = buildDnrRules([ws, method, query]);
+    expect(rules).toHaveLength(0);
+  });
 });

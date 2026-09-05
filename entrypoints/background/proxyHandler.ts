@@ -1,4 +1,4 @@
-import { findMatchingRule, rewriteUrl } from '@/utils/urlMatcher';
+import { findMatchingRule, rewriteUrl, applyQueryOverrides } from '@/utils/urlMatcher';
 import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
@@ -195,7 +195,7 @@ export async function handleProxyRequest(data: {
     };
   }
 
-  const rule = findMatchingRule(data.url, config.rules);
+  const rule = findMatchingRule(data.url, config.rules, data.method);
   if (!rule) {
     return {
       requestId: data.requestId,
@@ -290,7 +290,8 @@ export async function handleProxyRequest(data: {
     };
   }
 
-  const targetUrl = rewriteUrl(data.url, rule);
+  // 先按匹配类型重写 URL，再对最终地址追加/覆盖查询参数（仅真实代理分支）
+  const targetUrl = applyQueryOverrides(rewriteUrl(data.url, rule), rule.queryOverrides);
   logger.info(`Proxying: ${data.url} → ${targetUrl}`);
 
   // ─── 准备请求参数（重试循环外，避免重复计算）────────────────────────────────

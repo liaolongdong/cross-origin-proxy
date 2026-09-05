@@ -14,6 +14,14 @@ export interface ResponseOverrides {
 }
 
 /**
+ * 可选的 HTTP 方法集合（规则级方法过滤与表单下拉共用）。
+ * 大小写统一为大写，匹配时对请求方法与配置值均做大写归一比较。
+ */
+export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'] as const;
+
+export type HttpMethod = (typeof HTTP_METHODS)[number];
+
+/**
  * 代理规则
  */
 export interface ProxyRule {
@@ -23,6 +31,8 @@ export interface ProxyRule {
   matchPattern: string; // URL 匹配模式，如 "https://fat-api.example.com/*"
   targetUrl: string; // 目标替换 URL，如 "https://uat-api.example.com"
   matchType: 'wildcard' | 'prefix' | 'regex'; // 匹配类型
+  methods?: string[]; // HTTP 方法白名单（大小写不敏感）；空/未定义=任意方法。非空时强制走 SW 通道（DNR 无法按方法过滤）
+  queryOverrides?: Record<string, string>; // 命中后对最终 URL 追加/覆盖的查询参数（仅 SW 通道）
   headerOverrides?: Record<string, string>; // 可选请求头覆盖
   requestBodyOverride?: string; // 请求体覆盖（仅 SW 通道）
   responseOverrides?: ResponseOverrides; // 响应覆盖（仅 SW 通道）
@@ -105,6 +115,7 @@ export enum MessageType {
   DELETE_RULE = 'DELETE_RULE',
   BATCH_TOGGLE_RULES = 'BATCH_TOGGLE_RULES', // Options → SW：批量启停规则（一次写入）
   BATCH_DELETE_RULES = 'BATCH_DELETE_RULES', // Options → SW：批量删除规则
+  BATCH_UPDATE_TARGETS = 'BATCH_UPDATE_TARGETS', // Options → SW：批量迁移目标 URL（一次写入）
   REORDER_RULES = 'REORDER_RULES', // Options → SW：拖拽排序（一次写入）
 
   // 日志相关
@@ -217,6 +228,12 @@ export interface BatchToggleRulesMessage {
 export interface BatchDeleteRulesMessage {
   type: MessageType.BATCH_DELETE_RULES;
   data: { ruleIds: string[] };
+}
+
+/** 批量迁移目标 URL：对指定规则集在 targetUrl 上查找/替换（一次写入） */
+export interface BatchUpdateTargetsMessage {
+  type: MessageType.BATCH_UPDATE_TARGETS;
+  data: { updates: { id: string; targetUrl: string }[] };
 }
 
 /** 拖拽排序规则 */
@@ -332,6 +349,7 @@ export type RuntimeMessage =
   | DeleteRuleMessage
   | BatchToggleRulesMessage
   | BatchDeleteRulesMessage
+  | BatchUpdateTargetsMessage
   | ReorderRulesMessage
   | GetDnrStatsMessage
   | GetSwStatsMessage

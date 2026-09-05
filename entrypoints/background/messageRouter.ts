@@ -12,6 +12,7 @@ import {
   deleteRule,
   batchDeleteRules,
   batchToggleRules,
+  batchUpdateTargets,
   reorderRules,
   toggleProxy,
   toggleRule,
@@ -126,6 +127,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.DELETE_RULE,
   MessageType.BATCH_DELETE_RULES,
   MessageType.BATCH_TOGGLE_RULES,
+  MessageType.BATCH_UPDATE_TARGETS,
   MessageType.REORDER_RULES,
   MessageType.CLEAR_REQUEST_LOG,
   MessageType.IMPORT_CONFIG,
@@ -267,6 +269,21 @@ export function setupMessageRouter(): void {
           sendResponse,
           batchToggleRules(message.data.ruleIds, message.data.enabled).then(() => ({ success: true })),
         );
+
+      case MessageType.BATCH_UPDATE_TARGETS: {
+        const updates = message.data?.updates;
+        if (
+          !Array.isArray(updates) ||
+          updates.some(u => !u || typeof u.id !== 'string' || typeof u.targetUrl !== 'string')
+        ) {
+          sendResponse({ success: false, error: 'Invalid updates' });
+          return false;
+        }
+        return respondAsync(
+          sendResponse,
+          batchUpdateTargets(updates).then(() => ({ success: true })),
+        );
+      }
 
       case MessageType.REORDER_RULES: {
         if (!message.data || !Array.isArray(message.data.orderedIds)) {

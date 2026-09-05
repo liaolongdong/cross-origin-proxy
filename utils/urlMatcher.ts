@@ -1,5 +1,50 @@
 import type { ProxyRule } from '@/utils/types';
 
+// ─── WebSocket / Method / Query helpers ────────────────────────────────────────
+
+const WS_SCHEME_RE = /wss?:\/\//i;
+
+/**
+ * 判断规则是否为 WebSocket 相关（匹配模式或目标含 ws:// / wss://）。
+ *
+ * WebSocket 连接只能由 MAIN-world 拦截器代理（DNR 资源类型不含 websocket），
+ * 因此此类规则不得判为“简单规则”。UI 徽标与双世界分流判定共用此函数。
+ */
+export function isWebSocketRule(rule: Pick<ProxyRule, 'matchPattern' | 'targetUrl'>): boolean {
+  return WS_SCHEME_RE.test(rule.matchPattern) || WS_SCHEME_RE.test(rule.targetUrl);
+}
+
+/**
+ * 规则的 HTTP 方法白名单是否放行给定方法。
+ * 未配置 methods（或为空）时放行任意方法；配置后仅放行列表内方法（大小写不敏感）。
+ * 无方法信息（method 为 undefined，如命中测试）时不因方法维度收窄。
+ */
+function methodAllowed(rule: ProxyRule, method?: string): boolean {
+  if (!rule.methods || rule.methods.length === 0) return true;
+  if (!method) return true;
+  const upper = method.toUpperCase();
+  return rule.methods.some(m => m.toUpperCase() === upper);
+}
+
+/**
+ * 对绝对 URL 追加/覆盖查询参数。
+ *
+ * 覆盖语义：同名参数存在则替换为新值，不存在则追加。URL 非法时原样返回
+ * （防御不可信的 targetUrl，如 regex 重写产出的非绝对地址）。
+ */
+export function applyQueryOverrides(url: string, overrides?: Record<string, string>): string {
+  if (!overrides || Object.keys(overrides).length === 0) return url;
+  try {
+    const parsed = new URL(url);
+    for (const [key, value] of Object.entries(overrides)) {
+      parsed.searchParams.set(key, value);
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 // ─── Matcher Cache ────────────────────────────────────────────────────────────
 
 const MAX_REGEX_CACHE = 500;
@@ -76,10 +121,11 @@ function getCompiledRegex(pattern: string): RegExp | null {
 }
 
 /**
- * 检查 URL 是否匹配规则
+ * 检查 URL 是否匹配规则（可选按 HTTP 方法白名单收窄）
  */
-export function matchRule(url: string, rule: ProxyRule): boolean {
+export function matchRule(url: string, rule: ProxyRule, method?: string): boolean {
   if (!rule.enabled) return false;
+  if (!methodAllowed(rule, method)) return false;
 
   switch (rule.matchType) {
     case 'wildcard': {
@@ -172,8 +218,9 @@ function buildRulesKey(rules: ProxyRule[]): string {
 
 /**
  * 查找第一个匹配的已启用规则（按优先级排序，结果缓存）
+ * @param method 可选 HTTP 方法；传入时按规则的 methods 白名单收窄匹配
  */
-export function findMatchingRule(url: string, rules: ProxyRule[]): ProxyRule | null {
+export function findMatchingRule(url: string, rules: ProxyRule[], method?: string): ProxyRule | null {
   const rulesKey = buildRulesKey(rules);
 
   let sorted: ProxyRule[];
@@ -186,7 +233,7 @@ export function findMatchingRule(url: string, rules: ProxyRule[]): ProxyRule | n
   }
 
   for (const rule of sorted) {
-    if (matchRule(url, rule)) {
+    if (matchRule(url, rule, method)) {
       return rule;
     }
   }
@@ -207,6 +254,12 @@ export function isSimpleRule(rule: ProxyRule): boolean {
   if (rule.delayMs) return false;
   if (rule.blocked) return false;
   if (rule.retryCount) return false;
+  // WebSocket 规则：DNR 资源类型不含 websocket，只能由拦截器代理，强制走 SW 通道
+  if (isWebSocketRule(rule)) return false;
+  // 方法过滤：DNR condition 不支持按 HTTP 方法筛选，只能由 SW/拦截器实现
+  if (rule.methods && rule.methods.length > 0) return false;
+  // 查询参数注入：由 SW 在重写后统一处理，不走 DNR regexSubstitution
+  if (rule.queryOverrides && Object.keys(rule.queryOverrides).length > 0) return false;
   // 不以 * 结尾的 wildcard：DNR 的 regexSubstitution 只能引用捕获组，
   // 会丢失模式末尾的固定文本（如 "a.com/*/x" 的 "/x"）产生错误重定向，
   // 改走 SW 通道（重写语义为不改写地址，仅代理转发）

@@ -272,6 +272,7 @@ import { ref } from 'vue';
 import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
 import { useI18n } from '@/composables/useI18n';
+import { isWebSocketRule } from '@/utils/urlMatcher';
 import EmptyGuide from './EmptyGuide.vue';
 
 /**
@@ -315,9 +316,6 @@ const MATCH_TYPE_TAG_TYPES: Record<string, 'primary' | 'success' | 'warning' | '
   prefix: 'success',
   regex: 'warning',
 };
-
-/** WebSocket 规则识别（匹配模式或目标含 ws:// / wss://） */
-const WS_PATTERN_RE = /wss?:\/\//i;
 
 /** 正在播放删除动画的行 id 集合 */
 const leavingIds = ref<Set<string>>(new Set());
@@ -405,8 +403,9 @@ function matchTypeLabel(matchType: string) {
   return labelMap[matchType] || matchType;
 }
 
+/** WebSocket 规则识别：复用 utils/urlMatcher 共享判定（与分流逻辑单一事实来源） */
 function isWsRule(rule: ProxyRule): boolean {
-  return WS_PATTERN_RE.test(rule.matchPattern) || WS_PATTERN_RE.test(rule.targetUrl);
+  return isWebSocketRule(rule);
 }
 
 /** 缓存高亮正则，避免每次 highlightText 调用都 new RegExp */

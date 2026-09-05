@@ -30,6 +30,8 @@ export default defineContentScript({
       matchPattern: string;
       targetUrl: string;
       matchType: 'wildcard' | 'prefix' | 'regex';
+      methods?: string[];
+      queryOverrides?: Record<string, string>;
       headerOverrides?: Record<string, string>;
       requestBodyOverride?: string;
       responseOverrides?: {
@@ -182,10 +184,37 @@ export default defineContentScript({
       }
     }
 
-    function findMatchingRule(url: string): ProxyRule | null {
+    /**
+     * Rule HTTP method allowlist check (self-contained mirror of utils/urlMatcher).
+     * Empty/undefined methods => allow any; unknown method (undefined) => not narrowed.
+     */
+    function methodAllowed(rule: ProxyRule, method?: string): boolean {
+      if (!rule.methods || rule.methods.length === 0) return true;
+      if (!method) return true;
+      const upper = method.toUpperCase();
+      return rule.methods.some(m => m.toUpperCase() === upper);
+    }
+
+    function findMatchingRule(url: string, method?: string): ProxyRule | null {
       if (!proxyEnabled) return null;
       for (const rule of cachedSortedRules) {
+        if (!methodAllowed(rule, method)) continue;
         if (matchUrl(url, rule)) return rule;
+      }
+      return null;
+    }
+
+    /**
+     * WebSocket rule lookup: a rule pattern may be written with http(s):// or ws(s)://.
+     * The connection is matched against BOTH the normalized http URL and the raw ws URL
+     * so that `wss://` patterns (previously never matched) work as expected.
+     * The WebSocket handshake is treated as GET for method filtering.
+     */
+    function findWsRule(wsUrl: string, httpUrl: string): ProxyRule | null {
+      if (!proxyEnabled) return null;
+      for (const rule of cachedSortedRules) {
+        if (!methodAllowed(rule, 'GET')) continue;
+        if (matchUrl(httpUrl, rule) || matchUrl(wsUrl, rule)) return rule;
       }
       return null;
     }
@@ -304,14 +333,16 @@ export default defineContentScript({
         // 无法解析时按原值匹配
       }
 
-      const rule = findMatchingRule(url);
+      // 合并 Request 对象与 init：init 优先，缺失时回退到 Request 自身的 method/headers/body
+      // 需先算出 method 再匹配，以便按规则的方法白名单收窄拦截范围
+      const method = init?.method || request?.method || 'GET';
+
+      const rule = findMatchingRule(url, method);
       if (!rule) {
         return originalFetch.call(window, input, init);
       }
 
       try {
-        // 合并 Request 对象与 init：init 优先，缺失时回退到 Request 自身的 method/headers/body
-        const method = init?.method || request?.method || 'GET';
         const headers = init?.headers ?? request?.headers;
         let body: unknown = init?.body;
         if (body === undefined && request && method !== 'GET' && method !== 'HEAD') {
@@ -382,7 +413,7 @@ export default defineContentScript({
         // 无法解析时按原值匹配
       }
 
-      const rule = url ? findMatchingRule(url) : null;
+      const rule = url ? findMatchingRule(url, method) : null;
 
       if (rule) {
         // Non-string bodies (FormData / Blob / ArrayBuffer / Document) cannot be
@@ -528,13 +559,32 @@ export default defineContentScript({
       return url.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
     }
 
-    /** WebSocket URL 重写（复用与 fetch 相同的匹配/重写逻辑） */
+    /** 对 ws(s):// URL 追加/覆盖查询参数；异常时原样返回（防御不可信目标地址） */
+    function applyWsQuery(url: string, overrides?: Record<string, string>): string {
+      if (!overrides || Object.keys(overrides).length === 0) return url;
+      try {
+        const parsed = new URL(url);
+        for (const [key, value] of Object.entries(overrides)) {
+          parsed.searchParams.set(key, value);
+        }
+        return parsed.toString();
+      } catch {
+        return url;
+      }
+    }
+
+    /**
+     * WebSocket URL 重写（复用与 fetch 相同的匹配/重写语义）。
+     * 根据规则实际命中的形态选择基准地址：http(s) 写法匹配归一化地址，
+     * ws(s) 写法匹配原始地址（优先 http 形态，保证多形态一致行为）。
+     */
     function rewriteWsUrl(url: string, rule: ProxyRule): string {
       if (!rule.targetUrl) return url;
       const httpUrl = normalizeWsUrl(url);
       // toWsUrl 负责协议映射（https→wss、http→ws）；wss://、ws:// 目标原样保留。
       // 注意不能先把 https 降级为 http，否则 wss 目标会被错误降级为不安全的 ws
       const wsTarget = rule.targetUrl;
+      const base = matchUrl(httpUrl, rule) ? httpUrl : url;
 
       switch (rule.matchType) {
         case 'wildcard': {
@@ -545,7 +595,7 @@ export default defineContentScript({
           const escaped = patternBase.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
           let matched: RegExpExecArray | null;
           try {
-            matched = new RegExp(`^${escaped}(.*)$`).exec(httpUrl);
+            matched = new RegExp(`^${escaped}(.*)$`).exec(base);
           } catch {
             return url;
           }
@@ -553,21 +603,21 @@ export default defineContentScript({
           const rest = matched[1];
           const target = wsTarget.replace(/\/$/, '');
           const separator = patternBase.endsWith('/') && rest ? '/' : '';
-          return toWsUrl(target + separator + rest);
+          return applyWsQuery(toWsUrl(target + separator + rest), rule.queryOverrides);
         }
         case 'prefix': {
-          if (httpUrl.startsWith(rule.matchPattern)) {
-            const rest = httpUrl.slice(rule.matchPattern.length);
+          if (base.startsWith(rule.matchPattern)) {
+            const rest = base.slice(rule.matchPattern.length);
             const target = wsTarget.replace(/\/$/, '');
-            return toWsUrl(target + rest);
+            return applyWsQuery(toWsUrl(target + rest), rule.queryOverrides);
           }
           return url;
         }
         case 'regex': {
           const regex = getCompiledRegex(rule);
           if (!regex) return url;
-          const httpResult = httpUrl.replace(regex, wsTarget);
-          return toWsUrl(httpResult);
+          const result = base.replace(regex, wsTarget);
+          return applyWsQuery(toWsUrl(result), rule.queryOverrides);
         }
         default:
           return url;
@@ -577,7 +627,7 @@ export default defineContentScript({
     function ProxyWebSocket(this: WebSocket, url: string | URL, protocols?: string | string[]) {
       const wsUrl = typeof url === 'string' ? url : url.href;
       const httpUrl = normalizeWsUrl(wsUrl);
-      const rule = findMatchingRule(httpUrl);
+      const rule = findWsRule(wsUrl, httpUrl);
 
       if (rule) {
         // 阻断规则：连向必然拒绝的本地端口，让页面收到标准 error 事件，

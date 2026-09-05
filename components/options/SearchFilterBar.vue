@@ -56,6 +56,7 @@
     <template v-if="selectedCount > 0">
       <el-button @click="$emit('batchToggle', true)"> {{ t('batchEnable') }} ({{ selectedCount }}) </el-button>
       <el-button @click="$emit('batchToggle', false)"> {{ t('batchDisable') }} ({{ selectedCount }}) </el-button>
+      <el-button @click="$emit('batchMigrate')"> {{ t('batchMigrate') }} </el-button>
       <el-button
         type="danger"
         plain
@@ -104,6 +105,8 @@ const emit = defineEmits<{
   batchToggle: [enabled: boolean];
   /** 批量删除勾选规则 */
   batchDelete: [];
+  /** 批量迁移勾选规则的目标 URL */
+  batchMigrate: [];
   /** 全部启用/停用所有规则 */
   toggleAll: [enabled: boolean];
 }>();

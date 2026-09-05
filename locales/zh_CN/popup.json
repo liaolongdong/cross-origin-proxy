@@ -16,5 +16,13 @@
   "actionProfiles": "环境配置",
   "actionProfilesDesc": "一键切换多环境规则快照",
   "autoOffCountdown": "$1 后自动关闭",
-  "createRuleFromTabFailed": "无法在当前页面创建规则"
+  "createRuleFromTabFailed": "无法在当前页面创建规则",
+  "currentPageHit": "当前页面",
+  "pageHitNotProxiable": "当前页面不可代理（非 http/https）",
+  "pageHitRule": "命中规则",
+  "pageHitChannelDnr": "DNR",
+  "pageHitChannelSw": "SW",
+  "pageHitRewritten": "改写为",
+  "pageHitProxyOff": "代理未开启，规则未生效",
+  "pageHitNoMatch": "没有规则匹配当前页面"
 }

@@ -7,13 +7,28 @@
     @close="$emit('update:visible', false)"
   >
     <div class="url-test-dialog dialog-body-scroll">
-      <el-input
-        v-model="testUrl"
-        :placeholder="t('urlTestPlaceholder')"
-        clearable
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <div class="url-test-input-row">
+        <el-select
+          v-model="testMethod"
+          clearable
+          :placeholder="t('urlTestMethodAny')"
+          class="url-test-method"
+        >
+          <el-option
+            v-for="method in HTTP_METHODS"
+            :key="method"
+            :label="method"
+            :value="method"
+          />
+        </el-select>
+        <el-input
+          v-model="testUrl"
+          :placeholder="t('urlTestPlaceholder')"
+          clearable
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
 
       <p
         v-if="!testUrl.trim()"
@@ -127,7 +142,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { ProxyRule } from '@/utils/types';
-import { findMatchingRule, isSimpleRule, matchRule, rewriteUrl } from '@/utils/urlMatcher';
+import { HTTP_METHODS } from '@/utils/types';
+import {
+  applyQueryOverrides,
+  findMatchingRule,
+  isSimpleRule,
+  isWebSocketRule,
+  matchRule,
+  rewriteUrl,
+} from '@/utils/urlMatcher';
 import { useI18n } from '@/composables/useI18n';
 
 const props = defineProps<{
@@ -145,11 +168,20 @@ defineEmits<{
 const { t } = useI18n();
 
 const testUrl = ref('');
+/** 参与命中测试的 HTTP 方法（空=不限，与无方法信息时的匹配行为一致） */
+const testMethod = ref('');
 
 // 命中判定复用 findMatchingRule（与实际代理行为同一实现，含启用过滤与优先级排序）
-const matchedRule = computed(() => (testUrl.value.trim() ? findMatchingRule(testUrl.value.trim(), props.rules) : null));
+const matchedRule = computed(() =>
+  testUrl.value.trim() ? findMatchingRule(testUrl.value.trim(), props.rules, testMethod.value || undefined) : null,
+);
 
-const rewrittenUrl = computed(() => (matchedRule.value ? rewriteUrl(testUrl.value.trim(), matchedRule.value) : ''));
+// 与生产 SW 通道一致：先重写再应用查询参数覆盖（仅展示，不写入）
+const rewrittenUrl = computed(() =>
+  matchedRule.value
+    ? applyQueryOverrides(rewriteUrl(testUrl.value.trim(), matchedRule.value), matchedRule.value.queryOverrides)
+    : '',
+);
 
 const channelIsDnr = computed(() => (matchedRule.value ? isSimpleRule(matchedRule.value) : false));
 
@@ -160,7 +192,7 @@ const shadowedRules = computed(() => {
   return props.rules
     .filter(r => r.enabled && r.id !== matched.id)
     .sort((a, b) => a.priority - b.priority)
-    .filter(r => matchRule(url, r));
+    .filter(r => matchRule(url, r, testMethod.value || undefined));
 });
 
 const extraActions = computed(() => {
@@ -176,6 +208,9 @@ const extraActions = computed(() => {
   }
   if (rule.requestBodyOverride !== undefined) actions.push(t('requestBodyOverrideLabel'));
   if (rule.responseOverrides) actions.push(t('responseOverridesLabel'));
+  if (rule.methods && rule.methods.length > 0) actions.push(t('urlTestActionMethods', rule.methods.join('/')));
+  if (rule.queryOverrides && Object.keys(rule.queryOverrides).length > 0) actions.push(t('urlTestActionQuery'));
+  if (isWebSocketRule(rule)) actions.push(t('urlTestActionWs'));
   return actions;
 });
 </script>
@@ -185,6 +220,16 @@ const extraActions = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.url-test-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.url-test-method {
+  flex: 0 0 130px;
 }
 
 .url-test-hint {

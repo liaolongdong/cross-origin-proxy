@@ -16,5 +16,13 @@
   "actionProfiles": "Env Profiles",
   "actionProfilesDesc": "Switch environment rule snapshots",
   "autoOffCountdown": "Auto-off in $1",
-  "createRuleFromTabFailed": "Cannot create a rule for this page"
+  "createRuleFromTabFailed": "Cannot create a rule for this page",
+  "currentPageHit": "Current Page",
+  "pageHitNotProxiable": "This page cannot be proxied (not http/https)",
+  "pageHitRule": "Matched rule",
+  "pageHitChannelDnr": "DNR",
+  "pageHitChannelSw": "SW",
+  "pageHitRewritten": "Rewrites to",
+  "pageHitProxyOff": "Proxy is off, rule not active",
+  "pageHitNoMatch": "No rule matches this page"
 }
