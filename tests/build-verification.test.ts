@@ -40,6 +40,14 @@ describe('[Build] 构建产物全量验证', () => {
       expect(manifest.description).toBe('__MSG_extensionDescription__');
     });
 
+    /**
+     * `manifest.name` 为商店搜索承载关键词（≤75 字符），但工具栏悬停提示
+     * 直接复用它会让 tooltip 变成一长串关键词，因此必须指向短名 key。
+     */
+    it('should use the short brand name for the toolbar tooltip', () => {
+      expect(manifest.action?.default_title).toBe('__MSG_extensionShortName__');
+    });
+
     it('should have default locale zh_CN', () => {
       expect(manifest.default_locale).toBe('zh_CN');
     });
@@ -232,6 +240,33 @@ describe('[Build] 构建产物全量验证', () => {
 
     it('should expose the same message keys in both locales', () => {
       expect(Object.keys(enMessages).sort()).toEqual(Object.keys(zhMessages).sort());
+    });
+
+    it('should keep the tooltip short name identical to the in-app brand name', () => {
+      // 同一品牌字符串分布在四处，不一致时商店名/悬停提示/popup 头部会互相漂移：
+      // _locales.extensionShortName（悬停提示）、common.extensionName（HeaderBar）、
+      // popup.popupTitle（popup 头部与文档标题）。options 页标题带「- 配置/- Options」
+      // 后缀，故意不等于短品牌名，不纳入本断言。
+      const readKey = (locale: string, file: string, key: string) =>
+        JSON.parse(fs.readFileSync(path.resolve(__dirname, `../locales/${locale}/${file}`), 'utf-8'))[key] as string;
+
+      for (const [locale, messages] of [
+        ['zh_CN', zhMessages],
+        ['en', enMessages],
+      ] as Array<[string, any]>) {
+        expect(messages.extensionShortName.message).toBe(readKey(locale, 'common.json', 'extensionName'));
+        expect(readKey(locale, 'popup.json', 'popupTitle')).toBe(readKey(locale, 'common.json', 'extensionName'));
+      }
+    });
+
+    it('should keep the tooltip short name free of store keywords', () => {
+      // 30 是 tooltip 可视宽度的经验预算，Chrome 对 default_title 并无长度硬校验；
+      // 禁词只列长名追加的关键词，“跨域”是品牌名自带成分，不得加入禁词表。
+      for (const messages of [enMessages, zhMessages]) {
+        const short = messages.extensionShortName.message;
+        expect([...short].length, `短名过长：${short}`).toBeLessThanOrEqual(30);
+        expect(short).not.toMatch(/CORS|Mock|环境切换|Environment/i);
+      }
     });
   });
 

@@ -6,7 +6,9 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
-    <title>__MSG_extensionName__</title>
+    <!-- WXT 会把本标题写进 manifest.action.default_title，而 manifest 里的 __MSG_ 会被 Chrome 解析，
+         因此这里就是工具栏悬停提示的真正来源：用短名，避免商店关键词泄露到浏览器 UI。 -->
+    <title>__MSG_extensionShortName__</title>
   </head>
   <body>
     <div id="app"></div>

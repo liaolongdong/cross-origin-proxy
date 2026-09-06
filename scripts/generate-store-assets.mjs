@@ -280,7 +280,7 @@ async function buildTiles() {
       chips: compact ? [] : copy.chips,
       url:
         job.name.startsWith('og-image') || job.name === 'github-social-preview'
-          ? 'GH_OWNER.github.io/cross-origin-proxy'
+          ? 'liaolongdong.github.io/cross-origin-proxy'
           : '',
       titleSize: job.titleSize,
     });

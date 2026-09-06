@@ -43,9 +43,10 @@ export default defineConfig({
     version: '1.0.0',
     permissions: ['storage', 'declarativeNetRequest', 'declarativeNetRequestFeedback', 'alarms'],
     host_permissions: ['<all_urls>'],
-    action: {
-      default_title: '__MSG_extensionName__',
-    },
+    // 注意：不要在此声明 `action.default_title`。WXT 会用 popup 入口 HTML 的 `<title>`
+    // 覆盖它（见 wxt/dist/core/utils/manifest.mjs），写在这里属于无效配置。
+    // 工具栏悬停提示的短名因此统一由 `entrypoints/popup/index.html` 的
+    // `<title>__MSG_extensionShortName__</title>` 决定，并由构建产物测试守卫。
     commands: {
       'toggle-proxy': {
         suggested_key: {

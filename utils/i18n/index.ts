@@ -9,7 +9,8 @@
  * - 占位符沿用 chrome.i18n 的 `$1..$9` 风格，t() 第二参传入替换值
  * - 语言偏好持久化在 chrome.storage.local，并镜像到 localStorage：
  *   页面入口可同步读取镜像消除首帧闪烁；storage.onChanged 实现跨页面实时同步
- * - manifest 的名称/描述仍走 chrome.i18n（_locales 仅保留这两个键）
+ * - manifest 的名称 / 悬停短名 / 描述 / 命令文案走 chrome.i18n（`public/_locales` 仅这 4 个键，
+ *   中英键集由 tests/build-verification.test.ts 守卫）；应用内可见文案一律用本模块
  */
 
 import { ref } from 'vue';

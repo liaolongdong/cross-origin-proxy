@@ -158,8 +158,8 @@
 
 - 单一自研响应式 i18n（`utils/i18n`）：`currentLocale` 为模块级共享 ref，`t(key, substitutions)` 支持 `$1..$9` 占位；组件侧经 `composables/useI18n.ts` 使用；偏好持久化在 `storage.local` 并镜像到 `localStorage`（消除首帧闪烁），`initLocaleSync()` 实现跨页实时同步。**本仓库无 `i18n-lite`/`tl()` 双体系。**
 - 应用文案在根 `locales/{zh_CN,en}/{common,options,popup}.json`，构建期静态合并为扁平字典；新增/删除/重命名 key 时中英 key 集必须一致。
-- manifest 名称/描述走 `chrome.i18n`，仅维护 `public/_locales/{zh_CN,en}/messages.json`（`extensionName`/`extensionDescription`/`commandToggleProxy` 等键）。**Chrome 上传时硬校验 `name` ≤ 75、`description` ≤ 132 字符（按码点计数），超出直接拒包**；`tests/build-verification.test.ts` 已加回归守卫。
-- 商店关键词只加在 `public/_locales` 的 `extensionName`（带浏览器 UI 可见代价：安装弹窗、`chrome://extensions`、工具栏 tooltip、页面 `<title>` 变长）；应用内 HeaderBar 继续用 `locales/{zh_CN,en}/common.json` 的短品牌名 `跨域代理助手`/`Cross-Origin Proxy`，**两处故意不一致，不要“顺手对齐”**。
+- manifest 名称/悬停短名/描述/命令文案走 `chrome.i18n`，仅维护 `public/_locales/{zh_CN,en}/messages.json`（`extensionName`/`extensionShortName`/`extensionDescription`/`commandToggleProxy`）。**Chrome 上传时硬校验 `name` ≤ 75、`description` ≤ 132 字符（按码点计数），超出直接拒包**；`tests/build-verification.test.ts` 已加回归守卫。
+- 商店关键词只加在 `public/_locales` 的 `extensionName`。它仍会出现在 Chrome 应用商店、安装确认弹窗、`chrome://extensions` 列表与工具栏扩展菜单——这是承载关键词的**已知代价**，无法由权限或代码消除；浏览器 UI 上接受显示长名。可收短的两处已收短：工具栏悬停提示走 `extensionShortName`，标签页标题由 `entrypoints/{options,popup}/main.ts` 用应用内 i18n 设置。**测试守卫的是“悬停短名 = HeaderBar 品牌名 = popup 标题”三者一致**；`optionsPageTitle` 带「- 配置 / - Options」后缀是故意设计，不要“顺手对齐”删掉后缀。
 - 文档按影响范围更新，中英文表达同一事实：
   - 用户功能、安装或用法变化：`README.md`（英）与 `README.zh-CN.md`（中）。
   - manifest 描述、权限、命令或配置变化：`wxt.config.ts` 及对应 `_locales` 文案；同时同步 `CHROMEWEBSTORE.md`（商店文案/权限/截图清单）与 `docs/` 落地页（能力、FAQ、隐私政策）。
@@ -221,10 +221,16 @@
 - `.test-tmp/`（含下载的 Chrome for Testing，约 558MB）只能留在磁盘、绝不能入库；已进 `.gitignore`，历史已于 2026-09 用 `filter-branch` 清除（`.git` 195MB → 2.2MB）。
 - GitHub 单文件硬上限 100MB；任何二进制、抓包产物、浏览器下载件都不得提交，新增图片前先确认体积与必要性。
 
+### WXT 构建
+
+- 当 popup 入口 HTML 存在**非空 `<title>`** 时，WXT 会用它推导 `manifest.action.default_title` 并覆盖 `wxt.config.ts` 里的同名声明（`wxt/dist/core/utils/manifest.mjs`，实测于 0.20.27）。因此悬停提示只能改 `entrypoints/popup/index.html` 的标题；若将来 popup 标题被删空，配置里的值会重新生效——升级 WXT 后需复核这一行为。
+- Chrome **不替换**扩展页面 HTML 里的 `__MSG_x__` 占位符（只对 manifest.json 生效），所以页面 `<title>` 里写占位符会直接以字面量出现在标签页上；需本地化时用入口 `main.ts` 设 `document.title`，静态值只作首帧兜底。
+- 干净检出跑 `pnpm typecheck` 前必须先 `pnpm exec wxt prepare`（`.wxt/` 不入库，CSS 模块与 `import.meta.env` 类型均来自它）。
+
 ### Element Plus / i18n
 
 - 禁止整包导入；`ElMessage`/`ElMessageBox` 为显式导入，其样式需在入口手动 import。
-- 中英 key 必须一致；单一自研 i18n 体系（无 `i18n-lite`/`tl`）；`_locales` 仅 manifest 名/描述。
+- 中英 key 必须一致；单一自研 i18n 体系（无 `i18n-lite`/`tl`）；`public/_locales` 仅放 manifest 名称/悬停短名/描述/命令文案。
 
 ## ESLint 已知例外
 

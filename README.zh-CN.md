@@ -6,7 +6,7 @@
 
 **一条浏览器规则，把 FAT 前端指到 UAT 后端——不改代码、不改后端 CORS、不用重新构建。**
 
-[![给仓库点个 Star](https://img.shields.io/github/stars/GH_OWNER/cross-origin-proxy?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/GH_OWNER/cross-origin-proxy/stargazers)
+[![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 
 <br/>
 
@@ -14,7 +14,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 &nbsp;
-[![CI](https://img.shields.io/github/actions/workflow/status/GH_OWNER/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/GH_OWNER/cross-origin-proxy/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
 &nbsp;
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 &nbsp;
@@ -48,7 +48,7 @@
 需要较新版本的桌面 Google Chrome（Manifest V3）。Chrome 应用商店上架准备中，现阶段按下面方式加载本地构建产物。
 
 ```bash
-git clone https://github.com/GH_OWNER/cross-origin-proxy
+git clone https://github.com/liaolongdong/cross-origin-proxy
 cd cross-origin-proxy
 pnpm install
 pnpm build
@@ -172,7 +172,7 @@ pnpm build
 <details>
 <summary><strong>数据会被上传吗？</strong></summary>
 
-不会。规则、日志、环境配置与偏好全部留在本机 `chrome.storage.local`，没有统计埋点，也不连接任何自有服务，唯一的网络流量就是你要求代理的 API 流量。详见[隐私政策](https://GH_OWNER.github.io/cross-origin-proxy/privacy.html)（中英双语同页）。
+不会。规则、日志、环境配置与偏好全部留在本机 `chrome.storage.local`，没有统计埋点，也不连接任何自有服务，唯一的网络流量就是你要求代理的 API 流量。详见[隐私政策](https://liaolongdong.github.io/cross-origin-proxy/privacy.html)（中英双语同页）。
 
 </details>
 
@@ -283,8 +283,8 @@ tests/                  Vitest 测试（node 环境）
 
 **如果它帮你省掉了一次后端发版，点个 Star 让更多前端同学看到它：**
 
-[![给仓库点个 Star](https://img.shields.io/github/stars/GH_OWNER/cross-origin-proxy?style=for-the-badge&logo=github&label=Star&color=yellow)](https://github.com/GH_OWNER/cross-origin-proxy/stargazers)
+[![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=Star&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 &nbsp;
-[![产品说明页](https://img.shields.io/badge/产品说明页-GitHub_Pages-409eff?style=for-the-badge&logo=githubpages&logoColor=white)](https://GH_OWNER.github.io/cross-origin-proxy/zh.html)
+[![产品说明页](https://img.shields.io/badge/产品说明页-GitHub_Pages-409eff?style=for-the-badge&logo=githubpages&logoColor=white)](https://liaolongdong.github.io/cross-origin-proxy/zh.html)
 
 </div>

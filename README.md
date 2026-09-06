@@ -6,7 +6,7 @@
 
 **Point a FAT frontend at a UAT backend with one browser rule — no code changes, no backend CORS edits, no rebuild.**
 
-[![Star this repo](https://img.shields.io/github/stars/GH_OWNER/cross-origin-proxy?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/GH_OWNER/cross-origin-proxy/stargazers)
+[![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 
 <br/>
 
@@ -14,7 +14,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 &nbsp;
-[![CI](https://img.shields.io/github/actions/workflow/status/GH_OWNER/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/GH_OWNER/cross-origin-proxy/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
 &nbsp;
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 &nbsp;
@@ -48,7 +48,7 @@ Built with [WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite, on
 Requires a recent desktop Google Chrome (Manifest V3). The Chrome Web Store listing is in preparation — until then, load the unpacked build.
 
 ```bash
-git clone https://github.com/GH_OWNER/cross-origin-proxy
+git clone https://github.com/liaolongdong/cross-origin-proxy
 cd cross-origin-proxy
 pnpm install
 pnpm build
@@ -172,7 +172,7 @@ Content scripts run on all `http` / `https` pages and rules match on request URL
 <details>
 <summary><strong>Is any data sent anywhere?</strong></summary>
 
-No. Rules, logs, profiles and preferences stay in `chrome.storage.local`. There is no analytics, no telemetry and no remote service; the only network traffic is the API traffic you ask it to proxy. See the [privacy policy](https://GH_OWNER.github.io/cross-origin-proxy/privacy.html).
+No. Rules, logs, profiles and preferences stay in `chrome.storage.local`. There is no analytics, no telemetry and no remote service; the only network traffic is the API traffic you ask it to proxy. See the [privacy policy](https://liaolongdong.github.io/cross-origin-proxy/privacy.html).
 
 </details>
 
@@ -283,8 +283,8 @@ Small fixes are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for the three
 
 **If this saved you a backend deploy, a star helps others find it:**
 
-[![Star this repo](https://img.shields.io/github/stars/GH_OWNER/cross-origin-proxy?style=for-the-badge&logo=github&label=Star&color=yellow)](https://github.com/GH_OWNER/cross-origin-proxy/stargazers)
+[![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=Star&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 &nbsp;
-[![Product page](https://img.shields.io/badge/Product_page-GitHub_Pages-409eff?style=for-the-badge&logo=githubpages&logoColor=white)](https://GH_OWNER.github.io/cross-origin-proxy/)
+[![Product page](https://img.shields.io/badge/Product_page-GitHub_Pages-409eff?style=for-the-badge&logo=githubpages&logoColor=white)](https://liaolongdong.github.io/cross-origin-proxy/)
 
 </div>

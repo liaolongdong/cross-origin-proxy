@@ -1,9 +1,36 @@
 {
   "name": "web-cross-origin",
-  "author": "Better",
+  "author": {
+    "name": "Better",
+    "email": "924902324@qq.com",
+    "url": "https://github.com/liaolongdong"
+  },
   "version": "1.0.0",
-  "description": "跨环境API请求代理，支持FAT/UAT/PROD等环境间请求转发",
-  "keywords": ["cross-origin", "proxy", "chrome-extension", "跨域代理", "请求转发"],
+  "license": "MIT",
+  "description": "跨环境 API 请求代理，支持 FAT/UAT/PROD 等环境间请求转发、请求/响应改写、Mock、延迟、阻断与 WebSocket 代理",
+  "keywords": [
+    "cross-origin",
+    "cors",
+    "proxy",
+    "api-proxy",
+    "request-interceptor",
+    "mock-api",
+    "environment-switch",
+    "chrome-extension",
+    "manifest-v3",
+    "declarativeNetRequest",
+    "跨域代理",
+    "请求转发",
+    "环境切换"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liaolongdong/cross-origin-proxy.git"
+  },
+  "homepage": "https://liaolongdong.github.io/cross-origin-proxy/",
+  "bugs": {
+    "url": "https://github.com/liaolongdong/cross-origin-proxy/issues"
+  },
   "packageManager": "pnpm@10.12.1",
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild", "sharp"]

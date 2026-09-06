@@ -6,7 +6,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
-    <title>__MSG_extensionName__</title>
+    <!-- Chrome 不会替换页面 HTML 里的 __MSG_ 占位符，字面量会直接当成标签页标题闪出来；
+         这里放默认语言（zh_CN，对应 manifest.default_locale）的可读兼底值，
+         实际标题由 main.ts 用应用内 i18n 立即设为跟随语言的 optionsPageTitle。 -->
+    <title>跨域代理助手</title>
     <!-- 在完整标签页中打开 Options（避免 chrome://extensions 内嵌弹窗形态，hash 直达才能生效） -->
     <meta
       name="manifest.open_in_tab"

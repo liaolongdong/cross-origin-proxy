@@ -67,12 +67,12 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 关于数据：
 - 规则、日志与偏好全部保存在你本机的浏览器存储中，没有账号、没有统计埋点、不连接任何自有服务器
 - 唯一的网络流量就是你自己要求代理的接口流量；导出文件也只写到本地
-- 隐私政策：https://GH_OWNER.github.io/cross-origin-proxy/privacy.html
+- 隐私政策：https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 
 限制：最多 200 条规则、最近 500 条日志、请求体上限 10MB。
 需要较新版本的桌面 Google Chrome（Manifest V3）。
 
-问题反馈与源码：https://github.com/GH_OWNER/cross-origin-proxy
+问题反馈与源码：https://github.com/liaolongdong/cross-origin-proxy
 ```
 
 ### 1.2 English listing（本地化列表）
@@ -121,11 +121,11 @@ Interface:
 About your data:
 - Rules, logs and preferences are stored in your browser's local storage on your own device. No accounts, no analytics, no telemetry, no servers of ours
 - The only network traffic is the API traffic you ask it to proxy; exports are written locally
-- Privacy policy: https://GH_OWNER.github.io/cross-origin-proxy/privacy.html
+- Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 
 Limits: 200 rules, the last 500 log entries, 10 MB request body. Requires a recent desktop Google Chrome (Manifest V3).
 
-Source code and issue tracker: https://github.com/GH_OWNER/cross-origin-proxy
+Source code and issue tracker: https://github.com/liaolongdong/cross-origin-proxy
 ```
 
 **Category**: Developer Tools
@@ -201,7 +201,7 @@ Rationale to paste if the form asks for clarification: request and response data
 
 ## 5. Privacy Policy
 
-**URL**: `https://GH_OWNER.github.io/cross-origin-proxy/privacy.html`（仓库 `docs/privacy.html`，中英双语同页）
+**URL**: `https://liaolongdong.github.io/cross-origin-proxy/privacy.html`（仓库 `docs/privacy.html`，中英双语同页）
 
 必须先把 GitHub Pages 打开并确认该 URL 可访问、内容与第 4 节披露一致，再提交——这是最常见的首审被拒原因。
 
@@ -214,12 +214,16 @@ Rationale to paste if the form asks for clarification: request and response data
 
 ## 7. Developer Info
 
-| 字段           | 值                                                      | 说明                                                            |
-| -------------- | ------------------------------------------------------- | --------------------------------------------------------------- |
-| Publisher Name | _待填_                                                  | 建议与 GitHub 用户名一致，便于交叉验证                          |
-| Contact Email  | _待填_                                                  | 商店页面公开显示；Google 的整改通知发到这里，必须是能收信的邮箱 |
-| Support URL    | `https://github.com/GH_OWNER/cross-origin-proxy/issues` |                                                                 |
-| Homepage URL   | `https://GH_OWNER.github.io/cross-origin-proxy/`        |                                                                 |
+| 字段           | 值                                                          | 说明                                                            |
+| -------------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
+| Publisher Name | Better                                                      | 与 `package.json` 的 `author.name` 一致                         |
+| Contact Email  | 924902324@qq.com                                            | 商店页面公开显示；Google 的整改通知发到这里，必须是能收信的邮箱 |
+| Support URL    | `https://github.com/liaolongdong/cross-origin-proxy/issues` |                                                                 |
+| Homepage URL   | `https://liaolongdong.github.io/cross-origin-proxy/`        |                                                                 |
+
+> 仓库尚未创建：先建公开仓库 `liaolongdong/cross-origin-proxy`（名字必须一致，Pages 路径基 = 仓库名），再按 `marketing/launch-playbook.md` §1.6 开启 Pages，**确认 `privacy.html` 能打开后再提审**。
+>
+> 联系邮箱会在商店页与隐私政策页公开，可能被爬虫采集用于发送 Spam。若希望隔离，可改用 GitHub 专用可收信地址（`用户名+编号@users.noreply.github.com`），并同步更新本节与 `docs/privacy.html`。
 
 ## 8. Version History
 

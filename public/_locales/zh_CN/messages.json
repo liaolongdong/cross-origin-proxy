@@ -3,6 +3,10 @@
     "message": "跨域代理助手 - CORS 跨域调试 · API 环境切换 · Mock",
     "description": "扩展名称，显示在 Chrome 应用商店与浏览器 UI。Chrome 硬校验 ≤75 字符，因此仅此处承载搜索关键词；应用内 HeaderBar 使用 locales/zh_CN/common.json 的短品牌名。"
   },
+  "extensionShortName": {
+    "message": "跨域代理助手",
+    "description": "工具栏悬停提示用的短品牌名，必须与 locales/zh_CN/common.json 的 extensionName 一致（由测试守卫），避免搜索关键词泄露到浏览器 UI。"
+  },
   "extensionDescription": {
     "message": "把前端 API 请求代理到 FAT/UAT/PROD 后端，无需改代码或 CORS：URL 重写、请求头与响应改写、Mock、延迟、阻断与 WebSocket 代理",
     "description": "扩展描述，用于商店搜索结果与详情摘要。Chrome 硬校验 ≤132 字符，超出会导致上传被拒。"

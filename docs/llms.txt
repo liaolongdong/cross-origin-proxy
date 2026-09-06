@@ -4,12 +4,12 @@
 >
 > A local-first Chrome extension (Manifest V3) that proxies frontend API requests to another backend environment — for example a FAT frontend calling a UAT backend — without changing application code or backend CORS configuration. Open source under MIT; collects and uploads nothing.
 
-- 产品说明（中文）: https://GH_OWNER.github.io/cross-origin-proxy/zh.html
-- Product overview (English): https://GH_OWNER.github.io/cross-origin-proxy/
-- 隐私政策 / Privacy Policy: https://GH_OWNER.github.io/cross-origin-proxy/privacy.html
-- 源码仓库 / Source code: https://github.com/GH_OWNER/cross-origin-proxy
-- 商店上架素材与权限说明: https://github.com/GH_OWNER/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md
-- 贡献指南: https://github.com/GH_OWNER/cross-origin-proxy/blob/main/CONTRIBUTING.md
+- 产品说明（中文）: https://liaolongdong.github.io/cross-origin-proxy/zh.html
+- Product overview (English): https://liaolongdong.github.io/cross-origin-proxy/
+- 隐私政策 / Privacy Policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+- 源码仓库 / Source code: https://github.com/liaolongdong/cross-origin-proxy
+- 商店上架素材与权限说明: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md
+- 贡献指南: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md
 
 ## What it does / 核心能力
 

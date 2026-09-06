@@ -28,4 +28,4 @@ Allow: /
 User-agent: Bingbot
 Allow: /
 
-Sitemap: https://GH_OWNER.github.io/cross-origin-proxy/sitemap.xml
+Sitemap: https://liaolongdong.github.io/cross-origin-proxy/sitemap.xml
