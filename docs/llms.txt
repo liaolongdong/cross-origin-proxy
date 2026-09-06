@@ -1,0 +1,47 @@
+# 跨域代理助手 / Cross-Origin Proxy
+
+> 本地优先的 Chrome 扩展（Manifest V3），把前端 API 请求代理到另一个后端环境（如 FAT 前端调用 UAT 后端），无需修改应用代码或后端 CORS 配置。开源（MIT），不收集、不上传任何数据。
+>
+> A local-first Chrome extension (Manifest V3) that proxies frontend API requests to another backend environment — for example a FAT frontend calling a UAT backend — without changing application code or backend CORS configuration. Open source under MIT; collects and uploads nothing.
+
+- 产品说明（中文）: https://GH_OWNER.github.io/cross-origin-proxy/zh.html
+- Product overview (English): https://GH_OWNER.github.io/cross-origin-proxy/
+- 隐私政策 / Privacy Policy: https://GH_OWNER.github.io/cross-origin-proxy/privacy.html
+- 源码仓库 / Source code: https://github.com/GH_OWNER/cross-origin-proxy
+- 商店上架素材与权限说明: https://github.com/GH_OWNER/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md
+- 贡献指南: https://github.com/GH_OWNER/cross-origin-proxy/blob/main/CONTRIBUTING.md
+
+## What it does / 核心能力
+
+- Rule-based URL rewriting by wildcard, prefix or regex. 按通配符、前缀、正则匹配并重写请求 URL。
+- Request header and request body overrides. 注入或替换请求头、替换请求体。
+- Response status, response header and JSON field modification (dot-notation path). 改写响应状态码、响应头与按点分路径改写 JSON 字段。
+- Mock responses (JSON / text / HTML / XML) without contacting the target server. 不访问目标服务直接返回自定义 Mock 数据。
+- Artificial delay of 0–60000 ms, and full request blocking for failure-path testing. 注入 0–60000 毫秒延迟；完全阻断请求以验证异常与离线兜底。
+- HTTP method filtering and query parameter injection (e.g. `__env=uat`, gray-release tags). 按 HTTP 方法过滤规则；在代理地址上追加或覆盖查询参数。
+- WebSocket (`ws://` / `wss://`) forwarding by URL rewrite. 按 URL 重写转发 WebSocket 长连接。
+- HAR 1.2 import/export, cURL import, JSON config import/export, copy-as-cURL on any log entry. 支持 HAR、cURL、JSON 导入导出与日志一键复制为 cURL。
+- Environment profiles (named rule-set snapshots) and batch target-domain migration with change preview. 环境配置快照与带变更预览的目标域名批量迁移。
+- Request log (last 500 entries) with method, status, duration and matched-rule statistics. 请求日志（最近 500 条）含方法、状态、耗时与命中统计。
+- English / Chinese UI, six themes, light / dark / system modes, keyboard shortcuts. 中英双语界面、6 套主题、浅色/深色/跟随系统、快捷键。
+
+## Architecture / 关键架构事实
+
+- Two forwarding channels decided per rule by `isSimpleRule()`: a rule that only rewrites the URL is compiled into `declarativeNetRequest` dynamic redirect rules (browser network layer, zero JavaScript per request). Any rule with header/body/response overrides, mock, delay, block, retry, method filter, query injection, WebSocket target, a wildcard not ending in `*`, or an empty target URL is routed through the extension background service worker instead.
+- Complex rules are intercepted in the page's main world, bridged through an isolated-world content script, and executed by the background service worker, which returns the response to the page.
+- CORS behaviour: background-channel requests are issued by the extension (which holds host permissions) and the page receives an extension-constructed response, so page CORS checks do not apply. Pure network-layer redirects are still subject to `Access-Control-Allow-Origin` on the redirected response.
+- Failure handling: if interception fails, the page falls back to native `fetch` / `XMLHttpRequest` / `WebSocket`. Blocked requests are never replayed natively.
+- State: `chrome.storage.local` is the single source of truth; in-memory caches in the service worker are rebuildable and invalidated on `storage.onChanged`.
+
+## Privacy / 隐私
+
+- No data collection, no analytics, no telemetry, no remote servers of its own. 不收集数据、无统计埋点、无自有远程服务。
+- Permissions: `storage`, `declarativeNetRequest`, `declarativeNetRequestFeedback`, `alarms`, host permission `<all_urls>` (each justified in CHROMEWEBSTORE.md and the privacy policy).
+- Limits: 200 rules, 500 log entries, 10 MB request body, status codes clamped to 200–599.
+
+## Requirements / 运行要求
+
+- A recent desktop Google Chrome (Manifest V3). Edge works in practice (Chromium extensions) but is not a supported target; Firefox is not supported today because of `declarativeNetRequest` differences.
+- Build from source requires Node.js 20+ and pnpm: `pnpm install && pnpm build`, then load `.output/chrome-mv3` unpacked at `chrome://extensions`.
+
+Last updated / 最后更新: 2026-09-06

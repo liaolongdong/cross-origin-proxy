@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <title>隐私政策 / Privacy Policy — 跨域代理助手 Cross-Origin Proxy</title>
+    <meta
+      name="description"
+      content="跨域代理助手（Cross-Origin Proxy）隐私政策：扩展不收集、不上传、不出售任何用户数据，规则与日志仅保存在本机 chrome.storage.local。Privacy policy for the Cross-Origin Proxy Chrome extension."
+    />
+    <link
+      rel="canonical"
+      href="https://GH_OWNER.github.io/cross-origin-proxy/privacy.html"
+    />
+    <link
+      rel="icon"
+      href="assets/icon.png"
+      sizes="128x128"
+    />
+    <link
+      rel="stylesheet"
+      href="assets/landing.css"
+    />
+  </head>
+  <body>
+    <a
+      class="skip-link"
+      href="#main"
+      >跳到主要内容</a
+    >
+    <header class="site-header">
+      <div class="wrap">
+        <a
+          class="brand"
+          href="zh.html"
+        >
+          <img
+            src="assets/icon.png"
+            alt=""
+            width="28"
+            height="28"
+          />
+          <span>跨域代理助手</span>
+        </a>
+        <nav
+          class="site-nav"
+          aria-label="页面导航"
+        >
+          <a href="zh.html">产品说明（中文）</a>
+          <a
+            href="./"
+            hreflang="en"
+            >Overview (English)</a
+          >
+          <a href="https://github.com/GH_OWNER/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section aria-labelledby="pp-zh">
+        <div class="wrap">
+          <h2 id="pp-zh">隐私政策（中文）</h2>
+          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-06</p>
+
+          <h3>1. 我们收集什么</h3>
+          <p>
+            <strong>不收集任何用户数据。</strong
+            >跨域代理助手是一款本地优先的开发者工具：它没有账号体系，没有服务器端接口，不接入任何统计、埋点、广告或数据分析服务，也不会向开发者控制的任何远程地址发送信息。
+          </p>
+
+          <h3>2. 数据存放在哪里</h3>
+          <p>
+            代理规则、环境配置快照、请求日志、界面偏好（语言、主题、自动关闭时长）全部保存在你浏览器的
+            <code>chrome.storage.local</code> 中，仅存在于你的设备。卸载扩展即随之清除。导出功能（JSON 配置、HAR
+            抓包文件、cURL 命令）只会在你主动点击时把文件写到你本地的下载目录。
+          </p>
+
+          <h3>3. 为什么需要这些权限</h3>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">权限</th>
+                  <th scope="col">用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>storage</code></td>
+                  <td>在本地保存规则、日志、环境配置与偏好。</td>
+                </tr>
+                <tr>
+                  <td><code>declarativeNetRequest</code></td>
+                  <td>安装网络层重定向规则，实现零 JS 开销的简单 URL 重写。</td>
+                </tr>
+                <tr>
+                  <td><code>declarativeNetRequestFeedback</code></td>
+                  <td>读取规则命中情况，用于日志面板的命中统计展示。</td>
+                </tr>
+                <tr>
+                  <td><code>alarms</code></td>
+                  <td>维持后台脚本存活，并实现代理自动关闭倒计时。</td>
+                </tr>
+                <tr>
+                  <td><code>&lt;all_urls&gt;</code></td>
+                  <td>
+                    代理需要能在你的任意前端来源（内网域名、localhost、预发环境）上工作，目标环境由你配置、无法事先枚举。该权限只用于按你自己写下的规则转发请求。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>4. 请求与响应内容的处理</h3>
+          <p>
+            扩展会在浏览器内部读取被代理请求的 URL、请求头、请求体与响应内容，用于完成你自己配置的转发、改写、Mock
+            与日志记录。这些内容只在你的设备内处理，<strong>不会上传、不会出售、不会用于任何形式的用户画像或广告</strong>。日志默认只保留最近
+            500 条，可在界面中随时清空。
+          </p>
+
+          <h3>5. 儿童隐私</h3>
+          <p>本扩展是面向开发者的技术工具，不针对儿童，也不会刻意收集 13 岁以下儿童的任何信息。</p>
+
+          <h3>6. 政策变更与联系方式</h3>
+          <p>
+            若本政策发生变化，会更新页面顶部的生效日期。如有疑问或建议，请在
+            <a href="https://github.com/GH_OWNER/cross-origin-proxy/issues">GitHub Issues</a> 提出，或在扩展仓库
+            <code>CHROMEWEBSTORE.md</code> 中列出的联系方式处联系开发者。
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="pp-en">
+        <div class="wrap">
+          <h2 id="pp-en">Privacy Policy (English)</h2>
+
+          <h3>1. What we collect</h3>
+          <p>
+            <strong>Nothing.</strong> Cross-Origin Proxy is a local-first developer tool. It has no accounts, no
+            server-side endpoints, and no analytics, telemetry or advertising SDKs. It never sends information to the
+            developer or to any remote service we control.
+          </p>
+
+          <h3>2. Where your data lives</h3>
+          <p>
+            Proxy rules, environment profiles, request logs and interface preferences (language, theme, auto-off
+            duration) are stored in <code>chrome.storage.local</code> on your own device, and are removed when you
+            uninstall the extension. Export actions (JSON configuration, HAR 1.2 capture, cURL command) write files to
+            your local downloads folder only when you trigger them.
+          </p>
+
+          <h3>3. Why each permission is requested</h3>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Permission</th>
+                  <th scope="col">Purpose</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>storage</code></td>
+                  <td>Save rules, logs, profiles and preferences locally.</td>
+                </tr>
+                <tr>
+                  <td><code>declarativeNetRequest</code></td>
+                  <td>Install network-layer redirect rules so simple URL rewrites cost no JavaScript per request.</td>
+                </tr>
+                <tr>
+                  <td><code>declarativeNetRequestFeedback</code></td>
+                  <td>Read which rules actually matched, for the hit statistics shown in the log panel.</td>
+                </tr>
+                <tr>
+                  <td><code>alarms</code></td>
+                  <td>Keep the background worker alive while proxying, and drive the auto-off countdown.</td>
+                </tr>
+                <tr>
+                  <td><code>&lt;all_urls&gt;</code></td>
+                  <td>
+                    Proxying must work on whatever origin your frontend runs on (internal domains, localhost, staging);
+                    target environments are configured by you and cannot be enumerated in advance. The permission is
+                    used only to forward requests according to rules you wrote.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>4. Handling of request and response content</h3>
+          <p>
+            To perform the forwarding, rewriting, mocking and logging you configure, the extension reads the URL,
+            headers, body and response content of proxied requests inside the browser. This processing stays on your
+            device: the data is <strong>not uploaded, not sold, and not used for profiling or advertising</strong>. Logs
+            keep the most recent 500 entries by default and can be cleared at any time from the interface.
+          </p>
+
+          <h3>5. Children</h3>
+          <p>
+            This extension is a technical tool for developers, is not directed at children, and does not knowingly
+            collect information from children under 13.
+          </p>
+
+          <h3>6. Changes and contact</h3>
+          <p>
+            Changes to this policy are reflected in the effective date above. Questions can be raised on
+            <a href="https://github.com/GH_OWNER/cross-origin-proxy/issues">GitHub Issues</a>.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div><p>跨域代理助手 Cross-Origin Proxy · MIT License</p></div>
+        <nav aria-label="页脚导航">
+          <a href="./">Overview</a>
+          <a href="zh.html">产品说明</a>
+          <a href="https://github.com/GH_OWNER/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

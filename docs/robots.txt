@@ -1,0 +1,31 @@
+# GitHub Pages 站点根（仓库 docs/ 目录）的爬虫策略。
+# 本项目刻意允许搜索引擎与 AI 检索爬虫：希望被检索到、被引用。
+# 仅屏蔽会放大无意义负载的路径（本仓库没有），因此这里保持全量放行。
+
+User-agent: *
+Allow: /
+
+# 显式声明允许主流 AI 检索爬虫（训练类爬虫未单独屏蔽，如需屏蔽请只屏蔽 CCBot 等训练用途爬虫，
+# 屏蔽检索类爬虫会让这些引擎无法引用本项目）。
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+Sitemap: https://GH_OWNER.github.io/cross-origin-proxy/sitemap.xml

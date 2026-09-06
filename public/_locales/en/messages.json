@@ -1,11 +1,11 @@
 {
   "extensionName": {
-    "message": "Cross-Origin Proxy",
-    "description": "Extension name shown in the Chrome Web Store and browser UI"
+    "message": "Cross-Origin Proxy - CORS & API Environment Switcher",
+    "description": "Extension name shown in the Chrome Web Store and browser UI. Chrome enforces <=75 characters; keywords live here only, while the in-app HeaderBar uses the short brand name from locales/en/common.json."
   },
   "extensionDescription": {
-    "message": "Cross-environment API request proxy for FAT/UAT/PROD, supporting request/response rewrite, mock, delay, blocking and WebSocket forwarding",
-    "description": "Extension description for the Chrome Web Store"
+    "message": "Proxy API calls to FAT/UAT/PROD backends, no code or CORS changes. Rewrite URLs/headers/responses, mock, delay, block, WebSocket.",
+    "description": "Short description used in store search results and the detail summary. Chrome enforces <=132 characters; longer text fails upload."
   },
   "commandToggleProxy": {
     "message": "Toggle proxy on/off",

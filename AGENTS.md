@@ -13,37 +13,41 @@
 
 ### 常用命令
 
-| 用途     | 命令                                              |
-| -------- | ------------------------------------------------- |
-| 开发     | `pnpm dev`（WXT HMR，端口 8899）                  |
-| 构建     | `pnpm build`（输出 `.output/chrome-mv3`）         |
-| 打包     | `pnpm build:zip`（商店上传用）                    |
-| 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                |
-| Lint     | `pnpm lint`（修复 `pnpm lint:fix`）               |
-| 样式检查 | `pnpm lint:style`                                 |
-| 格式检查 | `pnpm format:check`（格式化 `pnpm format`，慎用） |
-| 测试     | `pnpm test`（`vitest run`）                       |
+| 用途     | 命令                                                     |
+| -------- | -------------------------------------------------------- |
+| 开发     | `pnpm dev`（WXT HMR，端口 8899）                         |
+| 构建     | `pnpm build`（输出 `.output/chrome-mv3`）                |
+| 打包     | `pnpm build:zip`（商店上传用）                           |
+| 商店素材 | `pnpm assets` / `pnpm assets:en`（生成商店图与落地页图） |
+| 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                       |
+| Lint     | `pnpm lint`（修复 `pnpm lint:fix`）                      |
+| 样式检查 | `pnpm lint:style`                                        |
+| 格式检查 | `pnpm format:check`（格式化 `pnpm format`，慎用）        |
+| 测试     | `pnpm test`（`vitest run`）                              |
 
 > 本仓库未配置 husky/lint-staged；提交前需手动通过上述检查。
 
 ### 关键文件速查
 
-| 职责                      | 文件                                                                                     |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| 公共类型与消息判别联合    | `utils/types.ts`（`ProxyRule`/`MessageType`/`RuntimeMessage` 等）                        |
-| 常量与 Storage 键         | `utils/constants.ts`（`STORAGE_KEYS`、`MAX_RULES=200`、`MAX_LOG_ENTRIES=500`、alarm 名） |
-| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入）                 |
-| DNR 规则构建（纯函数）    | `utils/dnrRules.ts`                                                                      |
-| URL 匹配/重写与分流判定   | `utils/urlMatcher.ts`（`findMatchingRule`/`rewriteUrl`/`isSimpleRule`）                  |
-| 消息路由                  | `entrypoints/background/messageRouter.ts`（`isTrustedSender` 安全校验）                  |
-| SW 代理执行               | `entrypoints/background/proxyHandler.ts`（mock/delay/block/override/retry）              |
-| DNR 同步与广播            | `entrypoints/background/dnrManager.ts`                                                   |
-| DNR 命中统计              | `entrypoints/background/dnrStats.ts`（`getMatchedRules`，配额受限）                      |
-| SW 保活 / 自动关闭 / 徽章 | `entrypoints/background/{keepalive,autoOff,badgeManager}.ts`                             |
-| i18n（自研响应式）        | `utils/i18n/index.ts` + 根 `locales/{zh_CN,en}/{common,options,popup}.json`              |
-| 主题                      | `utils/theme.ts` + `assets/theme/tokens.css`（`--cop-*`，6 主题 + light/dark/system）    |
-| Vue 应用工厂              | `utils/createVueApp.ts`（`createAndMountApp`）                                           |
-| WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                  |
+| 职责                      | 文件                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 公共类型与消息判别联合    | `utils/types.ts`（`ProxyRule`/`MessageType`/`RuntimeMessage` 等）                                                   |
+| 常量与 Storage 键         | `utils/constants.ts`（`STORAGE_KEYS`、`MAX_RULES=200`、`MAX_LOG_ENTRIES=500`、alarm 名）                            |
+| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入）                                            |
+| DNR 规则构建（纯函数）    | `utils/dnrRules.ts`                                                                                                 |
+| URL 匹配/重写与分流判定   | `utils/urlMatcher.ts`（`findMatchingRule`/`rewriteUrl`/`isSimpleRule`）                                             |
+| 消息路由                  | `entrypoints/background/messageRouter.ts`（`isTrustedSender` 安全校验）                                             |
+| SW 代理执行               | `entrypoints/background/proxyHandler.ts`（mock/delay/block/override/retry）                                         |
+| DNR 同步与广播            | `entrypoints/background/dnrManager.ts`                                                                              |
+| DNR 命中统计              | `entrypoints/background/dnrStats.ts`（`getMatchedRules`，配额受限）                                                 |
+| SW 保活 / 自动关闭 / 徽章 | `entrypoints/background/{keepalive,autoOff,badgeManager}.ts`                                                        |
+| i18n（自研响应式）        | `utils/i18n/index.ts` + 根 `locales/{zh_CN,en}/{common,options,popup}.json`                                         |
+| 主题                      | `utils/theme.ts` + `assets/theme/tokens.css`（`--cop-*`，6 主题 + light/dark/system）                               |
+| Vue 应用工厂              | `utils/createVueApp.ts`（`createAndMountApp`）                                                                      |
+| 商店文案与权限理由        | `CHROMEWEBSTORE.md`（上架唯一素材源，不在扩展包内）                                                                 |
+| 产品落地页 / 隐私政策     | `docs/index.html`（英）、`docs/zh.html`（中）、`docs/privacy.html`、`docs/llms.txt`（GitHub Pages 以 `/docs` 为根） |
+| 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                   |
+| WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                             |
 
 ## 架构总览
 
@@ -74,6 +78,8 @@
 - `composables/`：响应式状态与副作用（`useRuleManagement`/`useProxyStatus`/`useRequestLog`/`useImportExport`/`useI18n`）。
 - `utils/`：与 Vue 生命周期无关的领域逻辑与纯函数（`dnrRules`/`urlMatcher`/`curlParser`/`har`/`formatters`/`generateId`/`storage`/`theme`/`i18n`/`logger`）。
 - `locales/`：应用内 i18n 文案；`public/_locales/`：仅 manifest 名称/描述。`assets/theme/tokens.css`：`--cop-*` 设计令牌。`tests/`：Vitest 单测（node 环境）。
+- `docs/`：GitHub Pages 产品站（静态 HTML/CSS，零 JS、零外部 CDN，不参与 WXT 构建）；`docs/assets/img/` 需入库供 Pages 访问。
+- `store-assets/`、`marketing/`：均为本地可再生/仅本地产物，已进 `.gitignore`；`.test-tmp/` 严禁入库（曾因误提交 Chrome for Testing 二进制把 `.git` 撑到 195MB，2026-09 已重写历史清除）。
 
 ## 代码改动与优化边界
 
@@ -152,11 +158,12 @@
 
 - 单一自研响应式 i18n（`utils/i18n`）：`currentLocale` 为模块级共享 ref，`t(key, substitutions)` 支持 `$1..$9` 占位；组件侧经 `composables/useI18n.ts` 使用；偏好持久化在 `storage.local` 并镜像到 `localStorage`（消除首帧闪烁），`initLocaleSync()` 实现跨页实时同步。**本仓库无 `i18n-lite`/`tl()` 双体系。**
 - 应用文案在根 `locales/{zh_CN,en}/{common,options,popup}.json`，构建期静态合并为扁平字典；新增/删除/重命名 key 时中英 key 集必须一致。
-- manifest 名称/描述走 `chrome.i18n`，仅维护 `public/_locales/{zh_CN,en}/messages.json`（`extensionName`/`extensionDescription`/`commandToggleProxy` 等键）。
+- manifest 名称/描述走 `chrome.i18n`，仅维护 `public/_locales/{zh_CN,en}/messages.json`（`extensionName`/`extensionDescription`/`commandToggleProxy` 等键）。**Chrome 上传时硬校验 `name` ≤ 75、`description` ≤ 132 字符（按码点计数），超出直接拒包**；`tests/build-verification.test.ts` 已加回归守卫。
+- 商店关键词只加在 `public/_locales` 的 `extensionName`（带浏览器 UI 可见代价：安装弹窗、`chrome://extensions`、工具栏 tooltip、页面 `<title>` 变长）；应用内 HeaderBar 继续用 `locales/{zh_CN,en}/common.json` 的短品牌名 `跨域代理助手`/`Cross-Origin Proxy`，**两处故意不一致，不要“顺手对齐”**。
 - 文档按影响范围更新，中英文表达同一事实：
   - 用户功能、安装或用法变化：`README.md`（英）与 `README.zh-CN.md`（中）。
-  - manifest 描述、权限、命令或配置变化：`wxt.config.ts` 及对应 `_locales` 文案。
-  - （本仓库无 `docs/`、根 `index.html`、`HelpDialog`、CWS 文档，勿引用。）
+  - manifest 描述、权限、命令或配置变化：`wxt.config.ts` 及对应 `_locales` 文案；同时同步 `CHROMEWEBSTORE.md`（商店文案/权限/截图清单）与 `docs/` 落地页（能力、FAQ、隐私政策）。
+  - 商店图或落地页图变化：改 `scripts/generate-store-assets.mjs` 后跑 `pnpm assets && pnpm assets:en`，不手工改图片。
 
 ## 测试与验证
 
@@ -168,6 +175,8 @@
   - Vue/CSS 样式：`pnpm lint:style`。
   - 入口、manifest、WXT/Vite 配置、依赖或打包行为：`pnpm build`。
   - 文档、JSON 等格式改动：对本次修改文件运行 `pnpm exec prettier --check <files...>`。
+  - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），并在浏览器里目测渲染。
+  - 商店文案改动：`pnpm test`（含 `name`/`description` 字符上限守卫）+ 同步 `CHROMEWEBSTORE.md`。
 - 不用会改写整个仓库的 `pnpm format` 处理局部任务；需要自动修复时只作用于本次修改文件。
 - 不为通过测试而弱化断言、删除、跳过测试或隐藏错误；命令因既有问题或环境限制无法运行时，交付时如实说明未验证项与原因。
 
@@ -181,6 +190,7 @@
 - **代理自动关闭**：总开关开启且配置时长时用 `chrome.alarms` 倒计时（跨 SW 重启持久化），到期自动关闭总开关。
 - **主题**：`--cop-*` 令牌 + `data-theme`/`data-mode`；6 主题（sky/green/pink/mauve/orange/slate）+ light/dark/system；同步覆盖 Element Plus `--el-color-primary` 梯度。
 - **容量限制**：`MAX_RULES=200`（新增/合并超限拒绝）、`MAX_LOG_ENTRIES=500`（环形缓冲）。
+- **商店文案**：`public/_locales` 承载搜索关键词（CORS/跨域/环境切换/Mock），`CHROMEWEBSTORE.md` 是商店表单的唯一素材源；截图由 `pnpm assets` 生成（商店只接受 1280×800 或 640×400，最多 5 张，像素级校验）。
 
 ## 常见陷阱
 
@@ -205,6 +215,11 @@
 ### Storage
 
 - 统一使用 `storage.local`（无 `storage.session`、无加密）；read-modify-write 必须走 `withStorageLock` 避免竞态。
+
+### 仓库体积
+
+- `.test-tmp/`（含下载的 Chrome for Testing，约 558MB）只能留在磁盘、绝不能入库；已进 `.gitignore`，历史已于 2026-09 用 `filter-branch` 清除（`.git` 195MB → 2.2MB）。
+- GitHub 单文件硬上限 100MB；任何二进制、抓包产物、浏览器下载件都不得提交，新增图片前先确认体积与必要性。
 
 ### Element Plus / i18n
 

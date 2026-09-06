@@ -215,11 +215,11 @@ describe('[Build] 构建产物全量验证', () => {
     });
 
     it('should have extensionName in English', () => {
-      expect(enMessages.extensionName.message).toBe('Cross-Origin Proxy');
+      expect(enMessages.extensionName.message).toBe('Cross-Origin Proxy - CORS & API Environment Switcher');
     });
 
     it('should have extensionName in Chinese', () => {
-      expect(zhMessages.extensionName.message).toBe('跨域代理助手');
+      expect(zhMessages.extensionName.message).toBe('跨域代理助手 - CORS 跨域调试 · API 环境切换 · Mock');
     });
 
     it('should have commandToggleProxy in English', () => {
@@ -229,6 +229,51 @@ describe('[Build] 构建产物全量验证', () => {
     it('should have commandToggleProxy in Chinese', () => {
       expect(zhMessages.commandToggleProxy.message).toBe('切换代理开关');
     });
+
+    it('should expose the same message keys in both locales', () => {
+      expect(Object.keys(enMessages).sort()).toEqual(Object.keys(zhMessages).sort());
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 商店文案字符上限
+  //
+  // Chrome 在上传扩展包时对 manifest 的 name / description 做硬校验
+  // （name ≤ 75、description ≤ 132，按码点计数），超出直接拒收，
+  // 故此处作为回归守卫，避免文案优化时又把包撑爆。
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('商店文案字符上限（Chrome 上传硬校验）', () => {
+    const MAX_NAME = 75;
+    const MAX_DESCRIPTION = 132;
+
+    /** 必须在用例会执行时再取消息对象：`enMessages`/`zhMessages` 到 `beforeAll` 才被赋值。 */
+    const storeLocales = [
+      { locale: 'en', read: () => enMessages },
+      { locale: 'zh_CN', read: () => zhMessages },
+    ];
+
+    for (const { locale, read } of storeLocales) {
+      it(`[${locale}] extensionName fits the 75-character manifest limit`, () => {
+        const length = [...read().extensionName.message].length;
+        expect(length, `extensionName 长度 ${length} 超过 ${MAX_NAME}`).toBeLessThanOrEqual(MAX_NAME);
+      });
+
+      it(`[${locale}] extensionDescription fits the 132-character manifest limit`, () => {
+        const length = [...read().extensionDescription.message].length;
+        expect(length, `extensionDescription 长度 ${length} 超过 ${MAX_DESCRIPTION}`).toBeLessThanOrEqual(
+          MAX_DESCRIPTION,
+        );
+      });
+
+      it(`[${locale}] store copy mentions a searchable capability keyword`, () => {
+        const messages = read();
+        const text = messages.extensionName.message + messages.extensionDescription.message;
+        const keywords = ['CORS', '代理', 'proxy', 'API'];
+        const hit = keywords.some(keyword => text.toLowerCase().includes(keyword.toLowerCase()));
+        expect(hit, `商店文案应包含 ${keywords.join(' / ')} 之一`).toBe(true);
+      });
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

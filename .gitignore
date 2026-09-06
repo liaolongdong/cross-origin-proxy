@@ -53,3 +53,23 @@ logs
 # Temporary files
 *.tmp
 *.temp
+
+# 本地端到端验证产物（含下载的 Chrome for Testing，约 558MB，曾因误提交把 .git 撑到 195MB）
+.test-tmp/
+
+# 商店素材生成结果（由 `pnpm assets` 从 screenshots/ 派生，不入库；docs/assets/img 需入库供 Pages 使用）
+store-assets/
+
+# 仓库维护产物：历史改写备份、推广文案稿（仅本地）
+*.bundle
+.git-backup/
+marketing/
+
+# 会话临时产物
+*.canvas.tsx
+
+# 仅本地留证的 QA 截图（已从仓库解除跟踪，防止 git add -A 重新带回）
+screenshots/dark-mode-issues.png
+
+# 早期脚本产物（无语言后缀、已无任何引用，现由 og-image-zh/en.png 取代）
+docs/assets/og-image.png

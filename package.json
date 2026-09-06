@@ -13,6 +13,8 @@
     "dev": "wxt",
     "build": "wxt build",
     "build:zip": "wxt zip",
+    "assets": "node scripts/generate-store-assets.mjs",
+    "assets:en": "node scripts/generate-store-assets.mjs --en",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "lint:style": "stylelint \"**/*.{css,vue}\"",

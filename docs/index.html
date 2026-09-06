@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <title>Cross-Origin Proxy — CORS debugging & API environment switcher</title>
+    <meta
+      name="description"
+      content="A Manifest V3 Chrome extension that routes frontend API requests to another backend environment (FAT/UAT/PROD) without touching application code. Rewrite URLs, headers and responses, mock data, inject delays, block requests and forward WebSocket — with a network-layer fast path and a local-only request log."
+    />
+    <link
+      rel="canonical"
+      href="https://GH_OWNER.github.io/cross-origin-proxy/"
+    />
+    <link
+      rel="alternate"
+      hreflang="en"
+      href="https://GH_OWNER.github.io/cross-origin-proxy/"
+    />
+    <link
+      rel="alternate"
+      hreflang="zh"
+      href="https://GH_OWNER.github.io/cross-origin-proxy/zh.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://GH_OWNER.github.io/cross-origin-proxy/"
+    />
+    <link
+      rel="icon"
+      href="assets/icon.png"
+      sizes="128x128"
+    />
+    <link
+      rel="stylesheet"
+      href="assets/landing.css"
+    />
+    <meta
+      property="og:type"
+      content="website"
+    />
+    <meta
+      property="og:site_name"
+      content="Cross-Origin Proxy"
+    />
+    <meta
+      property="og:title"
+      content="Cross-Origin Proxy — API environment switcher for Chrome"
+    />
+    <meta
+      property="og:description"
+      content="Route frontend API calls to a FAT/UAT/PROD backend without code changes. Rewrite, mock, delay, block, WebSocket. Local-only, open source, MIT."
+    />
+    <meta
+      property="og:url"
+      content="https://GH_OWNER.github.io/cross-origin-proxy/"
+    />
+    <meta
+      property="og:image"
+      content="https://GH_OWNER.github.io/cross-origin-proxy/assets/og-image-en.png"
+    />
+    <meta
+      property="og:locale"
+      content="en_US"
+    />
+    <meta
+      property="og:locale:alternate"
+      content="zh_CN"
+    />
+    <meta
+      name="twitter:card"
+      content="summary_large_image"
+    />
+    <meta
+      name="twitter:title"
+      content="Cross-Origin Proxy — API environment switcher for Chrome"
+    />
+    <meta
+      name="twitter:description"
+      content="Route frontend API calls to another backend environment without touching code or backend CORS config."
+    />
+    <meta
+      name="twitter:image"
+      content="https://GH_OWNER.github.io/cross-origin-proxy/assets/og-image-en.png"
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://GH_OWNER.github.io/cross-origin-proxy/#app",
+            "name": "Cross-Origin Proxy",
+            "alternateName": "跨域代理助手",
+            "applicationCategory": "DeveloperApplication",
+            "applicationSubCategory": "Browser Extension",
+            "operatingSystem": "Google Chrome (Manifest V3)",
+            "softwareVersion": "1.0.0",
+            "url": "https://GH_OWNER.github.io/cross-origin-proxy/",
+            "codeRepository": "https://github.com/GH_OWNER/cross-origin-proxy",
+            "downloadUrl": "https://github.com/GH_OWNER/cross-origin-proxy/releases",
+            "image": "https://GH_OWNER.github.io/cross-origin-proxy/assets/og-image-en.png",
+            "screenshot": "https://GH_OWNER.github.io/cross-origin-proxy/assets/img/rules-overview.jpg",
+            "license": "https://spdx.org/licenses/MIT.html",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "author": { "@type": "Person", "name": "Better", "url": "https://github.com/GH_OWNER" },
+            "dateModified": "2026-09-06",
+            "featureList": [
+              "Rule-based URL rewriting by wildcard, prefix or regex",
+              "Request header and body overrides",
+              "Response status, header and JSON field modifications",
+              "Mock responses without hitting the target server",
+              "Artificial request delay from 0 to 60 seconds",
+              "Request blocking for error-handling tests",
+              "HTTP method filtering and query parameter injection",
+              "WebSocket (ws/wss) forwarding",
+              "Declarative NetRequest fast path for simple rules",
+              "Request logs, HAR and cURL import/export",
+              "Environment profiles and batch target migration",
+              "English and Chinese UI with six themes"
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://GH_OWNER.github.io/cross-origin-proxy/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What does a cross-origin proxy for a browser do?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "It intercepts the API requests a page makes and sends them somewhere else. In development that usually means pointing a frontend running against one backend at a different environment, so you can test UAT code from a FAT page without editing the app or redeploying."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does this bypass CORS restrictions?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Rules that use any advanced capability (header override, body override, response override, mock, delay, block, retry, method filter, query injection or WebSocket) are executed by the extension's background context, which holds host permissions, and the page receives a response the extension constructed - so page CORS checks do not apply. A pure URL rewrite is handled as a network-layer redirect instead, where the browser still validates the response's Access-Control-Allow-Origin header. If a target environment does not allow your origin, add any advanced capability (for example a response header override) and the rule switches to the background channel."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does it work on any website?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "It is injected on all http and https pages, and rules match on request URL, so it works on internal tools, localhost dev servers and staging domains alike. It does not run on chrome:// pages, the Chrome Web Store, or other extension pages, which Chrome restricts for every extension."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is my data sent to a server?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Rules, logs, profiles and preferences live in chrome.storage.local on your machine. The extension contains no analytics, no telemetry and no remote service of its own; the only network traffic is the API traffic you ask it to proxy."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How is it different from a devServer proxy or a gateway config change?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "A devServer proxy needs per-project configuration, only covers requests sent to the dev server, and is invisible to teammates. A gateway or CORS change needs a backend release. The extension sits in the browser: one rule applies to every project you open, it can also rewrite responses and mock data, and the whole rule set exports as JSON so teammates can import it."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What are the limits?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, and delays between 0 and 60000 ms. Response status codes are clamped to 200-599 so the page can always build a valid Response object."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What happens if the extension fails to handle a request?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The page interceptor falls back to the browser's native fetch, XMLHttpRequest or WebSocket, so the request still goes out as it normally would. The single exception is a block rule: a blocked request is never replayed natively, because that would send the very request you asked to suppress."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I share rules with my team?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Export the full configuration as JSON, or export captured traffic as a HAR 1.2 file. Importing a HAR file creates proxy rules from the recorded requests, and pasting a cURL command (DevTools Copy as cURL output) prefills a new rule. Environment profiles let you store a named snapshot of the rule set and switch between FAT, UAT and PROD in one click."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <a
+      class="skip-link"
+      href="#main"
+      >Skip to content</a
+    >
+
+    <header class="site-header">
+      <div class="wrap">
+        <a
+          class="brand"
+          href="./"
+        >
+          <img
+            src="assets/icon.png"
+            alt=""
+            width="28"
+            height="28"
+          />
+          <span>Cross-Origin Proxy</span>
+        </a>
+        <nav
+          class="site-nav"
+          aria-label="Section navigation"
+        >
+          <a href="#how-it-works">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#use-cases">Use cases</a>
+          <a href="#compare">Compare</a>
+          <a href="#faq">FAQ</a>
+          <a href="#install">Install</a>
+          <a href="https://github.com/GH_OWNER/cross-origin-proxy">GitHub</a>
+          <a
+            class="lang-switch"
+            href="zh.html"
+            hreflang="zh"
+            lang="zh"
+            >中文</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section
+        class="hero"
+        aria-labelledby="hero-title"
+      >
+        <div class="wrap">
+          <h1 id="hero-title">Point a FAT frontend at a UAT backend — one rule, no code changes</h1>
+          <p class="lede">
+            Cross-Origin Proxy is an open-source Chrome extension (Manifest V3) that redirects the API requests a page
+            makes to another backend environment. Rewrite URLs, headers and responses, mock data, inject latency, block
+            requests and forward WebSocket — all configured in the browser, all stored locally.
+          </p>
+          <div class="badges">
+            <span>Manifest V3</span>
+            <span>No telemetry</span>
+            <span>Local-only storage</span>
+            <span>200 rules</span>
+            <span>EN / 中文 UI</span>
+            <span>MIT licensed</span>
+          </div>
+          <div class="cta-row">
+            <a
+              class="btn btn-primary"
+              href="https://github.com/GH_OWNER/cross-origin-proxy"
+              >View source on GitHub</a
+            >
+            <a
+              class="btn btn-ghost"
+              href="#install"
+              >Install in 3 steps</a
+            >
+            <a
+              class="btn btn-ghost"
+              href="#how-it-works"
+              >See how it works</a
+            >
+          </div>
+          <p class="section-lede">
+            The Chrome Web Store listing is in preparation; until then install from source as shown below.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="problem"
+        aria-labelledby="problem-title"
+      >
+        <div class="wrap">
+          <h2 id="problem-title">The problem it removes</h2>
+          <p class="section-lede">
+            Cross-environment debugging usually costs one of three things: a backend change, a config change in every
+            project, or a fake local build. This extension moves all three into a single browser rule.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <caption>
+                Before and after, for the common "the UAT service has the fix, my FAT page does not" case
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Without the extension</th>
+                  <th scope="col">With one rule</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Edit the devServer proxy table, then restart the dev server.</td>
+                  <td>
+                    Add <code>https://fat-api.example.com/*</code> → <code>https://uat-api.example.com</code>. Applies
+                    immediately.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Ask the backend to add your origin to <code>Access-Control-Allow-Origin</code> and redeploy.</td>
+                  <td>
+                    Requests with any advanced capability are answered by the extension, so page CORS checks do not
+                    apply.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Hardcode a token for the other environment in the source, and remember to revert it.</td>
+                  <td>Inject the header per rule; disable the rule when you are done.</td>
+                </tr>
+                <tr>
+                  <td>Wait for an API that is still being built, or stub it inside the app.</td>
+                  <td>Mock the response in the rule; the app code stays untouched.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="gallery"
+        aria-labelledby="gallery-title"
+      >
+        <div class="wrap">
+          <h2 id="gallery-title">What the interface looks like</h2>
+          <p class="section-lede">
+            Real screenshots from the current build. The options page holds the rule table, request logs and
+            import/export; the popup keeps the global switch and the current-page match preview one click away.
+          </p>
+          <div class="shots">
+            <figure class="shot">
+              <img
+                src="assets/img/rules-overview.jpg"
+                alt="Rule table with three proxy rules, capability badges, priority and status columns"
+                width="1200"
+                height="750"
+                loading="lazy"
+              />
+              <figcaption>Rule table with capability badges, drag-to-reorder priority and hit counts.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/img/rule-editor.jpg"
+                alt="Rule editor dialog with match pattern, target URL, header overrides and mock response sections"
+                width="1200"
+                height="750"
+                loading="lazy"
+              />
+              <figcaption>Rule editor: match, rewrite, override, mock, delay and block in one form.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/img/url-tester.jpg"
+                alt="URL match tester showing matched rule, rewritten URL and forwarding channel"
+                width="1200"
+                height="750"
+                loading="lazy"
+              />
+              <figcaption>
+                URL match tester: preview the match, the rewritten URL and the channel before you save.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/img/request-log.jpg"
+                alt="Request log drawer with method, status, duration and DNR hit statistics"
+                width="1200"
+                height="750"
+                loading="lazy"
+              />
+              <figcaption>Request log with per-request detail, cURL export and DNR hit statistics.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/img/popup.jpg"
+                alt="Extension popup with global switch, active rule count and quick links"
+                width="1200"
+                height="750"
+                loading="lazy"
+              />
+              <figcaption>Popup: global switch, today's stats, auto-off countdown and page hit preview.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/img/dark-theme.jpg"
+                alt="Options page in dark mode"
+                width="1200"
+                height="750"
+                loading="lazy"
+              />
+              <figcaption>Six themes with light, dark and follow-system modes, in English or Chinese.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="how-it-works"
+        aria-labelledby="hiw-title"
+      >
+        <div class="wrap">
+          <h2 id="hiw-title">How it works: two channels, one rule set</h2>
+          <p class="section-lede">
+            Every enabled rule is classified once, on save. A rule that only rewrites the URL is compiled into a
+            <em>declarativeNetRequest</em> redirect and handled by the browser's network stack — no JavaScript runs per
+            request. Anything richer is routed through the extension's background channel.
+          </p>
+          <pre><code>Page fetch / XHR / WebSocket
+   |
+   +-- simple rule (URL rewrite only) --> declarativeNetRequest redirect
+   |                                      resolved in the network layer, zero JS per request
+   |
+   +-- complex rule --> page interceptor (main world)
+                          +-> bridge (isolated world) --> background request
+                                                          +-> response handed back to the page</code></pre>
+          <h3>A rule stops being "simple" as soon as it has any of</h3>
+          <div class="table-scroll">
+            <table>
+              <caption>
+                The exact conditions that switch a rule to the background channel
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Capability</th>
+                  <th scope="col">Why the network layer cannot do it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Request header / body override</td>
+                  <td>Body replacement needs a real request to be re-issued.</td>
+                </tr>
+                <tr>
+                  <td>Response status, header or JSON field override</td>
+                  <td>The response has to be read and rebuilt.</td>
+                </tr>
+                <tr>
+                  <td>Mock, delay, block, retry</td>
+                  <td>These change whether and when a request happens at all.</td>
+                </tr>
+                <tr>
+                  <td>HTTP method filter</td>
+                  <td>Redirect rules cannot match on method.</td>
+                </tr>
+                <tr>
+                  <td>Query parameter injection</td>
+                  <td>Applied after rewriting, outside redirect substitution.</td>
+                </tr>
+                <tr>
+                  <td>WebSocket (<code>ws://</code> / <code>wss://</code>)</td>
+                  <td>Redirect rules have no WebSocket resource type.</td>
+                </tr>
+                <tr>
+                  <td>Wildcard pattern not ending in <code>*</code>, or empty target</td>
+                  <td>Redirect substitution would silently drop trailing text or produce an invalid value.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="section-lede">
+            If the interceptor cannot handle a request, the page falls back to its native <code>fetch</code>,
+            <code>XMLHttpRequest</code> or <code>WebSocket</code> — the request still goes out normally. Block rules are
+            the deliberate exception: a blocked request is never replayed.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="features"
+        aria-labelledby="features-title"
+      >
+        <div class="wrap">
+          <h2 id="features-title">Features</h2>
+          <div class="grid">
+            <div class="card">
+              <h3>Proxy &amp; rewrite</h3>
+              <p>
+                Match by wildcard, prefix or regular expression. Rewrite the URL, inject or replace request headers,
+                replace the request body, override response status, headers and individual JSON fields by dot path.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Mock, delay, block</h3>
+              <p>
+                Return a crafted JSON / text / HTML / XML body without touching a server. Add 0–60000 ms of latency to
+                exercise loading and timeout states. Block a request to test failure handling.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Method &amp; query control</h3>
+              <p>
+                Limit a rule to specific HTTP methods, or append and override query parameters such as
+                <code>__env=uat</code> and gray-release tags without rewriting the whole URL.
+              </p>
+            </div>
+            <div class="card">
+              <h3>WebSocket</h3>
+              <p>
+                Forward <code>ws://</code> and <code>wss://</code> connections by URL rewrite, so sockets — not just
+                REST calls — follow the same environment switch.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Rule management</h3>
+              <p>
+                Duplicate, batch enable or disable, drag to reorder priority, search and filter, and batch-migrate
+                target domains with a live change preview when environments rotate.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Logs &amp; debugging</h3>
+              <p>
+                Inspect method, status, duration and matched-rule statistics; open any entry for full headers and body;
+                copy it as cURL or export the capture as HAR 1.2.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Import &amp; profiles</h3>
+              <p>
+                Import a HAR file or paste a cURL command to create rules. Save the current set as a named environment
+                profile and switch between FAT, UAT and PROD in one click.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Interface</h3>
+              <p>
+                English and Chinese UI, six themes with light / dark / system modes, a match preview for the page you
+                have open, and shortcuts: <span class="kbd">⌘⇧P</span> toggle, <span class="kbd">⌘N</span> new rule,
+                <span class="kbd">/</span> search, <span class="kbd">Esc</span> close.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="use-cases"
+        aria-labelledby="use-cases-title"
+      >
+        <div class="wrap">
+          <h2 id="use-cases-title">Use cases</h2>
+          <div class="table-scroll">
+            <table>
+              <caption>
+                Common setups, and the capability each one uses
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Situation</th>
+                  <th scope="col">Rule configuration</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Verify a UAT-only fix from a FAT page</td>
+                  <td>Wildcard rewrite of the API prefix to the UAT host.</td>
+                </tr>
+                <tr>
+                  <td>Build UI before the backend exists</td>
+                  <td>Mock response with a crafted JSON body and status.</td>
+                </tr>
+                <tr>
+                  <td>Prove the loading and timeout paths work</td>
+                  <td>Delay of 3000–60000 ms on the specific endpoint.</td>
+                </tr>
+                <tr>
+                  <td>Check the offline / 500 fallback UI</td>
+                  <td>Block the request, or override the response status.</td>
+                </tr>
+                <tr>
+                  <td>Exercise a gray-release or A/B branch</td>
+                  <td>Query parameter injection on the proxied URL.</td>
+                </tr>
+                <tr>
+                  <td>Debug a real-time feature against another environment</td>
+                  <td>WebSocket rewrite from the page's socket URL to the target socket.</td>
+                </tr>
+                <tr>
+                  <td>Only send writes to the test backend</td>
+                  <td>Method filter limited to <code>POST</code> / <code>PUT</code> / <code>DELETE</code>.</td>
+                </tr>
+                <tr>
+                  <td>Hand the same setup to a teammate</td>
+                  <td>Export JSON, or share a HAR-derived rule set.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="compare"
+        aria-labelledby="compare-title"
+      >
+        <div class="wrap">
+          <h2 id="compare-title">How it compares to the alternatives</h2>
+          <div class="table-scroll">
+            <table>
+              <caption>
+                Cross-environment debugging, the usual ways. Categories are generic; verify details against the tools
+                you already use.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Approach</th>
+                  <th scope="col">Needs backend change</th>
+                  <th scope="col">Per-project setup</th>
+                  <th scope="col">Rewrites responses</th>
+                  <th scope="col">Mock / delay / block</th>
+                  <th scope="col">Covers WebSocket</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>This extension</strong></td>
+                  <td>No</td>
+                  <td>No — one browser-wide rule set</td>
+                  <td>Yes</td>
+                  <td>Yes</td>
+                  <td>Yes</td>
+                </tr>
+                <tr>
+                  <td>Dev server proxy table</td>
+                  <td>Often, for CORS</td>
+                  <td>Yes, per project</td>
+                  <td>No</td>
+                  <td>With extra plugins</td>
+                  <td>Rarely</td>
+                </tr>
+                <tr>
+                  <td>Gateway / CORS configuration</td>
+                  <td>Yes, plus a release</td>
+                  <td>No</td>
+                  <td>No</td>
+                  <td>No</td>
+                  <td>Depends</td>
+                </tr>
+                <tr>
+                  <td>Standalone API client</td>
+                  <td>No</td>
+                  <td>Yes, requests live outside the app</td>
+                  <td>Not on the page</td>
+                  <td>Mock usually</td>
+                  <td>No</td>
+                </tr>
+                <tr>
+                  <td>Editing app config / env vars</td>
+                  <td>No</td>
+                  <td>Yes, and it risks a bad commit</td>
+                  <td>No</td>
+                  <td>No</td>
+                  <td>No</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="section-lede">
+            The trade-off is honesty: the extension is browser-scoped. It cannot help a server-to-server call, it does
+            not record anything to a cloud workspace, and its rules live in your Chrome profile rather than in a shared
+            project file — export JSON when you want a teammate to have them.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="install"
+        aria-labelledby="install-title"
+      >
+        <div class="wrap">
+          <h2 id="install-title">Install</h2>
+          <div class="grid">
+            <div class="card">
+              <h3>1. Build</h3>
+              <pre><code>git clone https://github.com/GH_OWNER/cross-origin-proxy
+cd cross-origin-proxy
+pnpm install
+pnpm build</code></pre>
+            </div>
+            <div class="card">
+              <h3>2. Load</h3>
+              <p>
+                Open <code>chrome://extensions</code>, enable <em>Developer mode</em>, click <em>Load unpacked</em> and
+                select <code>.output/chrome-mv3</code>.
+              </p>
+            </div>
+            <div class="card">
+              <h3>3. First rule</h3>
+              <ol class="steps">
+                <li>Turn the proxy switch on in the popup.</li>
+                <li>
+                  Add a wildcard rule: <code>https://fat-api.example.com/*</code> →
+                  <code>https://uat-api.example.com</code>.
+                </li>
+                <li>Reload the page and check the request log.</li>
+              </ol>
+            </div>
+          </div>
+          <p class="section-lede">
+            Requires Node.js 20 or newer and pnpm to build from source. Development: <code>pnpm dev</code> serves the
+            extension with hot reload on port 8899.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="privacy"
+        aria-labelledby="privacy-title"
+      >
+        <div class="wrap">
+          <h2 id="privacy-title">Privacy and permissions</h2>
+          <p class="section-lede">
+            Everything is stored on your machine in <code>chrome.storage.local</code>. There is no account, no
+            analytics, no telemetry and no remote service: the only network traffic is the API traffic you ask it to
+            proxy. Logs and exports are produced locally. <a href="privacy.html">Read the privacy policy</a>.
+          </p>
+          <div class="table-scroll">
+            <table>
+              <caption>
+                Every permission the manifest declares, and what it is used for
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Permission</th>
+                  <th scope="col">Why it is needed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>storage</code></td>
+                  <td>Persist rules, request logs, environment profiles and preferences.</td>
+                </tr>
+                <tr>
+                  <td><code>declarativeNetRequest</code></td>
+                  <td>Install the network-layer redirect rules that make simple rewrites cost zero JavaScript.</td>
+                </tr>
+                <tr>
+                  <td><code>declarativeNetRequestFeedback</code></td>
+                  <td>Read which redirect rules actually matched, for the hit statistics in the log drawer.</td>
+                </tr>
+                <tr>
+                  <td><code>alarms</code></td>
+                  <td>Keep the background worker alive while proxying, and run the auto-off countdown.</td>
+                </tr>
+                <tr>
+                  <td><code>&lt;all_urls&gt;</code> host permission</td>
+                  <td>
+                    Proxying has to work on whatever origin your frontend runs on; the target environment is a
+                    developer-controlled internal domain, so it cannot be enumerated in advance.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Limits</h3>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Constraint</th>
+                  <th scope="col">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Rules</td>
+                  <td>200 maximum</td>
+                </tr>
+                <tr>
+                  <td>Request log</td>
+                  <td>Last 500 entries</td>
+                </tr>
+                <tr>
+                  <td>Request body</td>
+                  <td>10 MB maximum</td>
+                </tr>
+                <tr>
+                  <td>Injected delay</td>
+                  <td>0 – 60000 ms</td>
+                </tr>
+                <tr>
+                  <td>Mocked status code</td>
+                  <td>Clamped to 200 – 599</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="faq"
+        aria-labelledby="faq-title"
+      >
+        <div class="wrap">
+          <h2 id="faq-title">Frequently asked questions</h2>
+          <details>
+            <summary>What does a cross-origin proxy for a browser do?</summary>
+            <p>
+              It intercepts the API requests a page makes and sends them somewhere else. In development that usually
+              means pointing a frontend running against one backend at a different environment, so you can test UAT code
+              from a FAT page without editing the app or redeploying.
+            </p>
+          </details>
+          <details>
+            <summary>Does this bypass CORS restrictions?</summary>
+            <p>
+              For rules that carry any advanced capability, yes: the request is issued by the extension's background
+              context, which holds host permissions, and the page receives a response the extension built — page CORS
+              checks do not apply. A pure URL rewrite is instead compiled into a network-layer redirect, where the
+              browser still validates <code>Access-Control-Allow-Origin</code> on the redirected response. If a target
+              environment does not allow your origin, give the rule any capability (a response header override is the
+              cheapest) and it moves to the background channel.
+            </p>
+          </details>
+          <details>
+            <summary>Does it work on any website?</summary>
+            <p>
+              Content scripts are injected on all <code>http</code> and <code>https</code> pages and rules match on
+              request URL, so internal tools, <code>localhost</code> dev servers and staging domains all work. Chrome
+              blocks extensions on <code>chrome://</code> pages, the Chrome Web Store and other extension pages.
+            </p>
+          </details>
+          <details>
+            <summary>Is my data sent to a server?</summary>
+            <p>
+              No. Rules, logs, profiles and preferences live in <code>chrome.storage.local</code>. There is no analytics
+              or telemetry, and the extension talks to no service of its own.
+            </p>
+          </details>
+          <details>
+            <summary>How is it different from a devServer proxy or a gateway change?</summary>
+            <p>
+              A devServer proxy needs per-project configuration, only sees requests aimed at the dev server, and stays
+              invisible to teammates. A gateway or CORS change needs a backend release. The extension lives in the
+              browser: one rule covers every project you open, it can rewrite responses and mock data, and the whole
+              rule set exports as JSON for your team.
+            </p>
+          </details>
+          <details>
+            <summary>Why do some rules show a different forwarding channel than I expected?</summary>
+            <p>
+              Because a wildcard pattern that does not end in <code>*</code>, or a rule with an empty target, cannot be
+              expressed as a redirect without changing the result. Those are routed to the background channel on
+              purpose. The URL match tester shows the channel for any URL before you rely on it.
+            </p>
+          </details>
+          <details>
+            <summary>What are the limits?</summary>
+            <p>
+              200 rules, the last 500 log entries, a 10 MB request body ceiling, delays of 0–60000 ms, and mocked status
+              codes clamped to 200–599 so the page can always construct a valid <code>Response</code>.
+            </p>
+          </details>
+          <details>
+            <summary>What happens if the extension fails to handle a request?</summary>
+            <p>
+              The interceptor falls back to the browser's native <code>fetch</code>, <code>XMLHttpRequest</code> or
+              <code>WebSocket</code>, so the page keeps working as if the rule were not there. Block rules are the one
+              exception: a blocked request is never replayed natively.
+            </p>
+          </details>
+          <details>
+            <summary>Can I share rules with my team?</summary>
+            <p>
+              Yes: export the configuration as JSON, export captured traffic as HAR 1.2, or paste a cURL command to
+              create a rule. Environment profiles store a named snapshot of the rule set for one-click switching.
+            </p>
+          </details>
+          <details>
+            <summary>Does it work in Firefox or Edge?</summary>
+            <p>
+              It is built and tested against Chrome (Manifest V3). Edge runs Chromium extensions, so the same build
+              normally works there; Firefox's Manifest V3 support differs around
+              <code>declarativeNetRequest</code>, so it is not a supported target today.
+            </p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div>
+          <p>
+            Cross-Origin Proxy · open source under the MIT License · last updated 2026-09-06
+            <span lang="zh"
+              >（中文页面见
+              <a
+                href="zh.html"
+                hreflang="zh"
+                >产品说明</a
+              >）</span
+            >
+          </p>
+        </div>
+        <nav aria-label="Footer navigation">
+          <a href="https://github.com/GH_OWNER/cross-origin-proxy">GitHub</a>
+          <a href="https://github.com/GH_OWNER/cross-origin-proxy/issues">Issues</a>
+          <a href="https://github.com/GH_OWNER/cross-origin-proxy/blob/main/CONTRIBUTING.md">Contributing</a>
+          <a href="privacy.html">Privacy policy</a>
+          <a href="llms.txt">llms.txt</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

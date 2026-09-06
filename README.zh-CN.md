@@ -1,208 +1,290 @@
-# 跨域代理助手
+<div align="center">
+
+# 跨域代理助手 - CORS 跨域调试 · API 环境切换 · Mock
 
 [English](./README.md) | **简体中文**
 
-一款 Chrome 扩展（Manifest V3），用于在不同环境之间代理前端 API 请求——例如让 FAT 前端直接调用 UAT 后端接口，无需改动业务代码或后端 CORS 配置。
+**一条浏览器规则，把 FAT 前端指到 UAT 后端——不改代码、不改后端 CORS、不用重新构建。**
 
-技术栈：[WXT](https://wxt.dev) + Vue 3 + Element Plus + TypeScript。
+[![给仓库点个 Star](https://img.shields.io/github/stars/GH_OWNER/cross-origin-proxy?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/GH_OWNER/cross-origin-proxy/stargazers)
 
-## 核心功能
+<br/>
 
-### 请求代理与修改
+![跨域代理助手规则总览](./docs/assets/img/rules-overview.jpg)
 
-- **规则化 URL 重写** — 支持通配符、前缀、正则三种匹配方式，将命中的请求重定向到目标环境
-- **请求头覆盖** — 按规则注入或替换请求头（如目标环境的鉴权 Token）
-- **请求体覆盖** — 用自定义内容替换原始请求体
-- **响应修改** — 覆盖响应状态码、响应头，或通过点分路径替换 JSON 响应体字段（如 `data.token`）
-- **Mock 响应** — 不访问目标服务器，直接返回自定义的 Mock 数据（JSON/文本/HTML），适用于前端脱离后端开发
-- **请求延迟注入** — 添加 0–60 秒的人为延迟，模拟慢网络，测试加载状态和超时处理
-- **请求阻断** — 完全阻断匹配的请求（返回网络错误），用于测试错误处理和离线降级行为
-- **HTTP 方法过滤** — 将规则限定到指定方法（GET/POST/PUT/…），留空表示任意方法；因 `declarativeNetRequest` 无法按方法过滤，设置方法的规则会改走 SW 通道
-- **查询参数注入** — 在最终代理 URL 上追加/覆盖查询参数（如 `__env=uat`、灰度标识），无需重写整个 URL
-- **WebSocket 代理** — 按 URL 重写转发 `ws://` / `wss://` 连接；`http(s)` 写法与 `ws(s)` 写法的匹配模式均可命中，由页面拦截器处理
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
+&nbsp;
+[![CI](https://img.shields.io/github/actions/workflow/status/GH_OWNER/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/GH_OWNER/cross-origin-proxy/actions/workflows/ci.yml)
+&nbsp;
+[![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
+&nbsp;
+[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#安装)
+&nbsp;
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](./CONTRIBUTING.md)
 
-### 双通道代理架构
+> 页面连着 FAT，你要的修复只在 UAT。传统做法要么改每个项目的 devServer 代理、要么硬塞一个 token、要么请后端放开 CORS 再发一次版。这里只需要在 Chrome 里加一条规则：匹配 `https://fat-api.example.com/*`，目标 `https://uat-api.example.com`。同一套规则还能改写请求头与响应、Mock 数据、注入延迟、阻断请求、转发 WebSocket。
 
-- **DNR 通道** — 简单规则（无请求头/请求体/响应覆盖）走 `declarativeNetRequest` 动态规则，由浏览器网络层直接重定向，零 JS 开销
-- **SW fetch 通道** — 复杂规则走 Service Worker `fetch` 通道，拦截页面 `fetch`/XHR/WebSocket 后转发。当规则含任何覆盖/Mock/延迟/阻断、HTTP **方法过滤**、**查询参数覆盖**，或面向 **WebSocket** 时，将不再属于简单规则（这些能力 DNR 无法覆盖），改走 SW 通道
+[安装](#安装) · [工作原理](#工作原理) · [功能](#功能) · [使用场景](#使用场景) · [常见问题](#常见问题) · [参与贡献](./CONTRIBUTING.md)
 
-### 规则管理
+</div>
 
-- **添加 / 编辑 / 复制 / 删除** 规则，可视化表单操作
-- **拖拽排序** — 拖拽 ⠿ 手柄调整规则优先级顺序
-- **能力徽章** — 每条规则上的可视化标签，一目了然：
-  - **H**（蓝色）— 请求头覆盖
-  - **B**（琥珀色）— 请求体覆盖
-  - **R**（绿色）— 响应覆盖
-  - **M**（紫色）— Mock 响应
-  - **D**（青色）— 请求延迟
-  - **X**（红色）— 请求阻断
-  - **WS**（青蓝）— WebSocket 规则（同样适用于 `ws://` / `wss://` 连接）
-- **优先级排序** — 数值越小越优先匹配
-- **单条与批量启停**
-- **批量迁移目标 URL** — 选中多条规则后，在一次操作中查找/替换其目标 URL 的片段（如环境轮转时切换目标域名），并提供变更实时预览
-- **搜索筛选** — 按名称、模式、状态过滤
+---
 
-### 请求日志与调试
+## 它解决的是什么
 
-- **请求日志面板** — 展示最近代理请求的方法、状态码、耗时，以及 DNR 命中统计
-- **日志详情查看器** — 点击任意日志行展开详情面板，查看完整的请求/响应头和响应体（JSON 自动格式化）
-- **复制为 cURL** — 一键将日志条目导出为 `curl` 命令
-- **多维筛选** — 按方法、状态码、规则、URL 关键词过滤
-- **URL 匹配测试工具** — Options 顶栏全局入口，输入任意 URL（可选 HTTP 方法）实时预览命中的规则、重写后 URL（含查询参数覆盖）、转发通道（DNR / SW）与被遮蔽的规则
+跨环境联调通常要付出三样代价之一：改后端、改每个项目的配置、或者在本地伪造一份构建。这个扩展把它们收敛成浏览器里的一条规则。
 
-### 导入 / 导出
+| 不用它                                                    | 用一条规则                                             |
+| --------------------------------------------------------- | ------------------------------------------------------ |
+| 改 devServer 代理表，然后重启本地服务                     | 保存一条通配规则，立刻生效，且对浏览器里所有项目都生效 |
+| 请后端把来源加进 `Access-Control-Allow-Origin` 并重新发版 | 带高级能力的请求由扩展代发，页面侧不触发 CORS 校验     |
+| 在源码里硬写另一个环境的 token，还得记得改回来            | 按规则注入请求头，联调完把这条规则关掉                 |
+| 接口还没写好，只能先在前端塞假数据                        | 在规则里 Mock 响应，业务代码一行不动                   |
 
-- **配置导入/导出** — 以 JSON 格式备份和恢复完整规则配置
-- **HAR 报文导入/导出** — 将 SW 通道捕获的日志导出为标准 HAR 1.2 格式；导入 HAR 文件自动从流量中创建代理规则
-- **cURL 导入** — 粘贴 cURL 命令（如 DevTools「复制为 cURL」产物）自动解析为预填规则，与日志的「复制为 cURL」形成闭环
-
-### 环境配置
-
-- **命名配置快照** — 将当前规则集保存为命名的环境配置
-- **快速切换** — 在不同环境之间一键切换（如 FAT、UAT、PROD）
-
-### 界面与交互
-
-- **Popup 快速面板** — 代理总开关、今日统计、最近请求，一键直达 Options 页面；「为当前页创建规则」自动预填当前页面的规则表单（复用已打开的 Options 标签页）；配置了自动关闭时展示剩余倒计时；另有**当前页命中预览**，直观展示本页命中哪条规则、改写后的 URL 与转发通道
-- **国际化** — 中英文界面切换
-- **6 套配色主题** — 支持亮色 / 暗色 / 跟随系统
-- **键盘快捷键** — `Cmd+N` 添加规则、`/` 聚焦搜索、`Esc` 关闭弹窗
-- **模式匹配测试面板** — 实时测试 URL 匹配和重写结果
+技术栈：[WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite，Manifest V3。
 
 ## 安装
 
-### 从源码构建
+需要较新版本的桌面 Google Chrome（Manifest V3）。Chrome 应用商店上架准备中，现阶段按下面方式加载本地构建产物。
 
 ```bash
+git clone https://github.com/GH_OWNER/cross-origin-proxy
+cd cross-origin-proxy
 pnpm install
 pnpm build
 ```
 
-打开 `chrome://extensions`，开启**开发者模式**，点击**加载已解压的扩展程序**，选择 `.output/chrome-mv3` 目录。
+1. 打开 `chrome://extensions`。
+2. 开启右上角「开发者模式」。
+3. 点「加载已解压的扩展程序」，选择 `.output/chrome-mv3`。
 
-### 本地开发
+### 一分钟配出第一条规则
+
+1. 点扩展图标，打开**代理开关**。
+2. 点弹窗里的**规则管理**——配置页会带着新建规则表单打开。
+3. 填写规则：
+
+   | 字段     | 说明                                                          |
+   | -------- | ------------------------------------------------------------- |
+   | 匹配类型 | `通配符`（`https://fat-api.example.com/*`）、`前缀` 或 `正则` |
+   | 匹配模式 | 要拦截的 URL 模式                                             |
+   | 目标 URL | 命中后转发到的地址                                            |
+   | 优先级   | 数值越小越先匹配                                              |
+
+4. 刷新页面。命中已启用规则的请求会被代理，到**请求日志**里可以确认。
+
+## 工作原理
+
+每条启用的规则在保存时被判定一次。只做 URL 重写的规则会编译成 `declarativeNetRequest` 动态规则，交给浏览器网络栈处理，单个请求零 JS 开销；能力更全的规则走后台通道。
+
+```
+页面 fetch / XHR / WebSocket
+   │
+   ├── 简单规则（仅 URL 重写）──► declarativeNetRequest 重定向
+   │                              网络层完成转发，单请求零 JS 开销
+   │
+   └── 复杂规则 ─────────────────► 页面拦截器（MAIN world，postMessage）
+                                      └► 桥接（ISOLATED world，chrome.runtime）
+                                           └► 后台发起请求 ──► 响应回传页面
+```
+
+规则一旦带上下列任一项就不再是「简单规则」：请求头改写、请求体改写、响应改写、Mock、延迟、阻断、重试、HTTP 方法过滤、查询参数注入、`ws://`/`wss://` 目标、不以 `*` 结尾的通配符、目标地址留空。这些条件不是因为实现偷懒，而是网络层确实无法表达，详见 [utils/urlMatcher.ts](./utils/urlMatcher.ts)。
+
+**关于 CORS，说准确一点。** 后台通道的请求由扩展（持有站点权限）发出，页面拿到的是扩展构造的响应，因此不受页面 CORS 校验约束。而纯网络层重定向，浏览器仍会校验重定向后响应的 `Access-Control-Allow-Origin`。如果目标环境没放行你的来源，给规则加上任意一项能力（最省事的是加个响应头改写），它就切到后台通道。
+
+**兜底行为。** 拦截失败时页面会回退到原生 `fetch` / `XMLHttpRequest` / `WebSocket`，请求照常发出，不会因为扩展异常而中断。阻断规则是唯一的例外——被阻断的请求绝不回退发出。
+
+## 功能
+
+### 代理与请求改写
+
+- **规则化 URL 重写**——按通配符、前缀、正则匹配后转发到目标环境
+- **请求头改写**——按规则注入或替换请求头（例如目标环境的鉴权 token）
+- **请求体改写**——用自定义内容替换原始请求体
+- **响应改写**——改写响应状态码、响应头，或按点分路径替换 JSON 字段（如 `data.token`）
+- **Mock 响应**——不访问任何服务，直接返回自定义 JSON / 文本 / HTML / XML
+- **延迟注入**——0–60000 毫秒人工延迟，用来验证加载态与超时分支
+- **请求阻断**——命中即网络错误，用来验证异常处理与离线兜底
+- **HTTP 方法过滤**——把规则限定在指定方法（GET/POST/PUT…），留空表示任意方法
+- **查询参数注入**——在最终代理地址上追加或覆盖参数（`__env=uat`、灰度标识），不必整段重写 URL
+- **WebSocket 代理**——按 URL 重写转发 `ws://` / `wss://` 连接，由页面拦截器处理
+
+### 规则管理
+
+- 可视化表单新增 / 编辑 / 复制 / 删除
+- **拖拽排序**优先级（拖动 ⠿ 手柄）
+- **能力徽标**一眼看清规则做了什么：**H** 请求头 · **B** 请求体 · **R** 响应 · **M** Mock · **D** 延迟 · **X** 阻断 · **WS** WebSocket
+- 单条与批量启用 / 禁用
+- **批量迁移目标域名**——选中多条规则做查找替换，带逐条变更预览
+- 按名称、模式、状态搜索筛选
+
+### 日志与调试
+
+- 请求日志面板：方法、状态、耗时，以及规则命中与 DNR 命中统计
+- 日志详情：完整请求/响应头与 body，JSON 自动格式化
+- 任意一条日志**复制为 cURL**
+- 按方法、状态、规则、URL 关键字筛选
+- 顶栏** URL 匹配预演**：输入任意地址（可再选 HTTP 方法），实时看到命中规则、重写后的地址、转发通道与被遮蔽规则
+
+### 导入导出与环境
+
+- 配置以 JSON 导入导出
+- **HAR 1.2** 导出抓到的请求；导入 HAR 会依据录制请求自动生成代理规则
+- **cURL 导入**——粘贴 DevTools 的 Copy as cURL 结果即可解析并预填规则
+- **环境配置快照**——把当前规则集存成命名快照，在 FAT / UAT / PROD 间一键切换
+- 自动关闭倒计时（基于 `chrome.alarms`，后台脚本重启后仍然有效）与状态徽章
+
+### 界面
+
+- 弹窗快捷面板：总开关、今日统计、最近请求、自动关闭倒计时、**当前页面命中预演**，以及按当前标签页预填的「为本页创建规则」
+- 中英文界面，6 套主题 + 浅色 / 深色 / 跟随系统
+- 快捷键：<kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> 切换代理、<kbd>⌘</kbd>+<kbd>N</kbd> 新建规则、<kbd>/</kbd> 聚焦搜索、<kbd>Esc</kbd> 关闭弹窗
+
+## 使用场景
+
+| 场景                           | 怎么配                                     |
+| ------------------------------ | ------------------------------------------ |
+| 在 FAT 页面验证只在 UAT 的改动 | API 前缀通配重写到 UAT 域名                |
+| 后端还没开发完，先把前端做完   | Mock 响应，自定义 body 与状态码            |
+| 验证加载态、骨架屏与超时       | 对指定接口注入 3000–60000 毫秒延迟         |
+| 验证 500 与离线兜底 UI         | 阻断请求，或改写响应状态码                 |
+| 走灰度分支或 A/B 策略          | 查询参数注入                               |
+| 联调实时推送等长连接           | WebSocket 重写                             |
+| 只把写操作打到测试后端         | 方法过滤，仅放行 `POST` / `PUT` / `DELETE` |
+| 把同一套配置交给同事           | 导出 JSON，或分享由 HAR 生成的规则集       |
+
+## 常见问题
+
+<details open>
+<summary><strong>它能绕过 CORS 吗？</strong></summary>
+
+后台通道的规则可以：请求由持有站点权限的扩展发出，页面拿到的是扩展构造的响应，页面侧 CORS 校验不会触发。纯 URL 重写会被编译成网络层重定向，浏览器仍会校验 `Access-Control-Allow-Origin`。给规则加上任意一项能力，它就切到后台通道。
+
+</details>
+
+<details>
+<summary><strong>所有网站都能用吗？</strong></summary>
+
+内容脚本注入全部 `http` / `https` 页面，规则按请求 URL 匹配，内网系统、`localhost` 开发服务、预发域名都适用。`chrome://` 页面、应用商店页与其他扩展页面是 Chrome 对所有扩展的统一限制，无法注入。
+
+</details>
+
+<details>
+<summary><strong>数据会被上传吗？</strong></summary>
+
+不会。规则、日志、环境配置与偏好全部留在本机 `chrome.storage.local`，没有统计埋点，也不连接任何自有服务，唯一的网络流量就是你要求代理的 API 流量。详见[隐私政策](https://GH_OWNER.github.io/cross-origin-proxy/privacy.html)（中英双语同页）。
+
+</details>
+
+<details>
+<summary><strong>为什么我的规则走的是慢通道？</strong></summary>
+
+因为它带了网络层无法表达的能力；也可能是通配符不以 `*` 结尾、或目标地址留空——这两种情况若强行编译成重定向会静默改变结果。用 URL 匹配预演就能看到每条地址实际走的通道。
+
+</details>
+
+<details>
+<summary><strong>有哪些限制？</strong></summary>
+
+规则 200 条、日志最近 500 条、请求体上限 10MB、延迟 0–60000 毫秒；Mock 与响应改写的状态码钳制在 200–599，否则前端构造不出合法的 `Response`。
+
+</details>
+
+<details>
+<summary><strong>支持 Firefox 或 Edge 吗？</strong></summary>
+
+按 Chrome（MV3）构建与验证。Edge 兼容 Chromium 扩展，同一份构建通常可用；Firefox 因 `declarativeNetRequest` 支持差异，目前不作为支持目标。
+
+</details>
+
+## 权限
+
+| 权限                            | 用途                                               |
+| ------------------------------- | -------------------------------------------------- |
+| `storage`                       | 本地保存规则、日志、环境配置与偏好                 |
+| `declarativeNetRequest`         | 为简单规则安装网络层重定向，做到单请求零 JS 开销   |
+| `declarativeNetRequestFeedback` | 读取规则命中情况，用于日志抽屉的命中统计           |
+| `alarms`                        | 后台脚本保活与自动关闭倒计时                       |
+| `<all_urls>`（站点权限）        | 代理必须能在任意前端来源上工作，目标域名由你自己配 |
+
+每项权限面向商店审核的说明文案在 [CHROMEWEBSTORE.md](./CHROMEWEBSTORE.md)。
+
+## 开发
 
 ```bash
-pnpm dev   # 启动 WXT 开发服务（HMR，端口 8899）
+pnpm dev          # WXT 开发服务，端口 8899 热更新
+pnpm build        # 生产构建 → .output/chrome-mv3
+pnpm build:zip    # 构建并打包 zip（商店上传用）
+pnpm test         # vitest 单元测试
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # eslint（自动修复：pnpm lint:fix）
+pnpm lint:style   # stylelint（recess-order 属性排序）
+pnpm format:check # prettier（自动格式化：pnpm format）
+pnpm assets       # 重新生成商店图与落地页图
 ```
 
-## 使用说明
+需要 Node.js 20+ 与 pnpm 10（以 `packageManager` 为准）。CI 会在每次 push 与 PR 上跑 lint、typecheck、stylelint 与测试，见 [.github/workflows/ci.yml](./.github/workflows/ci.yml)。
 
-### 基本代理规则
-
-1. 点击扩展图标，打开**代理开关**。
-2. 在 Popup 中点击**规则管理** — Options 页面打开并自动弹出添加规则表单（若已有打开的 Options 标签页则直接复用，不会重复打开）。
-3. 创建规则：
-
-   | 字段     | 说明                                                              |
-   | -------- | ----------------------------------------------------------------- |
-   | 匹配类型 | `通配符`（`https://fat-api.example.com/*`）、`前缀`、`正则表达式` |
-   | 匹配模式 | 需要拦截的 URL 模式                                               |
-   | 目标 URL | 命中请求的重定向目标                                              |
-   | 优先级   | 数值越小越优先匹配                                                |
-
-4. 任意页面中命中已启用规则的请求会被透明重定向，可在**请求日志**中查看代理记录。
-
-### Mock 响应
-
-在规则表单中启用 **Mock 响应**，无需访问目标服务器即可返回自定义数据：
-
-1. 开启 Mock 响应开关
-2. 设置状态码（默认 200）
-3. 选择 Content-Type（JSON、文本、HTML、XML）
-4. 输入 Mock 响应体
-
-适用于后端 API 尚未就绪时的前端开发。
-
-### 请求延迟
-
-启用 **请求延迟** 添加人为延迟：
-
-1. 开启请求延迟开关
-2. 设置延迟毫秒数（0–60000）
-
-适用于测试加载状态、骨架屏和超时处理。
-
-### 请求阻断
-
-启用 **阻断请求** 完全阻断匹配的请求：
-
-1. 开启阻断请求开关
-
-匹配的请求将收到网络错误。适用于测试错误处理和离线降级行为。
-
-### 响应修改
-
-在规则表单中展开 **响应覆盖** 修改响应内容：
-
-- **状态码** — 覆盖响应状态码
-- **响应头** — 添加或覆盖响应头
-- **JSON 响应体字段替换** — 使用点分路径替换特定字段（如 `data.token` → `"mock-token"`）
-
-### 拖拽排序
-
-拖拽规则行上的 ⠿ 手柄即可重新排序。表格按数组顺序显示规则，拖拽会同时更新显示顺序和优先级值。
-
-### HAR 报文导入 / 导出
-
-- **导出**：打开导入/导出对话框，点击**导出 HAR 报文**，将捕获的请求/响应日志下载为 `.har` 文件。
-- **导入**：点击**导入 HAR 报文**，选择 `.har` 文件，扩展会自动从流量条目中创建代理规则。
-
-### cURL 导入
-
-打开导入/导出对话框，在 **cURL 导入** 区域粘贴 cURL 命令（支持 DevTools「复制为 cURL」产物、行续符、单双引号等常见写法），点击**解析并创建规则**。扩展会以请求的 origin 生成通配符规则，并把命令中的请求头、请求体预填到规则的覆盖项中，确认保存即可生效。
-
-### 日志详情查看器
-
-点击请求日志表格中的任意行，展开详情面板显示：
-
-- 请求 URL、请求头和请求体
-- 响应头和响应体（JSON 自动格式化）
-- 错误信息（如有）
-- **复制为 cURL** 按钮，将请求导出为 curl 命令
-
-## 架构
+### 目录结构
 
 ```
-页面 fetch / XHR
-   │
-   ├── 命中简单规则 ──► DNR 动态规则 ──► 浏览器网络层直接重定向
-   │
-   └── 命中复杂规则 ──► MAIN world 拦截器（postMessage）
-                          └► ISOLATED world 桥接层（chrome.runtime）
-                               └► Background SW fetch ──► 响应原路返回页面
+entrypoints/            WXT 入口：background（含各子模块）、内容脚本、options、popup
+  background/           autoOff · badgeManager · dnrManager · dnrStats · keepalive · messageRouter · proxyHandler
+  main-interceptor.content.ts   MAIN world 的 fetch/XHR/WebSocket 拦截器（按设计必须自包含）
+  content.ts           ISOLATED world 与后台脚本之间的桥接
+components/options/     配置页 UI（App.vue 负责装配；弹窗与抽屉用 defineAsyncComponent 异步加载）
+composables/            响应式状态与副作用
+utils/                  与框架无关的领域逻辑：urlMatcher · dnrRules · storage · curlParser · har · i18n · theme …
+locales/                应用内界面文案（zh_CN / en，分 common/options/popup 三个命名空间）
+public/_locales/        仅放 manifest 的名称与描述
+docs/                   GitHub Pages 产品站：index.html（英）· zh.html（中）· privacy.html · llms.txt
+tests/                  Vitest 测试（node 环境）
 ```
 
-- `entrypoints/background/` — DNR 同步、消息路由、SW 代理执行、保活
-- `entrypoints/main-interceptor.content.ts` — MAIN world `fetch`/XHR 拦截器（任何失败均回退原生请求）
-- `entrypoints/content.ts` — 页面与 Service Worker 之间的 ISOLATED world 桥接层
-- `components/options/` — Options 界面（规则表格、表单弹窗、日志抽屉、导入导出）
-- `utils/` — 存储、DNR 规则构建、URL 匹配、国际化、HAR 工具
+### 更多操作细节
 
-## 权限说明
+<details>
+<summary>Mock 响应 · 延迟 · 阻断 · 响应改写</summary>
 
-| 权限                            | 用途                        |
-| ------------------------------- | --------------------------- |
-| `storage`                       | 持久化规则、日志与偏好设置  |
-| `declarativeNetRequest`         | 简单规则的网络层 URL 重定向 |
-| `declarativeNetRequestFeedback` | 日志抽屉中的 DNR 命中统计   |
-| `alarms`                        | Service Worker 周期性保活   |
-| `<all_urls>`                    | 在任意站点上拦截并代理请求  |
+**Mock 响应**——在规则表单里打开 Mock Response，设置状态码（默认 200），选择 Content-Type（JSON / 文本 / HTML / XML），粘贴响应内容。后端接口还没就绪时最实用。
 
-## 限制
+**请求延迟**——打开 Request Delay，设置毫秒数（0–60000），用来验证加载态、骨架屏与超时处理。
 
-- 最多 **200 条规则**（添加时强制校验）
-- 请求日志保留最近 **500 条**
+**请求阻断**——打开 Block Request。命中请求直接收到网络错误，这就是验证异常处理与离线兜底的方式。
 
-## 常用命令
+**响应改写**——展开 Response Overrides，可设置状态码、新增或覆盖响应头，或按点分路径替换指定 JSON 字段（如 `data.token` → `"mock-token"`）。
 
-```bash
-pnpm dev         # 开发模式（HMR）
-pnpm build       # 生产构建，输出到 .output/chrome-mv3
-pnpm build:zip   # 构建并打包 zip（用于商店上传）
-pnpm test        # vitest 单元测试
-pnpm typecheck   # tsc --noEmit 类型检查
-pnpm lint        # eslint 检查
-pnpm format      # prettier 格式化
-```
+</details>
+
+<details>
+<summary>拖拽排序 · HAR · cURL · 日志详情</summary>
+
+**拖拽排序**——拖动任意行的 ⠿ 手柄。表格按数组顺序展示，拖拽会同时更新展示顺序与优先级数值。
+
+**HAR**——导入导出对话框里「导出 HAR」会把后台通道抓到的请求下载为 `.har`；「导入 HAR」会依据录制条目自动创建代理规则。
+
+**cURL 导入**——把 cURL 命令粘贴到「导入 cURL」区域（支持续行符与单双引号），点「解析并创建规则」。扩展会根据请求来源生成通配规则，并把请求头与请求体预填到改写区，确认后保存即生效。
+
+**日志详情**——点击任意日志行展开详情：请求 URL、请求头、请求体、响应头与响应体（JSON 自动格式化）、错误信息，以及「复制为 cURL」按钮。
+
+</details>
+
+## 参与贡献
+
+小修复也欢迎。请先读 [CONTRIBUTING.md](./CONTRIBUTING.md)：三步流程、国际化要求（每条可见文案都要同时补 `locales/zh_CN/` 与 `locales/en/`），以及提 PR 前必须通过的检查。
+
+## 许可证
+
+[MIT](./LICENSE) · Copyright (c) 2026 Better
+
+---
+
+<div align="center">
+
+**如果它帮你省掉了一次后端发版，点个 Star 让更多前端同学看到它：**
+
+[![给仓库点个 Star](https://img.shields.io/github/stars/GH_OWNER/cross-origin-proxy?style=for-the-badge&logo=github&label=Star&color=yellow)](https://github.com/GH_OWNER/cross-origin-proxy/stargazers)
+&nbsp;
+[![产品说明页](https://img.shields.io/badge/产品说明页-GitHub_Pages-409eff?style=for-the-badge&logo=githubpages&logoColor=white)](https://GH_OWNER.github.io/cross-origin-proxy/zh.html)
+
+</div>

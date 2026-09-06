@@ -1,0 +1,476 @@
+/**
+ * 跨域代理助手 · 产品落地页样式
+ *
+ * 设计约束：
+ * - 零依赖、零 JS、零外部字体/CDN：GitHub Pages 直出，AI 爬虫与禁用 JS 的访客都能看到完整内容。
+ * - 颜色取自 `assets/theme/tokens.css` 的 sky 主题主色，与扩展内 UI 保持同一品牌识别。
+ * - 遵循 prefers-color-scheme / prefers-reduced-motion / :focus-visible，保证可读性与可访问性。
+ */
+
+:root {
+  --lp-primary: #409eff;
+  --lp-primary-strong: #1a5fb4;
+  --lp-primary-soft: #ecf5ff;
+  --lp-ink: #1f2d3d;
+  --lp-ink-soft: #5b6b7c;
+  --lp-ink-faint: #8a97a5;
+  --lp-bg: #fff;
+  --lp-bg-alt: #f6f9fe;
+  --lp-surface: #fff;
+  --lp-line: #e3ecf7;
+  --lp-code-bg: #0f2b52;
+  --lp-code-ink: #d7e8ff;
+  --lp-radius: 14px;
+  --lp-radius-sm: 8px;
+  --lp-shadow: 0 10px 30px rgb(16 63 128 / 8%);
+  --lp-max: 1120px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lp-primary-strong: #8ac4ff;
+    --lp-primary-soft: #16283d;
+    --lp-ink: #e8eef5;
+    --lp-ink-soft: #a9b7c6;
+    --lp-ink-faint: #7f8b99;
+    --lp-bg: #0e1621;
+    --lp-bg-alt: #121c29;
+    --lp-surface: #16212f;
+    --lp-line: #24384f;
+    --lp-code-bg: #0a121c;
+    --lp-code-ink: #cfe3ff;
+    --lp-shadow: 0 10px 30px rgb(0 0 0 / 40%);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  font-family:
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--lp-ink);
+  background: var(--lp-bg);
+}
+
+a {
+  color: var(--lp-primary-strong);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 3px solid var(--lp-primary);
+  outline-offset: 2px;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+code,
+kbd,
+pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 10;
+  padding: 8px 14px;
+  color: #fff;
+  background: var(--lp-primary);
+  border-radius: var(--lp-radius-sm);
+
+  /* 用 transform 移出视口：之前用 top: -40px 时链接自身高约 43px，顶部会露出几px蓝条。 */
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--lp-max);
+  padding: 0 20px;
+  margin: 0 auto;
+}
+
+/* ---------- 顶部导航 ---------- */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--lp-bg) 88%, transparent);
+  border-bottom: 1px solid var(--lp-line);
+  backdrop-filter: saturate(160%) blur(8px);
+}
+
+.site-header .wrap {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 62px;
+}
+
+.brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-weight: 700;
+}
+
+.brand img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.site-nav a {
+  color: var(--lp-ink-soft);
+}
+
+.site-nav a:hover {
+  color: var(--lp-ink);
+}
+
+.lang-switch {
+  padding: 5px 12px;
+  border: 1px solid var(--lp-line);
+  border-radius: 999px;
+}
+
+/* ---------- Hero ---------- */
+
+.hero {
+  padding: 64px 0 44px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--lp-bg-alt), var(--lp-bg));
+}
+
+.hero h1 {
+  margin: 0 0 14px;
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 1.22;
+  letter-spacing: -0.5px;
+}
+
+.hero .lede {
+  max-width: 760px;
+  margin: 0 auto;
+  font-size: clamp(16px, 2.2vw, 19px);
+  color: var(--lp-ink-soft);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 22px 0 6px;
+  font-size: 13px;
+  color: var(--lp-ink-faint);
+}
+
+.badges span {
+  padding: 3px 10px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: 999px;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 26px;
+}
+
+.btn {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  padding: 11px 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.btn-primary {
+  color: #fff;
+  background: var(--lp-primary);
+}
+
+.btn-primary:hover {
+  color: #fff;
+  text-decoration: none;
+  background: var(--lp-primary-strong);
+}
+
+.btn-ghost {
+  color: var(--lp-ink);
+  background: var(--lp-surface);
+  border-color: var(--lp-line);
+}
+
+.btn-ghost:hover {
+  text-decoration: none;
+  border-color: var(--lp-primary);
+}
+
+/* ---------- 通用区块 ---------- */
+
+section {
+  padding: 52px 0;
+  border-top: 1px solid var(--lp-line);
+}
+
+section[aria-labelledby] {
+  scroll-margin-top: 72px;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: clamp(22px, 3.4vw, 30px);
+  line-height: 1.3;
+}
+
+h3 {
+  margin: 26px 0 8px;
+  font-size: 19px;
+}
+
+.section-lede {
+  max-width: 820px;
+  margin: 0 0 26px;
+  color: var(--lp-ink-soft);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+  gap: 18px;
+}
+
+.card {
+  padding: 20px 22px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  box-shadow: var(--lp-shadow);
+}
+
+.card h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.card p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--lp-ink-soft);
+}
+
+.kbd {
+  padding: 1px 7px;
+  font-size: 13px;
+  background: var(--lp-bg-alt);
+  border: 1px solid var(--lp-line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+}
+
+/* ---------- 表格 ---------- */
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+}
+
+table {
+  width: 100%;
+  font-size: 15px;
+  border-collapse: collapse;
+}
+
+caption {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--lp-ink-faint);
+  text-align: left;
+}
+
+th,
+td {
+  padding: 12px 16px;
+  vertical-align: top;
+  text-align: left;
+  border-bottom: 1px solid var(--lp-line);
+}
+
+th {
+  font-weight: 600;
+  background: var(--lp-bg-alt);
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ---------- 代码与流程 ---------- */
+
+pre {
+  padding: 18px 20px;
+  margin: 0;
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--lp-code-ink);
+  background: var(--lp-code-bg);
+  border-radius: var(--lp-radius);
+}
+
+pre + pre {
+  margin-top: 14px;
+}
+
+code {
+  padding: 1px 6px;
+  font-size: 0.92em;
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-soft);
+  border-radius: 5px;
+}
+
+pre code {
+  padding: 0;
+  color: inherit;
+  background: none;
+}
+
+ol.steps {
+  padding-left: 22px;
+  margin: 0;
+}
+
+ol.steps li {
+  margin-bottom: 10px;
+}
+
+/* ---------- 截图 ---------- */
+
+.shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.shot {
+  padding: 12px;
+  margin: 0;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  border-radius: var(--lp-radius-sm);
+}
+
+.shot figcaption {
+  padding: 10px 4px 2px;
+  font-size: 14px;
+  color: var(--lp-ink-soft);
+}
+
+/* ---------- FAQ ---------- */
+
+details {
+  padding: 14px 18px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-sm);
+}
+
+details + details {
+  margin-top: 10px;
+}
+
+summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+details p {
+  margin: 10px 0 0;
+  color: var(--lp-ink-soft);
+}
+
+/* ---------- 页脚 ---------- */
+
+.site-footer {
+  padding: 34px 0 46px;
+  font-size: 14px;
+  color: var(--lp-ink-faint);
+  background: var(--lp-bg-alt);
+  border-top: 1px solid var(--lp-line);
+}
+
+.site-footer .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 26px;
+  justify-content: space-between;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
