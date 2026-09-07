@@ -103,8 +103,10 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Request body override** — replace the original body with custom content
 - **Response modification** — override status code, response headers, or individual JSON fields by dot-notation path (`data.token`)
 - **Mock response** — return custom JSON / text / HTML / XML without hitting any server
+- **Conditional mock** — attach conditions (URL pattern, HTTP method, query params) and the first match decides the body, status and content type
 - **Request delay injection** — 0–60000 ms of artificial latency to exercise loading and timeout states
 - **Request blocking** — block matched requests entirely (network error) to test failure and offline fallback paths
+- **Retry on failure** — re-issue on a network error or a 5xx response, 0–5 attempts with a configurable interval
 - **HTTP method filtering** — restrict a rule to GET/POST/PUT/…; empty means any method
 - **Query parameter injection** — append or override query params on the proxied URL (`__env=uat`, gray-release tags) without rewriting the whole URL
 - **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite, handled in the page interceptor
@@ -112,17 +114,19 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 ### Rule management
 
 - Add / edit / duplicate / delete via a visual form
+- **Quick templates** for the common shapes (wildcard API proxy, prefix path, auth header, header override) and **undo** immediately after a delete
 - **Drag-and-drop reordering** of priority (grab the ⠿ handle)
 - **Capability badges** on every rule: **H** headers · **B** body · **R** response · **M** mock · **D** delay · **X** block · **WS** WebSocket
 - Per-rule and batch enable / disable
 - **Batch migrate target URLs** — find/replace part of the target domain across selected rules, with a live change preview
 - Search and filter by name, pattern and status
+- **Conflict warning** when the rule being edited is shadowed by a higher-priority rule with the same pattern, so a rule that can never fire does not go unnoticed
 
 ### Logs & debugging
 
-- Request log panel: method, status, duration, matched-rule and DNR hit statistics
+- Request log panel: method, status, duration, plus hit statistics for both channels — DNR over the last 5 minutes and service-worker hits since the last config change
 - Log detail viewer: full request/response headers and body, JSON auto-formatted
-- **Copy as cURL** on any log entry
+- **Copy as cURL** on any log entry, and **create a rule** straight from a captured request
 - Filter by method, status, rule or URL keyword
 - **URL match tester** in the header bar: type any URL (optionally with a method) to preview the matched rule, rewritten URL, forwarding channel and shadowed rules in real time
 

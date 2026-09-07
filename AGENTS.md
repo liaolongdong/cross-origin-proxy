@@ -78,7 +78,7 @@
 - `composables/`：响应式状态与副作用（`useRuleManagement`/`useProxyStatus`/`useRequestLog`/`useImportExport`/`useI18n`）。
 - `utils/`：与 Vue 生命周期无关的领域逻辑与纯函数（`dnrRules`/`urlMatcher`/`curlParser`/`har`/`formatters`/`generateId`/`storage`/`theme`/`i18n`/`logger`）。
 - `locales/`：应用内 i18n 文案；`public/_locales/`：仅 manifest 名称/描述。`assets/theme/tokens.css`：`--cop-*` 设计令牌。`tests/`：Vitest 单测（node 环境）。
-- `docs/`：GitHub Pages 产品站（静态 HTML/CSS，零 JS、零外部 CDN，不参与 WXT 构建）；`docs/assets/img/` 需入库供 Pages 访问。
+- `docs/`：GitHub Pages 产品站（静态 HTML/CSS + 一个零依赖、自托管的渐进增强脚本 `docs/assets/landing.js`，零外部 CDN、零远程字体；不参与 WXT 构建）。该脚本只加 `html.js` 类并接管截图廊控件、滚动淡入、导航高亮与回顶导轨，**所有依赖 JS 的样式状态写在 `html.js` 选择器下**，因此禁用或删除 JS 时页面内容依旧完整可读、可导航；改页面结构时要维持这个降级前提。`docs/assets/img/` 需入库供 Pages 访问。
 - `store-assets/`、`marketing/`：均为本地可再生/仅本地产物，已进 `.gitignore`；`.test-tmp/` 严禁入库（曾因误提交 Chrome for Testing 二进制把 `.git` 撑到 195MB，2026-09 已重写历史清除）。
 
 ## 代码改动与优化边界
@@ -175,7 +175,7 @@
   - Vue/CSS 样式：`pnpm lint:style`。
   - 入口、manifest、WXT/Vite 配置、依赖或打包行为：`pnpm build`。
   - 文档、JSON 等格式改动：对本次修改文件运行 `pnpm exec prettier --check <files...>`。
-  - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），并在浏览器里目测渲染。
+  - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），`docs/assets/landing.js` 需过 `pnpm lint`（浏览器全局已在 `eslint.config.js` 的 `docs/**` 覆盖块中声明），并在浏览器里目测渲染（含禁用 JS 的降级态）。中英两页的可见文案、FAQ 条目数与 `FAQPage` 结构化数据必须一一对应：`FAQPage` 的问答需与页面 `<details>` 文本一致，两页的条目顺序也需一致。
   - 商店文案改动：`pnpm test`（含 `name`/`description` 字符上限守卫）+ 同步 `CHROMEWEBSTORE.md`。
 - 不用会改写整个仓库的 `pnpm format` 处理局部任务；需要自动修复时只作用于本次修改文件。
 - 不为通过测试而弱化断言、删除、跳过测试或隐藏错误；命令因既有问题或环境限制无法运行时，交付时如实说明未验证项与原因。
@@ -239,6 +239,7 @@
 - `vue/multi-word-component-names` 已关闭。
 - `no-console` 设为 warn，仅允许 `console.warn`/`console.error`；运行时代码仍应使用 `utils/logger.ts`。
 - `utils/logger.ts`、`scripts/**` 显式豁免 `no-console`；MAIN-world 拦截器因自包含直接使用 `console.warn`。
+- `docs/**/*.js`（产品站渐进增强脚本）在 `eslint.config.js` 中声明为 `sourceType: 'script'` + 少量浏览器全局（`document`/`window`/`matchMedia`/`IntersectionObserver`/`setTimeout`/`clearTimeout`），因为它无构建、无模块系统；新增全局需在此块中显式补充。
 
 ## 完成标准
 

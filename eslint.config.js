@@ -47,4 +47,19 @@ export default [
       'no-console': 'off',
     },
   },
+  {
+    // GitHub Pages 落地页脚本：无构建、无模块系统，只有浏览器全局（渐进增强，可被禁用）
+    files: ['docs/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        document: 'readonly',
+        window: 'readonly',
+        matchMedia: 'readonly',
+        IntersectionObserver: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
 ];

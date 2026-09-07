@@ -6,10 +6,12 @@
       name="viewport"
       content="width=device-width, initial-scale=1"
     />
-    <title>跨域代理助手 - CORS 跨域调试 · API 环境切换 · Mock｜Chrome 扩展</title>
+    <title>
+      跨域代理助手 · 让 FAT 前端直连 UAT 后端的 Chrome 扩展 | CORS 跨域调试 · Mock · 延迟 · 阻断 · WebSocket
+    </title>
     <meta
       name="description"
-      content="跨域代理助手是一款 Manifest V3 Chrome 扩展：把前端 API 请求代理到 FAT/UAT/PROD 另一个环境，无需改应用代码。支持 URL 重写、请求头与请求体改写、响应状态/响应头/JSON 字段改写、Mock 响应、延迟注入、请求阻断与 WebSocket 转发；简单规则走浏览器网络层零 JS 快通道，全部数据只存本地。"
+      content="开源 Chrome 扩展（Manifest V3），把前端 API 请求代理到另一个后端环境（FAT/UAT/PROD），不改代码、不改后端 CORS：URL 与请求头/响应改写、条件化 Mock、延迟、阻断、重试、WebSocket 转发，数据只存本机。"
     />
     <link
       rel="canonical"
@@ -39,21 +41,25 @@
       rel="stylesheet"
       href="assets/landing.css"
     />
+    <script
+      src="assets/landing.js"
+      defer
+    ></script>
     <meta
       property="og:type"
       content="website"
     />
     <meta
       property="og:site_name"
-      content="跨域代理助手"
+      content="跨域代理助手 Cross-Origin Proxy"
     />
     <meta
       property="og:title"
-      content="跨域代理助手 - 前端 API 跨环境联调 Chrome 扩展"
+      content="跨域代理助手 · 一条规则让 FAT 前端调用 UAT 后端"
     />
     <meta
       property="og:description"
-      content="免改代码与 CORS，把前端 API 指到 FAT/UAT/PROD 任意环境：重写、Mock、延迟、阻断、WebSocket 转发，数据只存本地，MIT 开源。"
+      content="在浏览器里重写 URL、请求头与响应，Mock、注入延迟、阻断、重试、转发 WebSocket。网络层零 JS 快通道，数据只存本机，MIT 开源。"
     />
     <meta
       property="og:url"
@@ -62,6 +68,14 @@
     <meta
       property="og:image"
       content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-zh.png"
+    />
+    <meta
+      property="og:image:width"
+      content="1200"
+    />
+    <meta
+      property="og:image:height"
+      content="630"
     />
     <meta
       property="og:locale"
@@ -77,11 +91,11 @@
     />
     <meta
       name="twitter:title"
-      content="跨域代理助手 - 前端 API 跨环境联调 Chrome 扩展"
+      content="跨域代理助手 · 跨环境 API 调试 Chrome 扩展"
     />
     <meta
       name="twitter:description"
-      content="免改代码与 CORS，把前端 API 指到另一个后端环境。"
+      content="不改代码、不改后端 CORS，把前端 API 请求代理到另一个后端环境。本地存储，开源 MIT。"
     />
     <meta
       name="twitter:image"
@@ -104,96 +118,222 @@
             "codeRepository": "https://github.com/liaolongdong/cross-origin-proxy",
             "downloadUrl": "https://github.com/liaolongdong/cross-origin-proxy/releases",
             "image": "https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-zh.png",
-            "screenshot": "https://liaolongdong.github.io/cross-origin-proxy/assets/img/rules-overview.jpg",
+            "screenshot": [
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/rules-overview.jpg",
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/rule-editor.jpg",
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/url-tester.jpg",
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/request-log.jpg",
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/popup.jpg",
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/dark-theme.jpg"
+            ],
             "license": "https://spdx.org/licenses/MIT.html",
             "isAccessibleForFree": true,
-            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
             "author": { "@type": "Person", "name": "Better", "url": "https://github.com/liaolongdong" },
-            "dateModified": "2026-09-06",
+            "dateModified": "2026-09-07",
             "featureList": [
-              "按通配符、前缀、正则匹配的 URL 重写",
-              "请求头与请求体改写",
-              "响应状态码、响应头与 JSON 字段改写",
-              "不访问目标服务的 Mock 响应",
-              "0 到 60 秒的请求延迟注入",
-              "用于异常态验证的请求阻断",
-              "HTTP 方法过滤与查询参数注入",
-              "WebSocket（ws/wss）转发",
-              "简单规则走 declarativeNetRequest 网络层快通道",
-              "请求日志与 HAR、cURL 导入导出",
-              "环境配置快照与目标域名批量迁移",
-              "中英文界面与 6 套主题"
+              "按通配符、前缀、正则匹配并重写请求 URL",
+              "注入或替换请求头",
+              "替换请求体",
+              "改写响应状态码、状态文本、响应头与按点分路径改写 JSON 字段",
+              "不访问目标服务直接返回 Mock 响应（JSON / 文本 / HTML / XML）",
+              "按 URL 正则、HTTP 方法、查询参数命中不同内容的条件化 Mock",
+              "注入 0 至 60000 毫秒的请求延迟",
+              "阻断请求并返回网络错误",
+              "网络失败与 5xx 时自动重试，0 至 5 次且间隔可配",
+              "规则级 HTTP 方法过滤",
+              "在代理后的 URL 上追加或覆盖查询参数",
+              "按 URL 重写转发 WebSocket（ws / wss）长连接",
+              "仅重写 URL 的简单规则编译为 declarativeNetRequest 网络层重定向，单请求零 JS 开销",
+              "网络层无法表达的能力由页面拦截器 + 后台服务线程处理，失败可回退原生请求",
+              "优先级拖拽排序，并对被同模式更高优先级规则遮蔽的规则给出冲突提示",
+              "URL 匹配测试：实时预览命中规则、重写结果、转发通道与被遮蔽规则",
+              "快速模板、复制规则、撤销删除、批量启停与批量删除",
+              "带变更预览的目标域名批量迁移",
+              "最近 500 条请求日志，支持筛选、详情查看与复制为 cURL",
+              "两条通道各自的命中统计（DNR 近 5 分钟、服务线程自配置变更起）",
+              "HAR 1.2 导出，以及把抓包记录转成规则的 HAR 导入",
+              "粘贴 DevTools「复制为 cURL」命令预填规则",
+              "JSON 配置导入导出，支持替换与合并两种模式",
+              "环境配置快照，FAT / UAT / PROD 一键切换",
+              "30 分钟至 4 小时的代理自动关闭倒计时",
+              "弹窗含总开关、今日请求数、当前页命中预览与「为此页面创建规则」",
+              "中英文界面、6 套主题、浅色/深色/跟随系统、键盘快捷键"
             ]
           },
           {
-            "@type": "FAQPage",
-            "@id": "https://liaolongdong.github.io/cross-origin-proxy/zh.html#faq",
-            "mainEntity": [
+            "@type": "HowTo",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/zh.html#howto",
+            "name": "如何用跨域代理助手把 FAT 前端指向 UAT 后端",
+            "description": "从源码构建扩展，在 Chrome 中以「加载已解压的扩展程序」方式安装，添加一条通配符规则，并在请求日志中验证结果。",
+            "totalTime": "PT3M",
+            "tool": [
+              { "@type": "HowToTool", "name": "桌面版 Google Chrome（Manifest V3）" },
+              { "@type": "HowToTool", "name": "Node.js 20 及以上 + pnpm 10（仅源码构建需要）" }
+            ],
+            "step": [
               {
-                "@type": "Question",
-                "name": "浏览器的跨域代理是做什么的？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "它拦截页面发出的 API 请求，把请求送到别处。开发中最常见的用途就是跨环境联调：让连着 A 后端的前端去调 B 环境的接口，不改应用代码、不重新构建，就能验证只在 UAT 上存在的逻辑。"
-                }
+                "@type": "HowToStep",
+                "position": 1,
+                "name": "构建扩展",
+                "text": "执行 git clone https://github.com/liaolongdong/cross-origin-proxy，然后 pnpm install 与 pnpm build，产物在 .output/chrome-mv3。"
               },
               {
-                "@type": "Question",
-                "name": "它能绕过 CORS 限制吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "带任意高级能力的规则（请求头改写、请求体改写、响应改写、Mock、延迟、阻断、重试、方法过滤、查询参数注入、WebSocket）由扩展后台上下文发起请求，后台持有站点权限，页面拿到的是扩展构造出来的响应，因此不受页面 CORS 校验约束。而纯粹的 URL 重写会被编译成网络层重定向，浏览器仍会校验重定向后响应的 Access-Control-Allow-Origin。如果目标环境没有放行你的来源，给规则加上任意一项高级能力（最省事的是加一个响应头改写），规则就会切到后台通道。"
-                }
+                "@type": "HowToStep",
+                "position": 2,
+                "name": "在 Chrome 中加载",
+                "text": "打开 chrome://extensions，开启右上角「开发者模式」，点击「加载已解压的扩展程序」并选择 .output/chrome-mv3 目录。"
               },
               {
-                "@type": "Question",
-                "name": "所有网站都能用吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "内容脚本注入到全部 http 与 https 页面，规则按请求 URL 匹配，所以内网系统、localhost 开发服务、预发域名都能用。chrome:// 页面、Chrome 应用商店页和其他扩展页面是 Chrome 对所有扩展的统一限制，无法注入。"
-                }
+                "@type": "HowToStep",
+                "position": 3,
+                "name": "打开总开关并添加规则",
+                "text": "在弹窗中打开代理总开关，然后添加一条通配符规则，例如匹配 https://fat-api.example.com/*、目标 https://uat-api.example.com，并设置优先级数值。"
               },
               {
-                "@type": "Question",
-                "name": "我的数据会被传到服务器吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "不会。规则、请求日志、环境配置和偏好全部保存在本机的 chrome.storage.local。扩展没有账号体系、没有统计埋点、没有任何自有远程服务，唯一的网络流量就是你自己要求代理的 API 流量。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "和 devServer 代理、网关改配置有什么区别？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "devServer 代理要按项目配置、只覆盖指向本地开发服务的请求，而且同事看不见你的配置；改网关或 CORS 需要后端发版。扩展装在浏览器里：一条规则对所有项目生效，还能改写响应、Mock 数据，整套规则可导出 JSON 给团队复用。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "有哪些容量和参数限制？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "规则最多 200 条，请求日志保留最近 500 条，请求体上限 10MB，延迟范围 0 到 60000 毫秒。Mock 与响应改写的状态码会被钳制在 200 到 599，否则前端无法构造合法的 Response 对象。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "拦截器处理失败时会怎样？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "拦截器会回退到浏览器原生的 fetch、XMLHttpRequest 或 WebSocket，请求照原样发出，页面不会因为扩展异常而中断。唯一的例外是阻断规则：被阻断的请求绝不会回退发出，否则就等于把用户明确要求屏蔽的请求又放了出去。"
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "规则可以分享给同事吗？",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "可以。整套配置可导出为 JSON，抓到的请求可导出为标准 HAR 1.2；导入 HAR 会根据录制的请求自动生成代理规则，粘贴 DevTools 的 Copy as cURL 结果也能解析并预填一条规则。环境配置快照可以把当前规则集存成命名快照，在 FAT、UAT、PROD 之间一键切换。"
-                }
+                "@type": "HowToStep",
+                "position": 4,
+                "name": "验证结果",
+                "text": "刷新页面，在请求日志或 DNR 命中统计中确认代理生效；也可以把任意 URL 粘贴进匹配测试器，提前查看重写结果与转发通道。"
               }
             ]
+          }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://liaolongdong.github.io/cross-origin-proxy/zh.html#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "浏览器的跨域代理到底是做什么的？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "它拦截页面发出的 API 请求，并把请求送到别处。在研发场景里，通常就是让一个连着某个后端的前端页面改连另一个环境，于是不改应用代码、不重新部署，也能在 FAT 页面上验证只有 UAT 才有的修复。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "它能拦截哪些请求？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "页面主世界的拦截器会接管 fetch、XMLHttpRequest 与 WebSocket，相对地址在匹配前先解析为绝对地址。仅重写 URL 的规则会被编译成 declarativeNetRequest 重定向，由浏览器对匹配的各类资源生效：主文档与子框架、XHR、脚本、样式、图片、字体、媒体与其他。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "通配符、前缀、正则三种匹配方式有什么区别？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "通配符把 * 视为任意字符，并把结尾 * 捕获的内容拼接到目标地址之后；前缀匹配 URL 开头，把剩余部分拼到目标之后；正则按整个模式匹配，目标地址可以引用捕获组。多条规则同时命中时，优先级数值小者优先，数值相同则先创建的规则优先。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "所有网站都能用吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "内容脚本注入到所有 http 与 https 页面，规则按请求 URL 匹配，因此内网系统、localhost 开发服务、预发域名都适用。chrome:// 页面、Chrome 应用商店与其他扩展页面被浏览器统一限制，任何扩展都无法注入。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "它能绕过 CORS 限制吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "使用了任一高级能力（请求头覆盖、请求体覆盖、响应覆盖、Mock、延迟、阻断、重试、方法过滤、查询参数注入、WebSocket）的规则，由持有主机权限的扩展后台上下文发出请求，页面拿到的是扩展构造的响应，因此不会触发页面侧的 CORS 校验。仅重写 URL 的规则走网络层重定向，浏览器仍会校验重定向后响应的 Access-Control-Allow-Origin。若目标环境不允许你的源，给规则加上任一高级能力（加一个响应头覆盖代价最小）即可切到后台通道。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "为什么某条规则实际走的通道和我预期的不一样？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "因为网络层表达不了你想要的行为。不以 * 结尾的通配符、目标地址为空，或者带了任一高级能力，都会被刻意路由到后台通道——若强行编译成重定向，结果会被悄悄改变。URL 匹配测试器会在你依赖某条规则之前，把任意 URL 的转发通道显示出来。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "它会不会拖慢页面？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "只重写 URL 的规则单请求零 JavaScript 开销，由浏览器网络栈直接完成重定向。走后台通道的请求会多一次扩展内的中转，外加你配置的延迟，单个代理请求有 30 秒上限。用户编写的正则会先做嵌套量词 ReDoS 检测，送往网络层的正则还需通过 Chrome 的 RE2 校验——一条不支持的正则会让整批规则安装失败，因此在同步前就被过滤掉。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "为什么简单规则没有逐条请求日志？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "网络层重定向不会经过扩展，没有可记录的逐条请求。规则级命中数会出现在「DNR 命中统计」里，统计窗口为最近 5 分钟；Chrome 对该读取接口有配额限制，因此面板改为手动刷新，超出配额时静默保留上一次结果。后台通道的命中数单独统计。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Mock 除了返回固定内容还能做什么？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "一条规则可以挂多组条件——URL 正则、HTTP 方法、查询参数——首个命中的条件决定响应体、状态码与 Content-Type，全部不命中时回落到规则的默认响应体。于是一条规则就能替多个接口、或同一接口的多种状态兜底。Mock 请求完全不触网，返回状态码被钳制在 200–599。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "阻断请求和强行返回 500 有什么区别？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "阻断让请求以网络故障的方式失败，用来验证离线兜底与重试逻辑；改写响应状态码则给你一个真实的 HTTP 错误码、状态文本与响应头，用来验证依赖状态码的错误渲染。被阻断的请求不会被原生回退重放——否则发出去的正是你要压掉的那个请求。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "失败重试是怎么工作的？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "在后台通道，规则最多可重试 5 次，间隔可配置。请求本身失败、或响应状态为 5xx 且仍有剩余次数时触发重试；次数用尽后把最后一次响应或错误交回页面。重试属于后台通道能力，因此启用重试的规则永远不会被判定为网络层重定向。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "规则可以分享给团队吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "可以。导出为 JSON 配置，同事导入时可选择覆盖，也可与现有规则合并；可把捕获到的流量导出为 HAR 1.2，也可导入别处抓的 HAR 自动生成规则；粘贴一条 cURL 命令（DevTools「复制为 cURL」产物）即可预填规则表单。环境配置快照会保存整套规则的命名副本。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "有哪些限制？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "最多 200 条规则，最近 500 条请求日志，请求体上限 10 MB，延迟 0 至 60000 毫秒，重试最多 5 次，单个代理请求 30 秒上限，Mock 与改写的状态码钳制在 200–599，以保证页面总能构造出合法的 Response 对象。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "扩展处理失败时会怎样？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "页面会回退到浏览器原生的 fetch、XMLHttpRequest 或 WebSocket，请求照常发出，表现如同规则不存在。FormData、Blob、ArrayBuffer 等非字符串请求体无法跨消息通道传递，同样回退原生。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "我的数据会被上传到服务器吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "不会。规则、日志、环境快照与偏好设置都保存在本机的 chrome.storage.local 里。扩展不含统计埋点、不上传任何数据，也没有自有远程服务，唯一的网络流量就是你让它代理的 API 流量。需要留意的是，请求日志会在本机记录被代理的请求头与请求体（可能含 token），在分享导出的 HAR 或复制的 cURL 命令之前请先检查。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "支持 Firefox 或 Edge 吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "面向 Chrome（Manifest V3）构建与验证。Edge 支持 Chromium 扩展，同一份构建通常可用；Firefox 的 Manifest V3 在 declarativeNetRequest 上存在差异，目前不是支持目标。"
+            }
           }
         ]
       }
@@ -222,10 +362,12 @@
         </a>
         <nav
           class="site-nav"
-          aria-label="页面章节导航"
+          aria-label="页面区块导航"
         >
+          <a href="#problem">解决什么</a>
+          <a href="#features">能力</a>
+          <a href="#showcase">界面预览</a>
           <a href="#how-it-works">工作原理</a>
-          <a href="#features">功能</a>
           <a href="#use-cases">使用场景</a>
           <a href="#compare">方案对比</a>
           <a href="#faq">常见问题</a>
@@ -236,7 +378,7 @@
             href="./"
             hreflang="en"
             lang="en"
-            >English</a
+            >EN</a
           >
         </nav>
       </div>
@@ -248,37 +390,86 @@
         aria-labelledby="hero-title"
       >
         <div class="wrap">
-          <h1 id="hero-title">一条规则，把 FAT 前端指到 UAT 后端——不改代码、不发版</h1>
-          <p class="lede">
-            跨域代理助手是一款 MIT 开源的 Chrome 扩展（Manifest V3），把页面发出的 API 请求代理到另一个后端环境。URL
-            重写、请求头与请求体改写、响应改写、Mock、延迟、阻断、WebSocket 转发，全部在浏览器里配置，全部只存在本机。
-          </p>
-          <div class="badges">
-            <span>Manifest V3</span>
-            <span>无埋点无遥测</span>
-            <span>数据仅存本地</span>
-            <span>200 条规则</span>
-            <span>中英双语界面</span>
-            <span>MIT 开源</span>
+          <div class="hero-copy">
+            <span class="eyebrow"><span class="dot"></span> Manifest V3 · 只存本地 · MIT 开源</span>
+            <h1 id="hero-title">
+              一条规则，让 <span class="accent">FAT 前端</span>直连 <span class="accent">UAT 后端</span>——不改代码、不改
+              CORS
+            </h1>
+            <p class="lede">
+              跨域代理助手是一款开源 Chrome 扩展（Manifest V3），把页面发出的 API 请求代理到另一个后端环境。重写
+              URL、请求头与响应，条件化 Mock、注入延迟、阻断请求、失败重试、转发
+              WebSocket——全部在浏览器里配置，数据只存在你的电脑上。
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="https://github.com/liaolongdong/cross-origin-proxy"
+                >在 GitHub 查看源码</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/liaolongdong/cross-origin-proxy/releases"
+                >下载构建产物</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="#how-it-works"
+                >看工作原理</a
+              >
+            </div>
+            <p class="hero-note">Chrome 应用商店上架准备中；在此之前请按下面三步从源码安装。</p>
+            <div class="badges">
+              <span>无埋点无遥测</span>
+              <span>不需要后端改动</span>
+              <span>网络层零 JS 快通道</span>
+              <span>HAR · cURL · JSON</span>
+              <span>中英双语界面</span>
+              <span>6 套主题</span>
+            </div>
           </div>
-          <div class="cta-row">
-            <a
-              class="btn btn-primary"
-              href="https://github.com/liaolongdong/cross-origin-proxy"
-              >在 GitHub 查看源码</a
-            >
-            <a
-              class="btn btn-ghost"
-              href="#install"
-              >三步安装</a
-            >
-            <a
-              class="btn btn-ghost"
-              href="#how-it-works"
-              >看它怎么工作</a
-            >
+          <div class="hero-visual">
+            <figure class="flow-figure">
+              <div class="flow">
+                <div class="flow-node flow-node--page">
+                  FAT 页面 · fat.app<small>fetch · XMLHttpRequest · WebSocket</small>
+                </div>
+                <div
+                  class="flow-arrow"
+                  aria-hidden="true"
+                >
+                  ↓
+                </div>
+                <div class="flow-lanes">
+                  <div class="flow-node flow-node--fast">
+                    简单规则 → DNR 重定向<small>网络层完成 · 单请求零 JS 开销</small>
+                  </div>
+                  <div class="flow-node flow-node--sw">
+                    复杂规则 → SW 通道<small>改写 · Mock · 延迟 · 阻断 · 重试 · ws</small>
+                  </div>
+                </div>
+                <div
+                  class="flow-arrow"
+                  aria-hidden="true"
+                >
+                  ↓
+                </div>
+                <div class="flow-node flow-node--target">
+                  目标环境<small>UAT · PROD · Mock 服务——全浏览器共用一套规则</small>
+                </div>
+              </div>
+              <figcaption>
+                一套规则集，两条转发通道——按规则区分，而不是按项目区分。拦截失败时页面会回退到原生
+                <code>fetch</code> / <code>XMLHttpRequest</code> / <code>WebSocket</code>；被阻断的请求绝不回退重放。
+              </figcaption>
+            </figure>
+            <div class="stat-strip">
+              <div class="stat"><b>2</b><span>条转发通道</span></div>
+              <div class="stat"><b>11</b><span>项规则能力</span></div>
+              <div class="stat"><b>200</b><span>条规则上限</span></div>
+              <div class="stat"><b>0</b><span>字节外传</span></div>
+            </div>
           </div>
-          <p class="section-lede">Chrome 应用商店上架准备中，现阶段按下方方式从源码安装。</p>
         </div>
       </section>
 
@@ -287,40 +478,46 @@
         aria-labelledby="problem-title"
       >
         <div class="wrap">
-          <h2 id="problem-title">它省掉的是哪三件事</h2>
-          <p class="section-lede">
-            跨环境联调通常要付出三样代价之一：改后端、改每个项目的配置，或者在本地伪造一份构建。这个扩展把它们收敛成浏览器里的一条规则。
-          </p>
+          <div class="section-head">
+            <h2 id="problem-title">它消掉了哪一类成本</h2>
+            <p class="section-lede">
+              跨环境调试通常要付出三种成本之一：改后端、每个项目改一次配置，或者本地伪造一套构建。这款扩展把这三者收敛成一条浏览器规则，并对你打开的每个页面生效。
+            </p>
+          </div>
           <div class="table-scroll">
             <table>
               <caption>
-                以最常见的「修复只在 UAT 上，我的 FAT 页面调不到」为例
+                以最常见的「UAT 上有修复、我的 FAT 页面没有」为例，前后对比
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">不用扩展时</th>
-                  <th scope="col">用一条规则时</th>
+                  <th scope="col">没有扩展时</th>
+                  <th scope="col">有了一条规则后</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>改 devServer 代理表，然后重启本地服务。</td>
+                  <td>改 devServer 代理表，然后重启开发服务——每个项目一次，同事还看不到。</td>
                   <td>
-                    填 <code>https://fat-api.example.com/*</code> →
-                    <code>https://uat-api.example.com</code>，保存即生效。
+                    添加 <code>https://fat-api.example.com/*</code> →
+                    <code>https://uat-api.example.com</code>，立即对浏览器里的所有项目生效。
                   </td>
                 </tr>
                 <tr>
-                  <td>请后端把来源加进 <code>Access-Control-Allow-Origin</code> 再发一次版。</td>
-                  <td>带任意高级能力的请求由扩展代发，页面侧不触发 CORS 校验。</td>
+                  <td>请后端把你的源加进 <code>Access-Control-Allow-Origin</code> 并重新发布。</td>
+                  <td>带任一高级能力的请求由扩展应答，页面侧 CORS 校验不会触发。</td>
                 </tr>
                 <tr>
-                  <td>在源码里硬写另一个环境的 token，还要记得改回来。</td>
-                  <td>按规则注入请求头，联调完关掉这条规则即可。</td>
+                  <td>在源码里硬写另一个环境的 token，还得记得改回去。</td>
+                  <td>按规则注入请求头，调试完把规则关掉即可。</td>
                 </tr>
                 <tr>
-                  <td>接口还没写好，只能先在前端塞假数据。</td>
-                  <td>在规则里 Mock 响应，业务代码一行不动。</td>
+                  <td>等一个还没写完的接口，或者在应用里塞桩代码。</td>
+                  <td>在规则里 Mock——还能按 URL、方法、查询参数返回不同内容。</td>
+                </tr>
+                <tr>
+                  <td>抓包工具里录下流量，再手工复现一次请求去验证异常分支。</td>
+                  <td>导入 HAR 或粘贴 cURL 命令，规则自动预填。</td>
                 </tr>
               </tbody>
             </table>
@@ -329,75 +526,558 @@
       </section>
 
       <section
-        id="gallery"
-        aria-labelledby="gallery-title"
+        id="features"
+        aria-labelledby="features-title"
       >
         <div class="wrap">
-          <h2 id="gallery-title">界面长什么样</h2>
-          <p class="section-lede">
-            以下均为当前版本真实截图。配置页承载规则表、请求日志与导入导出；弹窗把总开关和「当前页面命中预演」放在一次点击的距离内。
-          </p>
-          <div class="shots">
-            <figure class="shot">
-              <img
-                src="assets/img/rules-overview.jpg"
-                alt="规则表：三条代理规则、能力徽标、优先级与状态列"
-                width="1200"
-                height="750"
-                loading="lazy"
-              />
-              <figcaption>规则表：能力徽标、拖拽排序优先级、命中计数。</figcaption>
-            </figure>
-            <figure class="shot">
-              <img
-                src="assets/img/rule-editor.jpg"
-                alt="规则编辑弹窗：匹配模式、目标 URL、请求头改写与 Mock 响应分区"
-                width="1200"
-                height="750"
-                loading="lazy"
-              />
-              <figcaption>规则编辑：匹配、重写、改写、Mock、延迟、阻断一屏配齐。</figcaption>
-            </figure>
-            <figure class="shot">
-              <img
-                src="assets/img/url-tester.jpg"
-                alt="URL 匹配预演：命中规则、重写后的地址与转发通道"
-                width="1200"
-                height="750"
-                loading="lazy"
-              />
-              <figcaption>URL 匹配预演：保存前就能看清命中结果、重写地址与转发通道。</figcaption>
-            </figure>
-            <figure class="shot">
-              <img
-                src="assets/img/request-log.jpg"
-                alt="请求日志抽屉：方法、状态、耗时与 DNR 命中统计"
-                width="1200"
-                height="750"
-                loading="lazy"
-              />
-              <figcaption>请求日志：单条详情、复制为 cURL、DNR 命中统计。</figcaption>
-            </figure>
-            <figure class="shot">
-              <img
-                src="assets/img/popup.jpg"
-                alt="扩展弹窗：总开关、活跃规则数与快捷入口"
-                width="1200"
-                height="750"
-                loading="lazy"
-              />
-              <figcaption>弹窗：总开关、今日统计、自动关闭倒计时与当前页命中预演。</figcaption>
-            </figure>
-            <figure class="shot">
-              <img
-                src="assets/img/dark-theme.jpg"
-                alt="深色模式下的配置页"
-                width="1200"
-                height="750"
-                loading="lazy"
-              />
-              <figcaption>6 套主题 + 浅色 / 深色 / 跟随系统，中英文界面可切换。</figcaption>
-            </figure>
+          <div class="section-head">
+            <h2 id="features-title">一条规则能做到哪些事</h2>
+            <p class="section-lede">
+              匹配模式、目标地址与优先级是一条规则的骨架。其余能力都是可选且可叠加的——而你开启的每一项能力，同时也决定了这条规则走哪条通道。
+            </p>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card feature-card-lg reveal">
+              <span class="feature-icon"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 7h6l3 5h9" />
+                  <path d="M3 17h6l3-5" />
+                  <circle
+                    cx="20"
+                    cy="7"
+                    r="2"
+                  />
+                  <circle
+                    cx="20"
+                    cy="17"
+                    r="2"
+                  /></svg
+              ></span>
+              <h3>两条通道，一套规则集</h3>
+              <p>
+                仅重写 URL 的规则会被编译为 <code>declarativeNetRequest</code> 动态重定向，由浏览器网络栈完成，单请求零
+                JavaScript 开销——对
+                XHR、页面跳转、内联框架、脚本、样式、图片、字体与媒体资源同样生效。更复杂的规则走后台服务线程：主世界拦截器接管
+                <code>fetch</code>、<code>XMLHttpRequest</code> 与
+                <code>WebSocket</code>，经隔离世界的内容脚本桥接，再把响应交回页面。
+              </p>
+              <div class="chip-row">
+                <span class="chip">网络层零 JS 快通道</span><span class="chip">主世界拦截</span
+                ><span class="chip">单请求 30 秒上限</span><span class="chip">失败回退原生</span>
+              </div>
+            </article>
+            <article class="feature-card feature-card-lg reveal">
+              <span class="feature-icon feature-icon--green"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3v18" />
+                  <path d="M5 8l7-5 7 5" />
+                  <path d="M5 16l7 5 7-5" /></svg
+              ></span>
+              <h3>请求与响应的全链路改写</h3>
+              <p>
+                重写 URL；注入或替换请求头；替换请求体；改写响应状态码、状态文本、响应头、整个响应体，或按点分路径（如
+                <code>data.token</code>）替换 JSON 字段。头名会做合法性校验、值里的 CRLF
+                会被直接拒收，规则无法构造请求拆分；Mock 与改写的状态码被钳制在 200–599，保证页面总能构造出合法响应。
+              </p>
+              <div class="chip-row">
+                <span class="cap">H</span><span class="cap">B</span><span class="cap">R</span><span class="cap">M</span
+                ><span class="cap">D</span><span class="cap">X</span><span class="cap">WS</span
+                ><span class="chip">规则列表逐条能力徽标</span>
+              </div>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--cyan"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 6h16" />
+                  <path d="M4 12h10" />
+                  <path d="M4 18h7" />
+                  <circle
+                    cx="19"
+                    cy="12"
+                    r="2"
+                  />
+                  <circle
+                    cx="16"
+                    cy="18"
+                    r="2"
+                  /></svg
+              ></span>
+              <h3>通配符 / 前缀 / 正则三套匹配</h3>
+              <p>
+                三种匹配类型在两条通道上语义完全一致：<code>*</code>
+                匹配任意字符、前缀匹配开头、正则整体匹配且目标地址可引用捕获组。用户正则会先做嵌套量词 ReDoS
+                筛查，送往网络层的正则还要通过 Chrome 的 RE2 校验。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--purple"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="3"
+                    y="4"
+                    width="18"
+                    height="16"
+                    rx="2"
+                  />
+                  <path d="M8 9h8" />
+                  <path d="M8 13h5" />
+                  <path d="M8 16h3" /></svg
+              ></span>
+              <h3>支持条件化的 Mock 响应</h3>
+              <p>
+                不碰任何服务器，直接返回构造好的 JSON / 文本 / HTML / XML 与状态码；还可以挂多组条件（URL
+                正则、方法、查询参数），首个命中的条件决定响应内容。一条规则就能替整组接口，或同一接口的多种状态。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--orange"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                  />
+                  <path d="M12 7v5l4 2" /></svg
+              ></span>
+              <h3>延迟、阻断与重试</h3>
+              <p>
+                注入 0–60000 毫秒延迟验证骨架屏与超时；把请求阻断成网络错误；或让扩展在失败与 5xx 时最多重试 5
+                次，间隔可配。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 12h5l2 4 3-9 2 5h4" /></svg
+              ></span>
+              <h3>方法过滤与查询参数注入</h3>
+              <p>
+                把规则限定在 GET / POST / PUT / DELETE / PATCH / OPTIONS / HEAD
+                中的若干方法（例如只把写操作打到测试后端），或者不改写地址、只在最终 URL 上追加或覆盖查询参数，如
+                <code>__env=uat</code> 与灰度标识。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--green"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M7 12h10" />
+                  <path d="M13 8l4 4-4 4" />
+                  <circle
+                    cx="5"
+                    cy="5"
+                    r="2"
+                  />
+                  <circle
+                    cx="5"
+                    cy="19"
+                    r="2"
+                  /></svg
+              ></span>
+              <h3>WebSocket 转发</h3>
+              <p>
+                通过重写 socket 地址把 <code>ws://</code> 与 <code>wss://</code> 连接指向另一个环境，让实时业务跟 REST
+                一起切换环境。匹配模式可以用 <code>http(s)</code> 也可以写 <code>ws(s)</code>，方法过滤把握手视为
+                <code>GET</code>。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--pink"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 6h16" />
+                  <path d="M4 12h10" />
+                  <path d="M4 18h6" />
+                  <circle
+                    cx="18"
+                    cy="15"
+                    r="3"
+                  />
+                  <path d="M17 15h2" /></svg
+              ></span>
+              <h3>是一个规则工作台，不是一份配置文件</h3>
+              <p>
+                从快速模板起步，复制规则、拖拽调整优先级、批量启停与删除，删除后还可撤销。支持按名称、模式、状态与匹配类型搜索筛选。当同模式的更高优先级规则会把当前规则遮蔽时，编辑时会给出冲突提示，避免写下一条永远不会命中的规则。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--cyan"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 12h4l2 6 4-12 2 6h6" /></svg
+              ></span>
+              <h3>用证据说话，不靠猜</h3>
+              <p>
+                URL 匹配测试器可实时预览任意
+                URL（可带方法）的命中规则、重写结果、转发通道、额外动作与被遮蔽规则。请求日志保留最近 500
+                条，含方法、状态、耗时与通道，可按方法、状态区间、规则或关键词筛选，详情可看完整请求响应头与体，可复制为
+                cURL，并展示两条通道各自的命中数。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--purple"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M8 7l-4 5 4 5" />
+                  <path d="M16 7l4 5-4 5" />
+                  <path d="M13 5l-2 14" /></svg
+              ></span>
+              <h3>导入导出与环境快照</h3>
+              <p>
+                JSON 配置导入导出，支持覆盖与合并两种模式；HAR 1.2 导出捕获到的流量，导入 HAR
+                则把录制到的请求自动变成规则；粘贴 cURL 预填表单；每条日志都能复制为
+                cURL。环境快照保存整套规则的命名副本，FAT / UAT / PROD
+                一键切换；环境换域名时，批量迁移会先给出变更预览。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--orange"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="4"
+                    y="3"
+                    width="16"
+                    height="18"
+                    rx="3"
+                  />
+                  <path d="M9 8h6" />
+                  <path d="M9 12h6" />
+                  <circle
+                    cx="12"
+                    cy="17"
+                    r="1.5"
+                  /></svg
+              ></span>
+              <h3>每天真正要碰的部分</h3>
+              <p>
+                弹窗里集中了总开关、启用规则数与今日请求数、最近请求、规则快捷启停、自动关闭倒计时，以及当前页命中预览和「为此页面创建规则」。工具栏角标显示代理状态；自动关闭（30
+                分钟至 4 小时，基于 <code>chrome.alarms</code>）会到点关掉总开关，忘了关的代理不会活过调试本身。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--pink"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="4"
+                  />
+                  <path d="M12 2v3" />
+                  <path d="M12 19v3" />
+                  <path d="M2 12h3" />
+                  <path d="M19 12h3" /></svg
+              ></span>
+              <h3>界面细节</h3>
+              <p>
+                中英文界面、6 套主色配浅色/深色/跟随系统，弹窗、配置页与页面内组件同步切换；键盘快捷键：<span
+                  class="kbd"
+                  >⌘⇧P</span
+                >
+                开关代理、<span class="kbd">⌘N</span> 新建规则、<span class="kbd">/</span> 聚焦搜索、<span class="kbd"
+                  >Esc</span
+                >
+                关闭。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="showcase"
+        aria-labelledby="showcase-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="showcase-title">界面预览</h2>
+            <p class="section-lede">
+              以下均为当前版本的真实截图。配置页承载规则表、匹配测试、请求日志与导入导出；弹窗把总开关与当前页预览放在一步可达的位置。
+            </p>
+          </div>
+          <div class="gallery reveal">
+            <div
+              class="gallery-track"
+              data-gallery-track
+              tabindex="0"
+              aria-label="产品截图，可横向滑动"
+            >
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/rules-overview.jpg"
+                    alt="规则列表：三条代理规则、能力徽标、优先级与状态列"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>规则列表</b
+                    ><span
+                      >能力徽标（H · B · R · M · D · X ·
+                      WS）、拖拽排序的优先级、每条规则的命中数，以及批量启停、批量删除与目标迁移。</span
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/rule-editor.jpg"
+                    alt="规则编辑弹窗：匹配模式、目标地址、请求头覆盖与 Mock 响应分区"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>规则编辑器</b
+                    ><span
+                      >匹配、重写、方法过滤、查询参数注入、请求头与请求体覆盖、响应覆盖、条件化
+                      Mock、延迟、阻断与重试——全部在一个表单里，并带实时冲突提示。</span
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/url-tester.jpg"
+                    alt="URL 匹配测试：命中规则、重写后地址与转发通道"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>URL 匹配测试</b
+                    ><span
+                      >粘贴任意
+                      URL（可带方法），实时查看命中规则、重写结果、转发通道、额外动作，以及被它遮蔽的其他规则。</span
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/request-log.jpg"
+                    alt="请求日志抽屉：方法、状态、耗时与命中统计"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>请求日志</b
+                    ><span
+                      >最近 500 条，支持筛选与可调的自动刷新，完整详情视图、复制为 cURL、HAR 导出，以及 DNR
+                      与后台通道各自的命中统计。</span
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/popup.jpg"
+                    alt="扩展弹窗：总开关、启用规则数与快捷入口"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>弹窗</b
+                    ><span
+                      >总开关、启用规则数、今日请求、最近请求、规则快捷启停、自动关闭倒计时、当前页命中预览，以及「为此页面创建规则」。</span
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/dark-theme.jpg"
+                    alt="深色模式下的配置页"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>主题与语言</b
+                    ><span>6 套主色 + 浅色/深色/跟随系统，中英文即时切换，并在弹窗、配置页与页面内组件间同步。</span>
+                  </figcaption>
+                </figure>
+              </div>
+            </div>
+            <div
+              class="gallery-bar"
+              data-gallery-bar
+            >
+              <button
+                class="gallery-btn"
+                type="button"
+                data-gallery-prev
+                aria-label="上一张截图"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M15 6l-6 6 6 6" />
+                </svg>
+              </button>
+              <div
+                class="gallery-dots"
+                data-gallery-dots
+                data-gallery-dots-label="跳到第 $1 张截图"
+              ></div>
+              <button
+                class="gallery-btn"
+                type="button"
+                data-gallery-next
+                aria-label="下一张截图"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -407,132 +1087,187 @@
         aria-labelledby="hiw-title"
       >
         <div class="wrap">
-          <h2 id="hiw-title">工作原理：一套规则，两条通道</h2>
-          <p class="section-lede">
-            每条启用的规则在保存时被判定一次。只做 URL 重写的规则会被编译成
-            <em>declarativeNetRequest</em> 重定向，由浏览器网络栈直接处理，单个请求不跑任何
-            JS；能力更全的规则走扩展后台通道。
-          </p>
+          <div class="section-head">
+            <h2 id="hiw-title">工作原理</h2>
+            <p class="section-lede">
+              每条启用的规则在保存时就被分类一次。正是这个分类（而不是某个全局开关）决定了请求由浏览器网络栈还是扩展后台应答，而它也就是匹配测试器展示给你的那个结果。
+            </p>
+          </div>
           <pre><code>页面 fetch / XHR / WebSocket
-   |
-   +-- 简单规则（仅 URL 重写）--> declarativeNetRequest 重定向
-   |                              网络层完成转发，单请求零 JS 开销
-   |
-   +-- 复杂规则 --> 页面拦截器（main world）
-                     +-> 桥接（isolated world）--> 后台发起请求
-                                                   +-> 响应回传给页面</code></pre>
-          <h3>规则一旦带上下列任一项，就不再是「简单规则」</h3>
+   │
+   ├── 命中简单规则（仅重写 URL）──► declarativeNetRequest 重定向
+   │                                    网络层完成，单请求零 JS 开销
+   │
+   └── 命中复杂规则 ─────────► 页面拦截器（主世界，postMessage 仅限本源）
+                                 └► 桥接（隔离世界，chrome.runtime）──► 后台服务线程
+                                                                         └► 响应回传页面</code></pre>
+          <h3>一旦包含下列任一项，规则就不再「简单」</h3>
           <div class="table-scroll">
             <table>
               <caption>
-                切到后台通道的准确条件
+                切到后台通道的完整条件，以及背后的原因
               </caption>
               <thead>
                 <tr>
                   <th scope="col">能力</th>
-                  <th scope="col">网络层做不到的原因</th>
+                  <th scope="col">为什么网络层做不到</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>请求头 / 请求体改写</td>
-                  <td>替换请求体必须真正重发一次请求。</td>
+                  <td>请求头 / 请求体覆盖</td>
+                  <td>替换请求体需要重新发一次真实请求，而不是重定向。</td>
                 </tr>
                 <tr>
-                  <td>响应状态码 / 响应头 / JSON 字段改写</td>
-                  <td>需要先读出响应，再重建一个响应。</td>
+                  <td>响应状态码 / 状态文本 / 响应头 / JSON 字段覆盖</td>
+                  <td>响应需要先读出来、再重建。</td>
                 </tr>
                 <tr>
-                  <td>Mock、延迟、阻断、重试</td>
-                  <td>这些改变的是请求到底发不发生、什么时候发生。</td>
+                  <td>Mock（含或不含条件）、延迟、阻断、重试</td>
+                  <td>它们改变的是请求到底会不会发生、何时发生、发生几次。</td>
                 </tr>
                 <tr>
                   <td>HTTP 方法过滤</td>
-                  <td>重定向规则无法按方法匹配。</td>
+                  <td>重定向规则无法按请求方法做条件。</td>
                 </tr>
                 <tr>
                   <td>查询参数注入</td>
-                  <td>发生在重写之后，超出替换表达式能力。</td>
+                  <td>在重写之后才应用，重定向替换无法表达。</td>
                 </tr>
                 <tr>
                   <td>WebSocket（<code>ws://</code> / <code>wss://</code>）</td>
-                  <td>重定向规则的资源类型里没有 websocket 这一项。</td>
+                  <td>declarativeNetRequest 没有 WebSocket 资源类型。</td>
                 </tr>
                 <tr>
-                  <td>不以 <code>*</code> 结尾的通配符，或目标 URL 留空</td>
-                  <td>替换表达式会静默丢掉末尾固定文本，或产出非法值。</td>
+                  <td>不以 <code>*</code> 结尾的通配符，或目标地址为空</td>
+                  <td>强行替换会静默丢弃尾部固定文本，或产生非法的重定向值。</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p class="section-lede">
-            拦截器一旦无法处理某个请求，就回退到页面原生的 <code>fetch</code>、<code>XMLHttpRequest</code> 或
-            <code>WebSocket</code>，请求照常发出。阻断规则是唯一的例外——被阻断的请求绝不回退。
+          <h3>关于 CORS，说得准确一点</h3>
+          <p>
+            后台通道的请求由持有主机权限的扩展发出，页面拿到的是扩展构造的响应，因此不会触发页面侧 CORS
+            校验。纯网络层重定向仍然受重定向后响应的
+            <code>Access-Control-Allow-Origin</code>
+            约束。若目标环境不允许你的源，给规则加上任一能力（加一个响应头覆盖代价最小），它就换到后台通道。
           </p>
+          <div class="callout callout--warn">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+              <path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+            </svg>
+            <p>
+              拦截失败时，页面会回退到原生的 <code>fetch</code>、<code>XMLHttpRequest</code> 或
+              <code>WebSocket</code>；FormData、Blob、ArrayBuffer
+              等非字符串请求体也走原生路径，而不是静默丢体。阻断规则是刻意保留的例外：被阻断的请求绝不回退重放，否则发出去的就是你要压掉的那个请求。
+            </p>
+          </div>
+          <div class="callout callout--key">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            <p>
+              <code>chrome.storage.local</code>
+              是唯一事实源。后台服务线程内的缓存——编译好的正则、规则列表、命中计数——均可重建，并在每次配置变更时失效，因此服务工作线程重启后扩展行为依旧正确。
+            </p>
+          </div>
         </div>
       </section>
 
       <section
-        id="features"
-        aria-labelledby="features-title"
+        id="steps"
+        aria-labelledby="steps-title"
       >
         <div class="wrap">
-          <h2 id="features-title">功能清单</h2>
-          <div class="grid">
-            <div class="card">
-              <h3>代理与改写</h3>
+          <div class="section-head">
+            <h2 id="steps-title">四步开始使用</h2>
+            <p class="section-lede">无需注册、无需服务器、无需安装证书。从克隆到第一条代理请求大约一分钟。</p>
+          </div>
+          <div class="step-grid">
+            <article class="step-card reveal">
+              <div class="step-num">01</div>
+              <h3>构建</h3>
+              <p>需要 Node.js 20+ 与 pnpm 10。</p>
+              <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
+cd cross-origin-proxy
+pnpm install
+pnpm build</code></pre>
+            </article>
+            <article class="step-card reveal">
+              <div class="step-num">02</div>
+              <h3>加载</h3>
               <p>
-                通配符、前缀、正则三种匹配方式。重写
-                URL，注入或替换请求头，替换请求体，改写响应状态码、响应头，以及按点分路径替换 JSON 字段（如
-                <code>data.token</code>）。
+                打开 <code>chrome://extensions</code>，开启右上角「开发者模式」，点击「加载已解压的扩展程序」并选择
+                <code>.output/chrome-mv3</code>，建议把图标固定到工具栏。
               </p>
-            </div>
-            <div class="card">
-              <h3>Mock / 延迟 / 阻断</h3>
+            </article>
+            <article class="step-card reveal">
+              <div class="step-num">03</div>
+              <h3>添加一条规则</h3>
+              <ol class="steps">
+                <li>在弹窗中打开代理总开关。</li>
+                <li>
+                  通配符规则：<code>https://fat-api.example.com/*</code> → <code>https://uat-api.example.com</code>。
+                </li>
+                <li>设定优先级（数值小者优先）并保存。</li>
+              </ol>
+            </article>
+            <article class="step-card reveal">
+              <div class="step-num">04</div>
+              <h3>验证</h3>
               <p>
-                不访问目标服务直接返回 JSON、文本、HTML 或 XML；注入 0–60000
-                毫秒延迟，用来验证骨架屏与超时分支；阻断请求，用来验证异常与离线兜底。
+                刷新页面，到请求日志或命中统计里确认结果；也可以把任意 URL
+                粘贴到匹配测试器，提前看到重写结果与转发通道。
               </p>
-            </div>
-            <div class="card">
-              <h3>方法与参数控制</h3>
-              <p>
-                把规则限定在指定 HTTP 方法；在最终代理地址上追加或覆盖查询参数，例如
-                <code>__env=uat</code> 与灰度标识，而不必整段重写 URL。
-              </p>
-            </div>
-            <div class="card">
-              <h3>WebSocket 转发</h3>
-              <p>
-                按 URL 重写转发 <code>ws://</code> 与 <code>wss://</code> 连接，让长连接和 REST 请求跟着同一个环境走。
-              </p>
-            </div>
-            <div class="card">
-              <h3>规则管理</h3>
-              <p>复制、批量启停、拖拽调整优先级、搜索筛选；环境轮换时用批量迁移目标域名，带逐条变更预览，避免误改。</p>
-            </div>
-            <div class="card">
-              <h3>日志与调试</h3>
-              <p>
-                查看方法、状态、耗时与命中统计；点开任意一条看到完整请求响应头与 body；一键复制为
-                cURL，或把抓包结果导出为标准 HAR 1.2。
-              </p>
-            </div>
-            <div class="card">
-              <h3>导入与环境快照</h3>
-              <p>
-                导入 HAR 自动生成规则，粘贴 cURL 命令自动解析预填；把当前规则集存成命名环境快照，在 FAT / UAT / PROD
-                间一键切换。
-              </p>
-            </div>
-            <div class="card">
-              <h3>界面与效率</h3>
-              <p>
-                中英文界面、6 套主题与浅色 / 深色 / 跟随系统、当前页面命中预演，快捷键
-                <span class="kbd">⌘⇧P</span> 切换、<span class="kbd">⌘N</span> 新建、<span class="kbd">/</span>
-                搜索、<span class="kbd">Esc</span> 关闭。
-              </p>
-            </div>
+            </article>
+          </div>
+          <div class="callout">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="9"
+              />
+              <path d="M12 8h.01" />
+              <path d="M11 12h1v5h1" />
+            </svg>
+            <p>
+              更新解压版构建时：请<strong>覆盖原目录里的文件</strong>。换一个目录加载会被 Chrome
+              视为一次全新安装并分配到不同的扩展 ID，而规则、日志与环境快照在 <code>chrome.storage.local</code> 中按 ID
+              隔离存放——旧规则看起来就空了。
+            </p>
           </div>
         </div>
       </section>
@@ -542,50 +1277,82 @@
         aria-labelledby="use-cases-title"
       >
         <div class="wrap">
-          <h2 id="use-cases-title">使用场景</h2>
+          <div class="section-head">
+            <h2 id="use-cases-title">使用场景与对应的规则写法</h2>
+            <p class="section-lede">从场景到配置的最短路径。下表每一行都是扩展已实现的行为，不是变通方案。</p>
+          </div>
           <div class="table-scroll">
             <table>
               <caption>
-                常见诉求与对应的规则配法
+                常见场景与各自用到的能力
               </caption>
               <thead>
                 <tr>
                   <th scope="col">场景</th>
-                  <th scope="col">怎么配</th>
+                  <th scope="col">规则配置</th>
+                  <th scope="col">通道</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>在 FAT 页面验证只在 UAT 生效的改动</td>
-                  <td>把 API 前缀通配重写到 UAT 域名。</td>
+                  <td>在 FAT 页面上验证只有 UAT 才有的修复</td>
+                  <td>把 API 前缀通配符重写到 UAT 域名。</td>
+                  <td>DNR</td>
                 </tr>
                 <tr>
-                  <td>后端接口还没开发，先把前端做完</td>
-                  <td>Mock 响应，自定义 JSON 与状态码。</td>
+                  <td>后端接口还没写，先把 UI 做出来</td>
+                  <td>Mock 响应自定内容与状态码；用条件让不同接口返回不同内容。</td>
+                  <td>SW</td>
                 </tr>
                 <tr>
-                  <td>验证加载态、骨架屏与超时逻辑</td>
-                  <td>对指定接口注入 3000–60000 毫秒延迟。</td>
+                  <td>验证加载态与超时分支</td>
+                  <td>对具体接口注入 3000–60000 毫秒延迟。</td>
+                  <td>SW</td>
                 </tr>
                 <tr>
-                  <td>验证 500 与离线兜底 UI</td>
+                  <td>验证离线兜底与 500 错误页</td>
                   <td>阻断请求，或改写响应状态码。</td>
+                  <td>SW</td>
                 </tr>
                 <tr>
-                  <td>走灰度分支或 A/B 策略</td>
-                  <td>在代理地址上注入查询参数。</td>
+                  <td>上游不稳定，希望读接口更韧性</td>
+                  <td>重试 2–5 次，间隔 1000 毫秒。</td>
+                  <td>SW</td>
                 </tr>
                 <tr>
-                  <td>联调实时推送、协同编辑等长连接</td>
-                  <td>WebSocket 重写，把页面 socket 指到目标环境。</td>
+                  <td>命中灰度 / A/B 分支</td>
+                  <td>查询参数注入，如 <code>__env=uat</code>。</td>
+                  <td>SW</td>
                 </tr>
                 <tr>
                   <td>只把写操作打到测试后端</td>
-                  <td>方法过滤，仅放行 <code>POST</code> / <code>PUT</code> / <code>DELETE</code>。</td>
+                  <td>方法过滤只允许 <code>POST</code> / <code>PUT</code> / <code>DELETE</code>。</td>
+                  <td>SW</td>
                 </tr>
                 <tr>
-                  <td>把同一套环境配置交给同事</td>
-                  <td>导出 JSON，或分享由 HAR 生成的规则集。</td>
+                  <td>在另一个环境调试实时功能</td>
+                  <td>把页面的 socket 地址重写到目标 socket。</td>
+                  <td>SW</td>
+                </tr>
+                <tr>
+                  <td>页面因为某个字段缺失而报错</td>
+                  <td>按点分路径替换 JSON 字段，如 <code>data.token</code> → <code>"mock-token"</code>。</td>
+                  <td>SW</td>
+                </tr>
+                <tr>
+                  <td>目标环境不允许你的源</td>
+                  <td>加上任一能力（如响应头覆盖）即可离开网络层。</td>
+                  <td>SW</td>
+                </tr>
+                <tr>
+                  <td>把同一套配置交给同事</td>
+                  <td>导出 JSON，或分享由 HAR 衍生的规则集。</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td>环境换了新域名</td>
+                  <td>批量迁移目标地址，并先查看变更预览。</td>
+                  <td>—</td>
                 </tr>
               </tbody>
             </table>
@@ -598,69 +1365,112 @@
         aria-labelledby="compare-title"
       >
         <div class="wrap">
-          <h2 id="compare-title">和其他做法的对比</h2>
+          <div class="section-head">
+            <h2 id="compare-title">与其他方案对比</h2>
+            <p class="section-lede">
+              表头是工具<em>类别</em>而非具体产品：同一类里的能力差异很大，请以你在用的工具实际文档为准。
+            </p>
+          </div>
           <div class="table-scroll">
-            <table>
+            <table class="compare">
               <caption>
-                跨环境联调的几种常见做法（对比项为通用能力类别，具体以你在用的工具为准）
+                跨环境调试与请求改写的常见路线。颜色按你的收益读：绿色为该行有利，橙色为部分支持，灰色为不具备。
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">做法</th>
-                  <th scope="col">要不要后端配合</th>
-                  <th scope="col">要不要按项目配</th>
-                  <th scope="col">能否改响应</th>
-                  <th scope="col">Mock / 延迟 / 阻断</th>
-                  <th scope="col">能否覆盖 WebSocket</th>
+                  <th scope="col">方案</th>
+                  <th
+                    scope="col"
+                    class="col-us"
+                  >
+                    本扩展
+                  </th>
+                  <th scope="col">开发服务器代理</th>
+                  <th scope="col">抓包代理工具</th>
+                  <th scope="col">API 客户端 / 改头类扩展</th>
+                  <th scope="col">改应用配置</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>跨域代理助手</strong></td>
-                  <td>不需要</td>
-                  <td>不需要，浏览器内全局生效</td>
-                  <td>可以</td>
-                  <td>都支持</td>
-                  <td>支持</td>
+                  <th scope="row">需要后端或网关配合改动</th>
+                  <td class="col-us"><span class="mark-yes">不需要</span></td>
+                  <td><span class="mark-part">为 CORS 常常需要</span></td>
+                  <td><span class="mark-yes">不需要</span></td>
+                  <td><span class="mark-yes">不需要</span></td>
+                  <td><span class="mark-yes">不需要</span></td>
                 </tr>
                 <tr>
-                  <td>本地 devServer 代理</td>
-                  <td>常需要处理 CORS</td>
-                  <td>每个项目各配一份</td>
-                  <td>不能</td>
-                  <td>需额外插件</td>
-                  <td>很少</td>
+                  <th scope="row">需要逐个项目配置</th>
+                  <td class="col-us"><span class="mark-yes">否——全浏览器共用</span></td>
+                  <td><span class="mark-no">是</span></td>
+                  <td><span class="mark-part">系统级配置</span></td>
+                  <td><span class="mark-part">按规则集</span></td>
+                  <td><span class="mark-no">是</span></td>
                 </tr>
                 <tr>
-                  <td>网关 / CORS 配置变更</td>
-                  <td>需要，且要发版</td>
-                  <td>不需要</td>
-                  <td>不能</td>
-                  <td>不支持</td>
-                  <td>看实现</td>
+                  <th scope="row">对任意页面源生效（localhost、内网系统）</th>
+                  <td class="col-us"><span class="mark-yes">是</span></td>
+                  <td><span class="mark-part">仅指向该开发服务的流量</span></td>
+                  <td><span class="mark-yes">是</span></td>
+                  <td><span class="mark-part">受扩展 API 限制</span></td>
+                  <td><span class="mark-yes">是</span></td>
                 </tr>
                 <tr>
-                  <td>独立接口调试工具</td>
-                  <td>不需要</td>
-                  <td>请求脱离真实页面</td>
-                  <td>无法作用于页面</td>
-                  <td>通常仅 Mock</td>
-                  <td>不支持</td>
+                  <th scope="row">改写响应（状态码、响应头、JSON 字段）</th>
+                  <td class="col-us"><span class="mark-yes">支持</span></td>
+                  <td><span class="mark-no">不支持</span></td>
+                  <td><span class="mark-yes">支持</span></td>
+                  <td><span class="mark-part">响应体通常不行</span></td>
+                  <td><span class="mark-no">不支持</span></td>
                 </tr>
                 <tr>
-                  <td>直接改前端环境变量 / 配置</td>
-                  <td>不需要</td>
-                  <td>要，且有误提交风险</td>
-                  <td>不能</td>
-                  <td>不支持</td>
-                  <td>不支持</td>
+                  <th scope="row">界面里直接 Mock / 延迟 / 阻断 / 重试</th>
+                  <td class="col-us"><span class="mark-yes">支持，含条件化 Mock</span></td>
+                  <td><span class="mark-part">需额外插件</span></td>
+                  <td><span class="mark-yes">支持</span></td>
+                  <td><span class="mark-part">通常只有 Mock</span></td>
+                  <td><span class="mark-no">不支持</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">覆盖 WebSocket 流量</th>
+                  <td class="col-us"><span class="mark-yes">支持</span></td>
+                  <td><span class="mark-part">较少见</span></td>
+                  <td><span class="mark-yes">支持</span></td>
+                  <td><span class="mark-no">不支持</span></td>
+                  <td><span class="mark-no">不支持</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">读 HTTPS 需要本地 CA 证书</th>
+                  <td class="col-us"><span class="mark-yes">不需要——在浏览器内运行</span></td>
+                  <td><span class="mark-yes">不需要</span></td>
+                  <td><span class="mark-part">需要</span></td>
+                  <td><span class="mark-yes">不需要</span></td>
+                  <td><span class="mark-yes">不需要</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">规则可用普通本地文件分享</th>
+                  <td class="col-us"><span class="mark-yes">JSON / HAR / cURL</span></td>
+                  <td><span class="mark-yes">随仓库代码共享</span></td>
+                  <td><span class="mark-part">会话文件</span></td>
+                  <td><span class="mark-part">常需云端同步</span></td>
+                  <td><span class="mark-yes">随仓库代码共享</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">能代理服务端到服务端等非浏览器流量</th>
+                  <td class="col-us"><span class="mark-no">不能——仅浏览器范围</span></td>
+                  <td><span class="mark-no">不能</span></td>
+                  <td><span class="mark-yes">能</span></td>
+                  <td><span class="mark-no">不能</span></td>
+                  <td><span class="mark-part">看情况</span></td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p class="section-lede">
-            代价也说清楚：扩展只在浏览器里起作用。它管不了服务端到服务端的调用，不会把数据同步到任何云端工作台，规则存在你的
-            Chrome 配置目录而不是项目文件里——需要同事复用时，导出 JSON 给他。
+            代价说在明处：它是一个浏览器内的工具。它无法帮助服务端之间的调用，不会把任何内容录到云端工作区，规则也存在你的
+            Chrome 配置文件里而不是共享的项目文件中——想给同事一份，就导出
+            JSON。抓包代理工具适合系统级流量，而本扩展适合「这个页面应该去连那个环境」。
           </p>
         </div>
       </section>
@@ -670,36 +1480,38 @@
         aria-labelledby="install-title"
       >
         <div class="wrap">
-          <h2 id="install-title">安装</h2>
+          <div class="section-head">
+            <h2 id="install-title">运行要求与开发命令</h2>
+          </div>
           <div class="grid">
             <div class="card">
-              <h3>1. 构建</h3>
-              <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
-cd cross-origin-proxy
-pnpm install
-pnpm build</code></pre>
-            </div>
-            <div class="card">
-              <h3>2. 加载</h3>
+              <h3>运行环境</h3>
               <p>
-                打开 <code>chrome://extensions</code>，开启右上角「开发者模式」，点「加载已解压的扩展程序」，选择
-                <code>.output/chrome-mv3</code>。
+                较新版本的桌面版 Google Chrome（Manifest V3）。商店上架准备中，因此需以「加载已解压的扩展程序」方式加载
+                <code>.output/chrome-mv3</code>。Edge 支持 Chromium 扩展，同一构建通常可用；Firefox 因为
+                <code>declarativeNetRequest</code> 差异目前不是支持目标。与其他扩展一样，<code>chrome://</code>
+                页面、应用商店与其他扩展页面无法注入。
               </p>
             </div>
             <div class="card">
-              <h3>3. 第一条规则</h3>
-              <ol class="steps">
-                <li>在弹窗里打开代理总开关。</li>
-                <li>
-                  新建通配规则：<code>https://fat-api.example.com/*</code> → <code>https://uat-api.example.com</code>。
-                </li>
-                <li>刷新页面，到请求日志里确认已被代理。</li>
-              </ol>
+              <h3>构建环境</h3>
+              <p>
+                Node.js 20 及以上、pnpm 10（见 <code>packageManager</code>）。技术栈为 WXT + Vue 3 + TypeScript +
+                Element Plus + Vite，Element Plus 按组件引入以控制包体；匹配、重写与导入导出逻辑由 Vitest 覆盖。
+              </p>
+            </div>
+            <div class="card">
+              <h3>开发命令</h3>
+              <pre><code>pnpm dev          # WXT 开发服务，带热更新（端口 8899）
+pnpm build        # 生产构建 → .output/chrome-mv3
+pnpm build:zip    # 商店上传用 zip
+pnpm test         # vitest 单元测试
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # eslint
+pnpm lint:style   # stylelint
+pnpm assets       # 重新生成商店与落地页图片</code></pre>
             </div>
           </div>
-          <p class="section-lede">
-            从源码构建需要 Node.js 20 及以上与 pnpm。开发调试执行 <code>pnpm dev</code>，端口 8899 热更新。
-          </p>
         </div>
       </section>
 
@@ -708,31 +1520,35 @@ pnpm build</code></pre>
         aria-labelledby="privacy-title"
       >
         <div class="wrap">
-          <h2 id="privacy-title">隐私与权限</h2>
-          <p class="section-lede">
-            所有数据都存在你本机的
-            <code>chrome.storage.local</code>。没有账号、没有统计埋点、没有自有远程服务，唯一的网络流量就是你要求代理的
-            API 流量；日志与导出文件也都在本地生成。<a href="privacy.html">查看完整隐私政策</a>。
-          </p>
+          <div class="section-head">
+            <h2 id="privacy-title">隐私与权限</h2>
+            <p class="section-lede">
+              所有内容都存在本机的
+              <code>chrome.storage.local</code
+              >。没有账号、没有统计埋点、没有遥测、没有自有远程服务：唯一的网络流量就是你让它代理的 API
+              流量。日志与导出均在本地生成——也需要提醒一句：日志会记录被代理的请求内容（请求头可能含 token），分享导出的
+              HAR 或 cURL 前请先检查。<a href="privacy.html">阅读隐私政策</a>。
+            </p>
+          </div>
           <div class="table-scroll">
             <table>
               <caption>
-                清单里声明的每一项权限，以及它的用途
+                清单声明的每一项权限，以及它的用途
               </caption>
               <thead>
                 <tr>
                   <th scope="col">权限</th>
-                  <th scope="col">用途</th>
+                  <th scope="col">为什么需要</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td><code>storage</code></td>
-                  <td>保存规则、请求日志、环境配置与偏好设置。</td>
+                  <td>持久保存规则、请求日志、环境快照与偏好设置。</td>
                 </tr>
                 <tr>
                   <td><code>declarativeNetRequest</code></td>
-                  <td>安装网络层重定向规则，让简单重写做到单请求零 JS 开销。</td>
+                  <td>安装网络层重定向规则，让简单改写做到单请求零 JS。</td>
                 </tr>
                 <tr>
                   <td><code>declarativeNetRequestFeedback</code></td>
@@ -740,44 +1556,59 @@ pnpm build</code></pre>
                 </tr>
                 <tr>
                   <td><code>alarms</code></td>
-                  <td>代理期间维持后台脚本存活，并驱动自动关闭倒计时。</td>
+                  <td>代理期间维持后台服务工作线程，并运行自动关闭倒计时。</td>
                 </tr>
                 <tr>
-                  <td><code>&lt;all_urls&gt;</code> 站点权限</td>
-                  <td>代理必须能在你的任意前端来源上工作，而目标环境通常是开发者自己的内网域名，无法事先枚举。</td>
+                  <td><code>&lt;all_urls&gt;</code> 主机权限</td>
+                  <td>代理必须在你前端运行的任意源上生效；目标环境是开发者自己的内网域名，无法提前枚举。</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <h3>限制</h3>
+          <h3>代码里硬性限制的上限</h3>
           <div class="table-scroll">
             <table>
+              <caption>
+                规划规则集时可以直接依赖的数值
+              </caption>
               <thead>
                 <tr>
-                  <th scope="col">约束项</th>
+                  <th scope="col">约束</th>
                   <th scope="col">取值</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>规则数量</td>
+                  <td>规则数</td>
                   <td>最多 200 条</td>
                 </tr>
                 <tr>
                   <td>请求日志</td>
-                  <td>保留最近 500 条</td>
+                  <td>最近 500 条（环形缓冲）</td>
                 </tr>
                 <tr>
-                  <td>请求体大小</td>
-                  <td>上限 10MB</td>
+                  <td>请求体</td>
+                  <td>最大 10 MB</td>
                 </tr>
                 <tr>
                   <td>注入延迟</td>
                   <td>0 – 60000 毫秒</td>
                 </tr>
                 <tr>
-                  <td>Mock 状态码</td>
+                  <td>重试</td>
+                  <td>0 – 5 次，间隔可配</td>
+                </tr>
+                <tr>
+                  <td>单请求超时</td>
+                  <td>30 秒</td>
+                </tr>
+                <tr>
+                  <td>Mock / 改写的状态码</td>
                   <td>钳制在 200 – 599</td>
+                </tr>
+                <tr>
+                  <td>自动关闭</td>
+                  <td>30 分钟 / 1 小时 / 2 小时 / 4 小时</td>
                 </tr>
               </tbody>
             </table>
@@ -790,114 +1621,343 @@ pnpm build</code></pre>
         aria-labelledby="faq-title"
       >
         <div class="wrap">
-          <h2 id="faq-title">常见问题</h2>
-          <details>
-            <summary>浏览器的跨域代理到底是做什么的？</summary>
-            <p>
-              拦截页面发出的 API 请求并把它送到别处。开发里最常见的形态就是跨环境联调：让连着 A 后端的前端去调 B
-              环境的接口，不改代码、不重新构建，就能验证只存在于 UAT 的逻辑。
+          <div class="section-head">
+            <h2 id="faq-title">常见问题</h2>
+            <p class="section-lede">
+              页面内容也是机器可读的：同样的问答以 <code>FAQPage</code> 结构化数据发布，<a href="llms.txt">llms.txt</a>
+              则向 AI 助手概述这款产品的能力与架构。
             </p>
-          </details>
-          <details>
-            <summary>它能绕过 CORS 吗？</summary>
-            <p>
-              带任意高级能力的规则可以：请求由持有站点权限的扩展后台发出，页面拿到的是扩展构造的响应，不触发页面侧 CORS
-              校验。纯 URL 重写则被编译成网络层重定向，浏览器仍会校验
-              <code>Access-Control-Allow-Origin</code
-              >。如果目标环境没放行你的来源，给规则加任意一项能力（最省事的是加个响应头改写），它就切到后台通道。
-            </p>
-          </details>
-          <details>
-            <summary>所有网站都能用吗？</summary>
-            <p>
-              内容脚本注入全部 <code>http</code> / <code>https</code> 页面，规则按请求 URL 匹配，内网系统、<code
-                >localhost</code
-              >
-              开发服务、预发域名都适用。<code>chrome://</code> 页面、应用商店页与其他扩展页面是 Chrome
-              对所有扩展的统一限制，无法注入。
-            </p>
-          </details>
-          <details>
-            <summary>我的数据会被上传吗？</summary>
-            <p>
-              不会。规则、日志、环境配置与偏好都在本机
-              <code>chrome.storage.local</code>，没有统计埋点，也不连接任何自有服务。
-            </p>
-          </details>
-          <details>
-            <summary>和 devServer 代理、网关改配置有什么区别？</summary>
-            <p>
-              devServer 代理要按项目配、只覆盖指向本地服务的请求，同事也看不到你的配置；改网关或 CORS
-              需要后端发版。扩展装在浏览器里，一条规则对所有项目生效，还能改写响应与 Mock 数据，整套规则可导出 JSON
-              给团队。
-            </p>
-          </details>
-          <details>
-            <summary>为什么某条规则实际走的通道和我预期不一样？</summary>
-            <p>
-              因为不以
-              <code>*</code>
-              结尾的通配符、或目标地址留空的规则，无法在不做语义妥协的前提下表达成重定向，这类会被有意送到后台通道。用
-              URL 匹配预演功能输入任意地址，就能在依赖它之前先看清走的哪条通道。
-            </p>
-          </details>
-          <details>
-            <summary>有哪些限制？</summary>
-            <p>
-              规则 200 条、日志最近 500 条、请求体 10MB、延迟 0–60000 毫秒；Mock 与响应改写的状态码钳制在
-              200–599，否则前端构造不出合法的
-              <code>Response</code>。
-            </p>
-          </details>
-          <details>
-            <summary>扩展处理失败时会怎样？</summary>
-            <p>
-              拦截器回退到原生 <code>fetch</code> / <code>XMLHttpRequest</code> /
-              <code>WebSocket</code
-              >，请求照原样发出，页面不会因为扩展异常而中断。阻断规则是唯一例外：被阻断的请求绝不回退。
-            </p>
-          </details>
-          <details>
-            <summary>规则能分享给团队吗？</summary>
-            <p>
-              可以：导出 JSON、导出标准 HAR 1.2、粘贴 cURL 生成规则；环境配置快照还能把整套规则命名保存，在 FAT / UAT /
-              PROD 间一键切换。
-            </p>
-          </details>
-          <details>
-            <summary>支持 Firefox 或 Edge 吗？</summary>
-            <p>
-              按 Chrome（Manifest V3）构建与验证。Edge 兼容 Chromium 扩展，同一份构建通常可用；Firefox 在
-              <code>declarativeNetRequest</code> 上的 MV3 支持存在差异，目前不作为支持目标。
-            </p>
-          </details>
+          </div>
+          <div class="faq-list">
+            <h3 class="faq-category">
+              <span class="feature-icon"
+                ><svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                  />
+                  <path d="M12 8h.01" />
+                  <path d="M11 12h1v4h1" /></svg
+              ></span>
+              基础与匹配
+            </h3>
+            <details>
+              <summary>浏览器的跨域代理到底是做什么的？</summary>
+              <p>
+                它拦截页面发出的 API
+                请求，并把请求送到别处。在研发场景里，通常就是让一个连着某个后端的前端页面改连另一个环境，于是不改应用代码、不重新部署，也能在
+                FAT 页面上验证只有 UAT 才有的修复。
+              </p>
+            </details>
+            <details>
+              <summary>它能拦截哪些请求？</summary>
+              <p>
+                页面主世界的拦截器会接管 <code>fetch</code>、<code>XMLHttpRequest</code> 与
+                <code>WebSocket</code>，相对地址在匹配前先解析为绝对地址。仅重写 URL 的规则会被编译成
+                <code>declarativeNetRequest</code>
+                重定向，由浏览器对匹配的各类资源生效：主文档与子框架、XHR、脚本、样式、图片、字体、媒体与其他。
+              </p>
+            </details>
+            <details>
+              <summary>通配符、前缀、正则三种匹配方式有什么区别？</summary>
+              <p>
+                通配符把 <code>*</code> 视为任意字符，并把结尾 <code>*</code> 捕获的内容拼接到目标地址之后；前缀匹配 URL
+                开头，把剩余部分拼到目标之后；正则按整个模式匹配，目标地址可以引用捕获组。多条规则同时命中时，优先级数值小者优先，数值相同则先创建的规则优先。
+              </p>
+            </details>
+            <details>
+              <summary>所有网站都能用吗？</summary>
+              <p>
+                内容脚本注入到所有 <code>http</code> 与 <code>https</code> 页面，规则按请求 URL
+                匹配，因此内网系统、<code>localhost</code> 开发服务、预发域名都适用。<code>chrome://</code> 页面、Chrome
+                应用商店与其他扩展页面被浏览器统一限制，任何扩展都无法注入。
+              </p>
+            </details>
+
+            <h3 class="faq-category">
+              <span class="feature-icon feature-icon--green"
+                ><svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M13 2 4 14h6l-1 8 9-12h-6z" /></svg
+              ></span>
+              通道、CORS 与性能
+            </h3>
+            <details>
+              <summary>它能绕过 CORS 限制吗？</summary>
+              <p>
+                使用了任一高级能力（请求头覆盖、请求体覆盖、响应覆盖、Mock、延迟、阻断、重试、方法过滤、查询参数注入、WebSocket）的规则，由持有主机权限的扩展后台上下文发出请求，页面拿到的是扩展构造的响应，因此不会触发页面侧的
+                CORS 校验。仅重写 URL 的规则走网络层重定向，浏览器仍会校验重定向后响应的
+                <code>Access-Control-Allow-Origin</code
+                >。若目标环境不允许你的源，给规则加上任一高级能力（加一个响应头覆盖代价最小）即可切到后台通道。
+              </p>
+            </details>
+            <details>
+              <summary>为什么某条规则实际走的通道和我预期的不一样？</summary>
+              <p>
+                因为网络层表达不了你想要的行为。不以
+                <code>*</code>
+                结尾的通配符、目标地址为空，或者带了任一高级能力，都会被刻意路由到后台通道——若强行编译成重定向，结果会被悄悄改变。URL
+                匹配测试器会在你依赖某条规则之前，把任意 URL 的转发通道显示出来。
+              </p>
+            </details>
+            <details>
+              <summary>它会不会拖慢页面？</summary>
+              <p>
+                只重写 URL 的规则单请求零 JavaScript
+                开销，由浏览器网络栈直接完成重定向。走后台通道的请求会多一次扩展内的中转，外加你配置的延迟，单个代理请求有
+                30 秒上限。用户编写的正则会先做嵌套量词 ReDoS 检测，送往网络层的正则还需通过 Chrome 的 RE2
+                校验——一条不支持的正则会让整批规则安装失败，因此在同步前就被过滤掉。
+              </p>
+            </details>
+            <details>
+              <summary>为什么简单规则没有逐条请求日志？</summary>
+              <p>
+                网络层重定向不会经过扩展，没有可记录的逐条请求。规则级命中数会出现在「DNR 命中统计」里，统计窗口为最近 5
+                分钟；Chrome
+                对该读取接口有配额限制，因此面板改为手动刷新，超出配额时静默保留上一次结果。后台通道的命中数单独统计。
+              </p>
+            </details>
+
+            <h3 class="faq-category">
+              <span class="feature-icon feature-icon--purple"
+                ><svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="3"
+                    y="4"
+                    width="18"
+                    height="16"
+                    rx="2"
+                  />
+                  <path d="M8 10h8" />
+                  <path d="M8 14h5" /></svg
+              ></span>
+              Mock 与故障注入
+            </h3>
+            <details>
+              <summary>Mock 除了返回固定内容还能做什么？</summary>
+              <p>
+                一条规则可以挂多组条件——URL 正则、HTTP 方法、查询参数——首个命中的条件决定响应体、状态码与
+                Content-Type，全部不命中时回落到规则的默认响应体。于是一条规则就能替多个接口、或同一接口的多种状态兜底。Mock
+                请求完全不触网，返回状态码被钳制在 200–599。
+              </p>
+            </details>
+            <details>
+              <summary>阻断请求和强行返回 500 有什么区别？</summary>
+              <p>
+                阻断让请求以网络故障的方式失败，用来验证离线兜底与重试逻辑；改写响应状态码则给你一个真实的 HTTP
+                错误码、状态文本与响应头，用来验证依赖状态码的错误渲染。被阻断的请求不会被原生回退重放——否则发出去的正是你要压掉的那个请求。
+              </p>
+            </details>
+            <details>
+              <summary>失败重试是怎么工作的？</summary>
+              <p>
+                在后台通道，规则最多可重试 5 次，间隔可配置。请求本身失败、或响应状态为 5xx
+                且仍有剩余次数时触发重试；次数用尽后把最后一次响应或错误交回页面。重试属于后台通道能力，因此启用重试的规则永远不会被判定为网络层重定向。
+              </p>
+            </details>
+
+            <h3 class="faq-category">
+              <span class="feature-icon feature-icon--orange"
+                ><svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M8 7l-4 5 4 5" />
+                  <path d="M16 7l4 5-4 5" /></svg
+              ></span>
+              分享、限制与安全兜底
+            </h3>
+            <details>
+              <summary>规则可以分享给团队吗？</summary>
+              <p>
+                可以。导出为 JSON 配置，同事导入时可选择覆盖，也可与现有规则合并；可把捕获到的流量导出为 HAR
+                1.2，也可导入别处抓的 HAR 自动生成规则；粘贴一条 cURL 命令（DevTools「复制为
+                cURL」产物）即可预填规则表单。环境配置快照会保存整套规则的命名副本。
+              </p>
+            </details>
+            <details>
+              <summary>有哪些限制？</summary>
+              <p>
+                最多 200 条规则，最近 500 条请求日志，请求体上限 10 MB，延迟 0 至 60000 毫秒，重试最多 5
+                次，单个代理请求 30 秒上限，Mock 与改写的状态码钳制在 200–599，以保证页面总能构造出合法的
+                <code>Response</code> 对象。
+              </p>
+            </details>
+            <details>
+              <summary>扩展处理失败时会怎样？</summary>
+              <p>
+                页面会回退到浏览器原生的 <code>fetch</code>、<code>XMLHttpRequest</code> 或
+                <code>WebSocket</code>，请求照常发出，表现如同规则不存在。FormData、Blob、ArrayBuffer
+                等非字符串请求体无法跨消息通道传递，同样回退原生。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。
+              </p>
+            </details>
+
+            <h3 class="faq-category">
+              <span class="feature-icon feature-icon--pink"
+                ><svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /></svg
+              ></span>
+              隐私与兼容性
+            </h3>
+            <details>
+              <summary>我的数据会被上传到服务器吗？</summary>
+              <p>
+                不会。规则、日志、环境快照与偏好设置都保存在本机的
+                <code>chrome.storage.local</code>
+                里。扩展不含统计埋点、不上传任何数据，也没有自有远程服务，唯一的网络流量就是你让它代理的 API
+                流量。需要留意的是，请求日志会在本机记录被代理的请求头与请求体（可能含 token），在分享导出的 HAR
+                或复制的 cURL 命令之前请先检查。
+              </p>
+            </details>
+            <details>
+              <summary>支持 Firefox 或 Edge 吗？</summary>
+              <p>
+                面向 Chrome（Manifest V3）构建与验证。Edge 支持 Chromium 扩展，同一份构建通常可用；Firefox 的 Manifest
+                V3 在 <code>declarativeNetRequest</code> 上存在差异，目前不是支持目标。
+              </p>
+            </details>
+          </div>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
       <div class="wrap">
-        <div>
-          <p>
-            跨域代理助手 · MIT 协议开源 · 最后更新 2026-09-06
-            <span lang="en"
-              >（English page:
-              <a
+        <div class="footer-main">
+          <p class="brand">
+            <img
+              src="assets/icon.png"
+              alt=""
+              width="28"
+              height="28"
+            />
+            <span>跨域代理助手 · Cross-Origin Proxy</span>
+          </p>
+          <p class="footer-disclaimer">
+            一款开源的浏览器跨环境 API 调试工具。规则、日志与环境快照只存在
+            <code>chrome.storage.local</code>，不安装证书，也不连接任何自有服务。与 Google 及 Chrome 应用商店无关联。
+          </p>
+          <div class="footer-meta">
+            <span>MIT 开源协议</span>
+            <span>v1.0.0</span>
+            <span>Manifest V3</span>
+            <span>最后更新 2026-09-07</span>
+            <span
+              ><a
                 href="./"
                 hreflang="en"
-                >product overview</a
-              >）</span
+                lang="en"
+                >English product page</a
+              ></span
             >
-          </p>
+          </div>
         </div>
         <nav aria-label="页脚导航">
           <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
-          <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">问题反馈</a>
-          <a href="https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md">参与贡献</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">Issues</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md">贡献指南</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md">商店文案</a>
           <a href="privacy.html">隐私政策</a>
           <a href="llms.txt">llms.txt</a>
         </nav>
       </div>
     </footer>
+
+    <div
+      class="scroll-rail"
+      aria-label="滚动快捷入口"
+    >
+      <button
+        class="rail-top"
+        type="button"
+        aria-label="回到顶部"
+        title="回到顶部"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 19V5" />
+          <path d="M5 12l7-7 7 7" />
+        </svg>
+      </button>
+      <span class="rail-divider"></span>
+      <button
+        class="rail-bottom"
+        type="button"
+        aria-label="滚到页底"
+        title="滚到页底"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 5v14" />
+          <path d="M19 12l-7 7-7-7" />
+        </svg>
+      </button>
+    </div>
   </body>
 </html>

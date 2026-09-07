@@ -4,44 +4,60 @@
 >
 > A local-first Chrome extension (Manifest V3) that proxies frontend API requests to another backend environment — for example a FAT frontend calling a UAT backend — without changing application code or backend CORS configuration. Open source under MIT; collects and uploads nothing.
 
-- 产品说明（中文）: https://liaolongdong.github.io/cross-origin-proxy/zh.html
-- Product overview (English): https://liaolongdong.github.io/cross-origin-proxy/
+- 产品说明（中文，含 FAQ / HowTo / SoftwareApplication 结构化数据）: https://liaolongdong.github.io/cross-origin-proxy/zh.html
+- Product overview (English, with FAQ / HowTo / SoftwareApplication structured data): https://liaolongdong.github.io/cross-origin-proxy/
 - 隐私政策 / Privacy Policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - 源码仓库 / Source code: https://github.com/liaolongdong/cross-origin-proxy
+- 预构建产物 / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases
 - 商店上架素材与权限说明: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md
 - 贡献指南: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md
 
 ## What it does / 核心能力
 
-- Rule-based URL rewriting by wildcard, prefix or regex. 按通配符、前缀、正则匹配并重写请求 URL。
-- Request header and request body overrides. 注入或替换请求头、替换请求体。
-- Response status, response header and JSON field modification (dot-notation path). 改写响应状态码、响应头与按点分路径改写 JSON 字段。
-- Mock responses (JSON / text / HTML / XML) without contacting the target server. 不访问目标服务直接返回自定义 Mock 数据。
-- Artificial delay of 0–60000 ms, and full request blocking for failure-path testing. 注入 0–60000 毫秒延迟；完全阻断请求以验证异常与离线兜底。
-- HTTP method filtering and query parameter injection (e.g. `__env=uat`, gray-release tags). 按 HTTP 方法过滤规则；在代理地址上追加或覆盖查询参数。
-- WebSocket (`ws://` / `wss://`) forwarding by URL rewrite. 按 URL 重写转发 WebSocket 长连接。
-- HAR 1.2 import/export, cURL import, JSON config import/export, copy-as-cURL on any log entry. 支持 HAR、cURL、JSON 导入导出与日志一键复制为 cURL。
-- Environment profiles (named rule-set snapshots) and batch target-domain migration with change preview. 环境配置快照与带变更预览的目标域名批量迁移。
-- Request log (last 500 entries) with method, status, duration and matched-rule statistics. 请求日志（最近 500 条）含方法、状态、耗时与命中统计。
-- English / Chinese UI, six themes, light / dark / system modes, keyboard shortcuts. 中英双语界面、6 套主题、浅色/深色/跟随系统、快捷键。
+- Rule-based URL rewriting by wildcard, prefix or regex, with identical rewrite semantics on both forwarding channels. 按通配符、前缀、正则匹配并重写请求 URL，两条通道的重写语义完全一致。
+- Request header injection/replacement and request body replacement. 注入或替换请求头、替换请求体。
+- Response override of status code, status text, headers, the whole body, or individual JSON fields by dot-notation path (`data.token`). 改写响应状态码、状态文本、响应头、整个响应体，或按点分路径改写 JSON 字段。
+- Mock responses (JSON / text / HTML / XML) without contacting the target server, plus conditional responses: the first matching condition on URL pattern, HTTP method or query parameters decides body, status and content type. 不访问目标服务直接返回 Mock 数据；支持条件化响应——按 URL 正则、HTTP 方法、查询参数命中，首个命中的条件决定响应体、状态码与 Content-Type。
+- Artificial delay of 0–60000 ms, and full request blocking that fails the request like a network error. 注入 0–60000 毫秒延迟；把请求阻断成网络错误，以验证异常与离线兜底。
+- Retry on failure and on 5xx responses: 0–5 attempts with a configurable interval. 失败或 5xx 时自动重试，0–5 次且间隔可配。
+- HTTP method filtering (GET/POST/PUT/DELETE/PATCH/OPTIONS/HEAD). 按 HTTP 方法过滤规则，空表示任意方法。
+- Query parameter injection on the final proxied URL (e.g. `__env=uat`, gray-release tags). 在代理后的 URL 上追加或覆盖查询参数（如灰度标识）。
+- WebSocket (`ws://` / `wss://`) forwarding by URL rewrite; the handshake counts as `GET` for method filtering. 按 URL 重写转发 WebSocket 长连接；方法过滤把握手视为 GET。
+- Rule workspace: quick templates, duplicate, undo delete, drag-and-drop priority, batch enable/disable/delete, batch target-domain migration with change preview, search and filters by status and match type, and a conflict warning when a higher-priority rule with the same pattern shadows the rule being edited. 规则工作台：快速模板、复制、撤销删除、拖拽优先级、批量启停/删除、带预览的目标域名批量迁移、按状态与匹配类型搜索筛选，以及同模式更高优先级规则的遮蔽冲突提示。
+- Diagnostics: real-time URL match test (matched rule, rewritten URL, forwarding channel, extra actions, shadowed rules), request log of the last 500 calls with filters, adjustable auto-refresh, full detail view, copy-as-cURL and "create rule from this log entry". 诊断能力：URL 匹配测试（命中规则、重写结果、通道、额外动作与被遮蔽规则）、最近 500 条日志（筛选、可调自动刷新、详情、复制为 cURL、由日志建规则）。
+- Hit statistics per rule for both channels: DNR hits over the last 5 minutes (quota-limited, refreshed on demand) and service-worker hits since the last config change. 两条通道各自的规则级命中统计：DNR 近 5 分钟（受配额限制、手动刷新）与后台通道自配置变更起的计数。
+- HAR 1.2 export of captured traffic, HAR import that creates rules from recorded requests, cURL import (DevTools "Copy as cURL") that prefills the rule form, JSON config export/import in replace or merge mode. 支持 HAR 导出、HAR 导入自动生成规则、cURL 导入预填规则、JSON 配置导入导出（覆盖或合并两种模式）。
+- Environment profiles: named snapshots of the whole rule set, switch between FAT / UAT / PROD in one click. 环境配置快照，FAT / UAT / PROD 一键切换。
+- Popup with global switch, active-rule and today's request counts, recent requests, quick rule toggles, auto-off countdown, current-page match preview and "create rule for this page". 弹窗含总开关、启用规则数与今日请求数、最近请求、规则快捷启停、自动关闭倒计时、当前页命中预览与「为此页面创建规则」。
+- Auto-off countdown (30 minutes, 1 h, 2 h or 4 h) on `chrome.alarms`, persisted across service-worker restarts; toolbar badge reflects proxy state. 代理自动关闭倒计时（30 分钟至 4 小时），基于 chrome.alarms 且跨服务工作线程重启持久化；工具栏角标显示代理状态。
+- English / Chinese UI, six themes, light / dark / system modes, keyboard shortcuts. 中英双语界面、6 套主题、浅色/深色/跟随系统、键盘快捷键。
 
 ## Architecture / 关键架构事实
 
-- Two forwarding channels decided per rule by `isSimpleRule()`: a rule that only rewrites the URL is compiled into `declarativeNetRequest` dynamic redirect rules (browser network layer, zero JavaScript per request). Any rule with header/body/response overrides, mock, delay, block, retry, method filter, query injection, WebSocket target, a wildcard not ending in `*`, or an empty target URL is routed through the extension background service worker instead.
-- Complex rules are intercepted in the page's main world, bridged through an isolated-world content script, and executed by the background service worker, which returns the response to the page.
-- CORS behaviour: background-channel requests are issued by the extension (which holds host permissions) and the page receives an extension-constructed response, so page CORS checks do not apply. Pure network-layer redirects are still subject to `Access-Control-Allow-Origin` on the redirected response.
-- Failure handling: if interception fails, the page falls back to native `fetch` / `XMLHttpRequest` / `WebSocket`. Blocked requests are never replayed natively.
-- State: `chrome.storage.local` is the single source of truth; in-memory caches in the service worker are rebuildable and invalidated on `storage.onChanged`.
+- Two forwarding channels decided per rule by `isSimpleRule()`: a rule that only rewrites the URL is compiled into `declarativeNetRequest` dynamic redirect rules (browser network layer, zero JavaScript per request, applied to main/sub frames, XHR, scripts, stylesheets, images, fonts, media and other). Any rule with header/body/response overrides, mock (with or without conditions), delay, block, retry, method filter, query injection, a WebSocket target, a wildcard not ending in `*`, or an empty target URL is routed through the extension background service worker instead. 双通道按规则分流：仅重写 URL 的规则编译为网络层重定向（单请求零 JS，覆盖各类资源类型）；含任何高级能力、不以 `*` 结尾的通配符或空目标地址的规则走后台服务线程。
+- Complex rules are intercepted in the page's main world (`fetch`, `XMLHttpRequest`, `WebSocket`), bridged through an isolated-world content script over `chrome.runtime`, and executed by the background service worker, which returns the response to the page. `postMessage` uses `window.location.origin` as the target origin, never `*`. 复杂规则由主世界拦截、隔离世界桥接、后台执行并回传响应；postMessage 仅限本源目标域。
+- CORS behaviour: background-channel requests are issued by the extension (which holds host permissions) and the page receives an extension-constructed response, so page CORS checks do not apply. Pure network-layer redirects are still subject to `Access-Control-Allow-Origin` on the redirected response. 后台通道由扩展代发且页面拿到扩展构造的响应，不触发页面 CORS 校验；纯网络层重定向仍受 ACAO 约束。
+- Failure handling: if interception fails, or the body is non-string (FormData / Blob / ArrayBuffer), the page falls back to native `fetch` / `XMLHttpRequest` / `WebSocket`. Blocked requests are never replayed natively. 拦截失败或非字符串请求体时回退原生请求；被阻断的请求绝不回退重放。
+- Input safety: header names validated and CRLF in values rejected (page-supplied headers are filtered leniently, rule-configured headers strictly); mocked/overridden status codes clamped to 200–599; user regex screened for nested-quantifier ReDoS patterns; regexes destined for the network layer verified with Chrome's RE2 (`isRegexSupported`) and substitution references bounds-checked, because one invalid rule makes `updateDynamicRules` reject the whole batch. 输入安全：头名校验且拒绝 CRLF、状态码钳制 200-599、ReDoS 筛查、RE2 兼容校验与替换引用越界检查（一条非法会让整批 DNR 规则被拒）。
+- State: `chrome.storage.local` is the single source of truth; in-memory caches in the service worker (compiled regexes, config, hit counters) are rebuildable and invalidated on `storage.onChanged`. 状态以 chrome.storage.local 为唯一事实源，内存缓存可重建并随配置变更失效。
+- Requests proxied by the service worker have a 30-second ceiling; request bodies are capped at 10 MB. 后台通道单请求 30 秒上限，请求体上限 10 MB。
+
+## Who it is for / 目标用户
+
+- Frontend and full-stack developers, QA and test engineers who need a page on one environment to talk to a backend on another, or who need to mock, delay, block or rewrite API traffic without touching application code or asking for a gateway change. 需要在不改代码、不改网关的前提下让某环境的页面调用另一环境后端，或需要 Mock、注入延迟、阻断、改写请求响应的前端/全栈工程师与测试工程师。
+- FAT / UAT / SIT / PRE / PROD are Chinese-industry environment names; the extension targets that workflow and is bilingual by design. 产品面向中国研发语境的 FAT/UAT/预发/生产多环境工作流，中英文双语为第一设计目标。
 
 ## Privacy / 隐私
 
-- No data collection, no analytics, no telemetry, no remote servers of its own. 不收集数据、无统计埋点、无自有远程服务。
+- No data collection, no analytics, no telemetry, no remote servers of its own, no certificate installation. 不收集数据、无统计埋点、无遥测、无自有远程服务、不安装证书。
 - Permissions: `storage`, `declarativeNetRequest`, `declarativeNetRequestFeedback`, `alarms`, host permission `<all_urls>` (each justified in CHROMEWEBSTORE.md and the privacy policy).
-- Limits: 200 rules, 500 log entries, 10 MB request body, status codes clamped to 200–599.
+- The request log records proxied headers and bodies locally, which may include tokens; exports (HAR, JSON, cURL) are produced on the user's machine. 请求日志在本机记录被代理的请求头与请求体（可能含 token），HAR/JSON/cURL 导出均在本地生成。
+- Limits: 200 rules, 500 log entries, 10 MB request body, delays 0–60000 ms, retries 0–5, status codes clamped to 200–599.
 
 ## Requirements / 运行要求
 
 - A recent desktop Google Chrome (Manifest V3). Edge works in practice (Chromium extensions) but is not a supported target; Firefox is not supported today because of `declarativeNetRequest` differences.
-- Build from source requires Node.js 20+ and pnpm: `pnpm install && pnpm build`, then load `.output/chrome-mv3` unpacked at `chrome://extensions`.
+- Chrome Web Store listing is in preparation; until then load the unpacked build from `.output/chrome-mv3`.
+- Build from source requires Node.js 20+ and pnpm 10: `pnpm install && pnpm build`, then load `.output/chrome-mv3` unpacked at `chrome://extensions`.
 
-Last updated / 最后更新: 2026-09-06
+Last updated / 最后更新: 2026-09-07 (extension v1.0.0)
