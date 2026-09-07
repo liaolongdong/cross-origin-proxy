@@ -174,13 +174,13 @@
                 "@type": "HowToStep",
                 "position": 1,
                 "name": "Build the extension",
-                "text": "Run git clone https://github.com/liaolongdong/cross-origin-proxy, then pnpm install and pnpm build. The unpacked extension lands in .output/chrome-mv3."
+                "text": "Run git clone https://github.com/liaolongdong/cross-origin-proxy, then pnpm install and pnpm build; the unpacked extension lands in .output/chrome-mv3. Alternatively download the prebuilt zip from https://github.com/liaolongdong/cross-origin-proxy/releases and unzip it, which needs no toolchain."
               },
               {
                 "@type": "HowToStep",
                 "position": 2,
                 "name": "Load it in Chrome",
-                "text": "Open chrome://extensions, enable Developer mode, click Load unpacked and select the .output/chrome-mv3 folder."
+                "text": "Open chrome://extensions, enable Developer mode, click Load unpacked and select the .output/chrome-mv3 folder, or the folder you unzipped from the release."
               },
               {
                 "@type": "HowToStep",
@@ -418,7 +418,8 @@
               >
             </div>
             <p class="hero-note">
-              The Chrome Web Store listing is in preparation; until then install from source in three steps.
+              The Chrome Web Store listing is in preparation; until then build from source, or load the unzipped package
+              from Releases.
             </p>
             <div class="badges">
               <span>No telemetry</span>
@@ -1238,7 +1239,11 @@
             <article class="step-card reveal">
               <div class="step-num">01</div>
               <h3>Build</h3>
-              <p>Requires Node.js 20+ and pnpm 10.</p>
+              <p>
+                Requires Node.js 20+ and pnpm 10. No toolchain? Grab the prebuilt zip from
+                <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
+                and unzip it instead.
+              </p>
               <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
 cd cross-origin-proxy
 pnpm install
@@ -1249,7 +1254,7 @@ pnpm build</code></pre>
               <h3>Load</h3>
               <p>
                 Open <code>chrome://extensions</code>, enable <em>Developer mode</em>, click <em>Load unpacked</em> and
-                select <code>.output/chrome-mv3</code>. Pin the icon.
+                select <code>.output/chrome-mv3</code> — or the folder you just unzipped from the release. Pin the icon.
               </p>
             </article>
             <article class="step-card reveal">
@@ -1523,8 +1528,9 @@ pnpm build</code></pre>
               <h3>Runtime requirements</h3>
               <p>
                 A recent desktop Google Chrome (Manifest V3). The store listing is in preparation, so load the unpacked
-                build from <code>.output/chrome-mv3</code>. Edge runs Chromium extensions, so the same build normally
-                works there; Firefox is not a supported target today because of
+                build from <code>.output/chrome-mv3</code> — or the folder you unzipped from
+                <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>. Edge runs Chromium
+                extensions, so the same build normally works there; Firefox is not a supported target today because of
                 <code>declarativeNetRequest</code> differences. Chrome itself blocks every extension on
                 <code>chrome://</code> pages, the Web Store and other extension pages.
               </p>

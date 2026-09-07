@@ -1,0 +1,53 @@
+name: Deploy product site
+
+# 产品站（含隐私政策）由 `docs/` 目录直接托管：`docs/` 就是站点根，
+# 所以 `/`、`/zh.html`、`/privacy.html`、`/assets/**`、`/sitemap.xml`、`/llms.txt`
+# 与 README、CHROMEWEBSTORE.md、llms.txt 里引用的 URL 逐字符一致，无需任何路径改写。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 部署不能中途取消：取消会留下半截的 Pages deployment。
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy docs/ to GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # 部署记录挂在 GitHub 自动创建的 `github-pages` 环境下，
+    # 该 URL 同时用于在 Run 页面直接点进线上站点。
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 前置条件：Settings → Pages → Source 必须已经是「GitHub Actions」
+      # （见 GITHUB.md §5）。未切换时这里之后会报 "Pages not enabled"，
+      # 这是配置缺失，不是工作流的问题。
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

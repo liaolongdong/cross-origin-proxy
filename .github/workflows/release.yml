@@ -1,0 +1,196 @@
+name: Release
+
+# 发版链路：tag `v*` → 全量校验（复用 CI 的 verify 动作）→ 构建并打包 zip →
+# GitHub Release（附 zip 与 CHANGELOG 小节）→ Chrome 应用商店上传并提审。
+#
+# 首次上架无法自动化：`publish-extension` 明确不提供「新建商店条目」的能力，
+# 必须先在 Developer Dashboard 手动上传一次 zip 拿到 Extension ID，
+# 之后所有版本都由本工作流提审。步骤见 RELEASING.md。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的已存在标签，例如 v1.0.1'
+        required: true
+        type: string
+      publish-target:
+        description: 'Chrome 商店发布分组'
+        required: false
+        type: choice
+        default: default
+        options:
+          - default
+          - trustedTesters
+      skip-review:
+        description: '只上传 zip 到商店草稿，不提交审核（先在 Dashboard 人工核对包内容）'
+        required: false
+        type: boolean
+        default: false
+
+# 默认零权限，按 job 升级：只有发布 job 需要写 Release。
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Verify, package and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+
+    steps:
+      # tag push 时是标签本身；手动补跑时用输入的 tag。
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Verify
+        uses: ./.github/actions/verify
+        with:
+          build-mode: zip
+
+      # 版本一致性是这条链路唯一的"静默失败"点：tag 与 package.json 不一致时，
+      # 商店会收到一个版本号错乱的包，而 Release 名字看起来仍然正常。
+      #
+      # `inputs.tag` 是自由文本，绝对不能直接 ${{ }} 插进 shell 脚本——那是一个
+      # 脚本注入面，而这个 job 的 env 里带着商店 OAuth refresh token（有仓库 write
+      # 权限就能提权到供应链发布位）。所有外部输入走 env 传递，先做格式校验，
+      # 再把已校验的值写成本步骤的 output 给下游使用。
+      - name: Guard tag vs package version
+        id: guard
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          TAG="${INPUT_TAG:-$REF_NAME}"
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
+            echo "::error::标签格式非法：$TAG（应为 vMAJOR.MINOR.PATCH）"
+            exit 1
+          fi
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "v${VERSION}" != "$TAG" ]; then
+            echo "::error::标签 $TAG 与 package.json 的 $VERSION 不一致。先在本地 npm version 并同步 CHANGELOG.md 再打 tag。"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Locate extension zip
+        id: package
+        run: |
+          # 按 wxt 的命名规则（<package-name>-<version>-<browser>.zip）算出唯一期望路径，
+          # 而不是用 .output/*.zip 匹配：本地工作区可能残留改名前的旧 zip，
+          # glob 匹配会把错的包上传商店。版本号取构建产物里的 manifest.version
+          # （WXT 已削去预发布后缀），不取 package.json 原文，否则预发布版本会拼错路径。
+          NAME="$(node -p "require('./package.json').name")"
+          ZIP_VERSION="$(node -p "require('./.output/chrome-mv3/manifest.json').version")"
+          ZIP=".output/${NAME}-${ZIP_VERSION}-chrome.zip"
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::未找到期望的构建包 $ZIP（实际产物：$(ls .output/*.zip 2>/dev/null | tr '\n' ' ')）"
+            exit 1
+          fi
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      # CHANGELOG.md 是版本历史唯一事实源；无对应小节时回落到自动生成的说明，
+      # 宁可说明朴素也不要发布时空白。
+      - name: Build release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.guard.outputs.version }}
+        run: |
+          awk -v version="$VERSION" '
+            BEGIN { printing = 0 }
+            /^## \[/ {
+              if (printing) exit
+              printing = (index($0, "## [" version "]") > 0)
+              next
+            }
+            printing { print }
+          ' CHANGELOG.md > notes.md
+          if [ -s notes.md ]; then
+            echo "source=changelog" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::CHANGELOG.md 里没有 [$VERSION] 小节，回落到自动生成的发布说明"
+            echo "source=generated" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 手动重跑是文档里的恢复路径，所以这里必须幂等：已存在就改说明并覆盖资产。
+      # run 步骤自带 GITHUB_TOKEN（本 job 已声明 contents: write）。
+      - name: Publish GitHub Release
+        env:
+          TAG: ${{ steps.guard.outputs.tag }}
+          TITLE: v${{ steps.guard.outputs.version }}
+          ZIP: ${{ steps.package.outputs.zip }}
+          NOTES_SOURCE: ${{ steps.notes.outputs.source }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，更新说明与资产"
+            if [ "$NOTES_SOURCE" = "changelog" ]; then
+              gh release edit "$TAG" --title "$TITLE" --notes-file notes.md
+            else
+              gh release edit "$TAG" --title "$TITLE"
+            fi
+            gh release upload "$TAG" "$ZIP" --clobber
+          elif [ "$NOTES_SOURCE" = "changelog" ]; then
+            gh release create "$TAG" --title "$TITLE" --notes-file notes.md --verify-tag "$ZIP"
+          else
+            gh release create "$TAG" --title "$TITLE" --generate-notes --verify-tag "$ZIP"
+          fi
+
+      - name: Detect Chrome Web Store credentials
+        id: credentials
+        run: |
+          MISSING=""
+          for NAME in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN; do
+            if [ -z "${!NAME}" ]; then MISSING="$MISSING $NAME"; fi
+          done
+          if [ -z "$MISSING" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            # 只记录变量名，不记录值
+            echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Submit to Chrome Web Store
+        if: steps.credentials.outputs.ready == 'true'
+        env:
+          ZIP: ${{ steps.package.outputs.zip }}
+          PUBLISH_TARGET: ${{ inputs.publish-target || 'default' }}
+          SKIP_REVIEW: ${{ inputs.skip-review }}
+        run: |
+          ARGS=(--chrome-zip "$ZIP" --chrome-publish-target "$PUBLISH_TARGET")
+          if [ "$SKIP_REVIEW" = "true" ]; then
+            ARGS+=(--chrome-skip-submit-review)
+          fi
+          pnpm exec wxt submit "${ARGS[@]}"
+
+      - name: Record skipped store publish
+        if: steps.credentials.outputs.ready != 'true'
+        env:
+          MISSING: ${{ steps.credentials.outputs.missing }}
+        run: |
+          {
+            echo '### Chrome Web Store 发布已跳过'
+            echo
+            echo "GitHub Release 已就绪，但仓库缺少以下 Secrets（$MISSING）："
+            echo
+            echo '- `CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`'
+            echo
+            echo '补齐后在本工作流页面点 **Run workflow** 并填入同一个 tag 即可继续发布；Release 已存在会被复用，不会重复创建。'
+            echo '获取步骤见仓库根目录的 [RELEASING.md](https://github.com/liaolongdong/cross-origin-proxy/blob/main/RELEASING.md)。'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -57,7 +57,7 @@
 ## Requirements / 运行要求
 
 - A recent desktop Google Chrome (Manifest V3). Edge works in practice (Chromium extensions) but is not a supported target; Firefox is not supported today because of `declarativeNetRequest` differences.
-- Chrome Web Store listing is in preparation; until then load the unpacked build from `.output/chrome-mv3`.
-- Build from source requires Node.js 20+ and pnpm 10: `pnpm install && pnpm build`, then load `.output/chrome-mv3` unpacked at `chrome://extensions`.
+- Chrome Web Store listing is in preparation; until then install the prebuilt zip from https://github.com/liaolongdong/cross-origin-proxy/releases (unzip, then load it unpacked) or build from source and load `.output/chrome-mv3`.
+- Build from source requires Node.js 20+ and pnpm 10: `pnpm install && pnpm build`, then load `.output/chrome-mv3` unpacked at `chrome://extensions`. Tagged releases are published automatically by GitHub Actions, including store submission once the store credentials are configured.
 
 Last updated / 最后更新: 2026-09-07 (extension v1.0.0)

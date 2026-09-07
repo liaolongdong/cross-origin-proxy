@@ -18,10 +18,10 @@ build/
 *.tsbuildinfo
 
 # Environment variables
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# `.env.submit` 由 `pnpm exec wxt submit init` 生成，内含商店 OAuth 的 refresh token，
+# 明文入库等于把发布权限交给任何能读这个仓库的人。宽泛排除 `.env*` 而不是逐个列举。
+.env
+.env.*
 
 # IDE and Editor files
 *.swp

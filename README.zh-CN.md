@@ -16,6 +16,10 @@
 &nbsp;
 [![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
 &nbsp;
+[![Release](https://img.shields.io/github/v/release/liaolongdong/cross-origin-proxy?style=for-the-badge&label=Release&color=409eff)](https://github.com/liaolongdong/cross-origin-proxy/releases)
+&nbsp;
+[![产品站](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?style=for-the-badge&label=Product%20site&logo=githubpages)](https://liaolongdong.github.io/cross-origin-proxy/zh.html)
+&nbsp;
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 &nbsp;
 [![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#安装)
@@ -45,7 +49,17 @@
 
 ## 安装
 
-需要较新版本的桌面 Google Chrome（Manifest V3）。Chrome 应用商店上架准备中，现阶段按下面方式加载本地构建产物。
+需要较新版本的桌面 Google Chrome（Manifest V3）。Chrome 应用商店上架准备中，在此之前走下面两条路径之一。
+
+### 方式 A：下载预构建包（不需要工具链）
+
+从 [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) 下载 zip 并解压，然后：
+
+1. 打开 `chrome://extensions`。
+2. 开启右上角「开发者模式」。
+3. 点「加载已解压的扩展程序」，选中解压出来的目录（含 `manifest.json` 的那层）。
+
+### 方式 B：从源码构建
 
 ```bash
 git clone https://github.com/liaolongdong/cross-origin-proxy
@@ -54,9 +68,9 @@ pnpm install
 pnpm build
 ```
 
-1. 打开 `chrome://extensions`。
-2. 开启右上角「开发者模式」。
-3. 点「加载已解压的扩展程序」，选择 `.output/chrome-mv3`。
+按上面同样三步加载 `.output/chrome-mv3`。
+
+两种安装方式结果一致：装好后点图标打开**代理开关**，加一条规则，刷新页面。
 
 ### 一分钟配出第一条规则
 
@@ -227,7 +241,11 @@ pnpm format:check # prettier（自动格式化：pnpm format）
 pnpm assets       # 重新生成商店图与落地页图
 ```
 
-需要 Node.js 20+ 与 pnpm 10（以 `packageManager` 为准）。CI 会在每次 push 与 PR 上跑 lint、typecheck、stylelint 与测试，见 [.github/workflows/ci.yml](./.github/workflows/ci.yml)。
+只有发版时会用到两条额外命令：`pnpm exec wxt submit --dry-run`（只验商店凭据不上传）与 `pnpm build:zip`（发布链路上交给商店的包），详见 [RELEASING.md](./RELEASING.md)。
+
+需要 Node.js 20+ 与 pnpm 10（以 `packageManager` 为准）。CI 会在每次 push 与 PR 上跑 lint、typecheck、stylelint、Prettier 与测试（[.github/workflows/ci.yml](./.github/workflows/ci.yml)），检查清单统一收在复合动作 `.github/actions/verify` 里，CI 与发布链路因此不会漂移。
+
+两件事已经自动化：推 `v*` 标签就产出带 zip 的 GitHub Release 并向 Chrome 应用商店提审（[release.yml](./.github/workflows/release.yml)，流程见 [RELEASING.md](./RELEASING.md)）；`docs/**` 一旦变更就重新部署产品站与隐私政策（[deploy-pages.yml](./.github/workflows/deploy-pages.yml)）。仓库在 GitHub 侧的展示信息（About 描述、website、topics、社交预览图、Pages 源）是一次性手动清单，见 [GITHUB.md](./GITHUB.md)。
 
 ### 目录结构
 
@@ -242,6 +260,7 @@ utils/                  与框架无关的领域逻辑：urlMatcher · dnrRules 
 locales/                应用内界面文案（zh_CN / en，分 common/options/popup 三个命名空间）
 public/_locales/        仅放 manifest 的名称与描述
 docs/                   GitHub Pages 产品站：index.html（英）· zh.html（中）· privacy.html · llms.txt
+.github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR 模板
 tests/                  Vitest 测试（node 环境）
 ```
 

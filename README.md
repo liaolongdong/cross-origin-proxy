@@ -16,6 +16,10 @@
 &nbsp;
 [![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
 &nbsp;
+[![Release](https://img.shields.io/github/v/release/liaolongdong/cross-origin-proxy?style=for-the-badge&label=Release&color=409eff)](https://github.com/liaolongdong/cross-origin-proxy/releases)
+&nbsp;
+[![Product site](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?style=for-the-badge&label=Product%20site&logo=githubpages)](https://liaolongdong.github.io/cross-origin-proxy/)
+&nbsp;
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 &nbsp;
 [![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#install)
@@ -45,7 +49,17 @@ Built with [WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite, on
 
 ## Install
 
-Requires a recent desktop Google Chrome (Manifest V3). The Chrome Web Store listing is in preparation — until then, load the unpacked build.
+Requires a recent desktop Google Chrome (Manifest V3). The Chrome Web Store listing is in preparation — until then, use one of these two paths.
+
+### A. Prebuilt package (no toolchain needed)
+
+Download the zip from [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases), unzip it, then:
+
+1. Open `chrome://extensions`.
+2. Enable **Developer mode** (top right).
+3. Click **Load unpacked** and select the unzipped folder (the one containing `manifest.json`).
+
+### B. Build from source
 
 ```bash
 git clone https://github.com/liaolongdong/cross-origin-proxy
@@ -54,9 +68,9 @@ pnpm install
 pnpm build
 ```
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode** (top right).
-3. Click **Load unpacked** and select `.output/chrome-mv3`.
+Then load `.output/chrome-mv3` unpacked, same three clicks as above.
+
+Either way, once it is installed: click the icon, turn on **Proxy Switch**, add a rule, reload the page.
 
 ### First rule in one minute
 
@@ -227,7 +241,11 @@ pnpm format:check# prettier (--write: pnpm format)
 pnpm assets      # regenerate store + landing images
 ```
 
-Requires Node.js 20+ and pnpm 10 (see `packageManager`). CI runs lint, typecheck, stylelint and tests on every push and pull request — see [.github/workflows/ci.yml](./.github/workflows/ci.yml).
+Two more commands matter only when releasing: `pnpm exec wxt submit --dry-run` (check store credentials without uploading) and `pnpm build:zip` (what the release workflow publishes). Both are covered in [RELEASING.md](./RELEASING.md).
+
+Requires Node.js 20+ and pnpm 10 (see `packageManager`). CI runs lint, typecheck, stylelint, Prettier and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)) — the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart.
+
+Two things are automated from there: pushing a `v*` tag produces a GitHub Release with the built zip and submits that build to the Chrome Web Store ([release.yml](./.github/workflows/release.yml), runbook in [RELEASING.md](./RELEASING.md)), and any change under `docs/**` redeploys the product site including the privacy policy ([deploy-pages.yml](./.github/workflows/deploy-pages.yml)). Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./GITHUB.md).
 
 ### Project layout
 
@@ -242,6 +260,7 @@ utils/                  Framework-free domain logic: urlMatcher · dnrRules · s
 locales/                In-app UI strings (zh_CN / en, split into common/options/popup)
 public/_locales/        Manifest name and description only
 docs/                   GitHub Pages product site: index.html (en) · zh.html · privacy.html · llms.txt
+.github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR template
 tests/                  Vitest suites (node environment)
 ```
 

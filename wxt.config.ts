@@ -40,7 +40,9 @@ export default defineConfig({
     name: '__MSG_extensionName__',
     description: '__MSG_extensionDescription__',
     default_locale: 'zh_CN',
-    version: '1.0.0',
+    // 版本号不要在这里声明：唯一事实源是 `package.json` 的 `version`，WXT 会取它并
+    // 削去预发布后缀（见 wxt/dist/core/utils/manifest.mjs）。双写必然漂移，而漂移的
+    // 代价是带错版本号的包进商店；`tests/build-verification.test.ts` 守卫两者一致。
     permissions: ['storage', 'declarativeNetRequest', 'declarativeNetRequestFeedback', 'alarms'],
     host_permissions: ['<all_urls>'],
     // 注意：不要在此声明 `action.default_title`。WXT 会用 popup 入口 HTML 的 `<title>`

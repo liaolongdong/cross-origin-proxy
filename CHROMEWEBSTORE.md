@@ -1,7 +1,8 @@
 # Chrome Web Store Listing — 跨域代理助手 / Cross-Origin Proxy
 
-> Last Updated: 2026-09-06
+> Last Updated: 2026-09-07
 > 本文件是商店上架的唯一素材源：把这里的内容逐项复制进 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)。
+> 商店表单（名称/描述/截图/权限理由/数据披露）无法由 API 代写，只能手动粘；**包上传与提审已经自动化**，见第 11 节。
 > 本文件位于仓库根目录，不在 `.output/chrome-mv3` 内，因此不会被打进上传包。
 
 ## 0. Keyword strategy（为什么这么写）
@@ -203,14 +204,18 @@ Rationale to paste if the form asks for clarification: request and response data
 
 **URL**: `https://liaolongdong.github.io/cross-origin-proxy/privacy.html`（仓库 `docs/privacy.html`，中英双语同页）
 
-必须先把 GitHub Pages 打开并确认该 URL 可访问、内容与第 4 节披露一致，再提交——这是最常见的首审被拒原因。
+该页由 `.github/workflows/deploy-pages.yml` 在 `main` 上改动 `docs/**` 时自动部署，但**部署源必须先在 Settings → Pages 里切成「GitHub Actions」**（一次性开关，见 [GITHUB.md](./GITHUB.md) §5）。提审前用下面命令确认三个页面都是 200——隐私政策 URL 打不开是最常见的首审被拒原因：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+```
 
 ## 6. Distribution
 
 - **Visibility**: Public
 - **Regions**: All regions
 - **Pricing**: Free
-- **Package**: `pnpm build:zip` → `.output/cross-origin-proxy-1.0.0-chrome.zip`（即 `<package-name>-<version>-<browser>.zip`；`manifest.json` 位于 zip 根目录，包内不含源码、测试与本文档）
+- **Package**: `pnpm build:zip` → `.output/cross-origin-proxy-<version>-chrome.zip`（即 `<package-name>-<version>-<browser>.zip`；`manifest.json` 位于 zip 根目录，包内不含源码、测试与本文档）。版本号只在 `package.json` 维护，发版链路见 [RELEASING.md](./RELEASING.md)。
 
 ## 7. Developer Info
 
@@ -221,11 +226,13 @@ Rationale to paste if the form asks for clarification: request and response data
 | Support URL    | `https://github.com/liaolongdong/cross-origin-proxy/issues` |                                                                 |
 | Homepage URL   | `https://liaolongdong.github.io/cross-origin-proxy/`        |                                                                 |
 
-> 仓库尚未创建：先建公开仓库 `liaolongdong/cross-origin-proxy`（名字必须一致，Pages 路径基 = 仓库名），再按 `marketing/launch-playbook.md` §1.6 开启 Pages，**确认 `privacy.html` 能打开后再提审**。
+> 仓库已建立并公开（`liaolongdong/cross-origin-proxy`，2026-09-07）。剩下的一次性动作全部列在 [GITHUB.md](./GITHUB.md)：About 描述与 website、topics、社交预览图、**Pages 源切到 GitHub Actions**、私密漏洞报告入口。**确认 `privacy.html` 能打开后再提审。**
 >
 > 联系邮箱会在商店页与隐私政策页公开，可能被爬虫采集用于发送 Spam。若希望隔离，可改用 GitHub 专用可收信地址（`用户名+编号@users.noreply.github.com`），并同步更新本节与 `docs/privacy.html`。
 
 ## 8. Version History
+
+完整版本历史以 [CHANGELOG.md](./CHANGELOG.md) 为唯一事实源（发版链路会把它对应小节切成 GitHub Release 的说明）；本表只记**已向商店提审**的版本与状态。
 
 | Version | Date   | Changes                                                                                                                                               | Status |
 | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
@@ -277,3 +284,13 @@ Rationale to paste if the form asks for clarification: request and response data
 | Date | Reason | Fix Applied | Resubmitted |
 | ---- | ------ | ----------- | ----------- |
 | —    | 暂无   | —           | —           |
+
+## 11. 自动化发布（包上传与提审）
+
+第 1–10 节是人工填写的商店表单；一旦条目存在，包体本身就不该再手工传。
+
+- **一次性准备（无法绕开的手动部分）**：`publish-extension` 不提供「新建商店条目」能力，必须在 Dashboard 手动上传一次 zip 才能拿到 Extension ID；同时在 Google Cloud 建 OAuth 客户端换 refresh token。四个值落到仓库 Secrets：`CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`。逐步命令见 [RELEASING.md](./RELEASING.md) §1。
+- **日常**：推 `v*` 标签即触发 `.github/workflows/release.yml`——全量校验 → 打 zip → 建 GitHub Release → `pnpm exec wxt submit` 上传并提审。版本号必须与 `package.json` 一致，不一致时工作流直接终止（商店收到错版本号的包是静默失败）。
+- **Secrets 未配时的行为**：Release 照建，商店那一步跳过并在 Run 页面留指引，不报红。
+- **先验后提审**：首次接管已有条目时，用 `Run workflow` 勾选 `skip-review`（只上传成草稿）或选 `publish-target=trustedTesters`，人工核对完再走 `default`。
+- **与商店表单的耦合点**：详细描述里刻意不写版本号，避开每次发版都要改商店文案；但限制条数（200 规则 / 500 日志 / 10MB）与能力清单必须与 `README.md`、`docs/` 落地页、`CHANGELOG.md` 保持同一事实。

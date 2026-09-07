@@ -1,0 +1,73 @@
+name: Verify
+description: 安装依赖并跑完仓库全套校验（ESLint / Stylelint / Prettier / tsc / build / vitest）
+
+# CI 与 Release 共用同一份校验实现：任何一项检查的新增或调整只改这里，
+# 不需要同步维护两份会漂移的 YAML。
+# 调用方必须先 `actions/checkout`，本动作只负责装工具链并跑检查。
+
+inputs:
+  build-mode:
+    description: 'build = 只产出 .output/chrome-mv3；zip = 同时产出可上传商店的 .output/*-chrome.zip'
+    required: false
+    default: build
+  node-version:
+    description: Node.js 版本
+    required: false
+    default: '22'
+
+runs:
+  using: composite
+  steps:
+    # pnpm 版本取自 package.json 的 packageManager 字段；必须在 setup-node 之前，
+    # 否则 pnpm 缓存目录探测不到。
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+      shell: bash
+
+    # tsconfig 依赖 `.wxt/` 里的类型声明（`wxt.d.ts` 提供 CSS 模块与
+    # `import.meta.env`），而 `.wxt/` 不入库；不先生成则 typecheck 必红。
+    - name: Prepare WXT types
+      run: pnpm exec wxt prepare
+      shell: bash
+
+    - name: ESLint
+      run: pnpm lint
+      shell: bash
+
+    - name: Stylelint
+      run: pnpm lint:style
+      shell: bash
+
+    - name: Prettier check
+      run: pnpm format:check
+      shell: bash
+
+    - name: Typecheck
+      run: pnpm typecheck
+      shell: bash
+
+    # build-verification.test.ts 断言的是真实构建产物，所以 build 必须在 test 之前。
+    # zip 分支：`wxt zip` 内部会先 build，`.output/chrome-mv3` 与 zip 同时就位，
+    # 测试照旧可跑，发布任务因此不需要再构建一次。
+    - name: Build
+      if: ${{ inputs.build-mode != 'zip' }}
+      run: pnpm build
+      shell: bash
+
+    - name: Build and zip
+      if: ${{ inputs.build-mode == 'zip' }}
+      run: pnpm build:zip
+      shell: bash
+
+    - name: Test
+      run: pnpm test
+      shell: bash

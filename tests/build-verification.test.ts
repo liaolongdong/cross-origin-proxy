@@ -55,6 +55,19 @@ describe('[Build] 构建产物全量验证', () => {
     it('should have version string', () => {
       expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
     });
+
+    /**
+     * 版本号的唯一事实源是 `package.json`（`wxt.config.ts` 刻意不再声明
+     * `manifest.version`）。双写会让发版链路把版本号错乱的包送进商店，而 Release
+     * 名字看起来仍然正常，因此在这里把两者钉在一起。期望值沿用 WXT 的简化规则：
+     * 取开头的 `X[.Y[.Z[.W]]]`，削去 `-alpha1` 之类的预发布后缀（浏览器不接受）。
+     */
+    it('should take its version from package.json (single source of truth)', () => {
+      const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8'));
+      const simplified = /^((0|[1-9]\d{0,8})(\.(0|[1-9]\d{0,8})){0,3})/.exec(pkg.version)?.[1];
+      expect(simplified).toBeTruthy();
+      expect(manifest.version).toBe(simplified);
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

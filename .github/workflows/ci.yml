@@ -22,43 +22,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # pnpm version comes from the `packageManager` field in package.json.
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # tsconfig 依赖 `.wxt/` 里的类型声明（`wxt.d.ts` 提供 CSS 模块与
-      # `import.meta.env`），而 `.wxt/` 不入库；不先生成则 typecheck 反必红。
-      - name: Prepare WXT types
-        run: pnpm exec wxt prepare
-
-      - name: ESLint
-        run: pnpm lint
-
-      - name: Stylelint
-        run: pnpm lint:style
-
-      - name: Prettier check
-        run: pnpm format:check
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      # build-verification.test.ts asserts against the real bundle, so the
-      # production build must exist before the suite runs.
-      - name: Build
-        run: pnpm build
-
-      - name: Test
-        run: pnpm test
+      # 校验清单的唯一实现处是 `.github/actions/verify`（release.yml 的发布前
+      # 门禁引用同一个动作），新增/调整检查只改那里，避免两份 YAML 漂移。
+      - name: Verify
+        uses: ./.github/actions/verify
 
       - name: Upload extension package
         if: github.event_name == 'push'

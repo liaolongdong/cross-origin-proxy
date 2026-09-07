@@ -13,19 +13,21 @@
 
 ### 常用命令
 
-| 用途     | 命令                                                     |
-| -------- | -------------------------------------------------------- |
-| 开发     | `pnpm dev`（WXT HMR，端口 8899）                         |
-| 构建     | `pnpm build`（输出 `.output/chrome-mv3`）                |
-| 打包     | `pnpm build:zip`（商店上传用）                           |
-| 商店素材 | `pnpm assets` / `pnpm assets:en`（生成商店图与落地页图） |
-| 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                       |
-| Lint     | `pnpm lint`（修复 `pnpm lint:fix`）                      |
-| 样式检查 | `pnpm lint:style`                                        |
-| 格式检查 | `pnpm format:check`（格式化 `pnpm format`，慎用）        |
-| 测试     | `pnpm test`（`vitest run`）                              |
+| 用途     | 命令                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| 开发     | `pnpm dev`（WXT HMR，端口 8899）                                                                     |
+| 构建     | `pnpm build`（输出 `.output/chrome-mv3`）                                                            |
+| 打包     | `pnpm build:zip`（产出 `.output/<name>-<version>-chrome.zip`，发布链路用的就是它）                   |
+| 商店素材 | `pnpm assets` / `pnpm assets:en`（生成商店图与落地页图）                                             |
+| 发版     | `npm version patch --no-git-tag-version` + `CHANGELOG.md` 小节 + `git tag vX.Y.Z && git push --tags` |
+| 鉴权预检 | `pnpm exec wxt submit --dry-run`（只验商店凭据，不上传不提审；需 `.env.submit`，已 gitignore）       |
+| 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                                                                   |
+| Lint     | `pnpm lint`（修复 `pnpm lint:fix`）                                                                  |
+| 样式检查 | `pnpm lint:style`                                                                                    |
+| 格式检查 | `pnpm format:check`（格式化 `pnpm format`，慎用）                                                    |
+| 测试     | `pnpm test`（`vitest run`）                                                                          |
 
-> 本仓库未配置 husky/lint-staged；提交前需手动通过上述检查。
+> 本仓库未配置 husky/lint-staged；提交前需手动通过上述检查。CI 与发布共用的检查清单唯一收在 `.github/actions/verify`，加一项检查就改那里。
 
 ### 关键文件速查
 
@@ -45,6 +47,10 @@
 | 主题                      | `utils/theme.ts` + `assets/theme/tokens.css`（`--cop-*`，6 主题 + light/dark/system）                               |
 | Vue 应用工厂              | `utils/createVueApp.ts`（`createAndMountApp`）                                                                      |
 | 商店文案与权限理由        | `CHROMEWEBSTORE.md`（上架唯一素材源，不在扩展包内）                                                                 |
+| 发版与商店提审 runbook    | `RELEASING.md`（一次性凭据、日常发版、失败排查）                                                                    |
+| GitHub 仓库展示信息       | `GITHUB.md`（About 描述 / website / topics / 社交预览 / Pages 源 / 私密漏洞报告入口，一次性手动清单）               |
+| 版本历史                  | `CHANGELOG.md`（唯一事实源；release 工作流把对应小节切成 GitHub Release 说明）                                      |
+| 三条自动化链路            | `.github/workflows/{ci,deploy-pages,release}.yml`；共用校验 `.github/actions/verify`                                |
 | 产品落地页 / 隐私政策     | `docs/index.html`（英）、`docs/zh.html`（中）、`docs/privacy.html`、`docs/llms.txt`（GitHub Pages 以 `/docs` 为根） |
 | 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                   |
 | WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                             |
@@ -80,6 +86,7 @@
 - `locales/`：应用内 i18n 文案；`public/_locales/`：仅 manifest 名称/描述。`assets/theme/tokens.css`：`--cop-*` 设计令牌。`tests/`：Vitest 单测（node 环境）。
 - `docs/`：GitHub Pages 产品站（静态 HTML/CSS + 一个零依赖、自托管的渐进增强脚本 `docs/assets/landing.js`，零外部 CDN、零远程字体；不参与 WXT 构建）。该脚本只加 `html.js` 类并接管截图廊控件、滚动淡入、导航高亮与回顶导轨，**所有依赖 JS 的样式状态写在 `html.js` 选择器下**，因此禁用或删除 JS 时页面内容依旧完整可读、可导航；改页面结构时要维持这个降级前提。`docs/assets/img/` 需入库供 Pages 访问。
 - `store-assets/`、`marketing/`：均为本地可再生/仅本地产物，已进 `.gitignore`；`.test-tmp/` 严禁入库（曾因误提交 Chrome for Testing 二进制把 `.git` 撑到 195MB，2026-09 已重写历史清除）。
+- `.github/`：`workflows/{ci,deploy-pages,release}.yml` 三条链路 + `actions/verify/`（CI 与发布共用的唯一校验入口）+ `ISSUE_TEMPLATE/` 与 PR 模板；不参与扩展构建，也无法用 `act`/`docker` 在本机实跑。根目录的运维文档与它同属仓库侧：`GITHUB.md`（手动设置清单）、`RELEASING.md`（发版）、`CHANGELOG.md`（版本历史）、`SECURITY.md`（披露渠道）——均不入库到扩展包，也不放 `docs/`（那是公开站点根）。
 
 ## 代码改动与优化边界
 
@@ -161,7 +168,8 @@
 - manifest 名称/悬停短名/描述/命令文案走 `chrome.i18n`，仅维护 `public/_locales/{zh_CN,en}/messages.json`（`extensionName`/`extensionShortName`/`extensionDescription`/`commandToggleProxy`）。**Chrome 上传时硬校验 `name` ≤ 75、`description` ≤ 132 字符（按码点计数），超出直接拒包**；`tests/build-verification.test.ts` 已加回归守卫。
 - 商店关键词只加在 `public/_locales` 的 `extensionName`。它仍会出现在 Chrome 应用商店、安装确认弹窗、`chrome://extensions` 列表与工具栏扩展菜单——这是承载关键词的**已知代价**，无法由权限或代码消除；浏览器 UI 上接受显示长名。可收短的两处已收短：工具栏悬停提示走 `extensionShortName`，标签页标题由 `entrypoints/{options,popup}/main.ts` 用应用内 i18n 设置。**测试守卫的是“悬停短名 = HeaderBar 品牌名 = popup 标题”三者一致**；`optionsPageTitle` 带「- 配置 / - Options」后缀是故意设计，不要“顺手对齐”删掉后缀。
 - 文档按影响范围更新，中英文表达同一事实：
-  - 用户功能、安装或用法变化：`README.md`（英）与 `README.zh-CN.md`（中）。
+  - 用户功能、安装或用法变化：`README.md`（英）与 `README.zh-CN.md`（中），并在 `CHANGELOG.md` 顶部记一条（发版时它就是 Release 说明）。
+  - 发布、CI、Pages、仓库展示信息变化：`RELEASING.md`（凭据与发版流程）、`GITHUB.md`（一次性仓库设置清单）、`.github/workflows/*` 与 `.github/actions/verify`。
   - manifest 描述、权限、命令或配置变化：`wxt.config.ts` 及对应 `_locales` 文案；同时同步 `CHROMEWEBSTORE.md`（商店文案/权限/截图清单）与 `docs/` 落地页（能力、FAQ、隐私政策）。
   - 商店图或落地页图变化：改 `scripts/generate-store-assets.mjs` 后跑 `pnpm assets && pnpm assets:en`，不手工改图片。
 
@@ -177,6 +185,8 @@
   - 文档、JSON 等格式改动：对本次修改文件运行 `pnpm exec prettier --check <files...>`。
   - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），`docs/assets/landing.js` 需过 `pnpm lint`（浏览器全局已在 `eslint.config.js` 的 `docs/**` 覆盖块中声明），并在浏览器里目测渲染（含禁用 JS 的降级态）。中英两页的可见文案、FAQ 条目数与 `FAQPage` 结构化数据必须一一对应：`FAQPage` 的问答需与页面 `<details>` 文本一致，两页的条目顺序也需一致。
   - 商店文案改动：`pnpm test`（含 `name`/`description` 字符上限守卫）+ 同步 `CHROMEWEBSTORE.md`。
+  - `.github/**`（工作流、复合动作、Issue/PR 模板）：`pnpm test`（`tests/docs-consistency.test.ts` 守卫关键契约与 YAML 可解析），并对改动文件跑 prettier；本机无 `act`/`docker`，**工作流无法本地实跑，必须把这一点作为未验证项写进交付说明**。
+  - 发版：按 `RELEASING.md` §2（`npm version` + `CHANGELOG.md` 小节 + 全量校验 + `git tag`），推 tag 即触发发布链路。
 - 不用会改写整个仓库的 `pnpm format` 处理局部任务；需要自动修复时只作用于本次修改文件。
 - 不为通过测试而弱化断言、删除、跳过测试或隐藏错误；命令因既有问题或环境限制无法运行时，交付时如实说明未验证项与原因。
 
@@ -227,6 +237,15 @@
 - 当 popup 入口 HTML 存在**非空 `<title>`** 时，WXT 会用它推导 `manifest.action.default_title` 并覆盖 `wxt.config.ts` 里的同名声明（`wxt/dist/core/utils/manifest.mjs`，实测于 0.20.27）。因此悬停提示只能改 `entrypoints/popup/index.html` 的标题；若将来 popup 标题被删空，配置里的值会重新生效——升级 WXT 后需复核这一行为。
 - Chrome **不替换**扩展页面 HTML 里的 `__MSG_x__` 占位符（只对 manifest.json 生效），所以页面 `<title>` 里写占位符会直接以字面量出现在标签页上；需本地化时用入口 `main.ts` 设 `document.title`，静态值只作首帧兜底。
 - 干净检出跑 `pnpm typecheck` 前必须先 `pnpm exec wxt prepare`（`.wxt/` 不入库，CSS 模块与 `import.meta.env` 类型均来自它）。
+
+### 发布与 CI
+
+- **版本号只在 `package.json`**。`wxt.config.ts` 刻意不声明 `manifest.version`（WXT 回落并削去预发布后缀），加回去就是双份事实源；`tests/build-verification.test.ts` 故意拒绝两者不一致。
+- **首次商店条目必须手动建**。`publish-extension`（`wxt submit` 的底层）不提供新建能力，必须先在 Dashboard 上传一次 zip 拿 Extension ID；之后才能由 `release.yml` 上传+提审。
+- **GitHub Pages 的 Source 必须是「GitHub Actions」**，否则 `deploy-pages` 报 "Pages not enabled"；而 `docs/` 就是站点根，`/privacy.html` 已写进商店详细描述与 `llms.txt`，改路径基、目录布局或仓库名都会打断隐私政策。
+- **仓库展示信息（About 描述 / website / topics / Pages 源 / 社交预览图）不能靠 `GITHUB_TOKEN` 改**，只能仓库所有者在 UI 手动填（逐项值见 `GITHUB.md`）。
+- **工作流 YAML 本地无法跑**（本仓库机器无 `act`/`docker`）：改 `.github/**` 后至少做 YAML 解析校验（`tests/docs-consistency.test.ts` 已覆盖关键契约），并如实把「未实跑」写进交付说明；首跑就是在 GitHub 上跑。
+- **`.env.submit` 永远不入库**（`wxt submit init` 会写进去，内含 refresh token）；`store-assets/`、`marketing/`、`.test-tmp/` 同样不得入库。
 
 ### Element Plus / i18n
 

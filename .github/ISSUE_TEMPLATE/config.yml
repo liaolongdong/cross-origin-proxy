@@ -1,0 +1,11 @@
+# 保留空白 Issue：本仓库未开 Discussions，"这个能力支不支持 X"这类提问需要一个出口。
+# 模板的信息密度高得多，能用模板时请优先用模板。
+blank_issues_enabled: true
+
+contact_links:
+  - name: 产品说明 · 能力清单 · FAQ（中英双语）/ Product docs and FAQ
+    url: https://liaolongdong.github.io/cross-origin-proxy/
+    about: 多数"怎么用""支持不支持"的问题这里已有答案；中文页在 /cross-origin-proxy/zh.html。
+  - name: 安全漏洞请私密上报 / Report a vulnerability privately
+    url: https://github.com/liaolongdong/cross-origin-proxy/security/policy
+    about: 这个扩展能注入请求头并代发请求，公开 Issue 里贴复现等于公开利用方式。

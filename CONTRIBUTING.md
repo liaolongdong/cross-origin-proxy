@@ -6,7 +6,7 @@ Thanks for taking the look. This is a small, focused Chrome extension for cross-
 
 ## The three-step flow
 
-1. **Fork and branch** off `master`. One concern per branch — `fix/dnr-regex-boundary`, not `misc-improvements`.
+1. **Fork and branch** off `main`. One concern per branch — `fix/dnr-regex-boundary`, not `misc-improvements`.
 2. **Make the change and run the checks** that match what you touched:
 
    | What you changed                         | Must pass                                                     |
@@ -61,9 +61,21 @@ Every visible string needs both languages, and the two key sets must stay identi
 
 Refactors are welcome when they are adjacent to the change you are making. What is not welcome: repository-wide restyling, renaming for taste, or a "while I was in there" behaviour change bundled into a fix. If a change would alter matching semantics, storage shape, defaults, permissions, or any visible behaviour, open an issue first and describe the trade-off.
 
+## Versioning and releasing
+
+You normally do not need any of this to send a patch — the maintainers cut releases. It is written down so a PR does not accidentally break the pipeline:
+
+- **The version lives in `package.json` only.** `wxt.config.ts` deliberately does not declare `manifest.version`; WXT derives it (and strips pre-release suffixes). Re-adding it creates a second source of truth that will drift, and [tests/build-verification.test.ts](./tests/build-verification.test.ts) fails on drift on purpose.
+- **User-visible changes need a `CHANGELOG.md` entry.** Add a bullet under `Unreleased` or, when cutting a version, a `## [x.y.z] - YYYY-MM-DD` section — the release workflow cuts that exact section into the GitHub Release notes, so a missing section silently downgrades to auto-generated notes.
+- **Pushing a `v*` tag is the release.** It runs [`.github/workflows/release.yml`](./.github/workflows/release.yml): full verify, build + zip, GitHub Release, then Chrome Web Store upload and review submission when the store secrets are configured. Never tag a commit you have not run the checks on.
+- **Docs under `docs/` are the product site.** Pushing to `main` deploys it via `.github/workflows/deploy-pages.yml`, and that is where the privacy-policy URL the store requires is served — so a broken link in `docs/` is a store-review blocker, not a cosmetic issue.
+- Repository display settings (About, topics, Pages source) are operator-only and listed in [GITHUB.md](./GITHUB.md).
+
+The full release runbook, including the one-time store credentials, is [RELEASING.md](./RELEASING.md).
+
 ## 贡献要点（中文）
 
-1. 从 `master` 分支拉分支，一个分支只解决一件事。
+1. 从 `main` 分支拉分支，一个分支只解决一件事。
 2. 按改动范围跑对应检查：TS/Vue 跑 `pnpm typecheck` + `pnpm lint` + `pnpm test`；样式跑 `pnpm lint:style`；入口/清单/依赖/打包跑 `pnpm build`；文档与 JSON 跑 `pnpm exec prettier --check <改动文件>`。仓库没有 git hook，靠手动与 CI 保证。
 3. PR 描述要写清「改动前行为 / 改动后行为 / 跑了哪些命令及结果 / 未能验证的部分」。
 
