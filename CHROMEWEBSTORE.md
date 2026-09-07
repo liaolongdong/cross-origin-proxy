@@ -210,7 +210,7 @@ Rationale to paste if the form asks for clarification: request and response data
 - **Visibility**: Public
 - **Regions**: All regions
 - **Pricing**: Free
-- **Package**: `pnpm build:zip` → `.output/web-cross-origin-1.0.0-chrome.zip`（即 `<package-name>-<version>-<browser>.zip`；`manifest.json` 位于 zip 根目录，包内不含源码、测试与本文档）
+- **Package**: `pnpm build:zip` → `.output/cross-origin-proxy-1.0.0-chrome.zip`（即 `<package-name>-<version>-<browser>.zip`；`manifest.json` 位于 zip 根目录，包内不含源码、测试与本文档）
 
 ## 7. Developer Info
 

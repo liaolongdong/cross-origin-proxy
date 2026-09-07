@@ -15,8 +15,8 @@ export const REFRESH_INTERVAL_PRESETS: readonly { value: number; label: string }
 /** 默认刷新频率（5s，平衡实时性与 SW 压力） */
 const DEFAULT_REFRESH_INTERVAL = 5000;
 
-/** 持久化键：跨会话记住用户选择的刷新频率 */
-const REFRESH_INTERVAL_STORAGE_KEY = 'webProxy:logRefreshInterval';
+/** 持久化键：跨会话记住用户选择的刷新频率（`cop_` 前缀与 i18n 的 `cop_locale` 镜像键同族） */
+const REFRESH_INTERVAL_STORAGE_KEY = 'cop_log_refresh_interval';
 
 /** 安全读取存储的刷新频率；非预设值或缺失时回退到默认值 */
 function loadStoredInterval(): number {

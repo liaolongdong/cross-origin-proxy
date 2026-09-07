@@ -1,4 +1,4 @@
-# AGENTS.md · Web Proxy
+# AGENTS.md · 跨域代理助手（cross-origin-proxy）
 
 ## 适用范围与优先级
 
@@ -191,6 +191,7 @@
 - **主题**：`--cop-*` 令牌 + `data-theme`/`data-mode`；6 主题（sky/green/pink/mauve/orange/slate）+ light/dark/system；同步覆盖 Element Plus `--el-color-primary` 梯度。
 - **容量限制**：`MAX_RULES=200`（新增/合并超限拒绝）、`MAX_LOG_ENTRIES=500`（环形缓冲）。
 - **商店文案**：`public/_locales` 承载搜索关键词（CORS/跨域/环境切换/Mock），`CHROMEWEBSTORE.md` 是商店表单的唯一素材源；截图由 `pnpm assets` 生成（商店只接受 1280×800 或 640×400，最多 5 张，像素级校验）。
+- **命名身份（两层，互为直译，不得混用）**：工程身份 = `cross-origin-proxy`（`package.json` 的 `name`、GitHub 仓库名、Pages 路径基、`pnpm build:zip` 产物名）；品牌身份 = 「跨域代理助手 / Cross-Origin Proxy」（商店名 `extensionName`、`extensionShortName`、HeaderBar、popup 标题、落地页 `<title>` 与 schema `name`）。品牌名是描述性短语（与用户查询语序一致，利于商店搜索与 AI 实体消歧），刻意不造臆造品牌词——FAT/UAT 是中国研发语境黑话，中文是主市场。工程身份曾被写成 `web-cross-origin`、`web-proxy` 并残留于包名，2026-09 已统一；`web-proxy` 在 GitHub `in:name` 有 5471 个仓库（且语义撞 VPN/翻墙代理）、`web-cross-origin` 不是任何检索短语，两者都不要再改回去。起量后若要加品牌前缀，只改商店名称字段与 HeaderBar：扩展 ID 不变、已装用户无感；**仓库名与 Pages 地址不动**，因为隐私政策 URL 是商店审核项，改动需重新提审。
 
 ## 常见陷阱
 

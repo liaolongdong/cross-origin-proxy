@@ -2,7 +2,7 @@
 trigger: always_on
 ---
 
-# 跨域代理助手（web-cross-origin）项目铁律
+# 跨域代理助手（cross-origin-proxy）项目铁律
 
 > 精简的 always-on 硬性规则。架构总览、关键文件速查、约定细节与常见陷阱见根目录 `AGENTS.md`。
 
