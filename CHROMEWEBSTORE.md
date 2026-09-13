@@ -11,22 +11,23 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 优化重心因此放在后两个字段：
 
-| 字段     | 预算       | 当前投入              | 说明                                                                             |
-| -------- | ---------- | --------------------- | -------------------------------------------------------------------------------- |
-| 名称     | 75 码点    | 36 / 52               | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                      |
-| 摘要     | 132 码点   | 100 / 127             | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断 |
-| 详细描述 | 16000 码点 | 中约 3.7K / 英约 9.5K | 参与索引且仍有大量余量；扩容只加**新的内容类型**，不把同一批能力换个说法重述一遍 |
+| 字段     | 预算       | 当前投入                | 说明                                                                                                                     |
+| -------- | ---------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 名称     | 75 码点    | 36 / 52                 | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                              |
+| 摘要     | 132 码点   | 100 / 127               | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
+| 详细描述 | 16000 码点 | 中约 3.79K / 英约 9.89K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
-| 目标查询                                       | 用户怎么搜                     | 落点                                                     |
-| ---------------------------------------------- | ------------------------------ | -------------------------------------------------------- |
-| `cors` / `cross origin` / `跨域`               | 报错来搜的人，量最大、意图最强 | 名称（中英）、摘要、详细描述首句与症状行                 |
-| `api proxy` / `request proxy` / `请求转发`     | 明确要代理工具                 | 名称、摘要、能力清单                                     |
-| `environment switch` / `环境切换` / `联调`     | 中文前端场景词，竞争小、转化高 | 中文名称、摘要、详细描述                                 |
-| `mock api` / `mock 数据` / `假数据`            | 后端未就绪的前端               | 名称（Mock）、能力清单、典型配置示例、「谁会用上它」     |
-| `modify request headers` / `response override` | 抓包改包需求                   | 能力清单、典型配置示例                                   |
-| `websocket proxy`                              | 长连接联调，几乎无同类扩展     | 摘要 + 能力清单 + 症状行（差异化点）                     |
-| `devserver proxy` / `devServer` / `本地跨域`   | 想换掉逐项目配置的人           | 首段痛点、症状行、与「开发代理」与「改项目配置」的对比段 |
-| `timeout` / `http 500` / `弱网` / `超时模拟`   | 要验异常与兜底态的人           | 能力清单、典型配置示例、「谁会用上它」（QA 那一行）      |
+| 目标查询                                                    | 用户怎么搜                     | 落点                                                     |
+| ----------------------------------------------------------- | ------------------------------ | -------------------------------------------------------- |
+| `cors` / `cross origin` / `跨域`                            | 报错来搜的人，量最大、意图最强 | 名称（中英）、摘要、详细描述首句与症状行                 |
+| `同源策略` / `same-origin policy`                           | 先查概念再找解法的人           | CORS 解释段                                              |
+| `api proxy` / `request proxy` / `请求转发`                  | 明确要代理工具                 | 名称、摘要、能力清单                                     |
+| `environment switch` / `环境切换` / `联调`                  | 中文前端场景词，竞争小、转化高 | 中文名称、摘要、详细描述                                 |
+| `mock api` / `mock 数据` / `假数据` / `fake data`           | 后端未就绪的前端               | 名称（Mock）、能力清单、典型配置示例、「谁会用上它」     |
+| `modify request headers` / `response override` / `throttle` | 抓包改包与弱网模拟需求         | 能力清单、典型配置示例                                   |
+| `websocket proxy`                                           | 长连接联调，几乎无同类扩展     | 摘要 + 能力清单 + 症状行（差异化点）                     |
+| `devserver proxy` / `devServer` / `本地跨域`                | 想换掉逐项目配置的人           | 首段痛点、症状行、与「开发代理」与「改项目配置」的对比段 |
+| `timeout` / `http 500` / `弱网` / `超时模拟`                | 要验异常与兜底态的人           | 能力清单、典型配置示例、「谁会用上它」（QA 那一行）      |
 
 描述里的内容块各自都有一个转化或检索目的，不是为了把字数填满：
 
@@ -73,10 +74,10 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 它能做什么：
 - 按通配符、前缀或正则匹配请求地址，转发到你指定的另一个环境
 - 注入或替换请求头（例如目标环境的鉴权 token），替换请求体
-- 改写响应状态码、响应头，或按路径替换 JSON 里的某个字段（如 data.token）
-- Mock 响应：接口还没写好时，直接返回你准备的 JSON / 文本 / HTML / XML
+- 响应改写：替换响应状态码、响应头，或按路径替换 JSON 里的某个字段（如 data.token）
+- 假数据 / Mock：接口还没写好时，直接返回你准备的 JSON / 文本 / HTML / XML
 - 条件化 Mock：一条规则里配多个条件（URL 正则、请求方法、查询参数），首个命中的条件决定响应体、状态码与 Content-Type
-- 注入 0–60000 毫秒延迟，用来验证骨架屏、加载态与超时处理
+- 注入 0–60000 毫秒延迟模拟弱网，用来验证骨架屏、加载态与超时处理
 - 阻断请求，用来验证异常提示与离线兜底；被阻断的请求不会被回退重发
 - 失败自动重试：网络错误、5xx 响应与单次 30 秒超时都会触发，重试 1–5 次、间隔 100–30000 毫秒可调
 - 按 HTTP 方法限定规则（GET/POST/PUT/DELETE/PATCH/OPTIONS/HEAD），或在代理后的地址上追加、覆盖查询参数（灰度标识、__env=uat）
@@ -100,15 +101,15 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - 要把配置交出去：JSON 导出、HAR 录制转规则、cURL 粘贴建规则，同事导入就是同一套
 
 调试与协作：
-- 请求日志记录方法、状态、耗时与命中的规则，点开可看完整的请求与响应头/体，JSON 自动格式化
-- 顶部「URL 匹配测试」输入任意地址（可带方法），实时显示命中的规则、重写后的地址、走哪条通道，以及被哪条规则遮蔽
-- 一键把任意请求复制为 cURL；支持 HAR 1.2 导出、HAR 导入（由录制流量自动生成规则）、cURL 粘贴导入
+- 请求日志记录方法、状态、耗时与命中的规则，点开可看请求与响应的头与文本 body（二进制响应体不落盘），JSON 自动格式化
+- 顶部「URL 匹配测试」输入任意地址（可带方法），实时显示命中的规则、重写后的地址、走哪条通道，以及还有哪些规则同样命中、但被它遮蔽
+- 把任意一条日志复制为 cURL（按原始请求地址）；支持 HAR 1.2 导出、HAR 导入（由录制流量生成规则，新规则默认停用，确认后自行启用）、cURL 粘贴导入
 - 规则可拖拽排序、单条与批量启停/删除，按名称、匹配模式或目标地址搜索，并按状态与匹配类型筛选
 - 环境轮换时批量迁移目标域名，并给出逐条变更预览
 - 规则列表为空时可直接点快速模板（通配符代理、前缀匹配、鉴权头、改请求头）起步；删除一条规则后能立即撤销，误删不用重填
 - 把整套规则保存成命名环境快照，在 FAT / UAT / PROD 间一键切换
-- 配置以 JSON 导出（覆盖或合并两种模式），同事导入即可复现同一套规则
-- 两条通道各自的命中统计：网络层近 5 分钟、后台通道自上次配置变更起
+- 配置以 JSON 导出；导入支持覆盖或合并两种模式，同事导入即可复现同一套规则
+- 两条通道各自的命中统计：网络层取近 5 分钟的命中记录，后台通道自上次配置变更起累计（内存计数，后台工作线程被回收后从 0 重新开始）
 
 一点说明（不是缺陷）：只重写 URL 的简单规则由浏览器网络层完成，那条请求不经过扩展的脚本，所以请求日志里不会出现它。这类规则请用「URL 匹配测试」验证，或看规则表里的命中次数；带任何改写、Mock、延迟能力的规则会正常出现在日志里。
 
@@ -119,7 +120,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 4. 在「URL 匹配测试」里输入实际请求地址，看是否被一条优先级数字更小（更靠前）的规则遮蔽
 5. 使用正则时确保它覆盖整条 URL：网络层会用替换结果整体替换 URL，而后台通道只替换命中的片段，覆盖不全的正则在两条通道上结果不同
 
-规则生效了、地址也换过去了，控制台却还是报 CORS——这通常不是没生效：只重写地址的请求在浏览器里仍然是一次跨域请求，目标环境没允许你的来源就照样被拦。此时给这条规则加任一改写能力（最省事的是加一个响应头覆盖），它就改由后台通道代发：那一次请求由扩展发出，页面拿到的是扩展构造的响应，页面侧的跨域校验不再适用。「URL 匹配测试」会直接告诉你这条地址现在走的是哪条通道。
+规则生效了、地址也换过去了，控制台却还是报 CORS——这通常不是没生效：只重写地址的请求在浏览器里仍然受同源策略约束，目标环境没允许你的来源就照样被拦。此时给这条规则加任一改写能力（最省事的是加一个响应头覆盖），它就改由后台通道代发：那一次请求由扩展发出，页面拿到的是扩展构造的响应，页面侧的跨域校验不再适用。「URL 匹配测试」会直接告诉你这条地址现在走的是哪条通道。
 
 与常见方案的差别：
 - 相比在每个项目里配 devServer 代理：规则配在浏览器里，一次配好对所有项目生效，而且能改写响应，不只是转发
@@ -130,7 +131,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 界面：
 - 中文 / English 双语界面，6 套主题与浅色 / 深色 / 跟随系统
-- 弹窗提供总开关、今日统计、自动关闭倒计时、「当前页面命中哪条规则」的预览，以及「为这个页面创建规则」
+- 弹窗提供总开关、今日请求数（只统计后台通道）、自动关闭倒计时、「当前页面命中哪条规则」的预览，以及「为这个页面创建规则」
 - 代理自动关闭：30 分钟 / 1 小时 / 2 小时 / 4 小时，基于浏览器定时器，服务工作线程重启后仍然生效
 - 快捷键：⌘⇧P（Windows/Linux 为 Ctrl+Shift+P）切换代理；配置页内 N 新建规则、/ 或 ⌘F 聚焦搜索、Esc 关闭弹窗
 
@@ -177,10 +178,10 @@ Reach for it if any of these is familiar:
 What it does:
 - Match requests by wildcard, prefix or regular expression and forward them to another environment
 - Inject or replace request headers (such as the target environment's auth token) and replace request bodies
-- Override the response status, response headers, or individual JSON fields by dot-notation path (`data.token`)
-- Mock responses with your own JSON / text / HTML / XML when the API is not built yet
+- Response overrides: the status code, the response headers, or individual JSON fields by dot-notation path (`data.token`)
+- Mock responses with your own fake data (JSON / text / HTML / XML) when the API is not built yet
 - Conditional mock responses: give one rule several conditions (URL pattern, request method, query parameters) and the first match decides the body, status and Content-Type
-- Add 0–60000 ms of latency to exercise loading, skeleton and timeout states
+- Add 0–60000 ms of latency to throttle a slow network and exercise loading, skeleton and timeout states
 - Block requests to verify error handling and offline fallbacks; a blocked request is never replayed
 - Retry automatically on network errors, 5xx responses and the 30-second per-attempt timeout — off, or 1–5 attempts with a 100–30000 ms interval
 - Limit a rule to specific HTTP methods (GET/POST/PUT/DELETE/PATCH/OPTIONS/HEAD), or append and override query parameters on the proxied URL (gray-release tags, __env=uat)
@@ -204,15 +205,15 @@ Who reaches for it:
 - Handing a setup over: JSON export, HAR-to-rules, paste-a-cURL-to-a-rule — your teammate imports the identical configuration
 
 Debugging and teamwork:
-- A request log with method, status, duration and the rule that matched; open any entry for full request and response headers and body, JSON auto-formatted
-- A URL match tester in the header bar: type any URL (optionally with a method) to see in real time which rule matches, what the rewritten URL is, which channel it takes, and which rule shadows it
-- Copy any request as cURL; HAR 1.2 export, HAR import that creates rules from recorded traffic, and cURL paste import
+- A request log with method, status, duration and the rule that matched; open any entry for request and response headers and text bodies (a binary response body is not stored), JSON auto-formatted
+- A URL match tester in the header bar: type any URL (optionally with a method) to see in real time which rule matches, what the rewritten URL is, which channel it takes, and which other rules match the same URL but lose to it
+- Copy any logged request as cURL, using its original URL; HAR 1.2 export, HAR import that generates rules from recorded traffic (those rules arrive disabled until you enable them), and cURL paste import
 - Drag to reorder rule priority, enable/disable/delete one at a time or in batch, search by name, pattern or target, and filter by status and match type
 - Batch-migrate target domains across rules with a per-rule change preview
 - Start from a quick template while the list is still empty (wildcard proxy, prefix match, auth header, header override), and undo a delete immediately — a mistaken removal does not mean retyping the rule
 - Save the whole rule set as a named environment profile and switch between FAT, UAT and PROD in one click
-- Export configuration as JSON (replace or merge mode) so a teammate gets the identical setup
-- Per-rule hit counts for both channels: network layer over the last 5 minutes, background channel since the last config change
+- Export configuration as JSON; on import you replace the current rules or merge into them, so a teammate gets the identical setup
+- Per-rule hit counts for both channels: the network layer over the last 5 minutes, the background channel since the last config change (an in-memory count that restarts when the worker is recycled)
 
 One thing that is by design, not a bug: a rule that only rewrites the URL is handled by the browser's network layer, so that request never passes through the extension's scripts and does not appear in the request log. Verify those rules with the URL match tester or the rule's hit count; anything with an override, mock or delay shows up in the log normally.
 
@@ -223,7 +224,7 @@ If a rule seems not to take effect, check in this order:
 4. Test the actual URL in the URL match tester: an enabled rule with a lower priority number may be matching first and shadowing it
 5. For regex rules, make sure the pattern covers the whole URL: the network layer replaces the entire URL while the background channel replaces only the part your pattern matched
 
-The rule took effect, the address did change, and the console still says CORS — that usually is not a broken rule. A request whose only rewrite happened in the network layer is still a cross-origin request from the page, so a target environment that does not allow your origin gets blocked. Add any capability to that rule (a response header override is the cheapest) and it moves to the background channel: the extension issues the request and hands the page a response it constructed, so the page's CORS check never runs. The URL match tester shows which channel a given address is currently taking.
+The rule took effect, the address did change, and the console still says CORS — that usually is not a broken rule. A request whose only rewrite happened in the network layer is still a cross-origin request the browser checks against the same-origin policy, so a target environment that does not allow your origin gets blocked. Add any capability to that rule (a response header override is the cheapest) and it moves to the background channel: the extension issues the request and hands the page a response it constructed, so the page's CORS check never runs. The URL match tester shows which channel a given address is currently taking.
 
 How it differs from the usual options:
 - Versus a per-project dev-server proxy: rules live in the browser, apply to every project at once, and can rewrite responses instead of only forwarding
@@ -234,7 +235,7 @@ How it differs from the usual options:
 
 Interface:
 - English and Chinese UI, six themes, light / dark / system modes
-- Popup with a global switch, today's stats, an auto-off countdown, a preview of which rule matches the page you have open, and "create a rule for this page"
+- Popup with a global switch, today's request count (background channel only), an auto-off countdown, a preview of which rule matches the page you have open, and "create a rule for this page"
 - Auto-off countdown of 30 minutes, 1, 2 or 4 hours, built on browser alarms so it survives service-worker restarts
 - Keyboard shortcut Ctrl+Shift+P (⌘⇧P on macOS) to toggle proxying; on the options page N adds a rule, / or ⌘F focuses search, Esc closes the topmost dialog
 
@@ -362,6 +363,8 @@ done
 | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | 1.0.0   | 待提交 | 首次提交：双通道代理（DNR + 后台）、请求/响应改写、Mock/延迟/阻断、方法与查询参数控制、WebSocket 转发、HAR/cURL 导入导出、环境快照、中英双语与 6 主题 | Draft  |
 
+> ⚠️ 第 1 节描述承诺了「关闭总开关时这层规则一并卸载」，而这条行为修复目前只记在 [CHANGELOG.md](./CHANGELOG.md) 的 `## [Unreleased]` 段（`1.0.0` 尚未打 tag）。首次提审的 zip 必须带上它——商店描述与包体行为不一致，既是拒审风险也是最容易吃差评的地方。上表的 Changes 列只描述条目范围，不代表 2026-09-07 那一节的功能清单。
+
 ## 9. Pre-Publish Checklist
 
 包与清单：
@@ -378,6 +381,7 @@ done
 - [ ] Single purpose 一句话填写（第 1.3 节）
 - [ ] 每一项权限与 host 权限的理由都粘贴（第 3 节），`<all_urls>` 单独说明
 - [ ] 数据披露按第 4 节勾选，与隐私政策文本一致
+- [ ] 描述里的每条能力主张都对得上要提交的那个包，尤其是按实现收窄过的六处：URL 匹配测试的遮蔽方向、日志只落文本 body、cURL 仅限日志条目、覆盖/合并是**导入**模式、后台命中数是内存计数、弹窗今日请求数只含后台通道
 - [ ] 隐私政策 URL 已可公开访问（第 5 节）
 - [ ] 开发者联系邮箱已验证（Developer Dashboard → Account）
 
@@ -395,13 +399,14 @@ done
 
 ## 10. Review Risk Notes
 
-| 风险                                | 为什么会被盯           | 应对                                                                                                             |
-| ----------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `<all_urls>` 权限过大               | 商店明确偏好窄权限     | 第 3 节已给出「无法枚举内网域名 + activeTab 不满足时机」的具体论证，并主动提出可降级为按站点授权                 |
-| 名称含 `CORS`/`Mock` 被判关键词堆砌 | 名称是搜索权重最高字段 | 名称结构为「品牌名 - 能力 A · 能力 B · 能力 C」，每个词对应真实功能，无重复词、无最高级、无 "free/best"          |
-| 数据披露与代码不一致                | 拒审主因               | 全仓库无 `fetch` 到自有域名、无埋点 SDK；命中统计仅本地展示；已在第 4 节写明可粘贴的依据                         |
-| 截图与实际不符                      | 会要求重传             | 截图由 `screenshots/` 真实界面派生，且不含真实内网域名（示例统一 `fat-api.example.com` / `uat-api.example.com`） |
-| 远程代码                            | MV3 红线               | 无 CDN 脚本、无 `eval`；构建产物 `esbuild.drop: ['console','debugger']`，全部脚本随包发布                        |
+| 风险                                | 为什么会被盯                   | 应对                                                                                                             |
+| ----------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `<all_urls>` 权限过大               | 商店明确偏好窄权限             | 第 3 节已给出「无法枚举内网域名 + activeTab 不满足时机」的具体论证，并主动提出可降级为按站点授权                 |
+| 名称含 `CORS`/`Mock` 被判关键词堆砌 | 名称是搜索权重最高字段         | 名称结构为「品牌名 - 能力 A · 能力 B · 能力 C」，每个词对应真实功能，无重复词、无最高级、无 "free/best"          |
+| 数据披露与代码不一致                | 拒审主因                       | 全仓库无 `fetch` 到自有域名、无埋点 SDK；命中统计仅本地展示；已在第 4 节写明可粘贴的依据                         |
+| 截图与实际不符                      | 会要求重传                     | 截图由 `screenshots/` 真实界面派生，且不含真实内网域名（示例统一 `fat-api.example.com` / `uat-api.example.com`） |
+| 描述与实际行为不符（overclaim）     | 会被要求整改，且直接转化成差评 | 2026-09-13 逐条对照代码核验，收窄六处（见第 9 节自检项）：这些限定词是**事实口径**，不要为了卖点更强再改回去     |
+| 远程代码                            | MV3 红线                       | 无 CDN 脚本、无 `eval`；构建产物 `esbuild.drop: ['console','debugger']`，全部脚本随包发布                        |
 
 ### Rejection History
 

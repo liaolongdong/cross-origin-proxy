@@ -154,23 +154,23 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 ### Logs & debugging
 
-- Request log panel: method, status, duration, plus hit statistics for both channels — DNR over the last 5 minutes and service-worker hits since the last config change
-- Log detail viewer: full request/response headers and body, JSON auto-formatted
-- **Copy as cURL** on any log entry, and **create a rule** straight from a captured request
+- Request log panel: method, status, duration, plus hit statistics for both channels — DNR over the last 5 minutes and service-worker hits since the last config change (an in-memory count that restarts when the worker is recycled)
+- Log detail viewer: request and response headers and text bodies (a binary response body is not stored), JSON auto-formatted
+- **Copy as cURL** on any log entry, using that request's original URL, and **create a rule** straight from a captured request
 - Filter by method (GET / POST / PUT / DELETE), status class (2xx / 4xx / 5xx), rule or URL keyword
-- **URL match tester** in the header bar: type any URL (optionally with a method) to preview the matched rule, rewritten URL, forwarding channel and shadowed rules in real time
+- **URL match tester** in the header bar: type any URL (optionally with a method) to preview in real time the matched rule, the rewritten URL, the forwarding channel and which other rules match the same URL but lose to it
 
 ### Import, export, environments
 
-- Config import/export as JSON
-- **HAR 1.2** export of captured requests, and HAR import that auto-creates rules from recorded traffic
+- Export configuration as JSON; on import, replace the current rules or merge into them
+- **HAR 1.2** export of captured requests, and HAR import that auto-creates rules from recorded traffic (those rules arrive disabled until you enable them)
 - **cURL import** — paste DevTools' "Copy as cURL" output to prefill a rule
 - **Environment profiles** — save the current rule set as a named snapshot and switch between FAT / UAT / PROD
 - Auto-off countdown (`chrome.alarms`, survives service-worker restarts) and a badge that shows proxy state
 
 ### Interface
 
-- Popup quick panel: global switch, today's stats, recent requests, auto-off countdown, **current-page hit preview**, and "Create rule for this page" prefilled from the active tab
+- Popup quick panel: global switch, today's request count (background channel only), recent requests, auto-off countdown, **current-page hit preview**, and "Create rule for this page" prefilled from the active tab
 - English / 简体中文 UI, six themes with light / dark / system modes
 - Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy (Chrome-level command), and on the options page <kbd>N</kbd> new rule, <kbd>/</kbd> or <kbd>⌘</kbd>+<kbd>F</kbd> focus search, <kbd>Esc</kbd> close the topmost dialog. <kbd>N</kbd> is a bare key, like Gmail — <kbd>⌘</kbd>+<kbd>N</kbd> is reserved by the browser and cannot be captured.
 
@@ -302,11 +302,11 @@ tests/                  Vitest suites (node environment)
 
 **Reordering** — drag the ⠿ handle on any row. The table shows rules in array order, and dragging updates both display order and priority values.
 
-**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, and imports a `.har` file to auto-create rules from recorded traffic.
+**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, and imports a `.har` file to auto-create rules from recorded traffic (those rules arrive disabled until you enable them).
 
 **cURL import** — paste a cURL command into the Import cURL section (line continuations and single/double quotes supported) and press Parse & Create Rule. A wildcard rule is generated from the request origin with headers and body prefilled.
 
-**Log detail viewer** — click any log row for request URL, headers and body, response headers and body (JSON auto-formatted), error details, and a Copy as cURL button.
+**Log detail viewer** — click any log row for request URL, headers and body, response headers and text body (JSON auto-formatted; a binary response body is not stored), error details, and a Copy as cURL button that uses the original request URL.
 
 </details>
 

@@ -118,7 +118,7 @@
             "name": "Cross-environment API debugging approaches compared",
             "inLanguage": "en",
             "datePublished": "2026-09-12",
-            "dateModified": "2026-09-12",
+            "dateModified": "2026-09-13",
             "about": {
               "@type": "SoftwareApplication",
               "name": "Cross-Origin Proxy",
@@ -135,7 +135,7 @@
             "inLanguage": "en",
             "author": { "@type": "Person", "name": "Better", "url": "https://github.com/liaolongdong" },
             "datePublished": "2026-09-12",
-            "dateModified": "2026-09-12",
+            "dateModified": "2026-09-13",
             "image": "https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-en.png",
             "mainEntityOfPage": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#webpage" }
           },
@@ -190,7 +190,7 @@
                 "name": "A header-modifier extension already changes requests. What is the difference?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Header editors rewrite request and response headers inside the browser, which is the smallest slice of this problem. They generally do not redirect the request URL to another host, do not replace the request body, cannot substitute a whole mock response, and have nothing to say about WebSocket connections - and the redirect is the part that removes the need for a backend CORS change."
+                  "text": "Header editors rewrite request and response headers inside the browser, which is the smallest slice of this problem. They generally do not redirect the request URL to another host, do not replace the request body, cannot substitute a whole mock response, and have nothing to say about WebSocket connections — and the redirect is the part that removes the need for a backend CORS change."
                 }
               },
               {
@@ -198,7 +198,7 @@
                 "name": "Can I use two of these approaches together?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes, and that is normally the right answer. A dev-server proxy stays where it is needed for local build tooling, a capture proxy stays for non-browser traffic, and browser rules take over the day-to-day case of 'this page should be talking to that environment'. The only thing to avoid is two rules rewriting the same request at once, which makes the result hard to reason about."
+                  "text": "Yes, and that is normally the right answer. A dev-server proxy stays where it is needed for local build tooling, a capture proxy stays for non-browser traffic, and browser rules take over the day-to-day case of “this page should be talking to that environment”. The only thing to avoid is two rules rewriting the same request at once, which makes the result hard to reason about."
                 }
               }
             ]
@@ -258,7 +258,7 @@
         <div class="wrap">
           <div class="hero-copy">
             <span class="eyebrow"
-              ><span class="dot"></span> Categories compared · no product claims · updated 2026-09-12</span
+              ><span class="dot"></span> Categories compared · no product claims · updated 2026-09-13</span
             >
             <h1 id="page-title">
               Five ways to point a frontend at <span class="accent">another backend environment</span> — compared,
@@ -850,7 +850,7 @@
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-12</span>
+            <span>Last updated 2026-09-13</span>
             <span
               ><a
                 href="zh-alternatives.html"
@@ -868,6 +868,7 @@
           <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">Issues</a>
           <a href="privacy.html">Privacy policy</a>
           <a href="llms.txt">llms.txt</a>
+          <a href="llms-full.txt">llms-full.txt</a>
         </nav>
       </div>
     </footer>

@@ -161,6 +161,49 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     const faqNames = (file: string): string[] =>
       [...read(file).matchAll(/"@type":\s*"Question",\s*"name":\s*"([^"]+)"/g)].map(m => m[1]);
 
+    /**
+     * 把一段 HTML/文本归一成“读者看到的字”：去标签、解常见实体、并行走空白。
+     * 结构化数据里是纯文本，页面里带 `<code>` 之类的标签，不归一没法比。
+     */
+    const asPlainText = (text: string): string =>
+      text
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&mdash;/g, '—')
+        .replace(/&ndash;/g, '–')
+        .replace(/&middot;/g, '·')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    /** 页面可见的 FAQ 答案：每个 `<details>` 里 `</summary>` 之后的部分。 */
+    const faqAnswers = (file: string): string[] =>
+      [...read(file).matchAll(/<details\b[^>]*>[\s\S]*?<\/summary>([\s\S]*?)<\/details>/g)]
+        .map(m => asPlainText(m[1]))
+        .filter(Boolean);
+
+    /** 结构化数据里 `acceptedAnswer.text`，按声明顺序，跨 `@graph` 与嵌套节点递归收集。 */
+    const schemaAnswers = (file: string): string[] => {
+      const found: string[] = [];
+      const walk = (node: unknown): void => {
+        if (Array.isArray(node)) return node.forEach(walk);
+        if (typeof node !== 'object' || node === null) return;
+        const record = node as Record<string, unknown>;
+        const answer = record.acceptedAnswer;
+        if (typeof answer === 'object' && answer !== null) {
+          const text = (answer as Record<string, unknown>).text;
+          if (typeof text === 'string') found.push(asPlainText(text));
+        }
+        Object.values(record).forEach(walk);
+      };
+      for (const block of read(file).matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
+        walk(JSON.parse(block[1]) as unknown);
+      }
+      return found;
+    };
+
     it.each(BILINGUAL_PAIRS)('%s / %s 的 FAQPage 结构化数据条数相同且非空', (en, zh) => {
       const enCount = countIn(en, /"@type":\s*"Question"/g);
       expect(enCount).toBeGreaterThan(0);
@@ -175,11 +218,13 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
     /**
      * AGENTS.md 要求“`FAQPage` 的问答需与页面 `<details>` 文本一致”，而且只比条数
-     * 是弱守卫——两边同数但讲不同问题照样能绿。这里逐条逐序比对。
+     * 是弱守卫——两边同数但讲不同问题照样能绿。这里问题与答案都逐条逐序比对：
+     * 答案只比问题的话，正文里改一句话不会变红，而 Google 会当成 markup 与内容不符。
      */
     it.each([...BILINGUAL_PAIRS.flat()])('%s 的 schema 问答与页面折叠文本逐条同序一致', file => {
       expect(summaries(file).length, `${file} 应有 FAQ 折叠项`).toBeGreaterThan(0);
       expect(faqNames(file)).toEqual(summaries(file));
+      expect(schemaAnswers(file), `${file} 的 FAQ 答案与页面可见文本不一致`).toEqual(faqAnswers(file));
     });
 
     /** 只解析 `<head>` 里的 `<link rel="alternate">` 标注：`hreflang` → 目标 URL。 */
@@ -347,6 +392,126 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         zhStats.map(s => s.value),
         `${zh} 与 ${en} 的统计条数字不一致`,
       ).toEqual(enStats.map(s => s.value));
+    });
+
+    /**
+     * 新鲜度同时写在一页的三处：JSON-LD 的 `dateModified`、页脚（及对比页眉标）的
+     * “Last updated / 最后更新”，以及 sitemap.xml 里该 URL 的 `<lastmod>`。三者靠手工
+     * 同步已经错过一次，而 Google 与引用型 AI 引擎都把它当新鲜度信号。这里只要求
+     * 三者**彼此一致**，不校验具体值，所以不会随着日期推移自己变红。
+     * privacy.html 不在内：它页脚写的是法律意义上的「生效日期」，与 lastmod 本就不等。
+     */
+    const FRESHNESS_PAGES = ['index.html', 'zh.html', 'alternatives.html', 'zh-alternatives.html'];
+
+    it.each(FRESHNESS_PAGES)('%s 的三处新鲜度日期彼此一致', file => {
+      const text = read(`docs/${file}`);
+      const inPage = [
+        ...text.matchAll(/(?:"dateModified":\s*"|(?:Last|·) updated\s+|最后更新\s*|更新于\s*)(\d{4}-\d{2}-\d{2})/g),
+      ].map(m => m[1]);
+      expect(inPage.length, `${file} 应同时带 dateModified 与页脚最后更新日期`).toBeGreaterThanOrEqual(2);
+
+      const url = `${PAGES_BASE}/${file}`.replace('/index.html', '/');
+      const entry = read('docs/sitemap.xml')
+        .split('<url>')
+        .find(block => block.includes(`<loc>${url}</loc>`));
+      const lastmod = entry?.match(/<lastmod>([^<]+)<\/lastmod>/)?.[1];
+      expect(lastmod, `${file} 在 sitemap.xml 里缺少对应的 <lastmod>`).toBeDefined();
+
+      expect(
+        new Set([...inPage, lastmod]).size,
+        `${file} 的新鲜度日期不一致：${[...new Set([...inPage, lastmod])].join(' / ')}`,
+      ).toBe(1);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 商店提审素材：CHROMEWEBSTORE.md 是商店表单的唯一素材源
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('Chrome 商店提审素材', () => {
+    const doc = read('CHROMEWEBSTORE.md');
+
+    /** 取某个小节区间内的全部 ``` 代码块（商店表单的可粘贴值就放在这里）。 */
+    const blocksIn = (from: string, to: string): string[] => {
+      const start = doc.indexOf(from);
+      const end = doc.indexOf(to, start + from.length);
+      expect(start, `CHROMEWEBSTORE.md 缺少小节 ${from}`).toBeGreaterThanOrEqual(0);
+      expect(end, `CHROMEWEBSTORE.md 缺少小节 ${to}`).toBeGreaterThan(start);
+      return [...doc.slice(start, end).matchAll(/```\n([\s\S]*?)```/g)].map(m => m[1].replace(/\n$/, ''));
+    };
+
+    /** `_locales/<lang>/messages.json` 里某条 message 的正文。 */
+    const manifestMessage = (lang: string, key: string): string =>
+      JSON.parse(read(`public/_locales/${lang}/messages.json`))[key].message as string;
+
+    /**
+     * 商店表单的名称与摘要必须与打进包里的 manifest 文案逐字相同。两者一旦分叉，
+     * 提审时粘进 Dashboard 的是文档里的旧值，而用户装到的以 `manifest.json` 为准，
+     * 搜索结果与详情页就互相矛盾——所以只允许有一处真值。
+     */
+    it.each([
+      ['### 1.1', '### 1.2', 'zh_CN'],
+      ['### 1.2', '### 1.3', 'en'],
+    ] as const)('%s 的名称与摘要与 _locales/%s 逐字一致', (from, to, lang) => {
+      const [name, summary, description] = blocksIn(from, to);
+      expect(name, `${from} 名称与 manifest 的 extensionName 不一致`).toBe(manifestMessage(lang, 'extensionName'));
+      expect(summary, `${from} 摘要与 manifest 的 extensionDescription 不一致`).toBe(
+        manifestMessage(lang, 'extensionDescription'),
+      );
+      expect(description, `${from} 应当还有第三个块（详细描述）`).toBeTruthy();
+
+      // Chrome 上传时按码点硬校验，超出直接拒包。
+      expect([...name].length, `${from} 名称 >75 码点，商店会拒包`).toBeLessThanOrEqual(75);
+      expect([...summary].length, `${from} 摘要 >132 码点，商店会拒包`).toBeLessThanOrEqual(132);
+      expect(name, `${from} 名称含最高级/免费类词，属「误导性列表信息」高危字段`).not.toMatch(
+        /\b(best|top|#1|free|top-rated|免费|最好|最强)\b/i,
+      );
+    });
+
+    /**
+     * 中英两份详细描述是同一次改稿的两个出口。条数不等意味着其中一边漏改——
+     * 这类漂移在落地页上已有守卫，商店侧此前只靠人工数（本轮 6 处修正正是人工发现的）。
+     */
+    it('中英详细描述结构对等（行数、条目数、段落数）', () => {
+      const shape = (from: string, to: string) => {
+        const body = blocksIn(from, to)[2];
+        return {
+          lines: body.split('\n').length,
+          bullets: [...body.matchAll(/^- /gm)].length,
+          paragraphs: body.split('\n\n').length,
+        };
+      };
+      const zh = shape('### 1.1', '### 1.2');
+      expect(shape('### 1.2', '### 1.3'), '中英详细描述必须行数、条目数、段落数全等').toEqual(zh);
+      expect(zh.bullets).toBeGreaterThan(0);
+    });
+
+    it('详细描述守住 16000 码点预算，且不含具体版本号', () => {
+      const pairs = [
+        ['zh', blocksIn('### 1.1', '### 1.2')[2]],
+        ['en', blocksIn('### 1.2', '### 1.3')[2]],
+      ] as const;
+      for (const [lang, body] of pairs) {
+        expect([...body].length, `${lang} 详细描述超出商店 16000 码点上限`).toBeLessThanOrEqual(16000);
+        // 版本号写进商店文案意味着每次发版都要手动改 Dashboard；`HAR 1.2` 是格式名，不算版本号。
+        expect(body, `${lang} 详细描述不应写具体版本号`).not.toMatch(/\b\d+\.\d+\.\d+\b/);
+        expect(body, `${lang} 详细描述必须带隐私政策 URL`).toContain(`${PAGES_BASE}/privacy.html`);
+        expect(body, `${lang} 详细描述必须带反馈与源码入口`).toContain(REPO_BASE);
+      }
+    });
+
+    /**
+     * §0 的预算表是对「还能不能扩写」的对外口径。它与实测脱节时，后来的人会按过时的
+     * 余量决定要不要加字，所以从正文反算，不允许有第二份数字。
+     */
+    it('§0 预算表记录的详细描述码点数与实测一致', () => {
+      const declared = doc.match(/\| 详细描述 \|[^\n]*?中约\s*([\d.]+)K\s*\/\s*英约\s*([\d.]+)K/);
+      expect(declared, '§0 预算表应记录中英详细描述的码点数').toBeTruthy();
+      const measured = [blocksIn('### 1.1', '### 1.2')[2], blocksIn('### 1.2', '### 1.3')[2]].map(
+        body => [...body].length / 1000,
+      );
+      expect(Number(declared![1]), '中文详细描述码点数与 §0 记录不符').toBeCloseTo(measured[0], 1);
+      expect(Number(declared![2]), '英文详细描述码点数与 §0 记录不符').toBeCloseTo(measured[1], 1);
     });
   });
 

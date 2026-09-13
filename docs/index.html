@@ -135,9 +135,9 @@
             "license": "https://spdx.org/licenses/MIT.html",
             "isAccessibleForFree": true,
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-            "author": { "@type": "Person", "name": "Better", "url": "https://github.com/liaolongdong" },
+            "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-12",
+            "dateModified": "2026-09-13",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -154,17 +154,17 @@
               "declarativeNetRequest network-layer fast path for rules that only rewrite the URL",
               "Page-level interceptor with native fallback for rules the network layer cannot express",
               "Priority ordering with drag and drop, plus conflict warnings for shadowed rules",
-              "Real-time URL match test showing matched rule, rewritten URL, channel and shadowed rules",
+              "Real-time URL match test showing matched rule, rewritten URL, channel and which other rules match the same URL but lose to it",
               "Quick rule templates in the empty state, duplicate, undo delete, batch enable, disable and delete",
               "Batch target-domain migration with a change preview",
-              "Request log of the last 500 calls with filters, detail viewer and copy as cURL",
-              "Hit statistics for both channels (DNR last 5 minutes, service worker since last config change)",
-              "HAR 1.2 export and HAR import that creates rules from captured traffic",
+              "Request log of the last 500 calls with filters, detail viewer and copy as cURL using the original URL",
+              "Hit statistics for both channels (DNR last 5 minutes, service worker since last config change — an in-memory count that restarts when the worker is recycled)",
+              "HAR 1.2 export and HAR import that creates rules from captured traffic (those rules arrive disabled until you enable them)",
               "cURL import from DevTools Copy as cURL output",
-              "JSON config export and import in replace or merge mode",
+              "JSON config export, with replace or merge modes on import",
               "Named environment profiles for one-click FAT / UAT / PROD switching",
               "Auto-off countdown that disables the proxy after 30 minutes to 4 hours",
-              "Popup with global switch, today's count, current-page match preview and create-rule-for-this-page",
+              "Popup with global switch, today's request count (background channel only), current-page match preview and create-rule-for-this-page",
               "English and Chinese UI, six themes, light / dark / system modes, keyboard shortcuts"
             ]
           },
@@ -204,6 +204,13 @@
                 "text": "Reload the page. A wildcard rewrite like this one runs in the browser's network layer, so it writes no per-request log entry: preview the URL in the match tester and watch the rule's DNR hit count instead. Only background-channel requests appear in the request log."
               }
             ]
+          },
+          {
+            "@type": "Person",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author",
+            "name": "Better",
+            "url": "https://github.com/liaolongdong",
+            "sameAs": ["https://github.com/liaolongdong"]
           }
         ]
       }
@@ -828,9 +835,11 @@
               <h3>Evidence, not guesswork</h3>
               <p>
                 The URL match tester previews the matched rule, the rewritten URL, the channel, the extra actions and
-                the shadowed rules for any URL in real time. The request log keeps the last 500 calls with method,
-                status, duration and the rule that served them, filters by method, status class, rule name or URL
-                keyword, opens a full detail view, copies any entry as cURL, and reports hit counts for both channels.
+                which other rules match the same URL but lose to it, for any URL in real time. The request log keeps the
+                last 500 calls with method, status, duration and the rule that served them, filters by method, status
+                class, rule name or URL keyword, opens a detail view with the request and response headers and text
+                bodies (a binary response body is not stored), copies any entry as cURL using its original URL, and
+                reports hit counts for both channels.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -852,10 +861,11 @@
               ></span>
               <h3>Import, export and environment profiles</h3>
               <p>
-                JSON config export and import, in replace or merge mode; HAR 1.2 export of captured traffic and HAR
-                import that turns recorded requests into rules; cURL paste that prefills the form; copy-as-cURL on every
-                log entry. Named profiles snapshot the whole rule set so FAT, UAT and PROD are one click apart, and
-                batch migration rewrites target domains across selected rules with a change preview.
+                JSON config export, with replace or merge modes on import; HAR 1.2 export of captured traffic and HAR
+                import that turns recorded requests into rules (those rules arrive disabled until you enable them); cURL
+                paste that prefills the form; copy-as-cURL on every log entry, using its original URL. Named profiles
+                snapshot the whole rule set so FAT, UAT and PROD are one click apart, and batch migration rewrites
+                target domains across selected rules with a change preview.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -888,10 +898,11 @@
               ></span>
               <h3>The parts you touch every day</h3>
               <p>
-                The popup holds the global switch, active-rule and today's counts, recent requests, quick rule toggles,
-                the auto-off countdown and a current-page match preview with “create a rule for this page”. A toolbar
-                badge shows the proxy state, and auto-off (30 minutes to 4 hours, on <code>chrome.alarms</code>) closes
-                the switch so a forgotten proxy never outlives the debugging session.
+                The popup holds the global switch, the active-rule count and today's request count (background channel
+                only), recent requests, quick rule toggles, the auto-off countdown and a current-page match preview with
+                “create a rule for this page”. A toolbar badge shows the proxy state, and auto-off (30 minutes to 4
+                hours, on <code>chrome.alarms</code>) closes the switch so a forgotten proxy never outlives the
+                debugging session.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1001,7 +1012,8 @@
                     <b>URL match tester</b
                     ><span
                       >Type any URL, optionally with a method, to preview the matched rule, the rewritten URL, the
-                      forwarding channel, the extra actions and the rules shadowed above it.</span
+                      forwarding channel, the extra actions and which other rules match the same URL but lose to
+                      it.</span
                     >
                   </figcaption>
                 </figure>
@@ -1019,8 +1031,8 @@
                   <figcaption>
                     <b>Request log</b
                     ><span
-                      >Last 500 calls with filters and adjustable auto-refresh, a full detail view, copy as cURL, HAR
-                      export, plus DNR and service-worker hit statistics.</span
+                      >Last 500 calls with filters and adjustable auto-refresh, a full detail view, copy as cURL using
+                      the original URL, HAR export, plus DNR and service-worker hit statistics.</span
                     >
                   </figcaption>
                 </figure>
@@ -1038,8 +1050,8 @@
                   <figcaption>
                     <b>Popup</b
                     ><span
-                      >Global switch, active rules, today's requests, recent calls, quick rule toggles, auto-off
-                      countdown, current-page hit preview and “create rule for this page”.</span
+                      >Global switch, active rules, today's requests (background channel only), recent calls, quick rule
+                      toggles, auto-off countdown, current-page hit preview and “create rule for this page”.</span
                     >
                   </figcaption>
                 </figure>
@@ -1187,10 +1199,10 @@
           <h3>CORS, precisely</h3>
           <p>
             Background-channel requests are issued by the extension, which holds host permissions, and the page receives
-            a response the extension constructed — page CORS checks do not apply. Pure network-layer redirects are still
-            subject to <code>Access-Control-Allow-Origin</code> on the redirected response. If a target environment does
-            not allow your origin, give the rule any capability (a response header override is the cheapest) and it
-            changes channels.
+            a response the extension constructed — page CORS checks do not apply. A pure URL rewrite stays an ordinary
+            cross-origin request: the browser applies the same-origin policy to the redirected response and still needs
+            <code>Access-Control-Allow-Origin</code> to cover your origin. If a target environment does not allow your
+            origin, give the rule any capability (a response header override is the cheapest) and it changes channels.
           </p>
           <div class="callout callout--warn">
             <svg
@@ -1982,7 +1994,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-12</span>
+            <span>Last updated 2026-09-13</span>
             <span
               ><a
                 href="zh.html"

@@ -9,7 +9,7 @@ Category / 类别: Chrome extension (Manifest V3) · 开发者工具 / developer
 License / 协议: MIT
 Source / 源码: https://github.com/liaolongdong/cross-origin-proxy
 Store listing / 商店状态: 上架准备中 — the Chrome Web Store listing is in preparation, so no store URL exists yet. Today the only install paths are building from source or unzipping a tagged release.
-Last verified / 内容核对日期: 2026-09-12, against extension v1.0.0 (`package.json` version) and its source.
+Last verified / 内容核对日期: 2026-09-13, against extension v1.0.0 (`package.json` version) and its source.
 
 ## 1. One-paragraph definition / 一段话定义
 
@@ -95,16 +95,16 @@ Capacity / 容量: 200 rules (`MAX_RULES`) enforced when adding, batch-adding or
 
 ## 7. Workspace, diagnostics and export / 工作台、诊断与导出
 
-- **URL match test / URL 匹配测试** — paste any URL and see the matched rule, the rewritten result, which channel will carry it, which extra actions apply (retry, delay, mock, block, header/body/response override, query injection, method filter) and which rules are shadowed. This is also the only way to preview a network-layer rule. 实时预览命中规则、重写结果、转发通道、额外动作与被遮蔽规则，也是预览网络层规则的唯一手段。
-- **Request log / 请求日志** — the last 500 background-channel calls, with filters, adjustable auto-refresh, a full detail view, copy-as-cURL and "create a rule from this entry". Network-layer redirects never reach the extension, so their absence from the log is expected, not a bug. 最近 500 条（仅后台通道），支持筛选、可调自动刷新、详情、复制为 cURL、由日志建规则；网络层重定向不经过扩展，因此不出现在日志中，这是设计而非缺陷。
-- **Hit statistics / 命中统计** — per rule for both channels: `declarativeNetRequest` hits over the last 5 minutes (Chrome quotas this API to roughly 20 reads per 10 minutes, so it refreshes on demand and silently returns the previous result when the quota is exhausted) and background-channel hits counted since the last configuration change. 两条通道各自的规则级命中统计：DNR 近 5 分钟（受 Chrome 配额限制，手动刷新，超配额时静默返回上次结果）与后台通道自配置变更起的计数。
-- **HAR 1.2 export**, plus **HAR import** that turns recorded requests into rules in one batched write. HAR/cURL 导出，以及把抓包记录批量转成规则的 HAR 导入。
+- **URL match test / URL 匹配测试** — paste any URL and see the matched rule, the rewritten result, which channel will carry it, which extra actions apply (retry, delay, mock, block, header/body/response override, query injection, method filter) and which other rules match the same URL but lose to it. This is also the only way to preview a network-layer rule. 实时预览命中规则、重写结果、转发通道、额外动作，以及还有哪些规则同样命中、但被它遮蔽，也是预览网络层规则的唯一手段。
+- **Request log / 请求日志** — the last 500 background-channel calls, with filters, adjustable auto-refresh, a detail view holding request and response headers plus text bodies (a binary response body is not stored), copy-as-cURL using the entry's original URL and "create a rule from this entry". Network-layer redirects never reach the extension, so their absence from the log is expected, not a bug. 最近 500 条（仅后台通道），支持筛选、可调自动刷新、可看请求与响应的头与文本 body（二进制响应体不落盘）、按原始请求地址复制为 cURL、由日志建规则；网络层重定向不经过扩展，因此不出现在日志中，这是设计而非缺陷。
+- **Hit statistics / 命中统计** — per rule for both channels: `declarativeNetRequest` hits over the last 5 minutes (Chrome quotas this API to roughly 20 reads per 10 minutes, so it refreshes on demand and silently returns the previous result when the quota is exhausted) and background-channel hits counted since the last configuration change — an in-memory counter that restarts from zero when the service worker is recycled. 两条通道各自的规则级命中统计：DNR 近 5 分钟（受 Chrome 配额限制，手动刷新，超配额时静默返回上次结果）与后台通道自配置变更起的计数（内存计数，工作线程被回收后从 0 重新开始）。
+- **HAR 1.2 export**, plus **HAR import** that turns recorded requests into rules in one batched write; imported rules arrive disabled (`enabled: false`) until you enable them. HAR/cURL 导出，以及把抓包记录批量转成规则的 HAR 导入；导入生成的新规则默认停用，确认后需自行启用。
 - **cURL import** — paste DevTools' "Copy as cURL" and the rule form is prefilled. 粘贴「复制为 cURL」预填规则表单。
-- **JSON config export / import** in replace or merge mode; merging reassigns ids and is capped at 200 rules total. 配置导入导出支持覆盖与合并两种模式。
+- **JSON config export**, with replace or merge modes chosen on import; merging reassigns ids and is capped at 200 rules total. 配置导出为 JSON，导入时可选覆盖或合并两种模式。
 - **Environment profiles / 环境配置快照** — named snapshots (up to 50 characters) of the whole rule set, switch FAT / UAT / PROD in one click; saving requires at least one rule. 整套规则集的命名快照，一键切换 FAT / UAT / PROD，保存至少需要一条规则。
 - **Batch target-domain migration / 目标域名批量迁移** with a change preview before you commit. 带变更预览的批量目标域名迁移。
 - **Batch operations / 批量操作** — enable, disable, delete, duplicate; undo for the last deletion; keyword search over name, match pattern and target URL plus separate status and match-type filters. 批量启停/删除/复制、撤销上一次删除、按名称与模式的关键词搜索及状态、类型筛选。
-- **Popup / 弹窗** — global switch, enabled-rule count, today's request count, recent requests, per-rule quick toggles, the auto-off countdown, a current-page match preview and "create a rule for this page". The today-counter is derived from the retained 500-entry window, so on a day busier than 500 requests it stops growing. 弹窗含总开关、启用规则数、今日请求数、最近请求、规则快捷启停、自动关闭倒计时、当前页命中预览与「为此页面创建规则」；今日请求数由保留的日志窗口统计，繁忙一天超过 500 条后不再增长。
+- **Popup / 弹窗** — global switch, enabled-rule count, today's request count (background channel only), recent requests, per-rule quick toggles, the auto-off countdown, a current-page match preview and "create a rule for this page". The today-counter is derived from the retained 500-entry window, so on a day busier than 500 requests it stops growing. 弹窗含总开关、启用规则数、今日请求数（只统计后台通道）、最近请求、规则快捷启停、自动关闭倒计时、当前页命中预览与「为此页面创建规则」；今日请求数由保留的日志窗口统计，繁忙一天超过 500 条后不再增长。
 - **Auto-off / 自动关闭** — never, 30 minutes, 1 h, 2 h or 4 h, on `chrome.alarms` so the countdown survives service-worker restarts; the toolbar badge reflects proxy state. 倒计时长可选 30 分钟 / 1 / 2 / 4 小时或关闭，基于 chrome.alarms 且跨服务线程重启持久化，工具栏角标反映状态。
 - **Interface / 界面** — Simplified Chinese and English, six accent themes, light / dark / system modes. Keyboard: the manifest command `Ctrl/Cmd+Shift+P` toggles the proxy; on the options page bare `N` opens a new rule and `/` focuses search (`Cmd/Ctrl+N` itself is browser-reserved). 中英双语、6 套主题、浅色/深色/跟随系统；快捷键为清单命令 Ctrl/Cmd+Shift+P 开关代理，配置页内单键 `N` 新建、`/` 聚焦搜索。
 
@@ -170,4 +170,4 @@ Commands / 命令: `pnpm dev`, `pnpm build`, `pnpm build:zip`, `pnpm test`, `pnp
 Questions not answered here: ask in the repository's issue tracker, or read 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 Issue tracker: https://github.com/liaolongdong/cross-origin-proxy/issues
 
-Last updated / 最后更新: 2026-09-12 (extension v1.0.0)
+Last updated / 最后更新: 2026-09-13 (extension v1.0.0)
