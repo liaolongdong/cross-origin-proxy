@@ -192,7 +192,7 @@
 
 ## 项目特有约定
 
-- **双通道分流**：`isSimpleRule` 决定走 DNR 还是 SW；两通道的 URL 重写语义必须一致（wildcard 末尾 `*` 捕获、prefix、regex）。
+- **双通道分流**：`isSimpleRule` 决定走 DNR 还是 SW。wildcard（以 `*` 结尾）与 prefix 的重写在两通道语义一致，**regex 不一致**：SW 走 `url.replace(regex, targetUrl)`，只替换匹配到的片段；DNR 的 `regexSubstitution` 整体替换整个 URL。因此覆盖不全的正则两通道结果必然不同，这是已知差异而非待修缺陷（只有「规则该走哪条通道」的分流判定需要保持一致）。
 - **三世界内容脚本**：MAIN 自包含拦截 + ISOLATED 桥接 + SW 执行；所有 `postMessage` 用 `window.location.origin` 作 targetOrigin（非 `*`）。
 - **storage 锁 + 缓存**：read-modify-write 走 `withStorageLock` 避免竞态；配置内存缓存随 `storage.onChanged` 失效。
 - **日志缓冲写入**：达 10 条或 1s 防抖 flush，且 flush 串行化避免并发覆盖丢失；`onSuspend` 时 `flushLogs`。

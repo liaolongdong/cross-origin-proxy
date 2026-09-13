@@ -47,13 +47,27 @@
 
 技术栈：[WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite，Manifest V3。
 
+### 核心优势
+
+| 优势                       | 联调时意味着什么                                                                                                |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 快通道上零 JS              | 只重写 URL 的规则编译成 `declarativeNetRequest` 重定向，由浏览器网络栈完成转发，每个请求不会跑一段页面侧钩子    |
+| 不装本地 CA 也能改写 HTTPS | 它运行在浏览器内部：不必安装证书、不必把 DevTools 指到某个代理端口、不动系统级设置                              |
+| 改写的是响应，不只是目的地 | 状态码、响应头，或按点分路径替换单个 JSON 字段（`data.token`）；Mock 还能按 URL / 方法 / 查询参数条件挑选响应体 |
+| 覆盖 WebSocket             | `ws://` 与 `wss://` 长连接用同一套规则重写，不必另配                                                            |
+| 管的是环境，不是一次性改动 | 环境配置快照把整套规则存成命名快照，在 FAT / UAT / PROD 间一键切换；自动关闭倒计时在你忘记之前把代理关掉        |
+| 数据不出本机               | 规则、日志与环境配置全部留在 `chrome.storage.local`：无统计埋点、无遥测、无账号、也没有自有服务端               |
+| 开源且双语                 | MIT 协议，界面与文档同时提供中英文两版                                                                          |
+
+完整对比——本扩展与 devServer 代理、抓包代理工具、API 客户端、请求头改写扩展、改应用配置各自擅长什么，以及六种不该用它的情形——在产品站：[中文](https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html) · [English](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html)。
+
 ## 安装
 
 需要较新版本的桌面 Google Chrome（Manifest V3）。Chrome 应用商店上架准备中，在此之前走下面两条路径之一。
 
 ### 方式 A：下载预构建包（不需要工具链）
 
-从 [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) 下载 zip 并解压，然后：
+发布工作流会在每个 `v*` tag 上把构建好的 zip 挂到 [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases)；首个 tag 打出来之前请先用下面的方式 B。有 Release 之后，下载 zip 并解压，然后：
 
 1. 打开 `chrome://extensions`。
 2. 开启右上角「开发者模式」。
@@ -85,11 +99,11 @@ pnpm build
    | 目标 URL | 命中后转发到的地址                                            |
    | 优先级   | 数值越小越先匹配                                              |
 
-4. 刷新页面。命中已启用规则的请求会被代理，到**请求日志**里可以确认。
+4. 刷新页面。命中已启用规则的请求会被代理。但像上面这种通配符重写走的是网络层，**不会留下逐条请求日志**——请用 **URL 匹配预演**，或到**请求日志**里看 DNR 命中统计来确认。
 
 ## 工作原理
 
-每条启用的规则在保存时被判定一次。只做 URL 重写的规则会编译成 `declarativeNetRequest` 动态规则，交给浏览器网络栈处理，单个请求零 JS 开销；能力更全的规则走后台通道。
+每条启用的规则在每次配置同步时按其自身字段重新判定一次，判定结果并不存储在规则上。只做 URL 重写的规则会编译成 `declarativeNetRequest` 动态规则，交给浏览器网络栈处理，单个请求零 JS 开销；能力更全的规则走后台通道。**代理开关**管住两条通道：关掉它时网络层规则同样会被卸载，不会出现「以为关了、其实还在重定向」。
 
 ```
 页面 fetch / XHR / WebSocket
@@ -103,6 +117,8 @@ pnpm build
 ```
 
 规则一旦带上下列任一项就不再是「简单规则」：请求头改写、请求体改写、响应改写、Mock、延迟、阻断、重试、HTTP 方法过滤、查询参数注入、`ws://`/`wss://` 目标、不以 `*` 结尾的通配符、目标地址留空。这些条件不是因为实现偷懒，而是网络层确实无法表达，详见 [utils/urlMatcher.ts](./utils/urlMatcher.ts)。
+
+**正则规则要覆盖整个 URL。** 通配符与前缀的重写在两条通道上语义一致，正则却不一定：后台通道只替换模式匹配到的那一段，未匹配的部分原样保留；网络层则用替换串整体替换掉整个 URL。所以 `^https://fat\.example\.com/api/(.*)` 配 `https://uat.example.com/$1` 两边结果相同，而 `^https://fat\.example\.com/api` 这种不完整模式在后台通道会留下 `/users`，在网络层会直接丢掉。用 `^` 锚定、用 `(.*)$` 捕获结尾，两者就一致；具体某条地址走哪条通道，URL 匹配预演会告诉你。
 
 **关于 CORS，说准确一点。** 后台通道的请求由扩展（持有站点权限）发出，页面拿到的是扩展构造的响应，因此不受页面 CORS 校验约束。而纯网络层重定向，浏览器仍会校验重定向后响应的 `Access-Control-Allow-Origin`。如果目标环境没放行你的来源，给规则加上任意一项能力（最省事的是加个响应头改写），它就切到后台通道。
 
@@ -120,7 +136,7 @@ pnpm build
 - **条件化 Mock**——可挂多组条件（URL 正则、HTTP 方法、查询参数），首个命中的条件决定响应体、状态码与 Content-Type
 - **延迟注入**——0–60000 毫秒人工延迟，用来验证加载态与超时分支
 - **请求阻断**——命中即网络错误，用来验证异常处理与离线兜底
-- **失败重试**——网络错误或 5xx 响应时重新发出，0–5 次，间隔可配
+- **失败重试**——按规则开启的开关，在网络错误、5xx 响应或单次 30 秒超时之后追加 1–5 次尝试，间隔 100–30000 毫秒（默认 1000）
 - **HTTP 方法过滤**——把规则限定在指定方法（GET/POST/PUT…），留空表示任意方法
 - **查询参数注入**——在最终代理地址上追加或覆盖参数（`__env=uat`、灰度标识），不必整段重写 URL
 - **WebSocket 代理**——按 URL 重写转发 `ws://` / `wss://` 连接，由页面拦截器处理
@@ -128,12 +144,12 @@ pnpm build
 ### 规则管理
 
 - 可视化表单新增 / 编辑 / 复制 / 删除
-- **快速模板**覆盖常见写法（通配符 API 代理、前缀路径、鉴权头、自定义头覆盖），删除后还可立即**撤销**
+- **快速模板**在规则为空时的引导区提供，覆盖常见写法（通配符 API 代理、前缀路径、鉴权头、自定义头覆盖）；删除后还可立即**撤销**
 - **拖拽排序**优先级（拖动 ⠿ 手柄）
-- **能力徽标**一眼看清规则做了什么：**H** 请求头 · **B** 请求体 · **R** 响应 · **M** Mock · **D** 延迟 · **X** 阻断 · **WS** WebSocket
+- **能力徽标**一眼看清规则做了什么：**H** 请求头 · **B** 请求体 · **R** 响应 · **M** Mock · **D** 延迟 · **X** 阻断 · **Re** 重试 · **WS** WebSocket
 - 单条与批量启用 / 禁用
 - **批量迁移目标域名**——选中多条规则做查找替换，带逐条变更预览
-- 按名称、模式、状态搜索筛选
+- 关键字搜索覆盖名称、匹配模式与目标地址，另可按状态和匹配类型筛选
 - **遮蔽冲突提示**——当被同模式更高优先级规则遮蔽时，编辑中即时提醒，避免写下一条永远不会命中的规则
 
 ### 日志与调试
@@ -141,8 +157,8 @@ pnpm build
 - 请求日志面板：方法、状态、耗时，以及两条通道各自的命中统计（DNR 近 5 分钟、后台服务线程自配置变更起）
 - 日志详情：完整请求/响应头与 body，JSON 自动格式化
 - 任意一条日志**复制为 cURL**，也可直接**由这条请求创建规则**
-- 按方法、状态、规则、URL 关键字筛选
-- 顶栏** URL 匹配预演**：输入任意地址（可再选 HTTP 方法），实时看到命中规则、重写后的地址、转发通道与被遮蔽规则
+- 按方法（GET / POST / PUT / DELETE）、状态类别（2xx / 4xx / 5xx）、规则、URL 关键字筛选
+- 顶栏**URL 匹配预演**：输入任意地址（可再选 HTTP 方法），实时看到命中规则、重写后的地址、转发通道与被遮蔽规则
 
 ### 导入导出与环境
 
@@ -156,7 +172,7 @@ pnpm build
 
 - 弹窗快捷面板：总开关、今日统计、最近请求、自动关闭倒计时、**当前页面命中预演**，以及按当前标签页预填的「为本页创建规则」
 - 中英文界面，6 套主题 + 浅色 / 深色 / 跟随系统
-- 快捷键：<kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> 切换代理、<kbd>⌘</kbd>+<kbd>N</kbd> 新建规则、<kbd>/</kbd> 聚焦搜索、<kbd>Esc</kbd> 关闭弹窗
+- 快捷键：<kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> 切换代理（Chrome 级命令）；配置页内 <kbd>N</kbd> 新建规则、<kbd>/</kbd> 或 <kbd>⌘</kbd>+<kbd>F</kbd> 聚焦搜索、<kbd>Esc</kbd> 关闭最上层弹窗。<kbd>N</kbd> 是单键（同 Gmail 风格），因为 <kbd>⌘</kbd>+<kbd>N</kbd> 被浏览器保留、页面捕获不到
 
 ## 使用场景
 
@@ -191,6 +207,8 @@ pnpm build
 <summary><strong>数据会被上传吗？</strong></summary>
 
 不会。规则、日志、环境配置与偏好全部留在本机 `chrome.storage.local`，没有统计埋点，也不连接任何自有服务，唯一的网络流量就是你要求代理的 API 流量。详见[隐私政策](https://liaolongdong.github.io/cross-origin-proxy/privacy.html)（中英双语同页）。
+
+一个只涉及本机的提醒：请求日志会存下被代理的请求头与请求体，里面可能包含 token。数据不出机器，但分享 HAR 导出或截图之前请先清空日志。
 
 </details>
 
@@ -259,7 +277,7 @@ composables/            响应式状态与副作用
 utils/                  与框架无关的领域逻辑：urlMatcher · dnrRules · storage · curlParser · har · i18n · theme …
 locales/                应用内界面文案（zh_CN / en，分 common/options/popup 三个命名空间）
 public/_locales/        仅放 manifest 的名称与描述
-docs/                   GitHub Pages 产品站：index.html（英）· zh.html（中）· privacy.html · llms.txt
+docs/                   GitHub Pages 产品站：index.html（英）· zh.html（中）· alternatives.html · zh-alternatives.html · privacy.html · llms.txt · llms-full.txt
 .github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR 模板
 tests/                  Vitest 测试（node 环境）
 ```
@@ -309,5 +327,9 @@ tests/                  Vitest 测试（node 环境）
 [![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=Star&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 &nbsp;
 [![产品说明页](https://img.shields.io/badge/产品说明页-GitHub_Pages-409eff?style=for-the-badge&logo=githubpages&logoColor=white)](https://liaolongdong.github.io/cross-origin-proxy/zh.html)
+
+<br/>
+
+产品站：[中文](https://liaolongdong.github.io/cross-origin-proxy/zh.html) · [English](https://liaolongdong.github.io/cross-origin-proxy/) · [方案对比](https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html) · [隐私政策](https://liaolongdong.github.io/cross-origin-proxy/privacy.html) · 机器可读：[llms.txt](https://liaolongdong.github.io/cross-origin-proxy/llms.txt) · [llms-full.txt](https://liaolongdong.github.io/cross-origin-proxy/llms-full.txt)
 
 </div>

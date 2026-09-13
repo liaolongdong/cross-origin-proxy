@@ -6,10 +6,10 @@
       name="viewport"
       content="width=device-width, initial-scale=1"
     />
-    <title>Cross-Origin Proxy · FAT/UAT/PROD API environment switcher &amp; CORS fix for Chrome</title>
+    <title>CORS Fix &amp; API Environment Switcher — Cross-Origin Proxy</title>
     <meta
       name="description"
-      content="Open-source Chrome extension (Manifest V3) that proxies frontend API requests to another backend environment - rewrite, mock with conditions, delay, block, retry, WebSocket. No code changes, local-only."
+      content="Fix CORS and switch API environments with no code changes. A Chrome MV3 extension: rewrite URLs, headers and responses, mock, delay, block, retry, WebSocket."
     />
     <link
       rel="canonical"
@@ -76,6 +76,10 @@
       content="630"
     />
     <meta
+      property="og:image:alt"
+      content="Cross-Origin Proxy brand card: the product name, the tagline “Route frontend API calls to any environment — no code or CORS changes”, four capability chips and the product-site address"
+    />
+    <meta
       property="og:locale"
       content="en_US"
     />
@@ -98,6 +102,10 @@
     <meta
       name="twitter:image"
       content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-en.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="Cross-Origin Proxy brand card: the product name, the tagline “Route frontend API calls to any environment — no code or CORS changes”, four capability chips and the product-site address"
     />
     <script type="application/ld+json">
       {
@@ -128,17 +136,18 @@
             "isAccessibleForFree": true,
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@type": "Person", "name": "Better", "url": "https://github.com/liaolongdong" },
-            "dateModified": "2026-09-07",
+            "datePublished": "2026-08-28",
+            "dateModified": "2026-09-12",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
               "Request body replacement",
-              "Response status, status text, header and JSON field overrides",
+              "Response status code, response header and JSON field overrides by dot path",
               "Mock responses (JSON, text, HTML, XML) without contacting any server",
               "Conditional mock responses selected by URL pattern, HTTP method and query parameters",
               "Artificial request delay from 0 to 60000 ms",
               "Request blocking that returns a network error",
-              "Automatic retry on network errors and 5xx responses, 0 to 5 times with a configurable interval",
+              "Retry switch that adds 1 to 5 extra attempts at a 100–30000 ms interval",
               "HTTP method filtering per rule",
               "Query parameter injection on the proxied URL",
               "WebSocket (ws and wss) forwarding by URL rewrite",
@@ -146,7 +155,7 @@
               "Page-level interceptor with native fallback for rules the network layer cannot express",
               "Priority ordering with drag and drop, plus conflict warnings for shadowed rules",
               "Real-time URL match test showing matched rule, rewritten URL, channel and shadowed rules",
-              "Quick rule templates, duplicate, undo delete, batch enable, disable and delete",
+              "Quick rule templates in the empty state, duplicate, undo delete, batch enable, disable and delete",
               "Batch target-domain migration with a change preview",
               "Request log of the last 500 calls with filters, detail viewer and copy as cURL",
               "Hit statistics for both channels (DNR last 5 minutes, service worker since last config change)",
@@ -174,7 +183,7 @@
                 "@type": "HowToStep",
                 "position": 1,
                 "name": "Build the extension",
-                "text": "Run git clone https://github.com/liaolongdong/cross-origin-proxy, then pnpm install and pnpm build; the unpacked extension lands in .output/chrome-mv3. Alternatively download the prebuilt zip from https://github.com/liaolongdong/cross-origin-proxy/releases and unzip it, which needs no toolchain."
+                "text": "Run git clone https://github.com/liaolongdong/cross-origin-proxy, then pnpm install and pnpm build; the unpacked extension lands in .output/chrome-mv3. Every tagged release also attaches a prebuilt zip at https://github.com/liaolongdong/cross-origin-proxy/releases, which needs no toolchain — check that a release exists before expecting that path."
               },
               {
                 "@type": "HowToStep",
@@ -192,7 +201,7 @@
                 "@type": "HowToStep",
                 "position": 4,
                 "name": "Verify",
-                "text": "Reload the page, preview any URL in the match tester, and confirm the proxied URL and channel in the request log or the DNR hit statistics."
+                "text": "Reload the page. A wildcard rewrite like this one runs in the browser's network layer, so it writes no per-request log entry: preview the URL in the match tester and watch the rule's DNR hit count instead. Only background-channel requests appear in the request log."
               }
             ]
           }
@@ -226,7 +235,7 @@
             "name": "How do wildcard, prefix and regex matching differ?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Wildcard treats * as any text and appends whatever the trailing * captured to the target URL. Prefix matches the beginning of the URL and appends the remaining part. Regex applies the pattern as a whole and lets the target reference capture groups. When several rules match, the lowest priority number wins; equal priorities fall back to the earlier-created rule."
+              "text": "Wildcard treats * as any text and appends whatever the trailing * captured to the target URL. Prefix matches the beginning of the URL and appends the remaining part. Regex must cover the whole URL: the background channel replaces only the part the pattern matched, while the network layer replaces the URL entirely, so anchor the pattern with ^ and capture the tail with (.*)$ if you want both channels to agree. When several rules match, the lowest priority number wins; ties keep the order shown in the rule table, so give each rule its own number."
             }
           },
           {
@@ -290,7 +299,7 @@
             "name": "How does the retry capability work?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "On the background channel a rule may retry up to five times with a configurable interval. A retry is triggered when the request itself fails or when the response status is 5xx while attempts remain; the last response or error is handed back to the page when the budget runs out. Retrying is a background-channel capability, so a rule that uses it never becomes a network-layer redirect."
+              "text": "Retrying sits behind a per-rule switch and runs on the background channel. Switched on, a rule makes 1 to 5 extra attempts after the first, spaced by an interval you set between 100 and 30000 ms (default 1000). An attempt is retried when it throws — including the 30 second per-attempt timeout — or when it returns a 5xx status while attempts remain; the last response or error reaches the page once the budget is exhausted. Because retrying is a background-channel capability, a rule that uses it never becomes a network-layer redirect."
             }
           },
           {
@@ -306,7 +315,7 @@
             "name": "What are the limits?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, delays between 0 and 60000 ms, up to 5 retries, a 30 second ceiling per proxied request, and response status codes clamped to 200–599 so the page can always construct a valid Response object."
+              "text": "Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, delays between 0 and 60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second ceiling per proxied request, and response status codes clamped to 200–599 so the page can always construct a valid Response object."
             }
           },
           {
@@ -368,6 +377,7 @@
           <a href="#how-it-works">How it works</a>
           <a href="#use-cases">Use cases</a>
           <a href="#compare">Compare</a>
+          <a href="alternatives.html">Alternatives</a>
           <a href="#faq">FAQ</a>
           <a href="#install">Install</a>
           <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
@@ -408,8 +418,8 @@
               >
               <a
                 class="btn btn-ghost"
-                href="https://github.com/liaolongdong/cross-origin-proxy/releases"
-                >Download the build</a
+                href="#install"
+                >Install steps</a
               >
               <a
                 class="btn btn-ghost"
@@ -418,8 +428,8 @@
               >
             </div>
             <p class="hero-note">
-              The Chrome Web Store listing is in preparation; until then build from source, or load the unzipped package
-              from Releases.
+              The Chrome Web Store listing is in preparation, and no tagged release has been published yet — until one
+              of the two lands, building from source below is the only install path.
             </p>
             <div class="badges">
               <span>No telemetry</span>
@@ -468,7 +478,7 @@
             </figure>
             <div class="stat-strip">
               <div class="stat"><b>2</b><span>forwarding channels</span></div>
-              <div class="stat"><b>11</b><span>per-rule capabilities</span></div>
+              <div class="stat"><b>12</b><span>per-rule capabilities</span></div>
               <div class="stat"><b>200</b><span>rules max</span></div>
               <div class="stat"><b>0</b><span>bytes uploaded</span></div>
             </div>
@@ -608,15 +618,15 @@
               <h3>Full control over request and response</h3>
               <p>
                 Rewrite the URL; inject or replace request headers; replace the request body; override the response
-                status code, status text, response headers, the whole body, or individual JSON fields by dot path such
-                as <code>data.token</code>. Header names are validated and CRLF inside values is refused, so a rule can
+                status code and response headers, or replace individual JSON fields by dot path such as
+                <code>data.token</code>. Header names are validated and CRLF inside values is refused, so a rule can
                 never smuggle a split request; mocked and overridden status codes are clamped to 200–599 so the page
                 always gets a response it can construct.
               </p>
               <div class="chip-row">
                 <span class="cap">H</span><span class="cap">B</span><span class="cap">R</span><span class="cap">M</span
-                ><span class="cap">D</span><span class="cap">X</span><span class="cap">WS</span
-                ><span class="chip">Badges on every rule row</span>
+                ><span class="cap">D</span><span class="cap">X</span><span class="cap">Re</span
+                ><span class="cap">WS</span><span class="chip">Badges on every rule row</span>
               </div>
             </article>
             <article class="feature-card reveal">
@@ -648,10 +658,11 @@
               ></span>
               <h3>Wildcard, prefix and regex matching</h3>
               <p>
-                Three match types with identical semantics on both channels: <code>*</code> for any text, a leading
-                substring, or a full regular expression whose capture groups the target URL can reference. Regexes are
-                screened for nested-quantifier ReDoS patterns, and anything heading for the network layer is validated
-                against Chrome's RE2 engine first.
+                Three match types — <code>*</code> for any text, a leading substring, or a full regular expression whose
+                capture groups the target URL can reference. Wildcard and prefix rewrite the same way on both channels;
+                a regex only does when it covers the whole URL, because the network layer replaces the URL while the
+                background channel replaces the matched part. Regexes are screened for nested-quantifier ReDoS patterns,
+                and anything heading for the network layer is validated against Chrome's RE2 engine first.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -708,7 +719,8 @@
               <h3>Delay, block and retry</h3>
               <p>
                 Add 0–60000 ms of latency to exercise skeletons and timeouts; block a request so it fails like a network
-                error; or let the extension retry up to five times on failure and on 5xx, with a configurable interval.
+                error; or let the extension add 1–5 extra attempts after a failure or a 5xx, spaced by an interval you
+                set between 100 and 30000 ms.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -792,10 +804,10 @@
               ></span>
               <h3>A rule workspace, not a config file</h3>
               <p>
-                Start from a quick template, duplicate a rule, drag to reorder priority, batch enable, disable or
-                delete, and undo a deletion. Search and filter by name, pattern, status or match type. A rule shadowed
-                by a higher-priority rule with the same pattern is flagged while you edit, so a rule that can never fire
-                does not go unnoticed.
+                Start from a quick template while the list is empty, duplicate a rule, drag to reorder priority, batch
+                enable, disable or delete, and undo a deletion. Search by name, match pattern or target URL, then narrow
+                the list with the status and match-type filters. A rule shadowed by a higher-priority rule with the same
+                pattern is flagged while you edit, so a rule that can never fire does not go unnoticed.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -817,8 +829,8 @@
               <p>
                 The URL match tester previews the matched rule, the rewritten URL, the channel, the extra actions and
                 the shadowed rules for any URL in real time. The request log keeps the last 500 calls with method,
-                status, duration and channel, filters by method, status class, rule or keyword, opens a full detail
-                view, copies any entry as cURL, and reports hit counts for both channels.
+                status, duration and the rule that served them, filters by method, status class, rule name or URL
+                keyword, opens a full detail view, copies any entry as cURL, and reports hit counts for both channels.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -909,8 +921,9 @@
               <p>
                 English and Simplified Chinese UI, six colour themes with light / dark / follow-system modes synced
                 across popup, options and in-page surfaces, and keyboard shortcuts: <span class="kbd">⌘⇧P</span> toggle
-                proxy, <span class="kbd">⌘N</span> new rule, <span class="kbd">/</span> focus search,
-                <span class="kbd">Esc</span> close.
+                proxy, <span class="kbd">N</span> new rule, <span class="kbd">/</span> focus search,
+                <span class="kbd">Esc</span> close. The single-key shortcuts are deliberate — ⌘/Ctrl+N opens a browser
+                window and a page cannot capture it.
               </p>
             </article>
           </div>
@@ -1113,9 +1126,10 @@
           <div class="section-head">
             <h2 id="hiw-title">How it works</h2>
             <p class="section-lede">
-              Every enabled rule is classified once, on save. That classification — not a global setting — decides
+              Every enabled rule is classified on each config sync, straight from storage. That classification decides
               whether the browser's network stack or the extension's background worker answers the request, and it is
-              the same classifier the match tester reports.
+              the same classifier the match tester reports. The global switch sits above both channels: turning it off
+              removes the network-layer rules and makes the background worker pass requests through untouched.
             </p>
           </div>
           <pre><code>Page fetch / XHR / WebSocket
@@ -1144,7 +1158,7 @@
                   <td>A body replacement needs a real request to be re-issued, not a redirect.</td>
                 </tr>
                 <tr>
-                  <td>Response status, status text, header or JSON field override</td>
+                  <td>Response status code, header or JSON field override</td>
                   <td>The response has to be read and rebuilt.</td>
                 </tr>
                 <tr>
@@ -1240,9 +1254,9 @@
               <div class="step-num">01</div>
               <h3>Build</h3>
               <p>
-                Requires Node.js 20+ and pnpm 10. No toolchain? Grab the prebuilt zip from
+                Requires Node.js 20+ and pnpm 10. No toolchain? Every tagged release attaches a prebuilt zip at
                 <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
-                and unzip it instead.
+                — once the first one exists, unzipping it is all the install needs.
               </p>
               <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
 cd cross-origin-proxy
@@ -1272,8 +1286,9 @@ pnpm build</code></pre>
               <div class="step-num">04</div>
               <h3>Verify</h3>
               <p>
-                Reload the page, then check the request log or the hit statistics. Paste a URL into the match tester to
-                see the rewritten result and the channel before you rely on it.
+                Reload the page. A wildcard rewrite like this one runs in the browser's network layer, so it writes no
+                per-request log entry: preview the URL in the match tester and watch the rule's DNR hit count instead.
+                Only background-channel requests appear in the request log.
               </p>
             </article>
           </div>
@@ -1512,6 +1527,12 @@ pnpm build</code></pre>
             — export JSON when you want a teammate to have them. Where a capture proxy is the right tool for system-wide
             traffic, this extension is the right tool for “this page should be talking to that environment”.
           </p>
+          <p class="section-lede">
+            <a href="alternatives.html"
+              >The long version of this comparison — what each approach is actually good at, and the six situations
+              where you should not use this extension</a
+            >.
+          </p>
         </div>
       </section>
 
@@ -1528,10 +1549,10 @@ pnpm build</code></pre>
               <h3>Runtime requirements</h3>
               <p>
                 A recent desktop Google Chrome (Manifest V3). The store listing is in preparation, so load the unpacked
-                build from <code>.output/chrome-mv3</code> — or the folder you unzipped from
-                <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>. Edge runs Chromium
-                extensions, so the same build normally works there; Firefox is not a supported target today because of
-                <code>declarativeNetRequest</code> differences. Chrome itself blocks every extension on
+                build from <code>.output/chrome-mv3</code> — or, once a tag has been published, the folder you unzipped
+                from <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>. Edge runs
+                Chromium extensions, so the same build normally works there; Firefox is not a supported target today
+                because of <code>declarativeNetRequest</code> differences. Chrome itself blocks every extension on
                 <code>chrome://</code> pages, the Web Store and other extension pages.
               </p>
             </div>
@@ -1626,7 +1647,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <tbody>
                 <tr>
                   <td>Rules</td>
-                  <td>200 maximum</td>
+                  <td>200 maximum when adding, batch-adding or merging; a replace-mode import writes the file as-is</td>
                 </tr>
                 <tr>
                   <td>Request log</td>
@@ -1721,9 +1742,11 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <summary>How do wildcard, prefix and regex matching differ?</summary>
               <p>
                 Wildcard treats <code>*</code> as any text and appends whatever the trailing <code>*</code> captured to
-                the target URL. Prefix matches the beginning of the URL and appends the remaining part. Regex applies
-                the pattern as a whole and lets the target reference capture groups. When several rules match, the
-                lowest priority number wins; equal priorities fall back to the earlier-created rule.
+                the target URL. Prefix matches the beginning of the URL and appends the remaining part. Regex must cover
+                the whole URL: the background channel replaces only the part the pattern matched, while the network
+                layer replaces the URL entirely, so anchor the pattern with <code>^</code> and capture the tail with
+                <code>(.*)$</code> if you want both channels to agree. When several rules match, the lowest priority
+                number wins; ties keep the order shown in the rule table, so give each rule its own number.
               </p>
             </details>
             <details>
@@ -1843,10 +1866,12 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <details>
               <summary>How does the retry capability work?</summary>
               <p>
-                On the background channel a rule may retry up to five times with a configurable interval. A retry is
-                triggered when the request itself fails or when the response status is 5xx while attempts remain; the
-                last response or error is handed back to the page when the budget runs out. Retrying is a
-                background-channel capability, so a rule that uses it never becomes a network-layer redirect.
+                Retrying sits behind a per-rule switch and runs on the background channel. Switched on, a rule makes 1
+                to 5 extra attempts after the first, spaced by an interval you set between 100 and 30000 ms (default
+                1000). An attempt is retried when it throws — including the 30 second per-attempt timeout — or when it
+                returns a 5xx status while attempts remain; the last response or error reaches the page once the budget
+                is exhausted. Because retrying is a background-channel capability, a rule that uses it never becomes a
+                network-layer redirect.
               </p>
             </details>
 
@@ -1881,8 +1906,9 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <summary>What are the limits?</summary>
               <p>
                 Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, delays between 0 and
-                60000 ms, up to 5 retries, a 30 second ceiling per proxied request, and response status codes clamped to
-                200–599 so the page can always construct a valid <code>Response</code> object.
+                60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second ceiling per
+                proxied request, and response status codes clamped to 200–599 so the page can always construct a valid
+                <code>Response</code> object.
               </p>
             </details>
             <details>
@@ -1956,7 +1982,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-07</span>
+            <span>Last updated 2026-09-12</span>
             <span
               ><a
                 href="zh.html"
@@ -1974,7 +2000,9 @@ pnpm assets       # regenerate store and landing images</code></pre>
           <a href="https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md">Contributing</a>
           <a href="https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md">Store copy</a>
           <a href="privacy.html">Privacy policy</a>
+          <a href="alternatives.html">vs. dev-server proxy, mitmproxy, API clients</a>
           <a href="llms.txt">llms.txt</a>
+          <a href="llms-full.txt">llms-full.txt</a>
         </nav>
       </div>
     </footer>

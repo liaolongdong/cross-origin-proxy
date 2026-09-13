@@ -74,7 +74,7 @@ describe('buildDnrRules', () => {
     const disabled = makeRule({ id: 'disabled', enabled: false });
     const complex = makeRule({ id: 'complex', headerOverrides: { 'X-Env': 'uat' } });
 
-    const { rules, idMap } = buildDnrRules([simple, disabled, complex]);
+    const { rules, idMap } = buildDnrRules([simple, disabled, complex], true);
 
     expect(rules).toHaveLength(1);
     expect(rules[0].id).toBe(DNR_RULE_ID_PREFIX);
@@ -88,7 +88,14 @@ describe('buildDnrRules', () => {
     const method = makeRule({ id: 'm', targetUrl: 'https://uat.example.com', methods: ['POST'] });
     const query = makeRule({ id: 'q', targetUrl: 'https://uat.example.com', queryOverrides: { env: 'uat' } });
 
-    const { rules } = buildDnrRules([ws, method, query]);
+    const { rules } = buildDnrRules([ws, method, query], true);
     expect(rules).toHaveLength(0);
+  });
+
+  it('总开关关闭时不编译任何 DNR 规则（否则关代理后网络层仍在重定向）', () => {
+    const { rules, idMap } = buildDnrRules([makeRule({ id: 'simple' })], false);
+
+    expect(rules).toHaveLength(0);
+    expect(idMap.size).toBe(0);
   });
 });

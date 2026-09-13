@@ -21,7 +21,7 @@ export default defineBackground(() => {
         [STORAGE_KEYS.PROXY_CONFIG]: DEFAULT_PROXY_CONFIG,
       });
       // 显式同步 DNR 规则，确保安装后规则立即生效
-      await syncDnrRules(DEFAULT_PROXY_CONFIG.rules);
+      await syncDnrRules(DEFAULT_PROXY_CONFIG);
       logger.info('Extension installed, default config set');
     } else if (details.reason === 'update') {
       logger.info('Extension updated to', chrome.runtime.getManifest().version);

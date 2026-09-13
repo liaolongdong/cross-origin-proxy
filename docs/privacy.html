@@ -9,7 +9,7 @@
     <title>隐私政策 / Privacy Policy — 跨域代理助手 Cross-Origin Proxy</title>
     <meta
       name="description"
-      content="跨域代理助手（Cross-Origin Proxy）隐私政策：扩展不收集、不上传、不出售任何用户数据，规则与日志仅保存在本机 chrome.storage.local。Privacy policy for the Cross-Origin Proxy Chrome extension."
+      content="跨域代理助手不收集、不上传、不出售任何用户数据，规则与日志只存在本机 chrome.storage.local。Privacy policy for the Cross-Origin Proxy Chrome extension."
     />
     <link
       rel="canonical"
@@ -24,6 +24,19 @@
       rel="stylesheet"
       href="assets/landing.css"
     />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html#webpage",
+        "url": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html",
+        "name": "隐私政策 / Privacy Policy",
+        "inLanguage": ["zh-CN", "en"],
+        "datePublished": "2026-09-06",
+        "dateModified": "2026-09-12",
+        "isPartOf": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" }
+      }
+    </script>
   </head>
   <body>
     <a
@@ -61,10 +74,13 @@
     </header>
 
     <main id="main">
+      <div class="wrap page-head">
+        <h1>跨域代理助手隐私政策 / <span lang="en">Cross-Origin Proxy Privacy Policy</span></h1>
+      </div>
       <section aria-labelledby="pp-zh">
         <div class="wrap">
           <h2 id="pp-zh">隐私政策（中文）</h2>
-          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-06</p>
+          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-08</p>
 
           <h3>1. 我们收集什么</h3>
           <p>
@@ -121,6 +137,11 @@
             与日志记录。这些内容只在你的设备内处理，<strong>不会上传、不会出售、不会用于任何形式的用户画像或广告</strong>。日志默认只保留最近
             500 条，可在界面中随时清空。
           </p>
+          <p>
+            需要如实告知的一点：日志与由它生成的导出文件（HAR、JSON 配置、复制的 cURL）会原样保存这些内容，其中可能包含
+            <code>Authorization</code>、<code>Cookie</code>
+            等鉴权头以及请求体里的私密字段。数据仍然只在你手里，但在分享导出文件或截图之前，请先清空日志。
+          </p>
 
           <h3>5. 儿童隐私</h3>
           <p>本扩展是面向开发者的技术工具，不针对儿童，也不会刻意收集 13 岁以下儿童的任何信息。</p>
@@ -134,9 +155,13 @@
         </div>
       </section>
 
-      <section aria-labelledby="pp-en">
+      <section
+        aria-labelledby="pp-en"
+        lang="en"
+      >
         <div class="wrap">
           <h2 id="pp-en">Privacy Policy (English)</h2>
+          <p class="section-lede"><strong>Effective date / Last updated:</strong> 2026-09-08</p>
 
           <h3>1. What we collect</h3>
           <p>
@@ -197,6 +222,12 @@
             headers, body and response content of proxied requests inside the browser. This processing stays on your
             device: the data is <strong>not uploaded, not sold, and not used for profiling or advertising</strong>. Logs
             keep the most recent 500 entries by default and can be cleared at any time from the interface.
+          </p>
+          <p>
+            One thing stated plainly rather than glossed over: the log — and the files generated from it (HAR, JSON
+            configuration, copy-as-cURL) — stores this content verbatim, which can include
+            <code>Authorization</code> and <code>Cookie</code> headers as well as private fields inside request bodies.
+            The data stays in your hands, but clear the log before you share an exported file or a screenshot.
           </p>
 
           <h3>5. Children</h3>

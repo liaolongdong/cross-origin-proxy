@@ -137,14 +137,21 @@ export function toDnrPriority(priority: number): number {
 }
 
 /**
- * 将启用中的简单规则批量转换为 DNR 动态规则
+ * 将当前应生效的简单规则批量转换为 DNR 动态规则
+ *
+ * `proxyEnabled` 是总开关：DNR 规则装在浏览器网络层、不经扩展 JS，因此后台通道的
+ * 开关判断（`proxyHandler` 里的 `config.enabled`）拦不住它们。总开关关闭时必须
+ * 编译出空规则集，否则「关掉代理」后简单规则仍在重定向流量。
  * @returns rules 为 DNR 规则数组；idMap 为「DNR 规则 id → 代理规则」映射（命中统计用）
  */
-export function buildDnrRules(rules: ProxyRule[]): {
+export function buildDnrRules(
+  rules: ProxyRule[],
+  proxyEnabled: boolean,
+): {
   rules: chrome.declarativeNetRequest.Rule[];
   idMap: Map<number, { ruleId: string; ruleName: string }>;
 } {
-  const simpleRules = rules.filter(r => r.enabled && isSimpleRule(r));
+  const simpleRules = proxyEnabled ? rules.filter(r => r.enabled && isSimpleRule(r)) : [];
   const idMap = new Map<number, { ruleId: string; ruleName: string }>();
 
   const dnrRules = simpleRules.map((rule, index) => {

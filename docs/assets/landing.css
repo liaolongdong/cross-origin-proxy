@@ -418,7 +418,7 @@ html.js .site-nav > a[aria-current]::after {
   margin: 0;
 }
 
-.hero-visual svg {
+.hero-visual figure svg {
   width: 100%;
   height: auto;
   filter: drop-shadow(0 18px 40px rgb(16 63 128 / 16%));
@@ -536,6 +536,20 @@ section[aria-labelledby] {
 
 .section-head.center {
   text-align: center;
+}
+
+/* 文档标题栏：供没有 hero 的纯文档页（privacy.html）承载唯一的 <h1>。
+   只覆写 padding-top，保留 .wrap 的左右留白。 */
+.page-head {
+  padding-top: 44px;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: clamp(25px, 3.8vw, 36px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.6px;
 }
 
 .section-lede {

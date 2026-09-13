@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <title>API Proxy Alternatives: CORS &amp; Cross-Environment Debugging</title>
+    <meta
+      name="description"
+      content="A dev-server proxy, capture proxy, API client, header-modifier extension or app config — what each costs, where each stops, and when a browser rule wins."
+    />
+    <link
+      rel="canonical"
+      href="https://liaolongdong.github.io/cross-origin-proxy/alternatives.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="en"
+      href="https://liaolongdong.github.io/cross-origin-proxy/alternatives.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="zh"
+      href="https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://liaolongdong.github.io/cross-origin-proxy/alternatives.html"
+    />
+    <link
+      rel="icon"
+      href="assets/icon.png"
+      sizes="128x128"
+    />
+    <link
+      rel="stylesheet"
+      href="assets/landing.css"
+    />
+    <script
+      src="assets/landing.js"
+      defer
+    ></script>
+    <meta
+      property="og:type"
+      content="article"
+    />
+    <meta
+      property="og:site_name"
+      content="Cross-Origin Proxy"
+    />
+    <meta
+      property="og:title"
+      content="Cross-environment API debugging, compared: which approach for which job"
+    />
+    <meta
+      property="og:description"
+      content="Dev-server proxy, system capture proxy, API client, header-modifier extension or app config: what each costs, where each stops, and when a browser rule is the right answer."
+    />
+    <meta
+      property="og:url"
+      content="https://liaolongdong.github.io/cross-origin-proxy/alternatives.html"
+    />
+    <meta
+      property="og:image"
+      content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-en.png"
+    />
+    <meta
+      property="og:image:width"
+      content="1200"
+    />
+    <meta
+      property="og:image:height"
+      content="630"
+    />
+    <meta
+      property="og:image:alt"
+      content="Cross-Origin Proxy brand card: the product name, the tagline “Route frontend API calls to any environment — no code or CORS changes”, four capability chips and the product-site address"
+    />
+    <meta
+      property="og:locale"
+      content="en_US"
+    />
+    <meta
+      property="og:locale:alternate"
+      content="zh_CN"
+    />
+    <meta
+      name="twitter:card"
+      content="summary_large_image"
+    />
+    <meta
+      name="twitter:title"
+      content="Cross-environment API debugging, compared"
+    />
+    <meta
+      name="twitter:description"
+      content="Dev-server proxy, capture proxy, API client, header-modifier extension or editing app config - what each costs, where each stops, and when a browser rule wins."
+    />
+    <meta
+      name="twitter:image"
+      content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-en.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="Cross-Origin Proxy brand card: the product name, the tagline “Route frontend API calls to any environment — no code or CORS changes”, four capability chips and the product-site address"
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#webpage",
+            "url": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html",
+            "name": "Cross-environment API debugging approaches compared",
+            "inLanguage": "en",
+            "datePublished": "2026-09-12",
+            "dateModified": "2026-09-12",
+            "about": {
+              "@type": "SoftwareApplication",
+              "name": "Cross-Origin Proxy",
+              "url": "https://liaolongdong.github.io/cross-origin-proxy/"
+            },
+            "isPartOf": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" },
+            "breadcrumb": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#breadcrumb" }
+          },
+          {
+            "@type": "Article",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#article",
+            "headline": "Five ways to point a frontend at another backend environment — compared, including where each one wins",
+            "description": "Dev-server proxy, system capture proxy, API client, header-modifying extension and editing application config: the four concrete costs that separate them, and where a browser rule is the wrong choice.",
+            "inLanguage": "en",
+            "author": { "@type": "Person", "name": "Better", "url": "https://github.com/liaolongdong" },
+            "datePublished": "2026-09-12",
+            "dateModified": "2026-09-12",
+            "image": "https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-en.png",
+            "mainEntityOfPage": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#webpage" }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#breadcrumb",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Product overview",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "Approaches compared",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html"
+              }
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is a browser extension a replacement for a dev-server proxy?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "For browser pages, usually yes, and it is broader in one direction: one rule set covers every project in the browser instead of a proxy table per project, and it can rewrite responses instead of only forwarding. It does not replace the dev-server proxy for non-browser clients, for CI, or for anything that talks to the dev server outside Chrome."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "When is a system capture proxy the better tool?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "When the traffic is not from a browser page. Server-to-server calls, mobile apps routed through a workstation, desktop applications, and anything you want recorded in a shared session file all belong to a system-wide proxy. It reads HTTPS by standing in as a trusted certificate authority, which is exactly the setup cost an in-browser extension avoids."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Why not just replay the request in an API client?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "An API client proves the endpoint behaves; it does not prove your page handles it. The response reaches the client, not the application code, so UI paths, interceptors and error handling stay untested. Use it to design the mock, then load the same body into a browser rule so the real page consumes it."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "A header-modifier extension already changes requests. What is the difference?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Header editors rewrite request and response headers inside the browser, which is the smallest slice of this problem. They generally do not redirect the request URL to another host, do not replace the request body, cannot substitute a whole mock response, and have nothing to say about WebSocket connections - and the redirect is the part that removes the need for a backend CORS change."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I use two of these approaches together?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes, and that is normally the right answer. A dev-server proxy stays where it is needed for local build tooling, a capture proxy stays for non-browser traffic, and browser rules take over the day-to-day case of 'this page should be talking to that environment'. The only thing to avoid is two rules rewriting the same request at once, which makes the result hard to reason about."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <a
+      class="skip-link"
+      href="#main"
+      >Skip to content</a
+    >
+
+    <header class="site-header">
+      <div class="wrap">
+        <a
+          class="brand"
+          href="./"
+        >
+          <img
+            src="assets/icon.png"
+            alt=""
+            width="28"
+            height="28"
+          />
+          <span>Cross-Origin Proxy</span>
+        </a>
+        <nav
+          class="site-nav"
+          aria-label="Section navigation"
+        >
+          <a href="#tldr">TL;DR</a>
+          <a href="#approaches">Approaches</a>
+          <a href="#matrix">Matrix</a>
+          <a href="#limits">Where it loses</a>
+          <a href="#switch">Switching</a>
+          <a href="#faq">FAQ</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+          <a
+            class="lang-switch"
+            href="zh-alternatives.html"
+            hreflang="zh"
+            lang="zh"
+            >中文</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section
+        class="hero"
+        aria-labelledby="page-title"
+      >
+        <div class="wrap">
+          <div class="hero-copy">
+            <span class="eyebrow"
+              ><span class="dot"></span> Categories compared · no product claims · updated 2026-09-12</span
+            >
+            <h1 id="page-title">
+              Five ways to point a frontend at <span class="accent">another backend environment</span> — compared,
+              including where each one wins
+            </h1>
+            <p class="lede">
+              A dev-server proxy, a system capture proxy, an API client, a header-modifying extension and editing your
+              application's own config are all real answers to cross-environment debugging. They differ in four concrete
+              costs: what you have to change, how long it lasts, whether it survives a page reload, and how far the
+              traffic has to go before the tool stops seeing it. This page states those costs, and says plainly where a
+              browser rule is the wrong choice.
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="./"
+                >Product overview</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/liaolongdong/cross-origin-proxy"
+                >View source on GitHub</a
+              >
+            </div>
+            <div class="badges">
+              <span>Written by the extension's author</span>
+              <span>Categories, not brands</span>
+              <span>Includes where we lose</span>
+            </div>
+          </div>
+          <div class="hero-visual">
+            <div class="callout callout--key">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <p>
+                <b>The one-sentence version:</b> If the request is made by a page you have open, and you want it
+                answered by a different environment without touching that page's code, a browser rule is the shortest
+                path — because the request is issued by the extension, so the page's
+                <code>Access-Control-Allow-Origin</code> check never runs. If the traffic is not from a browser page,
+                use a system capture proxy instead.
+              </p>
+            </div>
+            <div class="stat-strip">
+              <div class="stat"><b>5</b><span>approaches compared</span></div>
+              <div class="stat"><b>4</b><span>costs that decide it</span></div>
+              <div class="stat"><b>0</b><span>named products in the matrix</span></div>
+              <div class="stat"><b>1</b><span>section on our own limits</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="tldr"
+        aria-labelledby="tldr-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="tldr-title">Pick by the situation, not by the tool</h2>
+          </div>
+          <div class="table-scroll">
+            <table class="compare">
+              <caption>
+                Each row is one situation and the approach that costs the least in it. "This extension" means
+                Cross-Origin Proxy.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Your situation</th>
+                  <th scope="col">Cheapest correct fix</th>
+                  <th scope="col">Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>A page on FAT must call UAT, and you do not own the backend</td>
+                  <td><span class="mark-yes">Browser rule</span></td>
+                  <td>No redeploy, no gateway ticket, applies to every project in the browser at once</td>
+                </tr>
+                <tr>
+                  <td>Local dev server must forward <code>/api</code> to a backend for everyone on the team</td>
+                  <td><span class="mark-yes">Dev-server proxy</span></td>
+                  <td>It lives in the repo, so it is committed, reviewed and identical for colleagues</td>
+                </tr>
+                <tr>
+                  <td>You need to see or change traffic from a mobile app, a desktop app or a server process</td>
+                  <td><span class="mark-yes">System capture proxy</span></td>
+                  <td>It sits at the OS or network layer; a browser extension can only see browser pages</td>
+                </tr>
+                <tr>
+                  <td>The endpoint does not exist yet and you need to agree its shape with a backend engineer</td>
+                  <td><span class="mark-yes">API client</span></td>
+                  <td>Requests are shareable artefacts there; a browser rule lives in your Chrome profile</td>
+                </tr>
+                <tr>
+                  <td>You only need to add or swap one request header on a live page</td>
+                  <td><span class="mark-part">Header-modifier extension</span></td>
+                  <td>Smallest tool for the smallest change — until you also need a different host</td>
+                </tr>
+                <tr>
+                  <td>The environment difference is permanent product behaviour</td>
+                  <td><span class="mark-yes">App config</span></td>
+                  <td>Correct-by-source beats a rule that only exists on your machine</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="section-lede">
+            The last row matters more than the first. A browser rule is a debugging instrument: it is the fastest way to
+            see a behaviour and the wrong place to park a decision. Once "this page talks to that host" is permanent,
+            move it into the application's configuration.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="approaches"
+        aria-labelledby="approaches-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="approaches-title">The five approaches, each on its own terms</h2>
+            <p class="section-lede">
+              Every entry starts with what the approach is genuinely good at. Categories only: capabilities vary inside
+              a category, so verify against the tool you actually run.
+            </p>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card reveal">
+              <span class="feature-icon">A</span>
+              <h3>Dev-server proxy</h3>
+              <p>
+                <b>What it is.</b> A proxy table in the build tool — Vite, webpack-dev-server and friends forward
+                <code>/api</code> to another origin, so the browser sees one origin and CORS never enters the
+                conversation.
+              </p>
+              <p>
+                <b>What it is genuinely good at.</b> It is committed, reviewed and identical for everyone on the team,
+                it needs no browser extension, and it is the right default for a project's own local development.
+              </p>
+              <p>
+                <b>Where it stops.</b> It is per project and per dev server: a new repo means a new table and a restart.
+                It only sees traffic routed to that dev server, so a page calling a second host directly is outside its
+                reach. And it forwards — it does not rewrite responses, mock an endpoint that does not exist, or add
+                latency on demand.
+              </p>
+              <p>
+                <b>How it relates to a browser rule.</b> Complementary. Keep the repo's proxy table for the project's
+                normal development; add browser rules for the cross-environment cases that are yours alone.
+              </p>
+            </article>
+
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--cyan">B</span>
+              <h3>System capture proxy</h3>
+              <p>
+                <b>What it is.</b> A process on your machine that the operating system or browser is told to route
+                through (mitmproxy is the open-source reference in this category). To read HTTPS it must act as a
+                certificate authority your clients trust.
+              </p>
+              <p>
+                <b>What it is genuinely good at.</b> Nothing beats it for reach: browser, mobile app, desktop app and
+                server process, all in one place, with full request and response inspection, breakpoints, scripting and
+                saved session files.
+              </p>
+              <p>
+                <b>Where it stops.</b> The setup cost is the answer. Installing a trusted root certificate changes your
+                machine's security posture, some clients pin certificates, and on a corporate laptop it may need
+                approval. It is also system-wide: it keeps intercepting when you stop debugging, and it is the kind of
+                tool that gets turned off before you can trust a result.
+              </p>
+              <p>
+                <b>How it relates to a browser rule.</b> A browser rule cannot do system-wide traffic and does not try
+                to. It gives up that reach in exchange for needing no certificate, no system setting, and nothing to
+                remember to switch off outside the browser.
+              </p>
+            </article>
+
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--green">C</span>
+              <h3>API client</h3>
+              <p>
+                <b>What it is.</b> A standalone tool where you build a request by hand, send it, and read the response —
+                with collections, environments and mock servers.
+              </p>
+              <p>
+                <b>What it is genuinely good at.</b> Contract work. Designing and agreeing an endpoint shape with a
+                backend engineer, keeping a shared library of requests, and testing an API with no UI attached to it.
+              </p>
+              <p>
+                <b>Where it stops.</b> The response goes to the client, not to your application code. So the UI path,
+                the axios interceptor, the error branch and the retry logic all stay unverified. Anything your page does
+                with the payload — cookies, redirects, same-origin credentials, streaming — is outside what a client can
+                prove.
+              </p>
+              <p>
+                <b>How it relates to a browser rule.</b> Best used in sequence. Design the mock in the client, paste the
+                same body into a rule's mock response, and let the real page consume it. That combination covers the gap
+                neither tool closes alone.
+              </p>
+            </article>
+
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--orange">D</span>
+              <h3>Header-modifier extension</h3>
+              <p>
+                <b>What it is.</b> A lightweight browser extension that rewrites request or response headers by URL
+                pattern — often the declarative request-redirect APIs under the hood.
+              </p>
+              <p>
+                <b>What it is genuinely good at.</b> One-off header changes: accept-language, a cache-control override,
+                a debugging flag. Low concept count, instant effect.
+              </p>
+              <p>
+                <b>Where it stops.</b> The header is the whole surface. It typically does not replace a request body,
+                cannot answer with a mock body of your own, has no per-request delay or retry, and cannot touch a
+                WebSocket connection.
+              </p>
+              <p>
+                <b>How it relates to a browser rule.</b> This extension uses the same network-layer mechanism for the
+                subset of rules that only rewrite a URL, and adds the service-worker channel on top when a rule needs
+                header, body or response rewriting. So it is a superset in practice, at the cost of more to learn.
+              </p>
+            </article>
+
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--pink">E</span>
+              <h3>Editing the application's own config</h3>
+              <p>
+                <b>What it is.</b> The honest option: change the base URL, the environment file, or the token in source,
+                rebuild, and let the app call the other environment directly.
+              </p>
+              <p>
+                <b>What it is genuinely good at.</b> It is reproducible for everyone, it works in CI, and it survives
+                your machine being wiped. When the difference is permanent, this is the correct place for it.
+              </p>
+              <p>
+                <b>Where it stops.</b> A rebuild cycle per attempt, a diff you must remember to revert, and the CORS
+                question you cannot avoid — the page now calls a foreign origin, so the backend must allow it, which
+                means a gateway change and a redeploy.
+              </p>
+              <p>
+                <b>How it relates to a browser rule.</b> A rule is the temporary version of the same edit, applied
+                outside the source tree. Same effect on the request, none of the revert risk in review.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="matrix"
+        aria-labelledby="matrix-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="matrix-title">The same comparison as a matrix</h2>
+            <p class="section-lede">
+              Green is favourable for that row, orange is partial, grey is absent. Columns are categories, so read a
+              cell as "typical for this category", not as a statement about a specific product.
+            </p>
+          </div>
+          <div class="table-scroll">
+            <table class="compare">
+              <caption>
+                Cross-environment debugging and request rewriting, the usual ways.
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Approach</th>
+                  <th
+                    scope="col"
+                    class="col-us"
+                  >
+                    This extension
+                  </th>
+                  <th scope="col">Dev-server proxy</th>
+                  <th scope="col">System capture proxy</th>
+                  <th scope="col">API client</th>
+                  <th scope="col">Header-modifier extension</th>
+                  <th scope="col">Editing app config</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Needs a backend or gateway change</th>
+                  <td class="col-us"><span class="mark-yes">No</span></td>
+                  <td><span class="mark-part">Often, for CORS</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Configured per project</th>
+                  <td class="col-us"><span class="mark-yes">No — browser-wide</span></td>
+                  <td><span class="mark-no">Yes</span></td>
+                  <td><span class="mark-part">System-wide</span></td>
+                  <td><span class="mark-part">Per collection</span></td>
+                  <td><span class="mark-part">Per rule set</span></td>
+                  <td><span class="mark-no">Yes</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Survives a page reload without re-doing work</th>
+                  <td class="col-us"><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-part">Not applicable</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-part">Until you revert it</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Rewrites responses (status, headers, JSON fields)</th>
+                  <td class="col-us"><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-no">No</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-part">Mock servers, not live pages</span></td>
+                  <td><span class="mark-part">Headers only</span></td>
+                  <td><span class="mark-no">No</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Mock / delay / block / retry from the UI</th>
+                  <td class="col-us"><span class="mark-yes">Yes, conditional mock included</span></td>
+                  <td><span class="mark-part">With extra plugins</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-part">Mock only, typically</span></td>
+                  <td><span class="mark-no">No</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Covers WebSocket traffic</th>
+                  <td class="col-us"><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-part">Rarely</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-no">No</span></td>
+                  <td><span class="mark-no">No</span></td>
+                  <td><span class="mark-part">Depends on the app</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Needs a local CA certificate to read HTTPS</th>
+                  <td class="col-us"><span class="mark-yes">No — runs inside the browser</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                  <td><span class="mark-part">Yes</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                  <td><span class="mark-yes">No</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Reaches non-browser traffic (mobile, desktop, server)</th>
+                  <td class="col-us"><span class="mark-no">No — browser-scoped</span></td>
+                  <td><span class="mark-no">No</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-part">Only its own requests</span></td>
+                  <td><span class="mark-no">No</span></td>
+                  <td><span class="mark-part">Depends</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Shareable with the team as a reviewed artefact</th>
+                  <td class="col-us"><span class="mark-part">Export JSON to the repo</span></td>
+                  <td><span class="mark-yes">Yes — in the repo</span></td>
+                  <td><span class="mark-part">Session files</span></td>
+                  <td><span class="mark-yes">Yes — collections</span></td>
+                  <td><span class="mark-part">Often cloud-synced</span></td>
+                  <td><span class="mark-yes">Yes — in the repo</span></td>
+                </tr>
+                <tr>
+                  <th scope="row">Works in CI without a browser profile</th>
+                  <td class="col-us"><span class="mark-no">No</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                  <td><span class="mark-yes">Yes — CLI runners</span></td>
+                  <td><span class="mark-no">No</span></td>
+                  <td><span class="mark-yes">Yes</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="section-lede">
+            Read the last two rows as the honest boundary. This extension loses on system reach and on team
+            reproducibility, and it wins on the two things that decide daily debugging: nothing outside the browser has
+            to change, and the rule is still there after you reload.
+          </p>
+        </div>
+      </section>
+
+      <section
+        id="limits"
+        aria-labelledby="limits-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="limits-title">Where this extension is the wrong tool</h2>
+            <p class="section-lede">
+              A comparison that only lists wins is advertising. These are the cases where you should pick something
+              else.
+            </p>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <h3>Traffic that does not come from a browser page</h3>
+              <p>
+                A server-to-server call, a mobile app, a desktop process, a <code>curl</code> in a script — none of them
+                load a content script. Use a system capture proxy or fix the route in infrastructure.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Anything that must be true for the whole team</h3>
+              <p>
+                Rules live in your Chrome profile. If the correct behaviour belongs to the project, it belongs in the
+                repo: a dev-server proxy entry or an application config value. You can export JSON for a colleague to
+                import, but that is a handoff, not a source of truth.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Continuous integration</h3>
+              <p>
+                There is no headless mode for a browser extension's rule set. Test automation should call the backend
+                directly or run behind a proxy configured in the pipeline.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Pages Chrome does not let extensions touch</h3>
+              <p>
+                <code>chrome://</code> pages, the Chrome Web Store and other extensions' pages are off-limits to content
+                scripts, so the interception channel cannot run there. Network-layer redirect rules still apply to
+                requests those pages make.
+              </p>
+            </div>
+            <div class="card">
+              <h3>A pure URL rewrite against a host that does not allow your origin</h3>
+              <p>
+                If a rule only rewrites the URL, the browser performs a redirect and still validates
+                <code>Access-Control-Allow-Origin</code> on the redirected response. Add any capability to the rule — a
+                response header override is the cheapest — and it moves to the channel where the extension issues the
+                request.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Reading a request that never leaves the browser</h3>
+              <p>
+                Service workers using some caching strategies, and traffic through a proxy already configured at the OS
+                level, may not be intercepted the way you expect. Confirm with the URL match tester before trusting a
+                negative result.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="switch"
+        aria-labelledby="switch-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="switch-title">Switching: what actually moves</h2>
+          </div>
+          <div class="step-grid">
+            <article class="step-card reveal">
+              <span class="step-num">1</span>
+              <h3>From a dev-server proxy</h3>
+              <p>
+                Take the <code>/api</code> prefix you were forwarding and express it as one wildcard rule:
+                <code>https://fat-api.example.com/*</code> → <code>https://uat-api.example.com</code>. Leave the repo's
+                proxy table alone — other developers and CI still depend on it.
+              </p>
+            </article>
+            <article class="step-card reveal">
+              <span class="step-num">2</span>
+              <h3>From a capture proxy</h3>
+              <p>
+                Recreate the rewrite as a rule and keep the capture proxy for what it is better at: non-browser clients
+                and deep inspection. Turn off system proxy routing while you test the rule, or two layers will fight
+                over the same request.
+              </p>
+            </article>
+            <article class="step-card reveal">
+              <span class="step-num">3</span>
+              <h3>From an API client</h3>
+              <p>
+                Paste the mock body into the rule's mock response with the status and content type you had agreed.
+                Importing a HAR export of real traffic creates rules automatically, which is usually faster than
+                retyping them.
+              </p>
+            </article>
+            <article class="step-card reveal">
+              <span class="step-num">4</span>
+              <h3>From a header in source</h3>
+              <p>
+                Move the token out of code and into the rule's request header overrides, then revert the source change.
+                The value stops appearing in diffs, and switching the rule off is the whole rollback.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="faq"
+        aria-labelledby="faq-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="faq-title">Comparison questions</h2>
+            <p class="section-lede">
+              The product's own FAQ — limits, privacy, permissions, how the two channels work — lives on the
+              <a href="./">product overview</a>. These answers are only about choosing between approaches.
+            </p>
+          </div>
+          <div class="faq-list">
+            <details>
+              <summary>Is a browser extension a replacement for a dev-server proxy?</summary>
+              <p>
+                For browser pages, usually yes, and it is broader in one direction: one rule set covers every project in
+                the browser instead of a proxy table per project, and it can rewrite responses instead of only
+                forwarding. It does not replace the dev-server proxy for non-browser clients, for CI, or for anything
+                that talks to the dev server outside Chrome.
+              </p>
+            </details>
+            <details>
+              <summary>When is a system capture proxy the better tool?</summary>
+              <p>
+                When the traffic is not from a browser page. Server-to-server calls, mobile apps routed through a
+                workstation, desktop applications, and anything you want recorded in a shared session file all belong to
+                a system-wide proxy. It reads HTTPS by standing in as a trusted certificate authority, which is exactly
+                the setup cost an in-browser extension avoids.
+              </p>
+            </details>
+            <details>
+              <summary>Why not just replay the request in an API client?</summary>
+              <p>
+                An API client proves the endpoint behaves; it does not prove your page handles it. The response reaches
+                the client, not the application code, so UI paths, interceptors and error handling stay untested. Use it
+                to design the mock, then load the same body into a browser rule so the real page consumes it.
+              </p>
+            </details>
+            <details>
+              <summary>A header-modifier extension already changes requests. What is the difference?</summary>
+              <p>
+                Header editors rewrite request and response headers inside the browser, which is the smallest slice of
+                this problem. They generally do not redirect the request URL to another host, do not replace the request
+                body, cannot substitute a whole mock response, and have nothing to say about WebSocket connections — and
+                the redirect is the part that removes the need for a backend CORS change.
+              </p>
+            </details>
+            <details>
+              <summary>Can I use two of these approaches together?</summary>
+              <p>
+                Yes, and that is normally the right answer. A dev-server proxy stays where it is needed for local build
+                tooling, a capture proxy stays for non-browser traffic, and browser rules take over the day-to-day case
+                of “this page should be talking to that environment”. The only thing to avoid is two rules rewriting the
+                same request at once, which makes the result hard to reason about.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div class="footer-main">
+          <p class="brand">
+            <img
+              src="assets/icon.png"
+              alt=""
+              width="28"
+              height="28"
+            />
+            <span>Cross-Origin Proxy · 跨域代理助手</span>
+          </p>
+          <p class="footer-disclaimer">
+            Written by the author of this extension, so treat the cells about our own tool as marketing and the rest as
+            a checklist. Categories are compared, never specific products: capabilities vary within a category, so
+            verify against the tool you run before switching.
+          </p>
+          <div class="footer-meta">
+            <span>MIT licensed</span>
+            <span>v1.0.0</span>
+            <span>Manifest V3</span>
+            <span>Last updated 2026-09-12</span>
+            <span
+              ><a
+                href="zh-alternatives.html"
+                hreflang="zh"
+                lang="zh"
+                >中文对比页</a
+              ></span
+            >
+          </div>
+        </div>
+        <nav aria-label="Footer navigation">
+          <a href="./">Product overview</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">Issues</a>
+          <a href="privacy.html">Privacy policy</a>
+          <a href="llms.txt">llms.txt</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

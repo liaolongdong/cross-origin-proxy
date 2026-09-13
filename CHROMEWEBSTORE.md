@@ -1,24 +1,44 @@
 # Chrome Web Store Listing — 跨域代理助手 / Cross-Origin Proxy
 
-> Last Updated: 2026-09-07
+> Last Updated: 2026-09-12
 > 本文件是商店上架的唯一素材源：把这里的内容逐项复制进 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)。
 > 商店表单（名称/描述/截图/权限理由/数据披露）无法由 API 代写，只能手动粘；**包上传与提审已经自动化**，见第 11 节。
 > 本文件位于仓库根目录，不在 `.output/chrome-mv3` 内，因此不会被打进上传包。
 
 ## 0. Keyword strategy（为什么这么写）
 
-Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest description）> 详细描述 > 分类/语言**。优化前英文名称只用了 18/75 字符，是最大的浪费点；现已分别为中文 36/75、英文 52/75，均用于承载核心检索词。
+Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest description）> 详细描述 > 分类/语言**。三条自动化链路都在名称上收手：名称结构已经是「品牌名 - 能力 A · 能力 B · 能力 C」，每个词对应真实功能，再往上堆词就是拿审核换曝光。当前中文 36/75、英文 52/75，剩下的预算**刻意不吃**——2026-09-12 复核过一次并确认维持现状，不要因为「预算还没用满」就去扩名称。
 
-| 目标查询                                       | 用户怎么搜                     | 落点                             |
-| ---------------------------------------------- | ------------------------------ | -------------------------------- |
-| `cors` / `cross origin` / `跨域`               | 报错来搜的人，量最大、意图最强 | 名称（中英）、摘要、详细描述首句 |
-| `api proxy` / `request proxy` / `请求转发`     | 明确要代理工具                 | 名称、摘要                       |
-| `environment switch` / `环境切换` / `联调`     | 中文前端场景词，竞争小、转化高 | 中文名称、详细描述               |
-| `mock api` / `mock 数据`                       | 后端未就绪的前端               | 名称（Mock）、详细描述           |
-| `modify request headers` / `response override` | 抓包改包需求                   | 详细描述能力清单                 |
-| `websocket proxy`                              | 长连接联调，几乎无同类扩展     | 摘要 + 详细描述（差异化点）      |
+优化重心因此放在后两个字段：
 
-刻意**不做**的事：不在名称里堆同义词（Chrome 会因 "misleading keyword stuffing" 拒审，且 AI 检索研究里关键词堆砌反而降低可见度）；不写 "best"、"#1"、"free" 这类词；不出现 "Chrome" 字样冒充官方；不引用其他产品商标。
+| 字段     | 预算       | 当前投入              | 说明                                                                             |
+| -------- | ---------- | --------------------- | -------------------------------------------------------------------------------- |
+| 名称     | 75 码点    | 36 / 52               | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                      |
+| 摘要     | 132 码点   | 100 / 127             | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断 |
+| 详细描述 | 16000 码点 | 中约 3.7K / 英约 9.5K | 参与索引且仍有大量余量；扩容只加**新的内容类型**，不把同一批能力换个说法重述一遍 |
+
+| 目标查询                                       | 用户怎么搜                     | 落点                                                     |
+| ---------------------------------------------- | ------------------------------ | -------------------------------------------------------- |
+| `cors` / `cross origin` / `跨域`               | 报错来搜的人，量最大、意图最强 | 名称（中英）、摘要、详细描述首句与症状行                 |
+| `api proxy` / `request proxy` / `请求转发`     | 明确要代理工具                 | 名称、摘要、能力清单                                     |
+| `environment switch` / `环境切换` / `联调`     | 中文前端场景词，竞争小、转化高 | 中文名称、摘要、详细描述                                 |
+| `mock api` / `mock 数据` / `假数据`            | 后端未就绪的前端               | 名称（Mock）、能力清单、典型配置示例、「谁会用上它」     |
+| `modify request headers` / `response override` | 抓包改包需求                   | 能力清单、典型配置示例                                   |
+| `websocket proxy`                              | 长连接联调，几乎无同类扩展     | 摘要 + 能力清单 + 症状行（差异化点）                     |
+| `devserver proxy` / `devServer` / `本地跨域`   | 想换掉逐项目配置的人           | 首段痛点、症状行、与「开发代理」与「改项目配置」的对比段 |
+| `timeout` / `http 500` / `弱网` / `超时模拟`   | 要验异常与兜底态的人           | 能力清单、典型配置示例、「谁会用上它」（QA 那一行）      |
+
+描述里的内容块各自都有一个转化或检索目的，不是为了把字数填满：
+
+- **症状行**（「控制台报 blocked by CORS policy……」）：用户搜商店时用症状词而不是功能词，这一段把那些说法原样落进索引，同时让读者在前几行认出「说的就是我」。
+- **典型配置示例**：给出可直接照抄的 match → target 形状，把「能力清单」翻译成「我下一步会怎么填」，并在截图之外提供可抽取的文本。
+- **角色分组**（「谁会用上它」）：同一种能力在前端、全栈、测试、交接四种说法下被检索，按角色切分比把能力清单复述一遍更能命中查询措辞，也直接回答「这算不算给我这个场景做的」。
+- **CORS 仍报错那一段**：与「装了没生效」并列的头号差评来源，且它是**真实机制**（纯地址重写仍是页面的跨域请求），只写在 README 与落地页等于把最容易误解的点留给差评。
+- **与抓包代理/项目配置的共存与越界段**：不装证书、不改系统设置、不占系统代理端口、不写项目文件——这些是相对系统级代理与 devServer 配置的真实差异化成本账，写在「差别」段里而不是散进能力清单。
+- **零远端依赖段**：面向企业内网与合规审查的说法，同时给审核对「数据不外传」的疑问一个可核对的落点。
+- **排查清单**：`<all_urls>` 类扩展的差评与申诉几乎都来自「装了没生效」，把排查顺序写进商店描述能同时降低差评率与审核沟通成本；其中「正则必须覆盖整条 URL」是本扩展两通道的真实差异（见第 9 节）。
+
+刻意**不做**的事：不在名称里堆同义词（Chrome 会因 "misleading keyword stuffing" 拒审，且 AI 检索研究里关键词堆砌反而降低可见度）；不写 "best"、"#1"、"free" 这类词；不出现 "Chrome" 字样冒充官方；不引用其他产品商标（详细描述里的对比段只写**方案类别**，不点名产品，避免不可核验的主张）；详细描述里不写版本号，避开每次发版都要改商店文案；不为了吃满 16000 码点而把同一批能力换说法重述。
 
 ## 1. Store listing
 
@@ -30,48 +50,98 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 跨域代理助手 - CORS 跨域调试 · API 环境切换 · Mock
 ```
 
-**Short description / manifest description**（≤132 字符，当前 82）
+**Short description / manifest description**（≤132 码点，当前 100，与 `public/_locales/zh_CN/messages.json` 的 `extensionDescription` 同源）
 
 ```
-把前端 API 请求代理到 FAT/UAT/PROD 后端，无需改代码或 CORS：URL 重写、请求头与响应改写、Mock、延迟、阻断与 WebSocket 代理
+前端跨域联调不用改代码，也不用请后端改 CORS：把 API 请求代理到 FAT/UAT/PROD 环境，支持 URL、请求头与响应改写、条件化 Mock、延迟、阻断、重试与 WebSocket 转发
 ```
 
 **Detailed description**（≤16000 字符；商店会剥掉 Markdown，故用换行与短横线排版）
 
 ```
-前端连着 FAT，要验的改动只在 UAT——这个扩展让你在浏览器里加一条规则就完成跨环境联调，不用改应用代码，也不用请后端改 CORS 配置再发一次版。
+前端连着 FAT，要验的改动只在 UAT——这个扩展让你在浏览器里加一条规则就完成跨环境联调：不用改应用代码，不用在每个项目里维护 devServer 代理表，也不用请后端加一条 CORS 配置再发一次版。
+
+如果你遇到过下面任意一种情况，它能直接省掉那一步：
+- 控制台报 blocked by CORS policy / Access-Control-Allow-Origin，而后端不是你负责部署的
+- 本地 localhost 起的页面要调内网测试环境的接口
+- 接口还没写好，前端要先把界面跑通
+- 要验证超时、500、断网时的兜底 UI，却没法让后端配合制造这些情况
+- 想给请求换一套目标环境的鉴权 token，又不想把它写进代码里
+- 实时功能（WebSocket）也要跟着同一套环境切换走
+- 想把一整套联调配置交给同事，而不是靠口述和截图
 
 它能做什么：
 - 按通配符、前缀或正则匹配请求地址，转发到你指定的另一个环境
 - 注入或替换请求头（例如目标环境的鉴权 token），替换请求体
-- 改写响应状态码、响应头，或按路径替换 JSON 里的某个字段
+- 改写响应状态码、响应头，或按路径替换 JSON 里的某个字段（如 data.token）
 - Mock 响应：接口还没写好时，直接返回你准备的 JSON / 文本 / HTML / XML
-- 注入 0–60 秒延迟，用来验证骨架屏、加载态与超时处理
-- 阻断请求，用来验证异常提示与离线兜底
-- 按 HTTP 方法限定规则，或在代理后的地址上追加查询参数（灰度标识、__env=uat）
+- 条件化 Mock：一条规则里配多个条件（URL 正则、请求方法、查询参数），首个命中的条件决定响应体、状态码与 Content-Type
+- 注入 0–60000 毫秒延迟，用来验证骨架屏、加载态与超时处理
+- 阻断请求，用来验证异常提示与离线兜底；被阻断的请求不会被回退重发
+- 失败自动重试：网络错误、5xx 响应与单次 30 秒超时都会触发，重试 1–5 次、间隔 100–30000 毫秒可调
+- 按 HTTP 方法限定规则（GET/POST/PUT/DELETE/PATCH/OPTIONS/HEAD），或在代理后的地址上追加、覆盖查询参数（灰度标识、__env=uat）
 - 转发 WebSocket 长连接，让实时功能跟着同一套环境走
-- 简单转发在浏览器网络层完成，不给页面增加脚本开销
+- 只做 URL 重写的简单规则由浏览器网络层完成（declarativeNetRequest），不给页面增加脚本开销；关闭总开关时这层规则一并卸载，不会留下隐形重定向
+
+典型配置（示例域名换成你自己的）：
+- 跨环境转发：匹配 https://fat-api.example.com/* → 目标 https://uat-api.example.com
+- 换目标环境的鉴权：在上面这条里加一个请求头覆盖 Authorization: Bearer <你的 UAT token>
+- 接口未就绪：开启 Mock，状态 200、Content-Type application/json、响应体贴你的示例 JSON
+- 弱网与超时：开启延迟，填 3000–8000 毫秒
+- 异常兜底：开启阻断，或把响应状态码改写成 500
+- 灰度与 A/B：在代理后的地址上追加查询参数 __env=uat
+- 只把写操作打到测试环境：把规则限定在 POST / PUT / DELETE
+
+谁会用上它：
+- 前端：后端接口还在别人手里，你要先把页面跑完——用代理换环境，用 Mock 顶替未就绪的接口
+- 全栈：本地起的服务要调内网测试环境，不想在每个项目里维护一份 devServer 代理表
+- 测试与联调支持：要复现超时、5xx、断网和慢网络，开延迟与阻断就能造出来，不用请后端配合
+- 做多环境或灰度：用查询参数注入打灰度标识，用环境快照在 FAT / UAT / PROD 之间一键切换
+- 要把配置交出去：JSON 导出、HAR 录制转规则、cURL 粘贴建规则，同事导入就是同一套
 
 调试与协作：
-- 请求日志记录方法、状态、耗时与规则命中情况，点开可看完整请求与响应
-- 一键把任意请求复制为 cURL；支持 HAR 与 cURL 的导入导出
-- 规则可拖拽排序、批量启停、按名称与状态搜索
+- 请求日志记录方法、状态、耗时与命中的规则，点开可看完整的请求与响应头/体，JSON 自动格式化
+- 顶部「URL 匹配测试」输入任意地址（可带方法），实时显示命中的规则、重写后的地址、走哪条通道，以及被哪条规则遮蔽
+- 一键把任意请求复制为 cURL；支持 HAR 1.2 导出、HAR 导入（由录制流量自动生成规则）、cURL 粘贴导入
+- 规则可拖拽排序、单条与批量启停/删除，按名称、匹配模式或目标地址搜索，并按状态与匹配类型筛选
 - 环境轮换时批量迁移目标域名，并给出逐条变更预览
+- 规则列表为空时可直接点快速模板（通配符代理、前缀匹配、鉴权头、改请求头）起步；删除一条规则后能立即撤销，误删不用重填
 - 把整套规则保存成命名环境快照，在 FAT / UAT / PROD 间一键切换
-- 配置以 JSON 导出，交给同事直接导入即可复现
+- 配置以 JSON 导出（覆盖或合并两种模式），同事导入即可复现同一套规则
+- 两条通道各自的命中统计：网络层近 5 分钟、后台通道自上次配置变更起
+
+一点说明（不是缺陷）：只重写 URL 的简单规则由浏览器网络层完成，那条请求不经过扩展的脚本，所以请求日志里不会出现它。这类规则请用「URL 匹配测试」验证，或看规则表里的命中次数；带任何改写、Mock、延迟能力的规则会正常出现在日志里。
+
+改了规则却没生效，按这个顺序检查：
+1. 弹窗里的总开关是否开启（关闭时网络层规则也会一起卸载）
+2. 这条规则本身是否处于启用状态
+3. 页面是否重新加载过——已经发出的请求不会被追溯改写
+4. 在「URL 匹配测试」里输入实际请求地址，看是否被一条优先级数字更小（更靠前）的规则遮蔽
+5. 使用正则时确保它覆盖整条 URL：网络层会用替换结果整体替换 URL，而后台通道只替换命中的片段，覆盖不全的正则在两条通道上结果不同
+
+规则生效了、地址也换过去了，控制台却还是报 CORS——这通常不是没生效：只重写地址的请求在浏览器里仍然是一次跨域请求，目标环境没允许你的来源就照样被拦。此时给这条规则加任一改写能力（最省事的是加一个响应头覆盖），它就改由后台通道代发：那一次请求由扩展发出，页面拿到的是扩展构造的响应，页面侧的跨域校验不再适用。「URL 匹配测试」会直接告诉你这条地址现在走的是哪条通道。
+
+与常见方案的差别：
+- 相比在每个项目里配 devServer 代理：规则配在浏览器里，一次配好对所有项目生效，而且能改写响应，不只是转发
+- 相比系统级抓包代理：不需要安装本地证书、不改动系统网络设置、不占用系统代理端口，只作用于浏览器里的页面；公司的 VPN 与抓包工具照常工作，两者可以叠加——改写发生在浏览器侧，抓包工具看到的是改写之后的请求
+- 相比改项目配置或构建脚本：它不写任何项目文件、不进任何构建产物，同事不需要在你的仓库里找到那行代理配置，也不会有人把你的本地地址提交上去
+- 相比 API 客户端或改请求头插件：它处理页面真实发出的请求，不需要把请求手工搬进另一个工具里重放
+- 它的边界也说清楚：这是浏览器内的工具，帮不到服务端对服务端的调用；规则存在你的 Chrome 配置里，需要协作时用 JSON 导出交给同事
 
 界面：
 - 中文 / English 双语界面，6 套主题与浅色 / 深色 / 跟随系统
-- 弹窗提供总开关、今日统计、自动关闭倒计时，以及「当前页面命中哪条规则」的预演
-- 快捷键：⌘⇧P（Windows/Linux 为 Ctrl+Shift+P）切换代理
+- 弹窗提供总开关、今日统计、自动关闭倒计时、「当前页面命中哪条规则」的预览，以及「为这个页面创建规则」
+- 代理自动关闭：30 分钟 / 1 小时 / 2 小时 / 4 小时，基于浏览器定时器，服务工作线程重启后仍然生效
+- 快捷键：⌘⇧P（Windows/Linux 为 Ctrl+Shift+P）切换代理；配置页内 N 新建规则、/ 或 ⌘F 聚焦搜索、Esc 关闭弹窗
 
 关于数据：
 - 规则、日志与偏好全部保存在你本机的浏览器存储中，没有账号、没有统计埋点、不连接任何自有服务器
 - 唯一的网络流量就是你自己要求代理的接口流量；导出文件也只写到本地
+- 扩展自身零远端依赖：不加载远程脚本、不请求任何远端接口，界面、规则与日志全部从本机读取（你要求代理的那个接口当然仍然需要网络可达）
+- 关于「更改您访问的网站上的数据」权限：被代理的请求发生在每个开发者自己的内网域名、localhost 与各个测试环境之间，这些地址无法在扩展里预先枚举。扩展用它只做两件事——在你浏览的页面上注入拦截器、按你亲手创建的规则代发请求，不向任何第三方或开发者服务器发送数据
 - 隐私政策：https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 
-限制：最多 200 条规则、最近 500 条日志、请求体上限 10MB。
-需要较新版本的桌面 Google Chrome（Manifest V3）。
+限制：最多 200 条规则、最近 500 条日志、请求体上限 10MB、延迟 0–60000 毫秒、Mock 与改写的状态码钳制在 200–599（否则前端无法构造有效响应）。需要较新版本的桌面 Google Chrome（Manifest V3）。
 
 问题反馈与源码：https://github.com/liaolongdong/cross-origin-proxy
 ```
@@ -84,10 +154,10 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 Cross-Origin Proxy - CORS & API Environment Switcher
 ```
 
-**Short description**（≤132 字符，当前 129）
+**Short description**（≤132 码点，当前 127，与 `public/_locales/en/messages.json` 的 `extensionDescription` 同源）
 
 ```
-Proxy API calls to FAT/UAT/PROD backends, no code or CORS changes. Rewrite URLs/headers/responses, mock, delay, block, WebSocket.
+Proxy API calls to FAT/UAT/PROD, no code or CORS changes. Rewrite URLs/headers/responses, mock, delay, block, retry, WebSocket.
 ```
 
 **Detailed description**
@@ -95,36 +165,87 @@ Proxy API calls to FAT/UAT/PROD backends, no code or CORS changes. Rewrite URLs/
 ```
 Your frontend talks to FAT, but the change you need to verify only exists on UAT. This extension lets you add one rule in Chrome instead of editing a dev-server proxy in every project, hardcoding a token, or asking the backend to open CORS and redeploy.
 
+Reach for it if any of these is familiar:
+- The console says blocked by CORS policy / Access-Control-Allow-Origin and you do not own the backend deployment
+- A localhost dev page needs to call an internal test environment
+- The API is not written yet, but the UI has to move forward
+- You need to exercise the timeout, HTTP 500 and offline fallback states without asking a backend engineer to reproduce them
+- You want another environment's auth token on the request without putting it in source control
+- Real-time features (WebSocket) have to follow the same environment switch
+- You want to hand a whole debugging setup to a teammate without describing it in chat
+
 What it does:
 - Match requests by wildcard, prefix or regular expression and forward them to another environment
 - Inject or replace request headers (such as the target environment's auth token) and replace request bodies
-- Override the response status, response headers, or individual JSON fields by path
+- Override the response status, response headers, or individual JSON fields by dot-notation path (`data.token`)
 - Mock responses with your own JSON / text / HTML / XML when the API is not built yet
-- Add 0–60 seconds of latency to exercise loading, skeleton and timeout states
-- Block requests to verify error handling and offline fallbacks
-- Limit a rule to specific HTTP methods, or append query parameters such as __env=uat and gray-release tags
+- Conditional mock responses: give one rule several conditions (URL pattern, request method, query parameters) and the first match decides the body, status and Content-Type
+- Add 0–60000 ms of latency to exercise loading, skeleton and timeout states
+- Block requests to verify error handling and offline fallbacks; a blocked request is never replayed
+- Retry automatically on network errors, 5xx responses and the 30-second per-attempt timeout — off, or 1–5 attempts with a 100–30000 ms interval
+- Limit a rule to specific HTTP methods (GET/POST/PUT/DELETE/PATCH/OPTIONS/HEAD), or append and override query parameters on the proxied URL (gray-release tags, __env=uat)
 - Forward WebSocket connections, so real-time features follow the same environment switch
-- Simple rewrites are resolved inside the browser's network layer, adding no script work to your page
+- Rules that only rewrite a URL are resolved inside the browser's network layer (declarativeNetRequest), adding no script work to your page; turning the global switch off uninstalls those rules too, so no invisible redirect is left behind
+
+Typical rules (swap the example hosts for your own):
+- Cross-environment switch: match https://fat-api.example.com/* → target https://uat-api.example.com
+- Use the other environment's credentials: add a request header override Authorization: Bearer <your UAT token> to that rule
+- API not ready yet: enable Mock with status 200, Content-Type application/json, and your sample JSON as the body
+- Slow network: enable delay with 3000–8000 ms
+- Failure states: enable Block, or override the response status to 500
+- Gray release / A-B branch: append the query parameter __env=uat on the proxied URL
+- Send only writes to the test backend: restrict the rule to POST / PUT / DELETE
+
+Who reaches for it:
+- Frontend work: the API belongs to someone else and the page still has to move — proxy to another environment, or mock the endpoint that is not finished
+- Full-stack work: a localhost dev server calling an internal test backend, without a dev-server proxy table to maintain in every project
+- QA and integration support: timeouts, HTTP 500, offline and slow-network paths reproduced from delay and block, with nobody on the backend having to cooperate
+- Multi-environment or gray-release work: tag the proxied URL with a query parameter, switch FAT / UAT / PROD with a named profile
+- Handing a setup over: JSON export, HAR-to-rules, paste-a-cURL-to-a-rule — your teammate imports the identical configuration
 
 Debugging and teamwork:
-- A request log with method, status, duration and rule hit statistics; open any entry for full headers and body
-- Copy any request as cURL; import and export HAR
-- Drag to reorder rule priority, batch enable or disable, search and filter
+- A request log with method, status, duration and the rule that matched; open any entry for full request and response headers and body, JSON auto-formatted
+- A URL match tester in the header bar: type any URL (optionally with a method) to see in real time which rule matches, what the rewritten URL is, which channel it takes, and which rule shadows it
+- Copy any request as cURL; HAR 1.2 export, HAR import that creates rules from recorded traffic, and cURL paste import
+- Drag to reorder rule priority, enable/disable/delete one at a time or in batch, search by name, pattern or target, and filter by status and match type
 - Batch-migrate target domains across rules with a per-rule change preview
+- Start from a quick template while the list is still empty (wildcard proxy, prefix match, auth header, header override), and undo a delete immediately — a mistaken removal does not mean retyping the rule
 - Save the whole rule set as a named environment profile and switch between FAT, UAT and PROD in one click
-- Export configuration as JSON so a teammate can import the exact same setup
+- Export configuration as JSON (replace or merge mode) so a teammate gets the identical setup
+- Per-rule hit counts for both channels: network layer over the last 5 minutes, background channel since the last config change
+
+One thing that is by design, not a bug: a rule that only rewrites the URL is handled by the browser's network layer, so that request never passes through the extension's scripts and does not appear in the request log. Verify those rules with the URL match tester or the rule's hit count; anything with an override, mock or delay shows up in the log normally.
+
+If a rule seems not to take effect, check in this order:
+1. The global switch in the popup is on (switching it off also removes the network-layer rules)
+2. That rule itself is enabled
+3. You reloaded the page — requests already sent are not rewritten retroactively
+4. Test the actual URL in the URL match tester: an enabled rule with a lower priority number may be matching first and shadowing it
+5. For regex rules, make sure the pattern covers the whole URL: the network layer replaces the entire URL while the background channel replaces only the part your pattern matched
+
+The rule took effect, the address did change, and the console still says CORS — that usually is not a broken rule. A request whose only rewrite happened in the network layer is still a cross-origin request from the page, so a target environment that does not allow your origin gets blocked. Add any capability to that rule (a response header override is the cheapest) and it moves to the background channel: the extension issues the request and hands the page a response it constructed, so the page's CORS check never runs. The URL match tester shows which channel a given address is currently taking.
+
+How it differs from the usual options:
+- Versus a per-project dev-server proxy: rules live in the browser, apply to every project at once, and can rewrite responses instead of only forwarding
+- Versus a system-wide capture proxy: no local certificate to install, no system network settings to change, no system proxy port to configure, and it only touches pages in the browser. A company VPN or a capture tool keeps working alongside it — the rewrite happens inside the browser, so those tools see the rewritten request rather than competing with it
+- Versus editing project config or build scripts: it writes no file in your repository and appears in no build output, so a teammate never has to find the proxy line in your project — and nobody commits their localhost address
+- Versus an API client or a header-modifier extension: it works on the requests the page actually makes, instead of asking you to replay them in another tool
+- Its limits, stated plainly: it is a browser tool. It cannot help a server-to-server call, and its rules live in your Chrome profile — export JSON when a teammate needs them.
 
 Interface:
 - English and Chinese UI, six themes, light / dark / system modes
-- Popup with a global switch, today's stats, an auto-off countdown, and a preview of which rule matches the page you have open
-- Keyboard shortcut Ctrl+Shift+P (⌘⇧P on macOS) to toggle proxying
+- Popup with a global switch, today's stats, an auto-off countdown, a preview of which rule matches the page you have open, and "create a rule for this page"
+- Auto-off countdown of 30 minutes, 1, 2 or 4 hours, built on browser alarms so it survives service-worker restarts
+- Keyboard shortcut Ctrl+Shift+P (⌘⇧P on macOS) to toggle proxying; on the options page N adds a rule, / or ⌘F focuses search, Esc closes the topmost dialog
 
 About your data:
 - Rules, logs and preferences are stored in your browser's local storage on your own device. No accounts, no analytics, no telemetry, no servers of ours
 - The only network traffic is the API traffic you ask it to proxy; exports are written locally
+- The extension itself has zero remote dependencies: no remote scripts, no calls to any endpoint of ours, and its UI, rules and logs are all read from local storage (the API you proxy obviously still has to be reachable)
+- About the "change the data on websites you visit" permission: proxied requests happen on each developer's own internal domains, localhost and staging hosts, which cannot be enumerated in advance. The extension uses that permission for two things only — injecting the interceptor into pages you browse, and issuing requests on your behalf according to rules you created. Nothing is sent to any third party or to a developer-controlled server
 - Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 
-Limits: 200 rules, the last 500 log entries, 10 MB request body. Requires a recent desktop Google Chrome (Manifest V3).
+Limits: 200 rules, the last 500 log entries, 10 MB request body, delays of 0–60000 ms, and mocked or overridden status codes clamped to 200–599 so the page can always build a valid response. Requires a recent desktop Google Chrome (Manifest V3).
 
 Source code and issue tracker: https://github.com/liaolongdong/cross-origin-proxy
 ```
@@ -164,8 +285,8 @@ Redirects a page's API requests to another backend environment and lets develope
 | Permission                      | Type             | Justification                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `storage`                       | permissions      | Saves the user's proxy rules, environment profiles, request logs and UI preferences in `chrome.storage.local`. Nothing leaves the device and no other storage area is used.                                                                                                                                                                                                                                                                                                  |
-| `declarativeNetRequest`         | permissions      | The core feature. Rules that only rewrite a request URL are installed as dynamic redirect rules so the browser's network stack performs the redirect without per-request JavaScript. Rules are created only by the user, in the options UI, and are removed when disabled or deleted.                                                                                                                                                                                        |
-| `declarativeNetRequestFeedback` | permissions      | Reads which dynamic rules actually matched, to display hit counts and forwarding-channel statistics in the request-log drawer. Used for display only; results are kept locally.                                                                                                                                                                                                                                                                                              |
+| `declarativeNetRequest`         | permissions      | The core feature. Rules that only rewrite a request URL are installed as dynamic redirect rules so the browser's network stack performs the redirect without per-request JavaScript. Dynamic rules are rebuilt from proxy rules the user authored in the extension's own UI (including imports the user initiates); they are removed when a rule is disabled or deleted, and the whole set is cleared when the global proxy switch is turned off.                            |
+| `declarativeNetRequestFeedback` | permissions      | Reads which dynamic rules actually matched, to show a per-rule hit count in the request-log drawer. This is the only way the user can see network-layer redirects, because those requests never reach the extension's JavaScript and therefore produce no per-request log entry. Used for display only; results are kept locally.                                                                                                                                            |
 | `alarms`                        | permissions      | Two timers: a keepalive ping so the background worker survives while proxying is active, and the user-configured auto-off countdown that turns proxying off after a set number of minutes. Minimum period is one minute; no second-precision scheduling is used.                                                                                                                                                                                                             |
 | `<all_urls>`                    | host_permissions | The extension must work on whatever origin the developer's frontend runs on — internal domains, `localhost` dev servers and staging hosts cannot be enumerated in advance, and they differ per developer. It is used to (a) inject the request interceptor on pages the user browses and (b) issue proxied requests on the user's behalf for rules the user authored. The extension sends no data to any third-party or developer-controlled server; see the privacy policy. |
 
@@ -207,7 +328,10 @@ Rationale to paste if the form asks for clarification: request and response data
 该页由 `.github/workflows/deploy-pages.yml` 在 `main` 上改动 `docs/**` 时自动部署，但**部署源必须先在 Settings → Pages 里切成「GitHub Actions」**（一次性开关，见 [GITHUB.md](./GITHUB.md) §5）。提审前用下面命令确认三个页面都是 200——隐私政策 URL 打不开是最常见的首审被拒原因：
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+for p in "" zh.html privacy.html; do
+  printf '%-14s ' "/$p"
+  curl -s -o /dev/null -w '%{http_code}\n' "https://liaolongdong.github.io/cross-origin-proxy/$p"
+done
 ```
 
 ## 6. Distribution
@@ -259,8 +383,8 @@ curl -s -o /dev/null -w '%{http_code}\n' https://liaolongdong.github.io/cross-or
 
 功能自检（提交前在本地最新版 Chrome 手动过一遍）：
 
-- [ ] 通配 / 前缀 / 正则三类规则均能命中并重写
-- [ ] 简单规则确实走 DNR（日志通道显示 DNR），复杂规则走后台
+- [ ] 通配 / 前缀 / 正则三类规则均能命中并重写（正则注意：网络层重定向替换的是整个 URL，想两通道结果一致就写覆盖整条 URL 的正则）
+- [ ] 通道判定用「URL 匹配测试」面板核对：它直接显示命中的通道（网络层 / 后台）。简单规则在该面板显示网络层重定向、请求能正常转发，且规则表的「命中次数」列会增长——但**请求日志里不会有这一条**（日志只由后台通道写入，网络层重定向不经过扩展脚本）；复杂规则在面板显示后台且日志有对应行。日志抽屉另有一个只统计网络层命中的面板可交叉验证
 - [ ] Mock、延迟、阻断、响应改写、方法过滤、查询参数注入逐项生效
 - [ ] WebSocket 规则能转发 `wss://` 连接
 - [ ] 拦截异常时页面回退原生请求，且阻断请求不会被回退发出

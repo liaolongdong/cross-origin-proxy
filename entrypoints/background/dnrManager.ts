@@ -13,6 +13,8 @@ import { setDnrRuleIdMap } from './dnrStats';
  * 职责：
  * - 将启用的简单规则（无 headerOverrides）同步为 DNR 动态重定向规则，
  *   由浏览器网络层零开销完成重定向（复杂规则走 SW fetch 通道）
+ * - 总开关（config.enabled）关闭时编译出空规则集：DNR 不经扩展 JS，
+ *   SW 通道的开关判断拦不住它，否则「关掉代理」后简单规则仍在重定向
  * - regex 类型规则先经 isRegexSupported 校验（DNR 使用 RE2 语法，
  *   与 JS 正则不完全兼容），不支持的规则跳过并告警，避免整批同步失败
  * - 配置变化时向所有标签页广播新配置，驱动 MAIN world 拦截器实时同步
@@ -58,15 +60,15 @@ async function filterRegexSupported(rules: ProxyRule[]): Promise<ProxyRule[]> {
 let syncQueue: Promise<void> = Promise.resolve();
 let pendingSyncCount = 0;
 
-export function syncDnrRules(rules: ProxyRule[]): Promise<void> {
+export function syncDnrRules(config: ProxyConfig): Promise<void> {
   pendingSyncCount++;
   const next = syncQueue.then(
     () =>
-      doSyncDnrRules(rules).finally(() => {
+      doSyncDnrRules(config).finally(() => {
         pendingSyncCount--;
       }),
     () =>
-      doSyncDnrRules(rules).finally(() => {
+      doSyncDnrRules(config).finally(() => {
         pendingSyncCount--;
       }),
   );
@@ -85,13 +87,13 @@ export function syncDnrRules(rules: ProxyRule[]): Promise<void> {
   return next;
 }
 
-async function doSyncDnrRules(rules: ProxyRule[]): Promise<void> {
+async function doSyncDnrRules(config: ProxyConfig): Promise<void> {
   try {
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
     const removeRuleIds = existingRules.map(r => r.id);
 
-    const supported = await filterRegexSupported(rules);
-    const { rules: newRules, idMap } = buildDnrRules(supported);
+    const supported = await filterRegexSupported(Array.isArray(config.rules) ? config.rules : []);
+    const { rules: newRules, idMap } = buildDnrRules(supported, config.enabled);
 
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds,
@@ -140,15 +142,14 @@ async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> {
 export async function initDnrManager(): Promise<void> {
   try {
     const config = await getProxyConfig();
-    // 防御存储损坏：rules 非数组时按空集处理
-    await syncDnrRules(Array.isArray(config.rules) ? config.rules : []);
+    await syncDnrRules(config);
 
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === 'local' && STORAGE_KEYS.PROXY_CONFIG in changes) {
         const newConfig = changes[STORAGE_KEYS.PROXY_CONFIG].newValue as ProxyConfig | undefined;
         if (newConfig && Array.isArray(newConfig.rules)) {
           invalidateMatcherCache();
-          void syncDnrRules(newConfig.rules);
+          void syncDnrRules(newConfig);
           void broadcastConfigToTabs(newConfig);
         }
       }

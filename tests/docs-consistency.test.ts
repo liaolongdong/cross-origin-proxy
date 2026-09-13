@@ -37,8 +37,11 @@ const PAGES_URL_SOURCES = [
   'GITHUB.md',
   'docs/index.html',
   'docs/zh.html',
+  'docs/alternatives.html',
+  'docs/zh-alternatives.html',
   'docs/privacy.html',
   'docs/llms.txt',
+  'docs/llms-full.txt',
   'docs/sitemap.xml',
   'docs/robots.txt',
 ];
@@ -54,6 +57,12 @@ const HUMAN_DOCS = [
   'RELEASING.md',
   'GITHUB.md',
   'AGENTS.md',
+];
+
+/** 需要成对守卫的中英页面（左英右中）；新增双语页面只改这一处。 */
+const BILINGUAL_PAIRS: Array<[string, string]> = [
+  ['docs/index.html', 'docs/zh.html'],
+  ['docs/alternatives.html', 'docs/zh-alternatives.html'],
 ];
 
 describe('[Docs] 仓库自动化与文档一致性', () => {
@@ -114,16 +123,19 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       return fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() ? path.join(target, 'index.html') : target;
     };
 
-    it.each(['index.html', 'zh.html', 'privacy.html'])('%s 的本地资源全部存在', file => {
-      const refs = localRefs(file);
-      expect(refs.length, `${file} 应当有本地资源引用`).toBeGreaterThan(0);
+    it.each(['index.html', 'zh.html', 'alternatives.html', 'zh-alternatives.html', 'privacy.html'])(
+      '%s 的本地资源全部存在',
+      file => {
+        const refs = localRefs(file);
+        expect(refs.length, `${file} 应当有本地资源引用`).toBeGreaterThan(0);
 
-      const missing = refs
-        .map(resolveLocal)
-        .filter(ref => !exists(ref))
-        .sort();
-      expect(missing, `${file} 引用了 docs/ 下不存在的文件`).toEqual([]);
-    });
+        const missing = refs
+          .map(resolveLocal)
+          .filter(ref => !exists(ref))
+          .sort();
+        expect(missing, `${file} 引用了 docs/ 下不存在的文件`).toEqual([]);
+      },
+    );
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -149,36 +161,192 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     const faqNames = (file: string): string[] =>
       [...read(file).matchAll(/"@type":\s*"Question",\s*"name":\s*"([^"]+)"/g)].map(m => m[1]);
 
-    it('FAQPage 结构化数据的 Question 条数相同且非空', () => {
-      const en = countIn('docs/index.html', /"@type":\s*"Question"/g);
-      const zh = countIn('docs/zh.html', /"@type":\s*"Question"/g);
-      expect(en).toBeGreaterThan(0);
-      expect(zh).toBe(en);
+    it.each(BILINGUAL_PAIRS)('%s / %s 的 FAQPage 结构化数据条数相同且非空', (en, zh) => {
+      const enCount = countIn(en, /"@type":\s*"Question"/g);
+      expect(enCount).toBeGreaterThan(0);
+      expect(countIn(zh, /"@type":\s*"Question"/g)).toBe(enCount);
     });
 
-    it('页面可见的 <details> 折叠条数与 schema 条数一致', () => {
-      const en = countIn('docs/index.html', /<details\b/g);
-      const zh = countIn('docs/zh.html', /<details\b/g);
-      expect(en).toBeGreaterThan(0);
-      expect(zh).toBe(en);
+    it.each(BILINGUAL_PAIRS)('%s / %s 的页面可见折叠条数与 schema 条数一致', (en, zh) => {
+      const enCount = countIn(en, /<details\b/g);
+      expect(enCount).toBeGreaterThan(0);
+      expect(countIn(zh, /<details\b/g)).toBe(enCount);
     });
 
     /**
      * AGENTS.md 要求“`FAQPage` 的问答需与页面 `<details>` 文本一致”，而且只比条数
      * 是弱守卫——两边同数但讲不同问题照样能绿。这里逐条逐序比对。
      */
-    it.each(['docs/index.html', 'docs/zh.html'])('%s 的 schema 问答与页面折叠文本逐条同序一致', file => {
+    it.each([...BILINGUAL_PAIRS.flat()])('%s 的 schema 问答与页面折叠文本逐条同序一致', file => {
       expect(summaries(file).length, `${file} 应有 FAQ 折叠项`).toBeGreaterThan(0);
       expect(faqNames(file)).toEqual(summaries(file));
     });
 
-    it('两页 hreflang 互指，且都声明了 x-default', () => {
-      const en = read('docs/index.html');
-      const zh = read('docs/zh.html');
-      expect(en).toContain('hreflang="zh"');
-      expect(en).toContain('hreflang="x-default"');
-      expect(zh).toContain('hreflang="en"');
-      expect(zh).toContain('hreflang="x-default"');
+    /** 只解析 `<head>` 里的 `<link rel="alternate">` 标注：`hreflang` → 目标 URL。 */
+    const hreflangMap = (file: string): Record<string, string> =>
+      Object.fromEntries(
+        [...read(file).matchAll(/<link\b[^>]*rel="alternate"[^>]*>/g)]
+          .map(tag => {
+            const lang = tag[0].match(/hreflang="([^"]+)"/)?.[1];
+            const href = tag[0].match(/href="([^"]+)"/)?.[1];
+            return lang && href ? ([lang, href] as const) : null;
+          })
+          .filter((entry): entry is readonly [string, string] => entry !== null),
+      );
+
+    /**
+     * hreflang 的三条硬规则：每页自指、中英互指、声明 x-default。head 与 sitemap
+     * 两处标注不一致时 Google 会整对丢弃，所以下面两条用例分别守两边。
+     */
+    it.each(BILINGUAL_PAIRS)('%s / %s 的 hreflang 自指、互指且声明 x-default', (en, zh) => {
+      const urlOf = (file: string) => `${PAGES_BASE}/${path.basename(file)}`.replace('index.html', '');
+      const [enMap, zhMap] = [hreflangMap(en), hreflangMap(zh)];
+
+      expect(enMap.en, `${en} 缺少指向自己的 hreflang="en"`).toBe(urlOf(en));
+      expect(enMap.zh, `${en} 缺少 hreflang="zh"`).toBe(urlOf(zh));
+      expect(enMap['x-default'], `${en} 缺少 x-default`).toBe(urlOf(en));
+
+      expect(zhMap.zh, `${zh} 缺少指向自己的 hreflang="zh"`).toBe(urlOf(zh));
+      expect(zhMap.en, `${zh} 缺少 hreflang="en"`).toBe(urlOf(en));
+      expect(zhMap['x-default'], `${zh} 缺少 x-default`).toBe(urlOf(en));
+    });
+
+    it('sitemap 为每个中英页面对补齐 en / zh / x-default 三条 alternate', () => {
+      const blocks = read('docs/sitemap.xml').split('<url>').slice(1);
+      for (const [en, zh] of BILINGUAL_PAIRS) {
+        for (const file of [en, zh]) {
+          const url = `${PAGES_BASE}/${path.basename(file)}`.replace('index.html', '');
+          const block = blocks.find(b => b.includes(`<loc>${url}</loc>`));
+          expect(block, `sitemap 缺少 ${url}`).toBeTruthy();
+          for (const lang of ['en', 'zh', 'x-default']) {
+            expect(block, `${url} 的 sitemap 标注缺少 hreflang="${lang}"`).toContain(`hreflang="${lang}"`);
+          }
+        }
+      }
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 搜索结果可见宽度与结构化数据有效性
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('docs/ 页面的 SERP 预算与 JSON-LD', () => {
+    const SITE_PAGES = ['index.html', 'zh.html', 'alternatives.html', 'zh-alternatives.html', 'privacy.html'];
+
+    /**
+     * Google 按可见宽度截断摘要，而不是按码点：CJK 与全角标点约占 2 个单位。
+     * 与 `_locales` 的 75/132 码点硬校验是两套预算，不能互相替代。
+     */
+    const displayWidth = (text: string): number =>
+      [...text].reduce(
+        (n, ch) =>
+          n +
+          (/[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(ch)
+            ? 2
+            : 1),
+        0,
+      );
+
+    /** 还原成搜索结果里真正显示的样子：去标签、解实体、并行走空白。 */
+    const visible = (text: string): string =>
+      text
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&mdash;/g, '—')
+        .replace(/&ndash;/g, '–')
+        .replace(/&middot;/g, '·')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&#\d+;|&#x[0-9a-fA-F]+;/g, '0')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    /** 取 `<meta>` 的 content，兼容 `name=`（description）与 `property=`（og:type）两种写法。 */
+    const metaContent = (file: string, key: string): string =>
+      [...read(`docs/${file}`).matchAll(/<meta\b[^>]*>/g)]
+        .map(m => m[0])
+        .find(tag => tag.includes(`="${key}"`))
+        ?.match(/content="([^"]*)"/)?.[1] ?? '';
+
+    /** 统计条里 `<b>` 的数字与 `<span>` 的说明文字。 */
+    const stats = (file: string): Array<{ value: string; label: string }> =>
+      [...read(file).matchAll(/<div class="stat"><b>([^<]+)<\/b><span>([^<]*)<\/span>/g)].map(m => ({
+        value: m[1],
+        label: m[2],
+      }));
+
+    it.each(SITE_PAGES)('%s 的 title 与 description 没超出搜索结果可见宽度', file => {
+      const title = visible(read(`docs/${file}`).match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '');
+      expect(title, `${file} 缺少 <title>`).not.toBe('');
+      expect(
+        displayWidth(title),
+        `${file} 的 title 宽 ${displayWidth(title)} 单位，>60 会在搜索结果被截断`,
+      ).toBeLessThanOrEqual(60);
+
+      const description = visible(metaContent(file, 'description'));
+      expect(description, `${file} 缺少 meta description`).not.toBe('');
+      expect(
+        displayWidth(description),
+        `${file} 的 description 宽 ${displayWidth(description)} 单位，>160 会被截断`,
+      ).toBeLessThanOrEqual(160);
+    });
+
+    it.each(SITE_PAGES)('%s 的每段 JSON-LD 可解析，且 og:type 有对应节点', file => {
+      const html = read(`docs/${file}`);
+      const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+      expect(blocks.length, `${file} 应带结构化数据`).toBeGreaterThan(0);
+
+      const broken: string[] = [];
+      const types: string[] = [];
+      for (const [index, block] of blocks.entries()) {
+        try {
+          const parsed = JSON.parse(block[1]) as { '@graph'?: Array<{ '@type'?: unknown }>; '@type'?: unknown };
+          for (const node of parsed['@graph'] ?? [parsed]) {
+            if (typeof node['@type'] === 'string') types.push(node['@type']);
+          }
+        } catch (error) {
+          broken.push(`#${index + 1}: ${(error as Error).message}`);
+        }
+      }
+      expect(broken, `${file} 的 JSON-LD 解析失败：页面上看不出来，但富媒体结果会全部失效`).toEqual([]);
+
+      if (metaContent(file, 'og:type') === 'article') {
+        expect(types, `${file} 声明 og:type=article 却没有 Article 节点`).toContain('Article');
+      }
+    });
+
+    /**
+     * 统计条是页面读者看到的第一个数字，README 的能力清单是他真正会去核对的地方；
+     * 两边各自数过一遍就已经错过一次（11 对 12），所以只允许它们引用同一个来源。
+     */
+    it('落地页统计条的「每规则能力数」与中英 README 的能力清单条目数一致', () => {
+      const capabilityBullets = (file: string): number => {
+        const list = read(file).match(/### (?:Request proxy & modification|代理与请求改写)\n([\s\S]*?)\n### /)?.[1];
+        expect(list, `${file} 缺少「请求代理与改写」能力清单`).toBeTruthy();
+        return [...(list ?? '').matchAll(/^- \*\*/gm)].length;
+      };
+
+      const en = capabilityBullets('README.md');
+      expect(en, 'README 能力清单为空').toBeGreaterThan(0);
+      expect(capabilityBullets('README.zh-CN.md'), '中英 README 能力清单条目数必须一致').toBe(en);
+
+      for (const [file, label] of [
+        ['docs/index.html', /per-rule capabilities/],
+        ['docs/zh.html', /规则能力/],
+      ] as const) {
+        const shown = stats(file).find(s => label.test(s.label))?.value;
+        expect(shown, `${file} 统计条缺少能力数一项`).toBe(String(en));
+      }
+    });
+
+    it.each(BILINGUAL_PAIRS)('%s / %s 的统计条数字逐项相同（数字与语言无关）', (en, zh) => {
+      const [enStats, zhStats] = [stats(en), stats(zh)];
+      expect(enStats.length, `${en} 应有统计条`).toBeGreaterThan(0);
+      expect(
+        zhStats.map(s => s.value),
+        `${zh} 与 ${en} 的统计条数字不一致`,
+      ).toEqual(enStats.map(s => s.value));
     });
   });
 

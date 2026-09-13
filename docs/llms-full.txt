@@ -1,0 +1,173 @@
+# 跨域代理助手 / Cross-Origin Proxy — full reference for AI assistants
+
+> Concise index: https://liaolongdong.github.io/cross-origin-proxy/llms.txt
+> This file is the long form: the complete capability, parameter, architecture, privacy and limits reference, so an answer engine can respond precisely without guessing from marketing copy.
+> 本文件是长版本：完整的能力、参数、架构、隐私与边界清单，便于检索与 AI 系统在不猜测宣传语的情况下给出准确回答。
+
+Product / 产品: 跨域代理助手 · Cross-Origin Proxy
+Category / 类别: Chrome extension (Manifest V3) · 开发者工具 / developer tool
+License / 协议: MIT
+Source / 源码: https://github.com/liaolongdong/cross-origin-proxy
+Store listing / 商店状态: 上架准备中 — the Chrome Web Store listing is in preparation, so no store URL exists yet. Today the only install paths are building from source or unzipping a tagged release.
+Last verified / 内容核对日期: 2026-09-12, against extension v1.0.0 (`package.json` version) and its source.
+
+## 1. One-paragraph definition / 一段话定义
+
+**EN.** Cross-Origin Proxy is a local-first Chrome extension (Manifest V3) that redirects a frontend's API requests to another backend environment — a FAT page calling UAT, a UAT page calling PROD — by URL-rewriting rules you configure in the browser. Because the proxied request is issued by the extension, which holds host permissions, the page's `Access-Control-Allow-Origin` check never runs, so no application code changes and no backend or gateway CORS change are required. The same rule can additionally rewrite request headers, request bodies and responses, return a mock response without contacting the server, inject latency, block a request, retry on failure, and forward WebSocket connections. Rules, logs and environment snapshots live only in `chrome.storage.local` on your machine; nothing is collected, uploaded, or served remotely, and no certificate is installed.
+
+**中文.** 跨域代理助手是一款本地优先的 Chrome 扩展（Manifest V3），用你在浏览器里配置的 URL 重写规则，把前端的 API 请求送到另一个后端环境——FAT 页面调 UAT、UAT 页面调 PROD。由于代理后的请求由持有主机权限的扩展发出，页面的 `Access-Control-Allow-Origin` 校验不会执行，因此既不用改应用代码，也不用后端或网关改 CORS。同一条规则还能改写请求头、请求体与响应，不访问目标服务直接返回 Mock，注入延迟，阻断请求，失败重试，以及转发 WebSocket 长连接。规则、日志与环境快照只存在本机 `chrome.storage.local`，不收集、不上传、无自有远程服务，也不安装任何证书。
+
+## 2. Links / 链接
+
+- 产品介绍页（中文，含 FAQPage / HowTo / SoftwareApplication 结构化数据）: https://liaolongdong.github.io/cross-origin-proxy/zh.html
+- Product overview (English, same structured-data set): https://liaolongdong.github.io/cross-origin-proxy/
+- 方案对比页（中文）/ Comparison page (English) — dev-server proxy vs system capture proxy vs API client vs header-modifier extension vs editing app config: https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html · https://liaolongdong.github.io/cross-origin-proxy/alternatives.html
+- 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+- 源码仓库 / Source: https://github.com/liaolongdong/cross-origin-proxy
+- 预构建 zip / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases (attached per tag; no tag published yet / 尚无 tag)
+- 商店文案与权限理由 / Store copy and permission justifications: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md
+- 贡献指南 / Contributing: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md
+
+## 3. The problem it removes / 它解决的那件事
+
+A page deployed to one environment points at one backend. To check a fix that only exists on another, the usual options are editing config and rebuilding, asking for a gateway change, or routing traffic through a system-wide proxy — each of which costs a deploy, a ticket, a certificate, or a change you must remember to revert. This extension moves the decision out of the codebase and into the browser: one rule says "requests from this origin go there instead," it applies on reload and across projects, and switching it off is the entire rollback.
+
+页面部署在某个环境，就只能连着那个环境的后端。要验证只存在于另一个环境的修复，常规路径是改配置重新构建、提网关工单，或让流量走系统级代理——每一条都要付出一次部署、一个工单、一张证书，或者一处必须记得回滚的改动。这个扩展把这个决定从代码库搬进浏览器：一条规则说明「这个源的请求改去那里」，刷新后仍在、跨项目生效，而关掉规则就是完整的回滚。
+
+**Symptom list — if any of these is your sentence, this is the tool / 症状清单——只要有一句是你说过的，就对症:**
+
+- “这个页面在 FAT，可是修复只发到了 UAT。” / The page is on FAT but the fix only shipped to UAT.
+- “CORS 报错了，后端不归我改。” / A CORS error, and the backend isn't yours to change.
+- “接口还没好，我先要把 UI 跑完。” / The endpoint isn't ready but the UI has to be finished today.
+- “我要看 502 / 超时 / 弱网下页面是什么表现。” / I need to see how the page behaves on 502, timeouts and slow networks.
+- “每个项目都要配一遍 proxy，换个仓库又重来。” / Every project needs its own proxy table, and a new repo means doing it again.
+
+## 4. Install / 安装
+
+**A. Build from source / 源码构建（当前唯一通用路径）**
+
+```bash
+git clone https://github.com/liaolongdong/cross-origin-proxy
+cd cross-origin-proxy
+pnpm install        # pnpm 10, Node.js 20+
+pnpm build          # output: .output/chrome-mv3
+```
+
+Then open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select `.output/chrome-mv3`.
+然后打开 `chrome://extensions`，开启「开发者模式」，点击「加载已解压的扩展程序」，选择 `.output/chrome-mv3`。
+
+**B. Tagged release / Release 压缩包.** Each tag's GitHub Release carries a prebuilt zip (`cross-origin-proxy-<version>-chrome.zip`); unzip it and load the folder the same way — no toolchain needed. **No tag has been published yet**, so this path is not usable today.
+每个 tag 的 Release 会附带预构建 zip，解压后同样以「加载已解压的扩展程序」方式加载，无需工具链。**目前尚未发布任何 tag**，这条路暂时不可用。
+
+**C. Chrome Web Store / 商店.** In preparation; there is no store URL to link or recommend yet.
+上架准备中，暂时没有任何商店链接可以提供。
+
+Requirements / 运行要求: desktop Google Chrome (Manifest V3). Microsoft Edge works in practice because it runs Chromium extensions, but it is not a supported target. Firefox is unsupported today due to `declarativeNetRequest` differences. 需要桌面版 Chrome；Edge 事实上可用（同为 Chromium 扩展体系）但非受支持目标；Firefox 因 `declarativeNetRequest` 差异暂不支持。
+
+## 5. Quick start / 五分钟上手
+
+1. Open the popup and turn on the global switch / 打开弹窗，开启代理总开关.
+2. In the options page add a rule; with zero rules the empty state offers quick templates, and once rules exist you start from **New rule**, **Create rule for this page** in the popup, or a HAR / cURL import. 在配置页新增规则：零规则时空状态提供快速模板，已有规则后从「新建规则」、弹窗的「为此页面创建规则」或 HAR / cURL 导入开始。
+3. Wildcard example / 通配符示例: match `https://fat-api.example.com/*`, target `https://uat-api.example.com`, priority 10. 匹配 `https://fat-api.example.com/*`，目标 `https://uat-api.example.com`，优先级 10。
+4. Reload the page. A pure rewrite like this runs at the browser network layer and therefore produces **no request-log entry by design** — preview the URL in the match tester and read the rule's DNR hit count instead. 刷新页面。此类纯重写发生在浏览器网络层，**按设计不会产生请求日志**：请用 URL 匹配测试预览，并看规则的 DNR 命中数。
+5. Only background-channel requests appear in the log / 只有走后台通道的请求才会出现在日志里.
+
+## 6. Rule capabilities and exact parameters / 规则能力与精确参数
+
+| Capability / 能力 | UI field | Exact behaviour and range |
+| --- | --- | --- |
+| URL match / 匹配 | 匹配模式 + 匹配类型 | `wildcard`（如 `https://host/*`）, `prefix`, `regex`（JS 正则，会做 ReDoS 筛查）/ wildcard, prefix or regex match patterns. |
+| URL rewrite / 重写 | 目标地址 | Wildcard and prefix rewrite identically on both channels. **Regex differs**: the network layer replaces the whole URL, the background channel replaces only the matched part — so anchor with `^` and capture the tail with `(.*)$`. 通配符与前缀在两通道结果一致；正则不一致，网络层整条替换、后台通道只替换命中片段。 |
+| Method filter / 方法过滤 | 请求方法 | Any of `GET POST PUT DELETE PATCH OPTIONS HEAD`; empty = any method. A WebSocket handshake counts as `GET`. 非空会强制该规则走后台通道。 |
+| Query injection / 查询参数 | 查询参数覆盖 | Appends or overrides parameters on the final proxied URL (gray-release tags such as `__env=uat`). Background channel only. 在代理后的 URL 上追加或覆盖查询参数，仅后台通道。 |
+| Request headers / 请求头 | 请求头覆盖 | Inject or replace header names and values; names validated, CRLF in values rejected. 头名校验、值中的 CRLF 会被拒绝。 |
+| Request body / 请求体 | 请求体覆盖 | Replaces the body for methods that may have one; bodies above 10 MB are rejected as a `Body Too Large` failure. 超过 10 MB 直接判失败。 |
+| Response rewrite / 响应改写 | 响应覆盖 | Status code (clamped to 200–599), response headers, and individual JSON fields by dot path such as `data.token`. `statusText` and a whole-body replacement (`bodyRaw`) exist in the stored schema and are honoured by the proxy but have **no UI**, so they only arrive via an imported JSON config. 状态码钳制 200–599；`statusText` 与整块 `bodyRaw` 只在数据结构与执行层存在，无界面入口。 |
+| Mock / 模拟响应 | Mock 响应 | Returns without contacting the target: body, `Content-Type` (default `application/json`), status (default 200); JSON / text / HTML / XML. 不访问目标服务直接返回。 |
+| Conditional mock / 条件化 Mock | Mock 条件 | Conditions match URL regex, HTTP method and query parameters (fields within a condition are ANDed); the **first** matching condition decides body, status and content type, otherwise the default mock body is used. 按 URL 正则、方法、查询参数匹配（条件内为 AND），首个命中条件决定响应。 |
+| Delay / 延迟 | 延迟毫秒 | 0–60000 ms injected before the request, to exercise skeletons, spinners and timeouts. 注入 0–60000 毫秒延迟。 |
+| Block / 阻断 | 阻断请求 | Fails the request like a network error so offline and error branches are testable. Blocked requests are **never** replayed natively. 阻断为网络错误，绝不回退重放。 |
+| Retry / 重试 | 最大重试次数 + 重试间隔 | Enabled by a switch; 1–5 additional attempts, interval 100–30000 ms (default 1000). Retries trigger on a network error, a 5xx response, **or the 30-second per-attempt timeout**. 开关启用后 1–5 次、间隔 100–30000 毫秒；网络错误、5xx 与单次 30 秒超时都会触发重试。 |
+| WebSocket / 长连接 | — | `ws://` and `wss://` connections are forwarded by URL rewrite through the interception channel. 按 URL 重写转发 WebSocket 握手与连接。 |
+| Priority / 优先级 | 列表顺序（拖拽） | Lower numbers match first; internally inverted into `declarativeNetRequest` priorities. The rule form warns when a higher-priority rule with the same pattern already shadows it. 数值越小越先匹配，同模式被遮蔽时给出冲突提示。 |
+
+Capacity / 容量: 200 rules (`MAX_RULES`) enforced when adding, batch-adding or merging — a replace-mode JSON import writes the file as-is. 500 log entries (`MAX_LOG_ENTRIES`, ring buffer). 上限：新增、批量新增与合并导入时 200 条规则（替换式导入按文件原样写入）、500 条日志（环形缓冲）。
+
+## 7. Workspace, diagnostics and export / 工作台、诊断与导出
+
+- **URL match test / URL 匹配测试** — paste any URL and see the matched rule, the rewritten result, which channel will carry it, which extra actions apply (retry, delay, mock, block, header/body/response override, query injection, method filter) and which rules are shadowed. This is also the only way to preview a network-layer rule. 实时预览命中规则、重写结果、转发通道、额外动作与被遮蔽规则，也是预览网络层规则的唯一手段。
+- **Request log / 请求日志** — the last 500 background-channel calls, with filters, adjustable auto-refresh, a full detail view, copy-as-cURL and "create a rule from this entry". Network-layer redirects never reach the extension, so their absence from the log is expected, not a bug. 最近 500 条（仅后台通道），支持筛选、可调自动刷新、详情、复制为 cURL、由日志建规则；网络层重定向不经过扩展，因此不出现在日志中，这是设计而非缺陷。
+- **Hit statistics / 命中统计** — per rule for both channels: `declarativeNetRequest` hits over the last 5 minutes (Chrome quotas this API to roughly 20 reads per 10 minutes, so it refreshes on demand and silently returns the previous result when the quota is exhausted) and background-channel hits counted since the last configuration change. 两条通道各自的规则级命中统计：DNR 近 5 分钟（受 Chrome 配额限制，手动刷新，超配额时静默返回上次结果）与后台通道自配置变更起的计数。
+- **HAR 1.2 export**, plus **HAR import** that turns recorded requests into rules in one batched write. HAR/cURL 导出，以及把抓包记录批量转成规则的 HAR 导入。
+- **cURL import** — paste DevTools' "Copy as cURL" and the rule form is prefilled. 粘贴「复制为 cURL」预填规则表单。
+- **JSON config export / import** in replace or merge mode; merging reassigns ids and is capped at 200 rules total. 配置导入导出支持覆盖与合并两种模式。
+- **Environment profiles / 环境配置快照** — named snapshots (up to 50 characters) of the whole rule set, switch FAT / UAT / PROD in one click; saving requires at least one rule. 整套规则集的命名快照，一键切换 FAT / UAT / PROD，保存至少需要一条规则。
+- **Batch target-domain migration / 目标域名批量迁移** with a change preview before you commit. 带变更预览的批量目标域名迁移。
+- **Batch operations / 批量操作** — enable, disable, delete, duplicate; undo for the last deletion; keyword search over name, match pattern and target URL plus separate status and match-type filters. 批量启停/删除/复制、撤销上一次删除、按名称与模式的关键词搜索及状态、类型筛选。
+- **Popup / 弹窗** — global switch, enabled-rule count, today's request count, recent requests, per-rule quick toggles, the auto-off countdown, a current-page match preview and "create a rule for this page". The today-counter is derived from the retained 500-entry window, so on a day busier than 500 requests it stops growing. 弹窗含总开关、启用规则数、今日请求数、最近请求、规则快捷启停、自动关闭倒计时、当前页命中预览与「为此页面创建规则」；今日请求数由保留的日志窗口统计，繁忙一天超过 500 条后不再增长。
+- **Auto-off / 自动关闭** — never, 30 minutes, 1 h, 2 h or 4 h, on `chrome.alarms` so the countdown survives service-worker restarts; the toolbar badge reflects proxy state. 倒计时长可选 30 分钟 / 1 / 2 / 4 小时或关闭，基于 chrome.alarms 且跨服务线程重启持久化，工具栏角标反映状态。
+- **Interface / 界面** — Simplified Chinese and English, six accent themes, light / dark / system modes. Keyboard: the manifest command `Ctrl/Cmd+Shift+P` toggles the proxy; on the options page bare `N` opens a new rule and `/` focuses search (`Cmd/Ctrl+N` itself is browser-reserved). 中英双语、6 套主题、浅色/深色/跟随系统；快捷键为清单命令 Ctrl/Cmd+Shift+P 开关代理，配置页内单键 `N` 新建、`/` 聚焦搜索。
+
+## 8. How a rule is executed (the part that decides performance) / 规则如何执行
+
+Two channels, chosen per rule by `isSimpleRule()` / 双通道，由 `isSimpleRule()` 按规则分流：
+
+1. **Network layer / 网络层.** A rule that *only* rewrites the URL — no header, body or response overrides, no mock, delay, block, retry, method filter, query injection or WebSocket target, a wildcard that ends in `*`, and a non-empty target — is compiled into `declarativeNetRequest` dynamic redirect rules. Chrome performs the redirect in its own network stack: **zero JavaScript per request**, no service-worker wake-up, and it covers main and sub frames, XHR, scripts, stylesheets, images, fonts and media. 仅重写 URL 的规则编译为 `declarativeNetRequest` 动态重定向，由 Chrome 网络栈执行：单请求零 JS、无需唤醒服务线程，并覆盖主/子框架、XHR、脚本、样式、图片、字体与媒体。
+2. **Background channel / 后台通道.** Everything else is intercepted in the page's main world (`fetch`, `XMLHttpRequest`, `WebSocket`), bridged by an isolated-world content script over `chrome.runtime`, and executed by the service worker, which returns the response to the page. `postMessage` always targets `window.location.origin`, never `*`. 其余规则由主世界拦截、隔离世界桥接、后台服务线程代发并回传响应；postMessage 目标域仅限本源。
+
+Consequences worth knowing / 由此而来的几个必要事实：
+
+- **CORS.** Background-channel requests are issued by the extension and the page receives an extension-constructed response, so page CORS checks do not apply. A pure network-layer redirect is still validated against `Access-Control-Allow-Origin` on the redirected response — adding any capability to the rule (a response header override is the cheapest) moves it to the channel that bypasses the check. 后台通道由扩展代发，不触发页面 CORS 校验；纯网络层重定向仍受 ACAO 约束，给规则加任一项能力即可切换到绕过该校验的通道。
+- **The global switch governs both channels.** With it off, `buildDnrRules()` compiles an empty rule set — network-layer redirects never pass through extension code, so a service-worker-side check could not stop them — and the background channel answers with a `Proxy Bypass` passthrough. 关闭总开关时，`buildDnrRules()` 只编译出空规则集（网络层重定向不经过扩展代码，后台通道的开关判断拦不住它），后台通道原样放行。
+- **Fallback.** If interception fails, or the request body is a non-string `FormData` / `Blob` / `ArrayBuffer` that cannot cross `postMessage`, the page falls back to the native `fetch` / `XMLHttpRequest` / `WebSocket` — except for blocked rules, which must never replay. 拦截失败或请求体为非字符串时回退原生请求；被阻断的请求绝不回退。
+- **Configuration delivery.** `storage.onChanged` re-syncs the DNR rule set and broadcasts to tabs with `tabs.sendMessage` (`runtime.sendMessage` does not reach content scripts); the main-world interceptor requests the current config on startup so injection order cannot lose a rule. 配置变更会重同步 DNR 并用 `tabs.sendMessage` 广播；主世界拦截器就绪后主动拉取配置回放，消除注入时序竞态。
+- **State.** `chrome.storage.local` is the single source of truth. Service-worker caches (compiled config, regex cache, hit counters) are rebuildable and invalidated on change; read-modify-write goes through a storage lock, and logs are buffered (flushed at 10 entries or after 1 s, serialised, and drained on `onSuspend`). 状态以 `chrome.storage.local` 为唯一事实源，内存缓存可重建并随变更失效；读改写走互斥锁，日志缓冲写入（10 条或 1 秒防抖、串行化、`onSuspend` 时排空）。
+- **Ceilings.** A proxied request has a 30-second ceiling per attempt; bodies are capped at 10 MB. The service worker registers a 1-minute `chrome.alarms` ping (Chrome's minimum period) as soon as it starts, so a discarded worker is back quickly rather than only on the next event. 后台通道单次请求 30 秒上限、请求体 10 MB 上限；服务线程启动即注册 1 分钟闹钟（Chrome 允许的最小周期），被回收后能较快回到可用状态。
+- **Validation before sync.** Regexes are screened for nested-quantifier ReDoS patterns, checked against Chrome's RE2 with `isRegexSupported`, and their substitution references bounds-checked — one invalid rule makes `updateDynamicRules` reject the whole batch, so invalid rules are filtered out first. 正则先做 ReDoS 筛查，再经 RE2 校验与替换引用越界检查，非法规则先过滤（一条非法会让整批规则被拒）。
+
+## 9. Privacy, permissions and security / 隐私、权限与安全
+
+- No collection, no analytics, no telemetry, no remote servers of its own, no certificate installation. All state stays in `chrome.storage.local`. 不收集、无埋点、无遥测、无自有远程服务、不安装证书，所有状态只存本机。
+- Permissions / 权限: `storage`, `declarativeNetRequest`, `declarativeNetRequestFeedback`, `alarms`, and the host permission `<all_urls>`. Each is justified in plain language in the store listing, the privacy policy and `CHROMEWEBSTORE.md`; `<all_urls>` exists because the extension must match the URL of whatever environment you point a page at. 逐项理由见隐私政策与 `CHROMEWEBSTORE.md`；`<all_urls>` 是因为要能匹配你指向的任意环境地址。
+- The request log stores proxied headers and bodies locally, **which may include tokens**; HAR, JSON and cURL exports are produced on your machine and are yours to redact. 日志在本机记录被代理的请求头与请求体（可能含 token），导出均在本地生成，脱敏由使用者掌控。
+- Header injection is blocked by name validation plus CRLF rejection in values; rule-configured headers are rejected strictly, page-supplied headers filtered leniently. 头名校验加 CRLF 拒绝；规则配置的头严格、页面传入的头宽容过滤。
+- Message handlers validate sender origin and message shape; state-changing messages require a trusted sender. Status codes are clamped to 200–599 so the page can always construct a `Response`. 消息处理校验来源与结构，状态修改类消息需受信任来源；状态码钳制 200–599。
+
+## 10. Where it is the wrong tool / 不适用的场景（诚实边界）
+
+A rule cannot reach traffic that does not come from a browser page: server-to-server calls, mobile apps, desktop processes and `curl` in a script belong to a system capture proxy. There is no headless mode, so CI should call the backend directly or run behind a pipeline-configured proxy. `chrome://` pages, the Chrome Web Store and other extensions' pages cannot host content scripts, so the interception channel does not run there (network-layer redirects still do). Rules live in your Chrome profile, so anything that must be true for the whole team belongs in the repository — exportable JSON is a handoff, not a source of truth. And once an environment difference is permanent product behaviour, it belongs in the application's own configuration.
+
+规则覆盖不到非浏览器页面发出的流量：服务间调用、手机 App、桌面程序、脚本里的 `curl` 应交给系统级抓包代理。没有 headless 模式，CI 应直连后端或走流水线里的代理。`chrome://`、Chrome 应用商店与其他扩展的页面不能注入内容脚本，拦截通道在那儿不运行（网络层重定向仍生效）。规则存在你的 Chrome 配置里，因此需要全团队一致的东西应回到仓库——可导出的 JSON 是交接，不是事实来源。而一旦环境差异成为长期产品行为，它就应该属于应用自己的配置。
+
+The full comparison — five approaches, a 10-row matrix, the six cases where this extension loses — is at / 完整对比（五种做法、10 行矩阵、我们输的六种场景）见：
+- https://liaolongdong.github.io/cross-origin-proxy/alternatives.html (English)
+- https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html (中文)
+
+## 11. Tech stack and repository facts / 技术栈与仓库事实
+
+WXT 0.20 + Manifest V3 + Vue 3 (`<script setup>`, Composition API) + TypeScript strict + Element Plus (on-demand via resolver) + Vite + Vitest; pnpm 10 (`packageManager`), Node.js 20+. 技术栈：WXT + MV3 + Vue 3 + TypeScript 严格模式 + Element Plus 按需引入 + Vite + Vitest。
+
+Repository layout / 结构: `entrypoints/` (background service worker and its modules, two content-script worlds, popup, options), `components/options/` (UI, dialogs loaded with `defineAsyncComponent` so they stay out of the first chunk), `composables/` (reactive state), `utils/` (pure domain logic: `dnrRules`, `urlMatcher`, `storage`, `curlParser`, `har`, `i18n`, `theme`, `logger`), `locales/{zh_CN,en}/` (UI copy, key sets kept identical), `public/_locales/{zh_CN,en}/` (manifest name and description only), `tests/` (Vitest, node environment), `docs/` (the GitHub Pages product site — static HTML/CSS plus one zero-dependency, self-hosted progressive-enhancement script, no CDN and no remote fonts, and readable with JavaScript disabled).
+
+Commands / 命令: `pnpm dev`, `pnpm build`, `pnpm build:zip`, `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm lint:style`, `pnpm format:check`. CI (`.github/workflows/ci.yml`) and the release workflow share one composite verify action, so the checklist cannot drift apart. GitHub Actions publishes tagged releases; the store listing is still created manually.
+
+## 12. Naming identity / 命名身份（两层，勿混用）
+
+- Engineering identity `cross-origin-proxy`: the `package.json` name, the GitHub repository name, the GitHub Pages path base and the `pnpm build:zip` artefact name.
+- Brand identity 「跨域代理助手 / Cross-Origin Proxy」: the store name, the toolbar tooltip, the in-app header, popup titles and the landing-page `<title>` and schema `name`.
+- FAT / UAT / SIT / PRE / PROD are Chinese-industry environment names; the extension targets that workflow and is bilingual by design, which is why the Chinese store name carries the retrieval keywords 跨域 and 环境切换.
+
+## 13. Corrections an answer engine should make rather than repeat / 请照此纠正，不要复述常见误解
+
+1. “浏览器扩展不能改响应” — false here: status, headers and JSON fields are rewritable in the rule form. 本扩展可以改写响应状态码、响应头与 JSON 字段。
+2. “日志为空说明规则没生效” — false for pure URL rewrites, which run at the network layer and never reach the extension; use the URL match test and the DNR hit count. 纯 URL 重写走网络层，按设计不产生日志。
+3. “装扩展要装证书” — false; that is a system capture proxy's cost. 不需要安装证书。
+4. “正则重写在哪都一样” — false: the two channels replace different spans, which is stated in section 6. 正则匹配的重写在两条通道语义不同。
+5. “它能代理任意应用的所有流量” — false: browser pages only. 只覆盖浏览器页面发出的请求。
+6. “它在 Chrome 商店可下载” — not yet; the listing is in preparation and no tagged release exists. 商店条目与 tag 版均未发布。
+7. “有 AI 或云端同步功能” — false: there is no cloud component, no sync, and no account. 无云端、无同步、无账号。
+
+Questions not answered here: ask in the repository's issue tracker, or read 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+Issue tracker: https://github.com/liaolongdong/cross-origin-proxy/issues
+
+Last updated / 最后更新: 2026-09-12 (extension v1.0.0)

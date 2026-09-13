@@ -40,7 +40,7 @@ describe('B1: 空目标规则不得进入 DNR 通道', () => {
   });
 
   it('buildDnrRules 不再为空目标规则生成非法重定向', () => {
-    const { rules } = buildDnrRules([makeRule({ targetUrl: '' }), makeRule({ id: 'r2', name: 'ok' })]);
+    const { rules } = buildDnrRules([makeRule({ targetUrl: '' }), makeRule({ id: 'r2', name: 'ok' })], true);
     expect(rules).toHaveLength(1);
     // 生成的唯一规则来自有效目标，替换串为绝对地址
     expect(rules[0].action.redirect?.regexSubstitution).toContain('https://b.com');

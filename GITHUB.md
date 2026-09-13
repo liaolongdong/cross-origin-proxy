@@ -2,7 +2,7 @@
 
 > 本文是**仓库在 GitHub 侧的展示信息**（About / website / topics / 社交预览 / Pages）的唯一操作清单，与商店侧的 `CHROMEWEBSTORE.md` 互补。
 >
-> 这些字段全部位于 GitHub 仓库设置里，只能由仓库所有者在 UI 手动填写——本仓库刻意不写需要 Personal Access Token 的脚本，也不建会改仓库设置的工作流。填完之后用 §7 的命令自检。
+> 这些字段全部位于 GitHub 仓库设置里，只有仓库所有者能改。本仓库刻意**不**收录自动改设置的脚本、也**不**建会动仓库设置的工作流；§3.1 给的是一条你自愿手动跑的 `gh` 命令，值仍然从本文读，不另建事实源。填完之后用 §7 的命令自检。
 >
 > 本文位于仓库根目录，不在 `docs/`（Pages 站点根）内，也不会被打进扩展包。
 
@@ -15,6 +15,21 @@
 | Topics              | GitHub 话题页（`/topics/<slug>`）与相关推荐                 | 话题页是长期被动流量来源，空 = 完全放弃                 |
 | Social preview      | 所有聊天工具、Twitter/X、Slack、掘金/知乎链接卡（1280×640） | 分享时只显示灰底仓库名，点击率显著下降                  |
 | Pages Source        | 产品站与隐私政策的托管开关                                  | `privacy.html` 打不开是 Chrome 商店首审最常见的拒审理由 |
+
+## 0.1 当前实测状态（2026-09-12，用 §7 的命令可复核）
+
+| 字段               | 实测值                                                       | 结论                                            |
+| ------------------ | ------------------------------------------------------------ | ----------------------------------------------- |
+| `description`      | `null`                                                       | §1 未填                                         |
+| `homepage`         | `null`                                                       | §2 未填                                         |
+| topics             | `[]`（0 个）                                                 | §3 未填                                         |
+| `has_pages`        | `true`；`/`、`/zh.html`、`/privacy.html`、`/llms.txt` 均 200 | §5 已经切到 GitHub Actions 源，Pages 链路是通的 |
+| `has_wiki`         | `true`                                                       | 建议关闭（理由见 §8），需你确认                 |
+| `v*` tag / Release | 0 个 tag、0 个 Release                                       | README 的 `Release` 徽章与「方式 A」都还是空态  |
+| `stargazers_count` | 1                                                            | —                                               |
+| Social preview     | API 读不出来                                                 | 只能在设置页目测                                |
+
+**§1 / §2 / §3 三项全空，而它们正是 GitHub 搜索摘要、Google 仓库卡与话题页的输入。**Pages 侧已经没有瓶颈了，剩下的曝光量差距全部集中在这些一次性可填完的元数据上。本文新增的对比页与 `llms-full.txt` 在推上 `main` 并跑完 `deploy-pages` 之前会 404，属预期。
 
 ## 1. About → Description
 
@@ -38,7 +53,7 @@ https://liaolongdong.github.io/cross-origin-proxy/
 
 与 `package.json` 的 `homepage`、`docs/sitemap.xml`、`docs/llms.txt`、`CHROMEWEBSTORE.md` 的 Homepage/隐私政策 URL 必须逐字符一致。**Pages 的路径基等于仓库名**，所以这个 URL 一旦提交给商店就不能再改仓库名——改仓库名会让隐私政策 404，需要重新提审。
 
-## 3. Topics（19 个，上限 20）
+## 3. Topics（20 个，已用满上限）
 
 在同一处 **About → ⚙️ → Topics** 逐个输入并回车（或粘贴后按空格分隔，GitHub 会自动切分）：
 
@@ -55,6 +70,7 @@ request-interceptor
 request-modification
 mock-api
 environment-switch
+debugging
 developer-tools
 devtools
 frontend
@@ -64,7 +80,33 @@ element-plus
 wxt
 ```
 
-分层理由：前 4 个决定"出现在哪些扩展类话题页"，`cross-origin` / `cors` / `api-proxy` 是有真实搜索量的意图词，`request-modification` / `mock-api` / `environment-switch` 覆盖用例词，后面 5 个（`typescript` / `vue3` / `element-plus` / `wxt` / `devtools`）走技术栈被检索的路径。`proxy` 与 `api-proxy` 都保留：前者流量大但语义泛（会跟 VPN 类仓库同框），后者意图精准。
+分层理由：前 4 个决定"出现在哪些扩展类话题页"，`cross-origin` / `cors` / `api-proxy` 是有真实搜索量的意图词，`request-modification` / `mock-api` / `environment-switch` / `debugging` 覆盖用例词，后面 5 个（`typescript` / `vue3` / `element-plus` / `wxt` / `devtools`）走技术栈被检索的路径。`proxy` 与 `api-proxy` 都保留：前者流量大但语义泛（会跟 VPN 类仓库同框），后者意图精准。
+
+20 个已经用满上限，日后再加词必须先删一个——删谁比加谁更值得想清楚。
+
+### 3.1 可选：用 `gh` 一次填完 §1–§3
+
+UI 逐字段粘贴当然也行。本机已 `gh auth login` 的话，下面这段把 §1 的描述、`package.json` 的 `homepage` 与 §3 的 topic 列表**从本文自身读出**再写回仓库，因此不存在第二份事实源——改本文即改仓库要填的值。
+
+```bash
+set -euo pipefail
+repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+
+desc=$(awk '/^## 1\./{f=1;next} /^## 2\./{f=0} f && /^Chrome extension:/' GITHUB.md)
+home=$(node -p "require('./package.json').homepage")
+jq -n --arg d "$desc" --arg h "$home" '{description:$d, homepage:$h}' \
+  | gh api -X PATCH "/repos/$repo" --input -
+
+awk '/^## 3\./{f=1} /^## 4\./{f=0} f && /^[a-z0-9][a-z0-9-]*$/' GITHUB.md \
+  | jq -R . | jq -s '{names:.}' \
+  | gh api -X PUT "/repos/$repo/topics" --input -
+```
+
+跑完用 §7 自检。三点约束：
+
+- 这是**你手动执行的一次性命令**，仓库不收录成脚本、也不建工作流去自动改设置——`description`/`homepage`/`topics` 会覆盖 GitHub 侧现值，自动化等于把展示信息交给 CI。
+- 抽 topics 依赖"§3 与 §4 之间只有那 20 行是纯 slug"。在本文里加别的代码块或纯小写行之前，先确认 awk 的输出仍是 20 行。
+- **§4 社交预览、§5 Pages 源、§6 私密漏洞报告没有可用 API**，只能在设置页点。`gh` 那条路只覆盖 §1–§3。
 
 ## 4. Social preview（1280×640）
 
@@ -102,9 +144,9 @@ pnpm assets:en
 
 ```bash
 # 产品站与隐私政策必须都是 200（商店提审前置条件）
-curl -s -o /dev/null -w 'home:    %{http_code}\n' https://liaolongdong.github.io/cross-origin-proxy/
-curl -s -o /dev/null -w 'zh:      %{http_code}\n' https://liaolongdong.github.io/cross-origin-proxy/zh.html
-curl -s -o /dev/null -w 'privacy: %{http_code}\n' https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+for p in "" zh.html privacy.html llms.txt llms-full.txt alternatives.html zh-alternatives.html; do
+  printf '%-22s %s\n' "${p:-/}" "$(curl -s -o /dev/null -w '%{http_code}' "https://liaolongdong.github.io/cross-origin-proxy/$p")"
+done
 
 # 仓库元数据是否已落库
 curl -s https://api.github.com/repos/liaolongdong/cross-origin-proxy \
@@ -112,19 +154,20 @@ curl -s https://api.github.com/repos/liaolongdong/cross-origin-proxy \
 
 # topics（GitHub 把它放在独立端点）
 curl -s -H "Accept: application/vnd.github.mercy-preview+json" \
-  https://api.github.com/repos/liaolongdong/cross-origin-proxy/topics | head -c 400
+  https://api.github.com/repos/liaolongdong/cross-origin-proxy/topics \
+  | jq '.names | length'
 ```
 
-期望：三个 200、`has_pages: true`、`description`/`homepage` 非 null、`topics` 含 19 项。
+期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 里前五个应为 200；`alternatives.html` 与 `zh-alternatives.html` 在 `docs/**` 推上 `main` 且 `deploy-pages` 跑完之前是 404，属预期而不是配置错。
 
 还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（因为还没有任何 Release），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。
 
 ## 8. 本文刻意没有做的事（需要时另行确认）
 
-| 项                        | 为什么先不做                                                          |
-| ------------------------- | --------------------------------------------------------------------- |
-| Discussions               | 反馈渠道已经是 `has_issues` + 商店 Support URL，开 Discussions 会分流 |
-| 分支保护 / required check | 单人仓库开了反而挡住自己的实验性推送，等有多人贡献再开                |
-| Dependabot                | 会自动开升级 PR；本仓库依赖升级需要连带跑 `pnpm build` 与商店文案守卫 |
-| Wiki（当前 `has_wiki`）   | 文档走 `README.md` / `AGENTS.md`，双份知识源必然漂移                  |
-| 用 PAT 脚本改这些设置     | 需要你把令牌交出来；清单化+自检命令的收益/风险比更划算                |
+| 项                            | 为什么先不做                                                                                                                                                                             |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Discussions                   | 反馈渠道已经是 `has_issues` + 商店 Support URL，开 Discussions 会分流                                                                                                                    |
+| 分支保护 / required check     | 单人仓库开了反而挡住自己的实验性推送，等有多人贡献再开                                                                                                                                   |
+| Dependabot                    | 会自动开升级 PR；本仓库依赖升级需要连带跑 `pnpm build` 与商店文案守卫                                                                                                                    |
+| Wiki（当前 `has_wiki: true`） | 文档走 `README.md` / `AGENTS.md`，双份知识源必然漂移。**建议关闭**，但它是仓库功能开关、且会连带改动 Security/Insights 等标签页布局，需你确认后再动（设置页 General → Features → Wikis） |
+| 把 §3.1 收录成脚本或工作流    | 展示信息会随 CI 被覆盖式重写；清单化 + 自检命令的收益/风险比更划算，命令只作为你本机的一次性手动操作存在                                                                                 |

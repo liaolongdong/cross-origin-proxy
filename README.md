@@ -47,13 +47,27 @@ Cross-environment debugging normally costs one of three things: a backend change
 
 Built with [WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite, on Manifest V3.
 
+### What makes it different
+
+| Advantage                                 | What it means while you debug                                                                                                                                   |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Zero JavaScript on the fast path          | Rules that only rewrite the URL compile to `declarativeNetRequest` redirects, so the browser's network stack does the work — no page-side hook runs per request |
+| Reads and rewrites HTTPS with no local CA | It runs inside the browser: no certificate to install, no proxy port to point DevTools at, no system-wide setting                                               |
+| Rewrites responses, not just destinations | Status code, response headers, or single JSON fields by dot path (`data.token`), plus mock bodies chosen by URL / method / query conditions                     |
+| Covers WebSocket                          | `ws://` and `wss://` connections are redirected by the same rule set that handles your HTTP calls                                                               |
+| Environments instead of one-off edits     | Named profiles snapshot the entire rule set for FAT / UAT / PROD, and an auto-off countdown stops the proxy before you forget it is on                          |
+| Nothing leaves the machine                | Rules, logs and profiles live in `chrome.storage.local`; no analytics, no telemetry, no account, no service of its own                                          |
+| Open source and bilingual                 | MIT licensed, and both the UI and the documentation ship in English and Chinese                                                                                 |
+
+The long version — this extension against dev-server proxies, capture proxies, API clients, header-modifier extensions and editing app config, including the six cases where it is the wrong tool — is on the product site: [English](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html) · [中文](https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html).
+
 ## Install
 
 Requires a recent desktop Google Chrome (Manifest V3). The Chrome Web Store listing is in preparation — until then, use one of these two paths.
 
 ### A. Prebuilt package (no toolchain needed)
 
-Download the zip from [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases), unzip it, then:
+The release workflow attaches a built zip to [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) on every `v*` tag; until the first tag exists, use path B below. Once there is a release: download the zip, unzip it, then
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode** (top right).
@@ -85,11 +99,11 @@ Either way, once it is installed: click the icon, turn on **Proxy Switch**, add 
    | Target URL    | Where matched requests are redirected                              |
    | Priority      | Lower number = matched first                                       |
 
-4. Reload the page. Requests matching an enabled rule are proxied; check **Request Logs** to confirm.
+4. Reload the page. Requests matching an enabled rule are proxied. A wildcard rewrite like this one runs in the network layer and therefore writes **no per-request log entry** — confirm it with the **URL match tester**, or with the DNR hit counts inside **Request Logs**.
 
 ## How it works
 
-Every enabled rule is classified once, on save. Rules that only rewrite the URL become `declarativeNetRequest` dynamic rules and are resolved by the browser's network stack — zero JavaScript per request. Everything richer runs through the background channel.
+Every enabled rule is classified from its own fields each time the rule set is synced — the classification is never stored on the rule. Rules that only rewrite the URL become `declarativeNetRequest` dynamic rules and are resolved by the browser's network stack — zero JavaScript per request. Everything richer runs through the background channel. **Proxy Switch** governs both channels: switching it off uninstalls the network-layer rules too, so nothing keeps redirecting once you think it is off.
 
 ```
 Page fetch / XHR / WebSocket
@@ -103,6 +117,8 @@ Page fetch / XHR / WebSocket
 ```
 
 A rule stops being "simple" as soon as it has any of: request header or body override, response override, mock, delay, block, retry, HTTP method filter, query parameter injection, a `ws://`/`wss://` target, a wildcard that does not end in `*`, or an empty target URL. Those conditions exist because the network layer genuinely cannot express them — see [utils/urlMatcher.ts](./utils/urlMatcher.ts).
+
+**Regex rules must cover the whole URL.** Wildcard and prefix rewrites mean the same thing on both channels. A regex does not: the background channel replaces only the part of the URL your pattern matched and leaves the rest in place, while the network layer replaces the entire URL with the substitution string. So `^https://fat\.example\.com/api/(.*)` targeting `https://uat.example.com/$1` behaves identically either way, but a partial pattern such as `^https://fat\.example\.com/api` keeps `/users` on the background channel and drops it on the network layer. Anchor with `^`, capture the tail with `(.*)$`, and the URL match tester will show you which channel a given URL lands on.
 
 **CORS, precisely.** Rules on the background channel are issued by the extension, which holds host permissions, and the page receives a response the extension constructed — page CORS checks do not apply. A pure network-layer redirect still gets `Access-Control-Allow-Origin` validated. If a target environment does not allow your origin, add any capability to the rule (a response header override is the cheapest) and it switches channels.
 
@@ -120,7 +136,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Conditional mock** — attach conditions (URL pattern, HTTP method, query params) and the first match decides the body, status and content type
 - **Request delay injection** — 0–60000 ms of artificial latency to exercise loading and timeout states
 - **Request blocking** — block matched requests entirely (network error) to test failure and offline fallback paths
-- **Retry on failure** — re-issue on a network error or a 5xx response, 0–5 attempts with a configurable interval
+- **Retry on failure** — a per-rule switch that adds 1–5 extra attempts after a network error, a 5xx response or the 30-second per-attempt timeout, spaced 100–30000 ms apart (default 1000)
 - **HTTP method filtering** — restrict a rule to GET/POST/PUT/…; empty means any method
 - **Query parameter injection** — append or override query params on the proxied URL (`__env=uat`, gray-release tags) without rewriting the whole URL
 - **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite, handled in the page interceptor
@@ -128,12 +144,12 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 ### Rule management
 
 - Add / edit / duplicate / delete via a visual form
-- **Quick templates** for the common shapes (wildcard API proxy, prefix path, auth header, header override) and **undo** immediately after a delete
+- **Quick templates** in the empty state, before you have any rules (wildcard API proxy, prefix path, auth header, header override), and **undo** immediately after a delete
 - **Drag-and-drop reordering** of priority (grab the ⠿ handle)
-- **Capability badges** on every rule: **H** headers · **B** body · **R** response · **M** mock · **D** delay · **X** block · **WS** WebSocket
+- **Capability badges** on every rule: **H** headers · **B** body · **R** response · **M** mock · **D** delay · **X** block · **Re** retry · **WS** WebSocket
 - Per-rule and batch enable / disable
 - **Batch migrate target URLs** — find/replace part of the target domain across selected rules, with a live change preview
-- Search and filter by name, pattern and status
+- Keyword search across name, pattern and target URL, plus filters by status and match type
 - **Conflict warning** when the rule being edited is shadowed by a higher-priority rule with the same pattern, so a rule that can never fire does not go unnoticed
 
 ### Logs & debugging
@@ -141,7 +157,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - Request log panel: method, status, duration, plus hit statistics for both channels — DNR over the last 5 minutes and service-worker hits since the last config change
 - Log detail viewer: full request/response headers and body, JSON auto-formatted
 - **Copy as cURL** on any log entry, and **create a rule** straight from a captured request
-- Filter by method, status, rule or URL keyword
+- Filter by method (GET / POST / PUT / DELETE), status class (2xx / 4xx / 5xx), rule or URL keyword
 - **URL match tester** in the header bar: type any URL (optionally with a method) to preview the matched rule, rewritten URL, forwarding channel and shadowed rules in real time
 
 ### Import, export, environments
@@ -156,7 +172,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 - Popup quick panel: global switch, today's stats, recent requests, auto-off countdown, **current-page hit preview**, and "Create rule for this page" prefilled from the active tab
 - English / 简体中文 UI, six themes with light / dark / system modes
-- Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy, <kbd>⌘</kbd>+<kbd>N</kbd> new rule, <kbd>/</kbd> focus search, <kbd>Esc</kbd> close
+- Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy (Chrome-level command), and on the options page <kbd>N</kbd> new rule, <kbd>/</kbd> or <kbd>⌘</kbd>+<kbd>F</kbd> focus search, <kbd>Esc</kbd> close the topmost dialog. <kbd>N</kbd> is a bare key, like Gmail — <kbd>⌘</kbd>+<kbd>N</kbd> is reserved by the browser and cannot be captured.
 
 ## Use cases
 
@@ -190,7 +206,9 @@ Content scripts run on all `http` / `https` pages and rules match on request URL
 <details>
 <summary><strong>Is any data sent anywhere?</strong></summary>
 
-No. Rules, logs, profiles and preferences stay in `chrome.storage.local`. There is no analytics, no telemetry and no remote service; the only network traffic is the API traffic you ask it to proxy. See the [privacy policy](https://liaolongdong.github.io/cross-origin-proxy/privacy.html).
+No. Rules, logs, profiles and preferences stay in `chrome.storage.local`. There is no analytics, no telemetry and no remote service; the only network traffic is the API traffic you ask it to proxy. See the [privacy policy](https://liaolongdong.github.io/cross-origin-proxy/privacy.html) (both languages on one page).
+
+One local caveat worth knowing: the request log stores the headers and bodies it proxies, which can include tokens. Nothing leaves the machine, but clear the log before sharing a HAR export or a screenshot.
 
 </details>
 
@@ -259,7 +277,7 @@ composables/            Reactive state and side effects
 utils/                  Framework-free domain logic: urlMatcher · dnrRules · storage · curlParser · har · i18n · theme …
 locales/                In-app UI strings (zh_CN / en, split into common/options/popup)
 public/_locales/        Manifest name and description only
-docs/                   GitHub Pages product site: index.html (en) · zh.html · privacy.html · llms.txt
+docs/                   GitHub Pages product site: index.html (en) · zh.html · alternatives.html · zh-alternatives.html · privacy.html · llms.txt · llms-full.txt
 .github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR template
 tests/                  Vitest suites (node environment)
 ```
@@ -309,5 +327,9 @@ Small fixes are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for the three
 [![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=Star&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 &nbsp;
 [![Product page](https://img.shields.io/badge/Product_page-GitHub_Pages-409eff?style=for-the-badge&logo=githubpages&logoColor=white)](https://liaolongdong.github.io/cross-origin-proxy/)
+
+<br/>
+
+Product site: [English](https://liaolongdong.github.io/cross-origin-proxy/) · [中文](https://liaolongdong.github.io/cross-origin-proxy/zh.html) · [Comparison](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html) · [Privacy policy](https://liaolongdong.github.io/cross-origin-proxy/privacy.html) · machine-readable: [llms.txt](https://liaolongdong.github.io/cross-origin-proxy/llms.txt) · [llms-full.txt](https://liaolongdong.github.io/cross-origin-proxy/llms-full.txt)
 
 </div>

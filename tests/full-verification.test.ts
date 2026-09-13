@@ -711,9 +711,20 @@ describe('[Feature 5] Duplicate rule preserves all fields', () => {
     expect(dup.retryDelay).toBe(500);
   });
 
+  it('should preserve methods and queryOverrides (a copy must not match more traffic than the original)', () => {
+    const rule = makeRule({ methods: ['POST', 'DELETE'], queryOverrides: { __env: 'uat' } });
+    const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.methods).toEqual(['POST', 'DELETE']);
+    expect(dup.methods).not.toBe(rule.methods);
+    expect(dup.queryOverrides).toEqual({ __env: 'uat' });
+    expect(dup.queryOverrides).not.toBe(rule.queryOverrides);
+  });
+
   it('should leave optional fields undefined when source has none', () => {
     const rule = makeRule();
     const dup = buildDuplicateRuleData(rule, ' (副本)');
+    expect(dup.methods).toBeUndefined();
+    expect(dup.queryOverrides).toBeUndefined();
     expect(dup.headerOverrides).toBeUndefined();
     expect(dup.requestBodyOverride).toBeUndefined();
     expect(dup.responseOverrides).toBeUndefined();
