@@ -298,7 +298,7 @@ kbd {
   line-height: 20px;
   color: var(--cop-text-color-regular);
   text-align: center;
-  background: var(--cop-fill-color-light);
+  background: var(--cop-bg-color-tertiary);
   border: 1px solid var(--cop-border-color);
   border-radius: 4px;
   box-shadow: 0 1px 0 var(--cop-border-color);

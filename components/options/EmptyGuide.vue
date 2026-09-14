@@ -238,7 +238,7 @@ function handleTemplateClick(tpl: TemplateItem) {
 
 .guide-card:hover {
   border-color: var(--cop-primary, #409eff);
-  box-shadow: 0 2px 12px rgb(var(--cop-primary-rgb, 64, 158, 255), 0.15);
+  box-shadow: 0 2px 12px rgb(var(--cop-primary-rgb) / 15%);
   transform: translateY(-2px);
 }
 
@@ -314,7 +314,7 @@ function handleTemplateClick(tpl: TemplateItem) {
 
 .template-card:hover {
   border-color: var(--cop-primary, #409eff);
-  box-shadow: 0 2px 12px rgb(var(--cop-primary-rgb, 64, 158, 255), 0.12);
+  box-shadow: 0 2px 12px rgb(var(--cop-primary-rgb) / 12%);
   transform: translateY(-2px);
 }
 

@@ -310,7 +310,7 @@ async function handleDeleteProfile(profile: EnvironmentProfile) {
 
 .profile-item:hover {
   border-color: var(--cop-primary-border, var(--el-color-primary-light-5));
-  box-shadow: 0 2px 8px rgb(var(--cop-primary-rgb, 64, 158, 255) / 10%);
+  box-shadow: 0 2px 8px rgb(var(--cop-primary-rgb) / 10%);
 }
 
 .profile-icon {

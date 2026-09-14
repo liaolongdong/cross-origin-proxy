@@ -183,7 +183,7 @@ function handleClose() {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--cop-text-color);
+  color: var(--cop-text-color-primary);
 }
 
 .migrate-row {
@@ -201,7 +201,7 @@ function handleClose() {
   text-overflow: ellipsis;
   font-size: 13px;
   font-weight: 600;
-  color: var(--cop-text-color);
+  color: var(--cop-text-color-primary);
   white-space: nowrap;
 }
 
@@ -216,7 +216,7 @@ function handleClose() {
 .migrate-new {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--cop-font-mono, monospace);
+  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
   white-space: nowrap;
 }
 

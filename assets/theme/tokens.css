@@ -319,3 +319,19 @@
   --el-color-primary: #98a7c2;
   --el-color-primary-dark-2: #7a869b;
 }
+
+/* ====== 动效降级 ======
+ * 「减少动态效果」是用户在系统层面提出的诉求（前庭功能障碍者），扩展没有理由拒绝。
+ * 时长取 0.01ms 而非 0：0s 不触发 transitionend，而 Element Plus 的折叠、弹窗与
+ * 消息过渡靠该事件收尾，归零会把内容停在半开状态。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
