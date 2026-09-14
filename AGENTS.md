@@ -202,6 +202,10 @@
 - **代理自动关闭**：总开关开启且配置时长时用 `chrome.alarms` 倒计时（跨 SW 重启持久化），到期自动关闭总开关。
 - **主题**：`--cop-*` 令牌 + `data-theme`/`data-mode`；6 主题（sky/green/pink/mauve/orange/slate）+ light/dark/system；同步覆盖 Element Plus `--el-color-primary` 梯度。新增引用必须在 `assets/theme/tokens.css` 里已定义（未定义的 `var()` 让整条声明在计算值阶段静默失效），`-rgb` 通道令牌存的是空格分隔值、只能写成 `rgb(var(--cop-primary-rgb) / 15%)`；两条契约由 `tests/designTokens.test.ts` 守卫。
 - **容量限制**：`MAX_RULES=200`（新增/合并超限拒绝）、`MAX_LOG_ENTRIES=500`（环形缓冲）。
+- **三处已确认的可访问性/首屏取舍（2026-09-14 定，不要「顺手修」）**：
+  1. **次要文字对比度维持 Element Plus 默认**：`--cop-text-color-secondary: #909399` 在白底 3.08:1、`--cop-text-color-placeholder: #c0c4cc` 1.56:1，低于 WCAG AA 的 4.5:1。刻意不压暗——这两个值与整个组件库同源，单独调会让本扩展界面与 `el-*` 其余部分观感割裂。
+  2. **规则拖拽排序只有指针路径**：`RuleTable.vue` 的行 `dragstart` 无键盘等价物。键盘用户改优先级数值可达到同样的生效顺序，只有「列表顺序」这一件事是鼠标独占。
+  3. **7 个 Options 弹窗不做 `v-if` 惰性挂载**：`defineAsyncComponent` 只保证分片不进首屏 chunk，页面挂载时仍会取回并实例化全部弹窗（约 130kB JS + 60kB CSS）。收益仅几毫秒到二十毫秒，而改造要碰每个弹窗的初始化路径——见「常见陷阱 · Element Plus / i18n」。
 - **商店文案**：`public/_locales` 承载搜索关键词（CORS/跨域/环境切换/Mock），`CHROMEWEBSTORE.md` 是商店表单的唯一素材源；截图由 `pnpm assets` 生成（商店只接受 1280×800 或 640×400，最多 5 张，像素级校验）。
 - **命名身份（两层，互为直译，不得混用）**：工程身份 = `cross-origin-proxy`（`package.json` 的 `name`、GitHub 仓库名、Pages 路径基、`pnpm build:zip` 产物名）；品牌身份 = 「跨域代理助手 / Cross-Origin Proxy」（商店名 `extensionName`、`extensionShortName`、HeaderBar、popup 标题、落地页 `<title>` 与 schema `name`）。品牌名是描述性短语（与用户查询语序一致，利于商店搜索与 AI 实体消歧），刻意不造臆造品牌词——FAT/UAT 是中国研发语境黑话，中文是主市场。工程身份曾被写成 `web-cross-origin`、`web-proxy` 并残留于包名，2026-09 已统一；`web-proxy` 在 GitHub `in:name` 有 5471 个仓库（且语义撞 VPN/翻墙代理）、`web-cross-origin` 不是任何检索短语，两者都不要再改回去。起量后若要加品牌前缀，只改商店名称字段与 HeaderBar：扩展 ID 不变、已装用户无感；**仓库名与 Pages 地址不动**，因为隐私政策 URL 是商店审核项，改动需重新提审。
 
@@ -252,6 +256,7 @@
 ### Element Plus / i18n
 
 - 禁止整包导入；`ElMessage`/`ElMessageBox` 为显式导入，其样式需在入口手动 import。
+- **给弹窗加 `v-if` 之前先改初始化**：`RuleFormDialog.vue` 等弹窗靠 `watch(() => props.visible)`（**没有** `immediate: true`）把 `rule` 灌进表单。若在父组件同一次渲染里就让它挂载，组件是带着 `visible === true` 挂载的，该 watcher 永不触发——「编辑规则」会打开一个空白表单，静默丢掉被编辑的规则。真要惰性挂载，必须先把这段初始化抽成函数并在 `onMounted` 里按 `props.visible` 调一次，再配一条源码契约测试守住。
 - 中英 key 必须一致；单一自研 i18n 体系（无 `i18n-lite`/`tl`）；`public/_locales` 仅放 manifest 名称/悬停短名/描述/命令文案。
 
 ## ESLint 已知例外
