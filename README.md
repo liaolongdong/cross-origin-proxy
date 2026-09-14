@@ -92,12 +92,12 @@ Either way, once it is installed: click the icon, turn on **Proxy Switch**, add 
 2. Click **Manage Rules** — the options page opens with the rule form ready.
 3. Fill in a rule:
 
-   | Field         | Description                                                        |
-   | ------------- | ------------------------------------------------------------------ |
-   | Match type    | `wildcard` (`https://fat-api.example.com/*`), `prefix`, or `regex` |
-   | Match pattern | The URL pattern to intercept                                       |
-   | Target URL    | Where matched requests are redirected                              |
-   | Priority      | Lower number = matched first                                       |
+   | Field         | Description                                                                              |
+   | ------------- | ---------------------------------------------------------------------------------------- |
+   | Match type    | `wildcard` (`https://fat-api.example.com/*`), `prefix`, or `regex`                       |
+   | Match pattern | The URL pattern to intercept                                                             |
+   | Target URL    | Where matched requests are redirected. Leave empty to forward the original URL unchanged |
+   | Priority      | Lower number = matched first                                                             |
 
 4. Reload the page. Requests matching an enabled rule are proxied. A wildcard rewrite like this one runs in the network layer and therefore writes **no per-request log entry** — confirm it with the **URL match tester**, or with the DNR hit counts inside **Request Logs**.
 

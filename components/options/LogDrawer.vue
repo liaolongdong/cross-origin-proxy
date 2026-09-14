@@ -74,6 +74,10 @@
               :label="t('status5xx')"
               value="5xx"
             />
+            <el-option
+              :label="t('statusFailed')"
+              value="error"
+            />
           </el-select>
           <el-select
             v-model="ruleFilter"
@@ -311,6 +315,13 @@
             >
               {{ row.status }}
             </el-tag>
+            <el-tag
+              v-else-if="row.error"
+              type="danger"
+              size="small"
+            >
+              {{ t('statusFailed') }}
+            </el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -385,12 +396,28 @@
               size="small"
               >{{ selectedLog.status }}</el-tag
             >
+            <el-tag
+              v-else-if="selectedLog.error"
+              type="danger"
+              size="small"
+              >{{ t('statusFailed') }}</el-tag
+            >
             <span class="log-detail-rule">{{ selectedLog.ruleName }}</span>
             <span
               v-if="selectedLog.duration"
               class="log-detail-duration"
               >{{ selectedLog.duration }}ms</span
             >
+          </div>
+
+          <!-- 失败原因提到标签页之外：它此前只出现在「响应」页，而行点击会把
+               detailTab 重置回「请求」，导致真正的原因永远要点一次才看得到 -->
+          <div
+            v-if="selectedLog.error"
+            class="detail-section detail-section--error"
+          >
+            <div class="detail-section-label detail-error-label">{{ t('detailError') }}</div>
+            <code class="detail-error-msg">{{ selectedLog.error }}</code>
           </div>
 
           <el-tabs
@@ -453,17 +480,10 @@
               name="response"
             >
               <div
-                v-if="selectedLog.error"
-                class="detail-section"
-              >
-                <div class="detail-section-label detail-error-label">{{ t('detailError') }}</div>
-                <code class="detail-error-msg">{{ selectedLog.error }}</code>
-              </div>
-              <div
                 v-if="selectedLog.responseHeaders && Object.keys(selectedLog.responseHeaders).length > 0"
                 class="detail-section"
               >
-                <div class="detail-section-label">{{ t('detailHeaders') }}</div>
+                <div class="detail-section-label">{{ t('detailResponseHeaders') }}</div>
                 <div class="detail-headers">
                   <div
                     v-for="(value, key) in selectedLog.responseHeaders"
@@ -479,11 +499,17 @@
                 v-if="selectedLog.responseBody"
                 class="detail-section"
               >
-                <div class="detail-section-label">{{ t('detailBody') }}</div>
+                <div class="detail-section-label">{{ t('detailResponseBody') }}</div>
                 <pre class="detail-body-content">{{ formatBody(selectedLog.responseBody) }}</pre>
               </div>
               <div
-                v-if="!selectedLog.responseHeaders && !selectedLog.responseBody && !selectedLog.error"
+                v-if="selectedLog.responseIsBase64"
+                class="detail-empty"
+              >
+                {{ t('detailBodyBinary') }}
+              </div>
+              <div
+                v-if="!selectedLog.responseHeaders && !selectedLog.responseBody && !selectedLog.responseIsBase64"
                 class="detail-empty"
               >
                 {{ t('detailNoData') }}
@@ -558,7 +584,9 @@ const filteredLogs = computed(() => {
       !props.statusFilter ||
       (props.statusFilter === '2xx' && log.status! >= 200 && log.status! < 300) ||
       (props.statusFilter === '4xx' && log.status! >= 400 && log.status! < 500) ||
-      (props.statusFilter === '5xx' && log.status! >= 500);
+      (props.statusFilter === '5xx' && log.status! >= 500) ||
+      // 代理失败不带状态码，三档数字区间都圈不住它，单列一档按 error 判定
+      (props.statusFilter === 'error' && !!log.error);
     const matchesRule = !ruleFilter.value || log.ruleName === ruleFilter.value;
     const matchesUrl =
       !keyword || log.originalUrl.toLowerCase().includes(keyword) || log.proxiedUrl.toLowerCase().includes(keyword);
@@ -911,6 +939,12 @@ function copyAsCurl() {
 
 .detail-section {
   margin-bottom: 14px;
+}
+
+/* 错误区块位于摘要行与标签页之间：只需要与上方摘要的间距，下方由标签页 own */
+.detail-section--error {
+  margin-top: 10px;
+  margin-bottom: 0;
 }
 
 .detail-section-label {

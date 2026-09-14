@@ -52,6 +52,9 @@
             v-model="form.targetUrl"
             :placeholder="t('targetUrlPlaceholder')"
           />
+          <div class="field-hint">
+            {{ t('targetUrlHint') }}
+          </div>
         </el-form-item>
 
         <el-form-item
@@ -558,7 +561,7 @@
               />
               <el-button
                 type="primary"
-                :disabled="!testUrl.trim() || !form.matchPattern || !form.targetUrl"
+                :disabled="!testUrl.trim() || !form.matchPattern"
                 @click="runTest"
               >
                 {{ t('testRule') }}
@@ -716,7 +719,9 @@ const formRules = computed<FormRules>(() => ({
     },
   ],
   targetUrl: [
-    { required: true, message: t('targetUrlRequired'), trigger: 'blur' },
+    // 只校验格式、不校验必填：空目标是合法语义（不改写地址，仅由扩展转发并注入头/参数），
+    // 见 utils/urlMatcher.ts 的 isSimpleRule 与 rewriteUrl 空目标分支。
+    // async-validator 的 type 规则在未声明 required 时会跳过空值，因此非空才做格式校验。
     {
       type: 'url',
       message: t('invalidUrl'),
@@ -958,7 +963,7 @@ async function handleSave() {
 
 function runTest() {
   const url = testUrl.value.trim();
-  if (!url || !form.matchPattern || !form.targetUrl) return;
+  if (!url || !form.matchPattern) return;
 
   // 构造临时规则供 matcher 使用（仅用于测试，不写入存储）
   const testRule: ProxyRule = {

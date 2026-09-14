@@ -447,18 +447,27 @@ function flashHighlight(ruleId: string) {
  * 5 秒后才真正向 background 发送删除消息，期间点击撤销可恢复规则。
  * 每次删除用独立闭包持有规则与定时器，连续删除多条时互不干扰
  * （单例状态会被后续删除覆盖，导致规则漏删或误删）。
+ *
+ * `committed` 是唯一的提交点标志：定时器触发即置位并先关闭提示，之后的撤销
+ * 一律拒绝（存储已删，本地插回只会得到一行随后被 storage.onChanged 抹掉的幽灵数据）。
  */
 function handleDeleteRule(ruleId: string) {
   const index = rules.value.findIndex(r => r.id === ruleId);
   if (index === -1) return;
-  const capturedRule = { ...rules.value[index] };
+  // structuredClone：嵌套的 headerOverrides / queryOverrides / mockResponse 等
+  // 不能与原规则共享引用，否则撤销回来的会是被人改过的对象
+  const capturedRule = structuredClone(rules.value[index]);
   const originalIndex = index;
 
   // 乐观更新：立即从 UI 移除
   rules.value = rules.value.filter(r => r.id !== ruleId);
 
+  let committed = false;
   let deleteTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    committed = true;
     deleteTimer = null;
+    // 先收起撤销入口，再发出删除：两者之间不留可点击的窗口
+    message.close();
     chrome.runtime
       .sendMessage({
         type: MessageType.DELETE_RULE,
@@ -475,6 +484,11 @@ function handleDeleteRule(ruleId: string) {
         {
           style: 'color: var(--cop-primary, #409EFF); cursor: pointer; text-decoration: underline;',
           onClick: () => {
+            // 提示的离场动画期间链接仍可能被点到，此时删除已落库，不能再假装恢复
+            if (committed) {
+              ElMessage.warning(t('undoExpired'));
+              return;
+            }
             // 撤销：取消定时器，恢复规则到原位置
             if (deleteTimer) {
               clearTimeout(deleteTimer);

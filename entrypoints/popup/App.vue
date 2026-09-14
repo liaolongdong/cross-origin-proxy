@@ -299,6 +299,15 @@
           >
             {{ log.status }}
           </el-tag>
+          <el-tag
+            v-else-if="log.error"
+            type="danger"
+            size="small"
+            class="status-tag"
+            disable-transitions
+          >
+            {{ t('requestFailed') }}
+          </el-tag>
           <span class="recent-time">{{ formatTimeAgo(log.timestamp) }}</span>
         </li>
       </ul>

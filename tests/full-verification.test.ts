@@ -507,6 +507,68 @@ describe('[Icon] Empty state icon uses exchange arrows', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// 空 targetUrl 口径统一 + 删除撤销提交点：可诊断性与数据一致性守卫
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const zhOptions = JSON.parse(fs.readFileSync('locales/zh_CN/options.json', 'utf-8'));
+const enOptions = JSON.parse(fs.readFileSync('locales/en/options.json', 'utf-8'));
+
+describe('[Empty target] 空目标规则在表单侧是合法输入', () => {
+  const formSrc = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf-8');
+
+  it('不再把目标URL 声明为必填：导入的规则与 EmptyGuide 模板都用空目标，否则打开编辑框就再也保存不了', () => {
+    expect(formSrc).not.toContain("t('targetUrlRequired')");
+    expect(formSrc).not.toContain('|| !form.targetUrl');
+  });
+
+  it('留空语义必须在字段处可见，而不是靠用户猜', () => {
+    expect(formSrc).toContain("t('targetUrlHint')");
+  });
+
+  it('中英两侧同时移除死 key、同时补上提示 key', () => {
+    for (const dict of [zhOptions, enOptions]) {
+      expect(dict).not.toHaveProperty('targetUrlRequired');
+      expect(dict).toHaveProperty('targetUrlHint');
+      expect(dict.targetUrlHint).toBeTruthy();
+    }
+  });
+
+  it('中英三个命名空间 key 集保持一致（铁律 9，此前无守卫）', () => {
+    for (const ns of ['common', 'options', 'popup'] as const) {
+      const zhNs = JSON.parse(fs.readFileSync(`locales/zh_CN/${ns}.json`, 'utf-8'));
+      const enNs = JSON.parse(fs.readFileSync(`locales/en/${ns}.json`, 'utf-8'));
+      expect(Object.keys(zhNs).sort()).toEqual(Object.keys(enNs).sort());
+    }
+  });
+});
+
+describe('[Undo delete] 5 秒窗口与提交定时器不再各自为政', () => {
+  const appSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
+  const start = appSrc.indexOf('function handleDeleteRule');
+  const body = appSrc.slice(start, appSrc.indexOf('\n}\n', start));
+
+  it('捕获规则走深拷贝，避免与原对象共享嵌套覆盖配置', () => {
+    expect(body).toContain('const capturedRule = structuredClone(rules.value[index])');
+  });
+
+  it('定时器先置提交标志并收起撤销入口，再发出删除', () => {
+    expect(body).toMatch(/committed = true;[\s\S]*?message\.close\(\);[\s\S]*?chrome\.runtime/);
+  });
+
+  it('提交后的撤销必须直接返回，不能走到本地插回的假恢复', () => {
+    const guard = body.slice(body.indexOf('if (committed)'));
+    expect(guard.slice(0, guard.indexOf('rules.value.splice'))).toContain('return');
+  });
+
+  it('过期撤销有对应文案，且中英同时具备', () => {
+    expect(appSrc).toContain("t('undoExpired')");
+    for (const dict of [zhOptions, enOptions]) {
+      expect(dict).toHaveProperty('undoExpired');
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // 跨模块集成验证（直接 import 真实模块，不再重复实现）
 // ═══════════════════════════════════════════════════════════════════════════════
 

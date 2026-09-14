@@ -24,5 +24,6 @@
   "pageHitChannelSw": "SW",
   "pageHitRewritten": "改写为",
   "pageHitProxyOff": "代理未开启，规则未生效",
-  "pageHitNoMatch": "没有规则匹配当前页面"
+  "pageHitNoMatch": "没有规则匹配当前页面",
+  "requestFailed": "失败"
 }

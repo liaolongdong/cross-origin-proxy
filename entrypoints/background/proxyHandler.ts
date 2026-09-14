@@ -3,11 +3,31 @@ import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
 import { logger } from '@/utils/logger';
-import type { ProxyStatus, RequestLogEntry, ResponseOverrides, MockCondition, DnrHitStat } from '@/utils/types';
+import type {
+  ProxyStatus,
+  ProxyRule,
+  RequestLogEntry,
+  ResponseOverrides,
+  MockCondition,
+  DnrHitStat,
+} from '@/utils/types';
 
-const MAX_BODY_SIZE = 10 * 1024 * 1024;
+export const MAX_BODY_SIZE = 10 * 1024 * 1024;
 
 const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9a-zA-Z]+$/;
+
+/**
+ * 判断字符串按 UTF-8 编码后是否超出请求体上限。
+ *
+ * 上限约束的是**实际上线的字节数**，而 `string.length` 数的是 UTF-16 码元：
+ * 一段全中文的 6 MB body 实际约 18 MB，按 length 判定会放行。
+ * 先按码元数做廉价早退——UTF-8 字节数恒 ≥ 码元数，码元已超限则必然越界——
+ * 只有这一侧没越界时，才付 `TextEncoder` 的线性开销去精确计量。
+ */
+export function exceedsBodyCap(text: string): boolean {
+  if (text.length > MAX_BODY_SIZE) return true;
+  return new TextEncoder().encode(text).length > MAX_BODY_SIZE;
+}
 
 // ─── SW 通道命中统计 ──────────────────────────────────────────────────────────
 
@@ -30,6 +50,35 @@ function trackRuleHit(ruleId: string, ruleName: string): void {
   } else {
     swHitStats.set(ruleId, { ruleId, ruleName, hitCount: 1 });
   }
+}
+
+/**
+ * 记录一条「请求尚未发出就被规则拒绝」的日志（非法头覆盖 / body 超限）。
+ *
+ * 这两类失败此前只给页面回一个信封，本地日志里查不到痕迹，用户在日志抽屉里
+ * 完全看不到自己的规则被拒过。字段口径与阻断分支一致：`status: 0`、未改写地址。
+ * `reason` 只进本地存储的 `error`，页面侧仍只拿到通用文案。
+ */
+function logRejectedRequest(
+  rule: ProxyRule,
+  url: string,
+  method: string,
+  startTime: number,
+  reason: string,
+): Promise<void> {
+  return addRequestLog({
+    id: generateId(),
+    timestamp: Date.now(),
+    ruleId: rule.id,
+    ruleName: rule.name,
+    originalUrl: url,
+    proxiedUrl: url,
+    method,
+    status: 0,
+    duration: Date.now() - startTime,
+    error: reason,
+    proxyType: 'sw',
+  });
 }
 
 // ─── 重试判定 ─────────────────────────────────────────────────────────────────
@@ -75,7 +124,8 @@ export function matchesMockCondition(url: string, method: string, condition: Moc
 
 // ─── Header 校验 ──────────────────────────────────────────────────────────────
 
-function isValidHeaderEntry(key: string, value: string): boolean {
+/** 单个头条目是否合法：头名符合 RFC 7230 token 字符集，且值不含 CR/LF（防头注入） */
+export function isValidHeaderEntry(key: string, value: string): boolean {
   return HEADER_NAME_RE.test(key) && !/[\r\n]/.test(value);
 }
 
@@ -83,7 +133,7 @@ function isValidHeaderEntry(key: string, value: string): boolean {
  * 过滤页面传入的请求头：跳过非法条目（非法名称或含换行的值），
  * 避免个别脏头部导致整个代理请求被拒绝
  */
-function filterIncomingHeaders(headers: Record<string, string>): Record<string, string> {
+export function filterIncomingHeaders(headers: Record<string, string>): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
     if (typeof value === 'string' && isValidHeaderEntry(key, value)) {
@@ -93,17 +143,28 @@ function filterIncomingHeaders(headers: Record<string, string>): Record<string, 
   return result;
 }
 
+/** `validateRuleHeaders` 的结果：`invalidKey` 非空表示整体拒绝，此时 `headers` 为空 */
+export interface RuleHeaderCheck {
+  headers: Record<string, string>;
+  invalidKey?: string;
+}
+
 /**
- * 校验规则配置的请求头覆盖：任一非法即整体拒绝（返回 null），
- * 规则由用户直接编辑，应报错促其修正而非静默丢弃
+ * 校验规则配置的请求头覆盖：任一非法即整体拒绝，
+ * 规则由用户直接编辑，应报错促其修正而非静默丢弃。
+ *
+ * 返回被拒的**头名**而不只是 null，好让请求日志能指出该去改哪一条；
+ * 头值不进日志——那里存的很可能就是凭据本身。
  */
-function validateRuleHeaders(headers: Record<string, string>): Record<string, string> | null {
+export function validateRuleHeaders(headers: Record<string, string>): RuleHeaderCheck {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
-    if (typeof value !== 'string' || !isValidHeaderEntry(key, value)) return null;
+    if (typeof value !== 'string' || !isValidHeaderEntry(key, value)) {
+      return { headers: {}, invalidKey: key };
+    }
     result[key] = value;
   }
-  return result;
+  return { headers: result };
 }
 
 // ─── 响应覆盖 ─────────────────────────────────────────────────────────────────
@@ -137,6 +198,16 @@ export function setByPath(obj: Record<string, unknown>, path: string, value: unk
   return true;
 }
 
+/**
+ * 把状态码钳制在可构造 `Response` 的合法区间（200-599）。
+ *
+ * 越界值会让前端构造响应失败并静默回退原生请求，覆盖因此不生效；
+ * 这里按「取整 → 落到区间」收敛，非法/空值（0、NaN、负数）统一回 200。
+ */
+export function clampResponseStatus(status: number): number {
+  return Math.min(599, Math.max(200, Math.trunc(status) || 200));
+}
+
 function applyResponseOverrides(
   status: number,
   statusText: string,
@@ -150,7 +221,7 @@ function applyResponseOverrides(
   if (overrides.status !== undefined) {
     // 状态码必须在可构造 Response 的合法区间（200-599），
     // 否则前端无法构造响应会回退原生请求，覆盖静默失效
-    result.status = Math.min(599, Math.max(200, Math.trunc(overrides.status) || 200));
+    result.status = clampResponseStatus(overrides.status);
   }
   if (overrides.statusText !== undefined) {
     result.statusText = overrides.statusText;
@@ -273,7 +344,7 @@ export async function handleProxyRequest(data: {
     }
 
     // 状态码必须在可构造 Response 的合法区间（200-599），否则前端会回退原生请求使 Mock 失效
-    mockStatus = Math.min(599, Math.max(200, Math.trunc(mockStatus) || 200));
+    mockStatus = clampResponseStatus(mockStatus);
 
     const mockHeaders: Record<string, string> = { 'content-type': mockContentType };
     logger.info(`Mock: ${data.url} → ${mockStatus} (rule: ${rule.name})`);
@@ -316,8 +387,12 @@ export async function handleProxyRequest(data: {
   // 传入头宽容过滤（跳过个别非法条目）；规则头严格校验（非法则拒绝并提示修正）
   const sanitizedIncoming = filterIncomingHeaders(data.headers);
 
-  const sanitizedOverrides = rule.headerOverrides ? validateRuleHeaders(rule.headerOverrides) : {};
-  if (rule.headerOverrides && !sanitizedOverrides) {
+  const headerCheck = rule.headerOverrides ? validateRuleHeaders(rule.headerOverrides) : null;
+  if (headerCheck?.invalidKey !== undefined) {
+    // 头名只进本地日志与 SW 控制台；页面侧维持原有的通用文案，契约不变
+    const reason = `Rule header override rejected: "${headerCheck.invalidKey}"`;
+    logger.warn(`${reason} (rule: ${rule.name})`);
+    await logRejectedRequest(rule, data.url, data.method, startTime, reason);
     return {
       requestId: data.requestId,
       status: 0,
@@ -328,11 +403,13 @@ export async function handleProxyRequest(data: {
     };
   }
 
+  const sanitizedOverrides = headerCheck?.headers ?? {};
+
   const fetchOptions: RequestInit = {
     method: data.method,
     headers: {
       ...sanitizedIncoming,
-      ...(sanitizedOverrides || {}),
+      ...sanitizedOverrides,
     },
   };
 
@@ -341,22 +418,29 @@ export async function handleProxyRequest(data: {
   const method = data.method.toUpperCase();
   const canHaveBody = method !== 'GET' && method !== 'HEAD';
 
-  if (data.body != null && data.body !== '' && canHaveBody) {
-    if (data.body.length > MAX_BODY_SIZE) {
+  // 最终真正发出的 body：规则覆盖优先于页面传入；GET/HEAD 一律不带
+  let outgoingBody: string | undefined;
+  if (canHaveBody) {
+    outgoingBody = rule.requestBodyOverride !== undefined ? rule.requestBodyOverride : data.body || undefined;
+  }
+
+  if (outgoingBody !== undefined) {
+    // 上限量的是这份最终 body 的 UTF-8 字节数：此前按码元数判定会低估非 ASCII body，
+    // 且在规则覆盖 body 之前就算完，等于规则侧可绕过上限
+    if (exceedsBodyCap(outgoingBody)) {
+      const reason = `Request body exceeds ${MAX_BODY_SIZE} bytes`;
+      logger.warn(`${reason} (rule: ${rule.name})`);
+      await logRejectedRequest(rule, data.url, data.method, startTime, reason);
       return {
         requestId: data.requestId,
         status: 0,
         statusText: 'Body Too Large',
         headers: {},
-        body: `Request body exceeds ${MAX_BODY_SIZE} bytes`,
+        body: reason,
         isBase64: false,
       };
     }
-    fetchOptions.body = data.body;
-  }
-
-  if (rule.requestBodyOverride !== undefined && canHaveBody) {
-    fetchOptions.body = rule.requestBodyOverride;
+    fetchOptions.body = outgoingBody;
   }
 
   if (rule.delayMs) {

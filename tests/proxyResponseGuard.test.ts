@@ -9,9 +9,19 @@
  * 整形发生在 `utils/proxyResponse.ts`（可直接单测），拦截器侧的区间守卫是自包含
  * world 里的第二层兜底，只能用源码契约固定（与 round3 对 computeProxyTimeout 的做法同源）。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { normalizeProxyResponse } from '@/utils/proxyResponse';
+
+vi.stubGlobal('chrome', {
+  storage: {
+    local: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) },
+    onChanged: { addListener: vi.fn() },
+  },
+  runtime: { getURL: vi.fn(() => 'chrome-extension://test/') },
+});
+
+const { clampResponseStatus } = await import('@/entrypoints/background/proxyHandler');
 
 describe('normalizeProxyResponse：后台失败信封（回归：挂到超时后回退原生请求）', () => {
   const REQ_ID = 'req-7-1700000000000';
@@ -90,5 +100,31 @@ describe('拦截器第二层守卫契约（MAIN world 自包含，无法导入�
     expect(source).toMatch(
       /if\s*\(rule\?\.blocked \|\|\s*\(error as \{ __proxyBlocked\?: boolean \}\)\?\.__proxyBlocked\)/,
     );
+  });
+});
+
+describe('状态码钳制（clampResponseStatus）：越界值不得让前端构造 Response 失败', () => {
+  it('区间内原样保留，含 4xx/5xx 这类后端真实状态', () => {
+    for (const status of [200, 204, 404, 499, 503, 599]) {
+      expect(clampResponseStatus(status)).toBe(status);
+    }
+  });
+
+  it('贴着边界的外侧值收进区间', () => {
+    expect(clampResponseStatus(199)).toBe(200);
+    expect(clampResponseStatus(600)).toBe(599);
+  });
+
+  it('0、负数与超界值都落到可构造区间，而不是原样透传', () => {
+    expect(clampResponseStatus(0)).toBe(200);
+    expect(clampResponseStatus(-5)).toBe(200);
+    expect(clampResponseStatus(999)).toBe(599);
+  });
+
+  it('小数取整，NaN 与非有限值回落 200/599，绝不产出 undefined 或 NaN', () => {
+    expect(clampResponseStatus(404.7)).toBe(404);
+    expect(clampResponseStatus(NaN)).toBe(200);
+    expect(clampResponseStatus(Infinity)).toBe(599);
+    expect(clampResponseStatus(-Infinity)).toBe(200);
   });
 });

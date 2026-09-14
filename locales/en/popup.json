@@ -24,5 +24,6 @@
   "pageHitChannelSw": "SW",
   "pageHitRewritten": "Rewrites to",
   "pageHitProxyOff": "Proxy is off, rule not active",
-  "pageHitNoMatch": "No rule matches this page"
+  "pageHitNoMatch": "No rule matches this page",
+  "requestFailed": "Failed"
 }
