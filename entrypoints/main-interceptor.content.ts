@@ -21,6 +21,16 @@ export default defineContentScript({
     const SYNC_RULES = 'SYNC_RULES';
     const REQUEST_CONFIG = 'REQUEST_CONFIG';
 
+    // 与 utils/constants.ts 的 DEFAULT_RULE_PRIORITY、utils/urlMatcher.ts 的
+    // normalizePriority 同源（MAIN world 自包含，无法 import）。
+    // 页面侧排序必须与后台 findMatchingRule 一致，否则同一 URL 两条通道选中不同规则。
+    const DEFAULT_RULE_PRIORITY = 10;
+
+    /** 缺失/非有限的 priority 回落为默认值，避免 NaN 让排序结果不确定 */
+    function normalizePriority(priority: number): number {
+      return Number.isFinite(priority) ? priority : DEFAULT_RULE_PRIORITY;
+    }
+
     // ---- Proxy rule types (duplicated from types.ts — must be self-contained) ----
 
     interface ProxyRule {
@@ -131,7 +141,9 @@ export default defineContentScript({
      * Called only when SYNC_RULES is received.
      */
     function rebuildRuleCache(rules: ProxyRule[]): void {
-      cachedSortedRules = [...rules].filter(r => r.enabled).sort((a, b) => a.priority - b.priority);
+      cachedSortedRules = [...rules]
+        .filter(r => r.enabled)
+        .sort((a, b) => normalizePriority(a.priority) - normalizePriority(b.priority));
       compiledRegexCache = new Map();
       // Pre-compile all wildcard and regex patterns
       for (const rule of cachedSortedRules) {
@@ -243,15 +255,19 @@ export default defineContentScript({
         pendingRequests.set(requestId, {
           resolve: (data: any) => {
             clearTimeout(timeout);
-            // status 0 无法构造 Response（合法范围 200-599）：
-            // 含旁路（Proxy Bypass）、代理失败（Proxy Error）、桥接层错误，
+            // status 越界或缺失一律无法构造 Response（合法范围 200-599）：
+            // 含旁路（Proxy Bypass）、代理失败（Proxy Error）、桥接层错误、
+            // 以及后台失败信封（无 status 字段，若漏判会静默变成 200）。
+            // 第一层整形在 content.ts（normalizeProxyResponse，会补回 requestId）；
+            // 本 world 自包含无法 import，故此处保留同语义守卫兜底。
             // 统一 reject；其中"规则阻断"必须真正拦截（打标记），
             // 不能回退原生 fetch，否则被阻断的请求会实际发出
-            if (data.status === 0 || data.status < 200 || data.status > 599) {
-              const err = new Error(data.body || data.statusText || 'Proxy bypassed') as Error & {
+            const status = typeof data?.status === 'number' ? data.status : 0;
+            if (status < 200 || status > 599) {
+              const err = new Error(data?.body || data?.statusText || 'Proxy bypassed') as Error & {
                 __proxyBlocked?: boolean;
               };
-              err.__proxyBlocked = data.statusText === 'Blocked';
+              err.__proxyBlocked = data?.statusText === 'Blocked';
               reject(err);
               return;
             }
@@ -362,9 +378,11 @@ export default defineContentScript({
 
         return await proxyFetch(url, rule, { method, headers, body: (body ?? null) as BodyInit | null });
       } catch (error) {
-        // 规则阻断：不得回退原生 fetch（否则被阻断的请求会实际发出），
+        // 阻断规则一律不得回退（否则被阻断的请求会实际发出）：除了 SW 明确回传的
+        // Blocked 标记，还要看本地 rule.blocked —— 读配置抛错、桥接超时或收到
+        // 无 status 的失败信封时，SW 根本来不及给出阻断判定。
         // 抛出模拟网络错误的 TypeError，与原生 fetch 被阻断时的行为一致
-        if ((error as { __proxyBlocked?: boolean })?.__proxyBlocked) {
+        if (rule?.blocked || (error as { __proxyBlocked?: boolean })?.__proxyBlocked) {
           throw new TypeError('Failed to fetch', { cause: error });
         }
         console.warn('[CrossOriginProxy] Proxy failed, falling back to original fetch:', error);
@@ -559,17 +577,64 @@ export default defineContentScript({
       return url.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
     }
 
-    /** 对 ws(s):// URL 追加/覆盖查询参数；异常时原样返回（防御不可信目标地址） */
+    /**
+     * 对 ws(s):// URL 追加/覆盖查询参数；非法 URL 原样返回（防御不可信目标地址）。
+     *
+     * 与 utils/urlMatcher.ts 的 applyQueryOverrides 同源且必须保持一致（MAIN world
+     * 自包含，无法 import）：只用 `URL` 判合法，改写在原始 query 串上定点增删，
+     * 否则 `searchParams.set` 会重编码**所有**参数，打断按原文比对的签名与回调地址。
+     */
     function applyWsQuery(url: string, overrides?: Record<string, string>): string {
-      if (!overrides || Object.keys(overrides).length === 0) return url;
+      if (!overrides) return url;
+      const entries = Object.entries(overrides);
+      if (entries.length === 0) return url;
       try {
-        const parsed = new URL(url);
-        for (const [key, value] of Object.entries(overrides)) {
-          parsed.searchParams.set(key, value);
-        }
-        return parsed.toString();
+        new URL(url);
       } catch {
         return url;
+      }
+
+      const hashAt = url.indexOf('#');
+      const hash = hashAt >= 0 ? url.slice(hashAt) : '';
+      const beforeHash = hashAt >= 0 ? url.slice(0, hashAt) : url;
+      const queryAt = beforeHash.indexOf('?');
+      const base = queryAt >= 0 ? beforeHash.slice(0, queryAt) : beforeHash;
+      let pairs =
+        queryAt >= 0
+          ? beforeHash
+              .slice(queryAt + 1)
+              .split('&')
+              .filter(p => p !== '')
+          : [];
+
+      for (const [key, value] of entries) {
+        const injected = `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+        let written = false;
+        pairs = pairs.reduce<string[]>((acc, pair) => {
+          const eq = pair.indexOf('=');
+          const name = eq === -1 ? pair : pair.slice(0, eq);
+          if (name === key || safeDecodeQuery(name) === key) {
+            if (!written) {
+              acc.push(injected);
+              written = true;
+            }
+            return acc;
+          }
+          acc.push(pair);
+          return acc;
+        }, []);
+        if (!written) pairs.push(injected);
+      }
+
+      return pairs.length > 0 ? `${base}?${pairs.join('&')}${hash}` : `${base}${hash}`;
+    }
+
+    /** 解码失败（原文含裸 `%`）时退回原值，保证不抛错 */
+    function safeDecodeQuery(text: string): string {
+      try {
+        return decodeURIComponent(text);
+      } catch {
+        return text;
       }
     }
 
@@ -608,8 +673,11 @@ export default defineContentScript({
         case 'prefix': {
           if (base.startsWith(rule.matchPattern)) {
             const rest = base.slice(rule.matchPattern.length);
+            // 模式以 / 结尾时该斜杠已被消耗，需补回分隔符，
+            // 否则拼出 "wss://uat.com/v2users"（与 rewriteUrl / buildRegexSubstitution 同步）
             const target = wsTarget.replace(/\/$/, '');
-            return applyWsQuery(toWsUrl(target + rest), rule.queryOverrides);
+            const separator = rule.matchPattern.endsWith('/') ? '/' : '';
+            return applyWsQuery(toWsUrl(target + separator + rest), rule.queryOverrides);
           }
           return url;
         }

@@ -45,7 +45,7 @@ Collect unreleased changes here; promote the section to `## [x.y.z] - YYYY-MM-DD
 
 ### Fixed
 
-1.0.0 尚未打 tag，因此下面三条在首次发版时会随本段一起提升进 Release 说明。
+1.0.0 尚未打 tag，因此下面九条在首次发版时会随本段一起提升进 Release 说明。
 
 - **关闭总开关后网络层规则不再代理请求**：总开关只挡住了后台通道，仅重写 URL 的简单规则仍以 `declarativeNetRequest` 动态规则留在浏览器网络层里继续转发。现在关闭总开关会清空这批动态规则，重新打开时按当前规则集重建。
   Turning the global switch off now actually stops proxying. Rules that only rewrite the URL were still installed as network-layer redirect rules and kept forwarding requests; switching off now clears that rule set, and switching back on rebuilds it from the current rules.
@@ -53,6 +53,18 @@ Collect unreleased changes here; promote the section to `## [x.y.z] - YYYY-MM-DD
   **Duplicating a rule kept its HTTP method filter and query-parameter overrides.** The copy behaved differently from the rule it was made from; both fields are now carried over with the rest of the configuration.
 - **首栏里的行内图标不再被拉成整栏宽度**：`docs/assets/landing.css` 里既有的 `.hero-visual svg` 选择器本意是给首栏插图用，却会命中首栏内任意一个行内图标。两个对比页的「一句话版本」框因此把 18×18 的对勾撑到 470 像素宽，正文被挤成一列竖排的单字。现在这条规则收窄到首栏插图所在的 `<figure>`（两个落地页首栏内没有任何 `<svg>`，实测宽度不变），框本身也改用站点约定的「图标 + 单段落」写法。
   **Inline icons in the hero column are no longer stretched.** The pre-existing `.hero-visual svg` rule was written for a hero illustration but matched any inline icon in that column, so the comparison pages' 18×18 check-mark expanded to 470px and squeezed their one-sentence summary into one Chinese character per line. The rule now reads `.hero-visual figure svg` (neither landing page has an `<svg>` in its hero, so its layout is measurably unchanged), and the box uses the site's icon-plus-single-paragraph callout pattern.
+- **前缀规则不再拼出坏的重定向地址**：匹配模式以 `/` 结尾时，该斜杠已被模式消耗，剩余路径却直接贴到目标地址后面，`https://fat.com/api/` + 目标 `https://uat.com/v2/` 因此变成 `https://uat.com/v2users`。网络层、后台通道与 WebSocket 三处现在都补回分隔斜杠。
+  **Prefix rules stopped building broken redirect URLs.** A pattern ending in `/` consumed that slash, so the remaining path was glued straight onto the target and `https://fat.com/api/users` with target `https://uat.com/v2/` became `https://uat.com/v2users`. The network layer, the background channel and the WebSocket path all restore the separator now.
+- **前缀模式里的 `*` 按字面量处理**：网络层曾把它当成正则量词，于是 `https://fat.com/a*b` 会命中 `https://fat.com/aaab` 这类完全不相干的地址并一并转发。现在与后台通道一致，只有字面包含 `a*b` 的地址才命中。**这是一次刻意的收窄**：若你此前依赖 `*` 在前缀模式里当通配用，请改用通配匹配类型。
+  **A literal `*` inside a prefix pattern is no longer a wildcard.** The network layer treated it as a regex quantifier, so `https://fat.com/a*b` also matched unrelated URLs like `https://fat.com/aaab` and redirected them. It now agrees with the background channel: only URLs literally containing `a*b` match. **This is a deliberate narrowing** — switch such a rule to the wildcard match type if you relied on the old behaviour.
+- **优先级留空不再连带打掉所有网络层规则**：一条规则的优先级缺失或被导入文件写成非数字，会让整批 `declarativeNetRequest` 规则被浏览器拒绝，于是**所有**仅重写 URL 的规则同时停止转发；命中顺序也变得不确定。现在这类值统一回落到默认优先级 10（导入的规则仍按既定的 100 排在后面）。
+  **An empty or invalid priority no longer disables every network-layer rule.** One bad value made the browser reject the whole batch of redirect rules, so all URL-rewrite-only rules stopped proxying at once, and rule ordering became indeterminate. Such values now fall back to the default priority of 10 (imported rules keep their deliberately later default of 100).
+- **查询参数注入不再改坏其他参数**：注入前原本会重新编解码整个查询串，`?q=a%20b` 变成 `?q=a+b`、`?redirect=https://y.com` 被转义成 `%3A%2F%2F`，依赖原文比对的签名与回调地址白名单因此校验失败。现在只有你指定的参数会被改写，其余保持字节一致（WebSocket 规则同样）。
+  **Query-parameter injection stopped re-encoding parameters you never touched.** Injecting one override rewrote the whole query string, turning `?q=a%20b` into `?q=a+b` and escaping `?redirect=https://y.com` into `%3A%2F%2F`, which broke signature checks and callback-URL allowlists that compare raw text. Only the parameters you name are modified now; the rest stay byte-identical, including on WebSocket rules.
+- **后台异常不再让请求静默走原生网络**：后台读取配置失败时回的是不带请求标识的异常信封，拦截器认领不到对应请求，页面要挂满 35 秒超时才失败，随后按兜底逻辑**把请求真的发出去**——被阻断的请求也不例外。现在桥接层会补齐信封，失败立即返回，且命中阻断规则的请求在任何异常路径下都绝不回退。
+  **A background failure no longer leaks requests to the real network.** When the background could not reply, its malformed envelope carried no request id, so the interceptor could not match it: the page hung for the full 35-second timeout and then fell back to issuing the request natively — including requests a block rule was supposed to stop. The bridge now completes the envelope so failures surface immediately, and a blocked request never falls back, on any error path.
+- **生产包保留告警日志，规则里的凭据不再广播给页面**：发布构建此前会剥掉全部 `console` 调用，把「网络层规则被整批拒绝」「正则不是 RE2 兼容所以被跳过」这类只有告警可查的故障一并变成静默。现在只移除 `debugger`。同时，规则中配置的请求头、请求体、响应改写与 Mock 内容在下发给页面前被剥离——它们只有后台用得上，而任何同页面的脚本都能读到跨 world 消息。
+  **Production builds keep diagnostic warnings, and rule credentials no longer reach page scripts.** Release builds stripped every `console` call, silencing the only signal for "the browser rejected my whole rule batch" and "this regex is not RE2-compatible, so it was skipped"; only `debugger` is removed now. Separately, header overrides, request/response body overrides and mock content are dropped before the rule set is posted to the page, since only the background needs them and any script on the same page can observe cross-world messages.
 
 ## [1.0.0] - 2026-09-07
 

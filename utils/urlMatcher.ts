@@ -1,6 +1,19 @@
+import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import type { ProxyRule } from '@/utils/types';
 
 // ─── WebSocket / Method / Query helpers ────────────────────────────────────────
+
+/**
+ * 归一化业务优先级：`undefined`/`NaN`/非数字（导入的不可信配置、被清空的输入框）
+ * 统一回落为默认值。
+ *
+ * 不归一化会让 `1000 - priority` 得到 `NaN`，进而使整批 `updateDynamicRules`
+ * 被 Chrome 拒绝（所有简单规则同时停止重定向），并让排序比较器返回 `NaN`
+ * 导致命中顺序不确定。
+ */
+export function normalizePriority(priority: number): number {
+  return Number.isFinite(priority) ? priority : DEFAULT_RULE_PRIORITY;
+}
 
 const WS_SCHEME_RE = /wss?:\/\//i;
 
@@ -29,19 +42,66 @@ function methodAllowed(rule: ProxyRule, method?: string): boolean {
 /**
  * 对绝对 URL 追加/覆盖查询参数。
  *
- * 覆盖语义：同名参数存在则替换为新值，不存在则追加。URL 非法时原样返回
- * （防御不可信的 targetUrl，如 regex 重写产出的非绝对地址）。
+ * 覆盖语义：同名参数（含重复项）合并为一条新值，不存在则追加到末尾。
+ * URL 非法时原样返回（防御不可信的 targetUrl，如 regex 重写产出的非绝对地址）。
+ *
+ * 只用 `URL` 做合法性校验，改写本身在原始 query 串上定点增删：
+ * `new URL().searchParams.set()` 会对**所有**参数重新编解码，把
+ * `?redirect=https://y.com?a=1` 变成 `?redirect=https%3A%2F%2Fy.com%3Fa%3D1`，
+ * 从而破坏依赖原文比对的签名参数与回调地址白名单。
  */
 export function applyQueryOverrides(url: string, overrides?: Record<string, string>): string {
-  if (!overrides || Object.keys(overrides).length === 0) return url;
+  if (!overrides) return url;
+  const entries = Object.entries(overrides);
+  if (entries.length === 0) return url;
+
   try {
-    const parsed = new URL(url);
-    for (const [key, value] of Object.entries(overrides)) {
-      parsed.searchParams.set(key, value);
-    }
-    return parsed.toString();
+    new URL(url);
   } catch {
     return url;
+  }
+
+  const hashAt = url.indexOf('#');
+  const hash = hashAt >= 0 ? url.slice(hashAt) : '';
+  const beforeHash = hashAt >= 0 ? url.slice(0, hashAt) : url;
+  const queryAt = beforeHash.indexOf('?');
+  const base = queryAt >= 0 ? beforeHash.slice(0, queryAt) : beforeHash;
+  let pairs =
+    queryAt >= 0
+      ? beforeHash
+          .slice(queryAt + 1)
+          .split('&')
+          .filter(p => p !== '')
+      : [];
+
+  for (const [key, value] of entries) {
+    const injected = `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+    let written = false;
+    pairs = pairs.reduce<string[]>((acc, pair) => {
+      const eq = pair.indexOf('=');
+      const name = eq === -1 ? pair : pair.slice(0, eq);
+      if (name === key || safeDecode(name) === key) {
+        if (!written) {
+          acc.push(injected);
+          written = true;
+        }
+        return acc;
+      }
+      acc.push(pair);
+      return acc;
+    }, []);
+    if (!written) pairs.push(injected);
+  }
+
+  return pairs.length > 0 ? `${base}?${pairs.join('&')}${hash}` : `${base}${hash}`;
+}
+
+/** 解码失败（原文含裸 `%`）时退回原值，保证不抛错 */
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
   }
 }
 
@@ -187,6 +247,8 @@ export function rewriteUrl(url: string, rule: ProxyRule): string {
       const patternBase = rule.matchPattern.slice(0, -1);
       // targetUrl 去掉末尾的 /；若 patternBase 以 / 结尾，需补回分隔斜杠，
       // 否则 "https://a.com/*" 会拼出 "https://b.comapi/x" 这样的坏 URL
+      // 已知差异：rest 为空时 DNR 的静态模板仍会补斜杠（这里返回 "https://b.com"，
+      // DNR 返回 "https://b.com/"）。两者指向同一资源，故不为此改变本通道的输出。
       const target = rule.targetUrl.replace(/\/$/, '');
       const separator = patternBase.endsWith('/') && rest ? '/' : '';
       return target + separator + rest;
@@ -194,8 +256,11 @@ export function rewriteUrl(url: string, rule: ProxyRule): string {
     case 'prefix': {
       if (url.startsWith(rule.matchPattern)) {
         const rest = url.slice(rule.matchPattern.length);
+        // 与 wildcard 分支同源：模式以 / 结尾时斜杠已被消耗，需补回分隔符，
+        // 否则拼出 "https://uat.com/v2users"（DNR 侧 buildRegexSubstitution 同步修正）
         const target = rule.targetUrl.replace(/\/$/, '');
-        return target + rest;
+        const separator = rule.matchPattern.endsWith('/') ? '/' : '';
+        return target + separator + rest;
       }
       return url;
     }
@@ -227,7 +292,9 @@ export function findMatchingRule(url: string, rules: ProxyRule[], method?: strin
   if (rulesKey === cachedRulesKey && cachedRules.length > 0) {
     sorted = cachedRules;
   } else {
-    sorted = [...rules].filter(r => r.enabled).sort((a, b) => a.priority - b.priority);
+    sorted = [...rules]
+      .filter(r => r.enabled)
+      .sort((a, b) => normalizePriority(a.priority) - normalizePriority(b.priority));
     cachedRules = sorted;
     cachedRulesKey = rulesKey;
   }

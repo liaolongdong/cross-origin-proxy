@@ -108,8 +108,23 @@ function validateRuleHeaders(headers: Record<string, string>): Record<string, st
 
 // ─── 响应覆盖 ─────────────────────────────────────────────────────────────────
 
-function setByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
+/** 出现在不可信路径里会沿原型链写入的键名 */
+const UNSAFE_PATH_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * 按点分隔路径写入 JSON 字段。
+ *
+ * `bodyReplacements` 的键来自导入的配置文件（不可信输入）：`"__proto__.x"` 会让
+ * `current['__proto__']` 取到 `Object.prototype`——它是对象、能通过 `typeof` 守卫——
+ * 于是赋值落在原型上，污染整个 SW realm 的每一次对象读取。任一路径段命中原型链
+ * 键名即整体拒绝。
+ *
+ * @returns 是否完成写入（拒绝时 `obj` 未被改动）
+ */
+export function setByPath(obj: Record<string, unknown>, path: string, value: unknown): boolean {
   const keys = path.split('.');
+  if (keys.some(key => UNSAFE_PATH_KEYS.has(key))) return false;
+
   let current: Record<string, unknown> = obj;
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i];
@@ -119,6 +134,7 @@ function setByPath(obj: Record<string, unknown>, path: string, value: unknown): 
     current = current[key] as Record<string, unknown>;
   }
   current[keys[keys.length - 1]] = value;
+  return true;
 }
 
 function applyResponseOverrides(
@@ -154,7 +170,9 @@ function applyResponseOverrides(
     try {
       const json = JSON.parse(body);
       for (const [path, value] of Object.entries(overrides.bodyReplacements)) {
-        setByPath(json, path, value);
+        if (!setByPath(json, path, value)) {
+          logger.warn(`Skipping unsafe bodyReplacements path: ${path}`);
+        }
       }
       result.body = JSON.stringify(json);
     } catch {

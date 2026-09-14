@@ -2,7 +2,7 @@ import { MessageType } from '@/utils/types';
 import type { RuntimeMessage, ExportData, ProxyRule } from '@/utils/types';
 import { handleProxyRequest, getProxyStatus, getSwHitStats } from './proxyHandler';
 import { getDnrHitStats } from './dnrStats';
-import { MAX_RULES } from '@/utils/constants';
+import { MAX_RULES, IMPORTED_RULE_PRIORITY } from '@/utils/constants';
 import {
   getProxyConfig,
   saveProxyConfig,
@@ -51,6 +51,15 @@ export function deduplicateRules(existing: ProxyRule[], incoming: ProxyRule[]): 
 }
 
 /**
+ * 导入文件是不可信输入：`typeof x === 'number'` 会放行 `NaN` 与 `Infinity`。
+ * NaN 优先级会让 DNR 侧算出 NaN 而使整批规则被拒，NaN 时间戳会打乱日志与排序，
+ * 因此这里只接受有限数。
+ */
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/**
  * 规范化导入的规则列表：过滤结构非法的条目、重新生成 id、补全默认值。
  * 重新生成 id 是必要的：文件中的旧 id 可能与现有规则冲突（合并模式下
  * 会造成重复 id，引发列表 key 冲突与按 id 操作误中其他规则）。
@@ -59,10 +68,10 @@ export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
   return rawRules.filter(isValidRule).map(rule => ({
     ...rule,
     id: generateId(),
-    priority: typeof rule.priority === 'number' ? rule.priority : 100,
+    priority: finiteOr(rule.priority, IMPORTED_RULE_PRIORITY),
     enabled: rule.enabled === true,
-    createdAt: typeof rule.createdAt === 'number' ? rule.createdAt : Date.now(),
-    updatedAt: typeof rule.updatedAt === 'number' ? rule.updatedAt : Date.now(),
+    createdAt: finiteOr(rule.createdAt, Date.now()),
+    updatedAt: finiteOr(rule.updatedAt, Date.now()),
   }));
 }
 

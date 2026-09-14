@@ -23,7 +23,13 @@ export default defineConfig({
     build: {
       minify: 'esbuild',
     },
-    esbuild: process.env.NODE_ENV === 'production' ? { drop: ['console', 'debugger'] } : {},
+    // 只 drop debugger，不要 drop console：实测 `drop: ['console']` 会让
+    // .output/chrome-mv3 里的 console.* 归零（dev 包 39 处），连带把
+    // logger.warn/error 一起编译掉——而 DNR 同步被整批拒绝、非 RE2 正则被跳过、
+    // ReDoS 规则被跳过这几类故障**只有**这些告警这一个信号源。
+    // 一个以“帮用户看清请求为什么没走代理”为卖点的工具不该在生产包里静默。
+    // logger.debug/info 已由 `import.meta.env.DEV` 门控，生产会被摇掉，无需靠 drop。
+    esbuild: process.env.NODE_ENV === 'production' ? { drop: ['debugger' as const] } : {},
     plugins: [
       AutoImport({
         imports: ['vue', { 'element-plus': ['ElMessage', 'ElMessageBox'] }],

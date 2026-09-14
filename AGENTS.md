@@ -193,6 +193,8 @@
 ## 项目特有约定
 
 - **双通道分流**：`isSimpleRule` 决定走 DNR 还是 SW。wildcard（以 `*` 结尾）与 prefix 的重写在两通道语义一致，**regex 不一致**：SW 走 `url.replace(regex, targetUrl)`，只替换匹配到的片段；DNR 的 `regexSubstitution` 整体替换整个 URL。因此覆盖不全的正则两通道结果必然不同，这是已知差异而非待修缺陷（只有「规则该走哪条通道」的分流判定需要保持一致）。
+- **两处已接受的通道差异**（不要再试图"修平"，改之前先读注释与 `tests/channel-consistency.test.ts`）：① wildcard 末尾 `*` 捕获为空时，DNR 的静态模板补分隔斜杠（`https://b.com/`）而 `rewriteUrl` 省略（`https://b.com`）——两者指向同一资源，且既有测试刻意守护 SW 输出；② regex 的整体替换 vs 片段替换（见上一条）。
+- **MAIN world 镜像必须同步**：`entrypoints/main-interceptor.content.ts` 自包含、无法 import，其中的 `rewriteWsUrl`、`applyWsQuery`、`normalizePriority`、`DEFAULT_RULE_PRIORITY` 是 `utils/urlMatcher.ts` / `utils/constants.ts` 的手工副本。改这两处 utils 的匹配、重写、查询参数编码或优先级语义，必须在同一改动里镜像到拦截器，否则 WebSocket 通道与 HTTP 通道行为分叉；`tests/channel-consistency.test.ts` 末尾的「MAIN world 镜像与 utils 侧同源」按源码契约守卫这一点。
 - **三世界内容脚本**：MAIN 自包含拦截 + ISOLATED 桥接 + SW 执行；所有 `postMessage` 用 `window.location.origin` 作 targetOrigin（非 `*`）。
 - **storage 锁 + 缓存**：read-modify-write 走 `withStorageLock` 避免竞态；配置内存缓存随 `storage.onChanged` 失效。
 - **日志缓冲写入**：达 10 条或 1s 防抖 flush，且 flush 串行化避免并发覆盖丢失；`onSuspend` 时 `flushLogs`。

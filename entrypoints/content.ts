@@ -3,6 +3,7 @@ import { MessageType } from '@/utils/types';
 import type { ProxyConfig } from '@/utils/types';
 import { CONTENT_SCRIPT_CHANNEL } from '@/utils/constants';
 import { isSimpleRule } from '@/utils/urlMatcher';
+import { normalizeProxyResponse } from '@/utils/proxyResponse';
 import { logger } from '@/utils/logger';
 
 export default defineContentScript({
@@ -14,14 +15,41 @@ export default defineContentScript({
     // to restrict message delivery to the same origin, preventing cross-origin data leakage.
 
     /**
-     * 双通道分工：简单规则（无 headerOverrides）由 DNR 在网络层重定向，
-     * MAIN world 拦截器只需处理复杂规则，因此下发前先过滤，
-     * 避免同一请求被两条通道重复代理。
+     * 仅 SW 使用、页面侧从不读取的规则字段。
+     * 拦截器只依赖 matchPattern、matchType、targetUrl、methods、blocked、delayMs、
+     * queryOverrides、retryCount、retryDelay、name、enabled；代理时 SW 会用 storage
+     * 里的完整规则重新匹配并应用这些能力，因此它们没有理由出现在发往页面的副本里。
+     */
+    const PAGE_IRRELEVANT_FIELDS = [
+      'headerOverrides',
+      'requestBodyOverride',
+      'responseOverrides',
+      'mockResponse',
+    ] as const;
+
+    /**
+     * 双通道分工 + 凭据脱敏：
+     *
+     * 1. 简单规则（无 headerOverrides 等 SW 专属能力）由 DNR 在网络层重定向，
+     *    MAIN world 拦截器只需处理复杂规则，因此下发前先过滤，
+     *    避免同一请求被两条通道重复代理。
+     * 2. 再剥离仅 SW 使用的凭据字段。配置经 `postMessage` 送达 MAIN world，
+     *    而**同页面的任意脚本都能监听这些消息**（入站校验只挡跨窗口，挡不住同源），
+     *    留着 `headerOverrides` 等于把「把 token 从代码挪进规则」的凭据
+     *    广播给用户访问的每个站点。
+     *
+     * 两步顺序不可颠倒：`isSimpleRule` 依赖这些字段判定分流。
      */
     function toInterceptorConfig(config: ProxyConfig): ProxyConfig {
       return {
         enabled: config.enabled,
-        rules: (config.rules ?? []).filter(rule => !isSimpleRule(rule)),
+        rules: (config.rules ?? [])
+          .filter(rule => !isSimpleRule(rule))
+          .map(rule => {
+            const pageRule = { ...rule };
+            for (const field of PAGE_IRRELEVANT_FIELDS) delete pageRule[field];
+            return pageRule;
+          }),
       };
     }
 
@@ -73,12 +101,14 @@ export default defineContentScript({
           data,
         });
 
-        // Send response back to MAIN world
+        // Send response back to MAIN world.
+        // 后台抛错时回的是无 requestId/无 status 的失败信封，原样转发会让拦截器
+        // 无人认领而挂到超时、进而回退原生请求，因此在边界处整形
         window.postMessage(
           {
             channel: CONTENT_SCRIPT_CHANNEL,
             type: MessageType.PROXY_RESPONSE,
-            data: response,
+            data: normalizeProxyResponse(response, String(data.requestId ?? '')),
           },
           window.location.origin,
         );

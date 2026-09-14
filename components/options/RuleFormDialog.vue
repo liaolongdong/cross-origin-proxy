@@ -627,6 +627,7 @@ import { Delete, Plus, Close } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
+import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { matchRule, rewriteUrl, applyQueryOverrides } from '@/utils/urlMatcher';
 
@@ -651,7 +652,7 @@ const defaultForm = {
   matchType: 'wildcard' as ProxyRule['matchType'],
   matchPattern: '',
   targetUrl: '',
-  priority: 10,
+  priority: DEFAULT_RULE_PRIORITY,
   enabled: true,
   requestBodyOverride: '',
   responseStatus: undefined as number | undefined,

@@ -11,7 +11,7 @@
  */
 
 import type { ProxyRule } from '@/utils/types';
-import { isSimpleRule } from '@/utils/urlMatcher';
+import { isSimpleRule, normalizePriority } from '@/utils/urlMatcher';
 import { DNR_RULE_ID_PREFIX } from '@/utils/constants';
 
 /** DNR 命中的资源类型（页面主/子文档、XHR、静态资源等） */
@@ -43,7 +43,10 @@ export function buildRegexFilter(rule: ProxyRule): string {
     case 'wildcard':
       return `^${escapeRegex(rule.matchPattern).replace(/\*/g, '(.*)')}$`;
     case 'prefix':
-      return `^${escapeRegex(rule.matchPattern)}(.*)`;
+      // 前缀模式中的 * 不是通配符：SW 侧 matchRule 用 startsWith 按字面量比对。
+      // escapeRegex 刻意保留 *，此处必须补转义，否则 RE2 会把它当量词
+      // （"https://fat.com/a*b" 命中 "https://fat.com/aaab"），两通道命中集合不一致。
+      return `^${escapeRegex(rule.matchPattern).replace(/\*/g, '\\*')}(.*)`;
     case 'regex':
       return rule.matchPattern;
   }
@@ -66,8 +69,12 @@ export function buildRegexSubstitution(rule: ProxyRule): string {
       const separator = rule.matchPattern.endsWith('*') && patternBase.endsWith('/') ? '/' : '';
       return `${target}${separator}\\${starCount}`;
     }
-    case 'prefix':
-      return `${target}\\1`;
+    case 'prefix': {
+      // 与 rewriteUrl 的 prefix 分支同源：模式以 / 结尾时斜杠已被 regexFilter 消耗，
+      // 替换串需补回分隔符，否则拼出 "https://uat.com/v2users"
+      const separator = rule.matchPattern.endsWith('/') ? '/' : '';
+      return `${target}${separator}\\1`;
+    }
     case 'regex':
       return rule.targetUrl.replace(/\$(\d)/g, '\\$1');
   }
@@ -130,10 +137,12 @@ export function isSubstitutionValid(regexFilter: string, substitution: string): 
 
 /**
  * 业务优先级 → DNR 优先级
- * 业务语义为数值越小越先匹配，DNR 为数值越大越优先，需反转（下限 1）
+ * 业务语义为数值越小越先匹配，DNR 为数值越大越优先，需反转（下限 1）。
+ * 入参先归一化：`NaN` 会被 Chrome 判定为非法 priority，代价是**整批**
+ * `updateDynamicRules` 被拒（所有简单规则同时失效），而非只丢一条。
  */
 export function toDnrPriority(priority: number): number {
-  return Math.max(1, 1000 - priority);
+  return Math.max(1, 1000 - normalizePriority(priority));
 }
 
 /**
