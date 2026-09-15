@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — 跨域代理助手 / Cross-Origin Proxy
 
-> Last Updated: 2026-09-12
+> Last Updated: 2026-09-15
 > 本文件是商店上架的唯一素材源：把这里的内容逐项复制进 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)。
 > 商店表单（名称/描述/截图/权限理由/数据披露）无法由 API 代写，只能手动粘；**包上传与提审已经自动化**，见第 11 节。
 > 本文件位于仓库根目录，不在 `.output/chrome-mv3` 内，因此不会被打进上传包。
@@ -17,17 +17,19 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 | 摘要     | 132 码点   | 100 / 127               | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
 | 详细描述 | 16000 码点 | 中约 3.79K / 英约 9.89K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
-| 目标查询                                                    | 用户怎么搜                     | 落点                                                     |
-| ----------------------------------------------------------- | ------------------------------ | -------------------------------------------------------- |
-| `cors` / `cross origin` / `跨域`                            | 报错来搜的人，量最大、意图最强 | 名称（中英）、摘要、详细描述首句与症状行                 |
-| `同源策略` / `same-origin policy`                           | 先查概念再找解法的人           | CORS 解释段                                              |
-| `api proxy` / `request proxy` / `请求转发`                  | 明确要代理工具                 | 名称、摘要、能力清单                                     |
-| `environment switch` / `环境切换` / `联调`                  | 中文前端场景词，竞争小、转化高 | 中文名称、摘要、详细描述                                 |
-| `mock api` / `mock 数据` / `假数据` / `fake data`           | 后端未就绪的前端               | 名称（Mock）、能力清单、典型配置示例、「谁会用上它」     |
-| `modify request headers` / `response override` / `throttle` | 抓包改包与弱网模拟需求         | 能力清单、典型配置示例                                   |
-| `websocket proxy`                                           | 长连接联调，几乎无同类扩展     | 摘要 + 能力清单 + 症状行（差异化点）                     |
-| `devserver proxy` / `devServer` / `本地跨域`                | 想换掉逐项目配置的人           | 首段痛点、症状行、与「开发代理」与「改项目配置」的对比段 |
-| `timeout` / `http 500` / `弱网` / `超时模拟`                | 要验异常与兜底态的人           | 能力清单、典型配置示例、「谁会用上它」（QA 那一行）      |
+| 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
+| ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
+| `cors` / `cross origin` / `跨域`                            | 报错来搜的人，量最大、意图最强 | 名称（中英）、摘要（中英）、详细描述症状行与「规则生效后仍报 CORS」段 |
+| `同源策略` / `same-origin policy`                           | 先查概念再找解法的人           | CORS 解释段                                                           |
+| `api proxy` / `request proxy` / `请求转发`                  | 明确要代理工具                 | 名称、摘要、能力清单                                                  |
+| `environment switch` / `环境切换` / `联调`                  | 中文前端场景词，竞争小、转化高 | 中文名称、摘要、详细描述                                              |
+| `mock api` / `mock 数据` / `假数据` / `fake data`           | 后端未就绪的前端               | 名称（Mock）、能力清单、典型配置示例、「谁会用上它」                  |
+| `modify request headers` / `response override` / `throttle` | 抓包改包与弱网模拟需求         | 能力清单、典型配置示例                                                |
+| `websocket proxy`                                           | 长连接联调，几乎无同类扩展     | 摘要 + 能力清单 + 症状行（差异化点）                                  |
+| `devserver proxy` / `devServer` / `本地跨域`                | 想换掉逐项目配置的人           | 首段痛点、症状行、与「开发代理」与「改项目配置」的对比段              |
+| `timeout` / `http 500` / `弱网` / `超时模拟`                | 要验异常与兜底态的人           | 能力清单、典型配置示例、「谁会用上它」（QA 那一行）                   |
+
+> 2026-09-15 复核过这一列，**最高意图词不在详细描述首句是刻意的，别去"补"**。实测：中文名 `跨域` ×2、英文名 `Cross-Origin` + `CORS`，两边摘要各命中一次，详细描述里中文 `跨域` 只出现 1 次（在「跨域校验不再适用」那段）、英文 `cross-origin` 3 次——首句都留给了 FAT→UAT 场景，症状行留给了 `blocked by CORS policy` 这个报错原话。Chrome 对同一个词只索引一次，而这两个词已经落在权重最高的名称与摘要上，再去改首句等于拿转化率换一次重复索引。2026-09-15 同时确认英文名已含 `cross-origin` / `CORS` / `environment`，因此英文摘要开头保留 FAT/UAT 场景叙事、不换成跨域措辞。
 
 描述里的内容块各自都有一个转化或检索目的，不是为了把字数填满：
 
@@ -367,16 +369,26 @@ done
 
 ## 9. Pre-Publish Checklist
 
+每轮提交都从头走一遍：这里的 `[ ]` 是运行时勾选，不是一次性记录，换一个包就得重走。仓库侧的一次性配置见 [GITHUB.md](./GITHUB.md)，上架后要做的翻转见第 12 节。
+
+仓库与托管（提审前置，配好之后每轮复核）：
+
+- [ ] 第 5 节的三个 URL 外加 `/llms.txt`、`/llms-full.txt` 实测都是 200——隐私政策打不开是首审最常见的拒审理由
+- [ ] About 描述 / website / topics 三项已填（[GITHUB.md](./GITHUB.md) §1–§3）；三项全空等于放弃 GitHub 搜索摘要与话题页这两条被动流量
+- [ ] Social preview 已上传（[GITHUB.md](./GITHUB.md) §4，无可用 API，只能设置页手动传）
+- [ ] 已勾选私密漏洞报告（[GITHUB.md](./GITHUB.md) §6；`SECURITY.md` 把私密上报列为首选，本扩展拿的是 `<all_urls>`）
+- [ ] 首个 `v*` tag 已推：Releases 有可下载 zip、README 的 `Release` 徽章转绿——上架前做掉，安装漏斗不必先落到「clone 源码」
+
 包与清单：
 
 - [ ] `pnpm build:zip` 通过，zip 根目录就是 `manifest.json`
 - [ ] `manifest.json` 的 `name` / `description` 与本文档第 1 节完全一致（Chrome 硬校验 ≤75 / ≤132，`pnpm test` 已守卫）
 - [ ] 版本号 > 商店已发布版本（首次忽略）
 - [ ] 包内无 `.git`、`node_modules`、源码 map、测试、`README.md`、本文件
+- [ ] 第 1 节承诺的「关闭总开关时这层规则一并卸载」确实在包里——`utils/dnrRules.ts` 里那行 `proxyEnabled ? … : []` 是它的实现；装一次实测「开总开关 → 规则表命中数增长 → 关总开关 → 请求不再被转发」比读代码可靠。描述与包体行为不一致既是拒审风险，也是最容易吃差评的地方
 
 商店信息：
 
-- [ ] 5 张 1280×800 截图已上传（英文列表用 `screenshots-en/`）
 - [ ] 分类 = Developer Tools；默认语言 = 中文（中国），并新增 English 本地化列表
 - [ ] Single purpose 一句话填写（第 1.3 节）
 - [ ] 每一项权限与 host 权限的理由都粘贴（第 3 节），`<all_urls>` 单独说明
@@ -384,6 +396,14 @@ done
 - [ ] 描述里的每条能力主张都对得上要提交的那个包，尤其是按实现收窄过的六处：URL 匹配测试的遮蔽方向、日志只落文本 body、cURL 仅限日志条目、覆盖/合并是**导入**模式、后台命中数是内存计数、弹窗今日请求数只含后台通道
 - [ ] 隐私政策 URL 已可公开访问（第 5 节）
 - [ ] 开发者联系邮箱已验证（Developer Dashboard → Account）
+
+图片（尺寸与顺序见第 2 节；商店只收 1280×800 或 640×400，最多 5 张，像素级校验）：
+
+- [ ] 中文列表 5 张按 `01-rules-overview` → `05-popup` 的顺序上传——前 3 张在搜索结果里可见，顺序别打乱
+- [ ] 先切到 English 本地化列表再传 `screenshots-en/` 的 5 张；英文图不要传进默认语言
+- [ ] 小型图块 440×280 与大型图块 1400×560 各按语言传对应版本（`store-assets/tiles/`）
+- [ ] 没有把第 6 张深色主题图传进商店——它只用于产品站
+- [ ] 截图与这次要提交的包体行为一致，且不含任何真实内网域名或 token（示例统一 `fat-api.example.com` / `uat-api.example.com`）
 
 功能自检（提交前在本地最新版 Chrome 手动过一遍）：
 
@@ -423,3 +443,42 @@ done
 - **Secrets 未配时的行为**：Release 照建，商店那一步跳过并在 Run 页面留指引，不报红。
 - **先验后提审**：首次接管已有条目时，用 `Run workflow` 勾选 `skip-review`（只上传成草稿）或选 `publish-target=trustedTesters`，人工核对完再走 `default`。
 - **与商店表单的耦合点**：详细描述里刻意不写版本号，避开每次发版都要改商店文案；但限制条数（200 规则 / 500 日志 / 10MB）与能力清单必须与 `README.md`、`docs/` 落地页、`CHANGELOG.md` 保持同一事实。
+
+## 12. 上架后的安装漏斗切换
+
+第 1 节的描述、两份 README、落地页两页与 `llms*.txt` 目前全部按「商店还没上架、只能源码构建」写——这句话一共散在 17 处。上架不是一次翻转，而是**两次互相独立**的状态变化，不要合并成一次改：
+
+| 翻转       | 触发                      | 变化                                                                                                           |
+| ---------- | ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| ① 打出 tag | 推 `v*` tag（见第 11 节） | GitHub Release 带上预构建 zip，README 的 `Release` 徽章从 unknown 转绿；「方式 A」这时才真的可用，商店与否无关 |
+| ② 商店上架 | 商店审核通过并公开发布    | 出现商店 URL，安装主入口从 GitHub 换成商店；下表在这一步一次性改完                                             |
+
+**②必须在拿到真实商店 URL 之后做**：URL 里的 Extension ID 只能由第 11 节那次「Dashboard 手动上传首个 zip」产生，提前用猜的 ID 写进文档会让所有链接 404——而隐私政策与商店链接打不开正是首审最常见的拒审理由。
+
+### 12.1 翻转②要改的位置
+
+| #   | 文件                 | 位置（按可见文案定位，别记行号）                      | 现在写的是                                                          | 改成                                                                    |
+| --- | -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1   | `docs/index.html`    | hero 区主按钮 `class="btn btn-primary"`               | `View source on GitHub` → 仓库                                      | `Add to Chrome` → 商店 URL；原 GitHub 链接降为 ghost 按钮留作次入口     |
+| 2   | `docs/zh.html`       | hero 区主按钮 `class="btn btn-primary"`               | `在 GitHub 查看源码`                                                | `添加到 Chrome`，同上                                                   |
+| 3   | `docs/index.html`    | `#install` 区第一张卡 `Runtime requirements`          | 「The store listing is in preparation, so load the unpacked build」 | 商店装法是默认路径，源码构建改为「开发者」小节的补充说明                |
+| 4   | `docs/zh.html`       | `#install` 区第一张卡「运行环境」                     | 「商店上架准备中，因此需以『加载已解压的扩展程序』方式加载」        | 同上                                                                    |
+| 5   | `README.md`          | `## Install` 首句 + `### A. Prebuilt package`         | 「The Chrome Web Store listing is in preparation」                  | 商店为方式 A；「从源码构建」降为方式 B，并把「首个 tag 之前请用 B」删掉 |
+| 6   | `README.zh-CN.md`    | 同上（`## 安装` / `### 方式 A`）                      | 「Chrome 应用商店上架准备中」                                       | 同上                                                                    |
+| 7   | `docs/llms.txt`      | 运行要求段                                            | 「the only install path is to build from source」                   | 商店 URL 列为第一个安装路径，源码构建附后                               |
+| 8   | `docs/llms-full.txt` | 头部 `Store listing / 商店状态`                       | 「no store URL exists yet」                                         | 直接写商店 URL，并把「上架准备中」整句删掉                              |
+| 9   | `docs/llms-full.txt` | 安装路径 B（`Tagged release`）                        | 「No tag has been published yet」                                   | 打 tag 后这条就不再成立，改为描述 Releases 是回退路径                   |
+| 10  | `docs/llms-full.txt` | 安装路径 C（`Chrome Web Store`）                      | 「In preparation; there is no store URL」                           | 写商店 URL；C 提到最前或与 B 调换顺序                                   |
+| 11  | `docs/llms-full.txt` | 「常见误解」清单第 6 条（「它在 Chrome 商店可下载」） | 「not yet」                                                         | 这条误解不再成立，整条删除或改成「已上架，商店 URL 见上」               |
+| 12  | `CHROMEWEBSTORE.md`  | 第 8 节 Version History 的 Status 列                  | `Draft`                                                             | 改 `Published` 并补发布日期；同时清掉该节下方的 ⚠️ 待发布提示           |
+| 13  | `CHROMEWEBSTORE.md`  | 第 7 节 Developer Info                                | 只有 Support URL / Homepage URL                                     | 可增一行 Store URL，便于后续文档互链                                    |
+
+第 1 节的**商店表单文案本身不用改**——名称、摘要、详细描述都不含安装路径或版本号，这也是当初不写版本号的收益。同一批能力主张继续与 `README.md`、`docs/`、`CHANGELOG.md` 保持同一事实即可。
+
+### 12.2 改完必须跑的守卫
+
+- `pnpm test`：`tests/docs-consistency.test.ts` 对中英落地页做**逐条对等**校验（`<summary>` 列表、FAQ 答案文本、结构化数据），所以第 1–4 项必须**两页同时改**，只改英文页会直接红。
+- 同一支测试的 `PAGES_URL_SOURCES` 要求清单里每个文件仍然引用至少一个 Pages URL。第 8–11 项若把 `llms-full.txt` 里的站点信息整段替换，确认页脚/源码链接没被一起删掉。
+- 第 5–6 项改完跑一次 `pnpm exec prettier --check README.md README.zh-CN.md`（两份 README 的徽章与表格格式由 prettier 管）。
+- 第 3–4 项改完在浏览器里目测两页 `#install` 区（含禁用 JS 的降级态），确认没有残留「上架准备中」的半句。
+- 商店侧动作与本节无关：`pnpm assets` 生成的图里烧的是**产品站地址**，不含商店 URL，所以②不需要重跑图。

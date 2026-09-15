@@ -16,20 +16,20 @@
 | Social preview      | 所有聊天工具、Twitter/X、Slack、掘金/知乎链接卡（1280×640） | 分享时只显示灰底仓库名，点击率显著下降                  |
 | Pages Source        | 产品站与隐私政策的托管开关                                  | `privacy.html` 打不开是 Chrome 商店首审最常见的拒审理由 |
 
-## 0.1 当前实测状态（2026-09-12，用 §7 的命令可复核）
+## 0.1 当前实测状态（2026-09-15，用 §7 的命令可复核）
 
-| 字段               | 实测值                                                       | 结论                                            |
-| ------------------ | ------------------------------------------------------------ | ----------------------------------------------- |
-| `description`      | `null`                                                       | §1 未填                                         |
-| `homepage`         | `null`                                                       | §2 未填                                         |
-| topics             | `[]`（0 个）                                                 | §3 未填                                         |
-| `has_pages`        | `true`；`/`、`/zh.html`、`/privacy.html`、`/llms.txt` 均 200 | §5 已经切到 GitHub Actions 源，Pages 链路是通的 |
-| `has_wiki`         | `true`                                                       | 建议关闭（理由见 §8），需你确认                 |
-| `v*` tag / Release | 0 个 tag、0 个 Release                                       | README 的 `Release` 徽章与「方式 A」都还是空态  |
-| `stargazers_count` | 1                                                            | —                                               |
-| Social preview     | API 读不出来                                                 | 只能在设置页目测                                |
+| 字段               | 实测值                                                              | 结论                                            |
+| ------------------ | ------------------------------------------------------------------- | ----------------------------------------------- |
+| `description`      | `null`                                                              | §1 未填                                         |
+| `homepage`         | `null`                                                              | §2 未填                                         |
+| topics             | `[]`（0 个）                                                        | §3 未填                                         |
+| `has_pages`        | `true`；§7 列的 7 个 URL 全部 200（含两个对比页与 `llms-full.txt`） | §5 已经切到 GitHub Actions 源，Pages 链路是通的 |
+| `has_wiki`         | `true`                                                              | 建议关闭（理由见 §8），需你确认                 |
+| `v*` tag / Release | 0 个 tag、0 个 Release                                              | README 的 `Release` 徽章与「方式 A」都还是空态  |
+| `stargazers_count` | 1                                                                   | —                                               |
+| Social preview     | API 读不出来                                                        | 只能在设置页目测                                |
 
-**§1 / §2 / §3 三项全空，而它们正是 GitHub 搜索摘要、Google 仓库卡与话题页的输入。**Pages 侧已经没有瓶颈了，剩下的曝光量差距全部集中在这些一次性可填完的元数据上。本文新增的对比页与 `llms-full.txt` 在推上 `main` 并跑完 `deploy-pages` 之前会 404，属预期。
+**§1 / §2 / §3 三项全空，而它们正是 GitHub 搜索摘要、Google 仓库卡与话题页的输入。**Pages 侧已经没有瓶颈——隐私政策、`llms.txt` 与两个对比页都可达，商店首审最常见的「隐私政策打不开」在这里不成立，剩下的曝光量差距全部集中在这三项一次性可填完的元数据上。
 
 ## 1. About → Description
 
@@ -84,29 +84,55 @@ wxt
 
 20 个已经用满上限，日后再加词必须先删一个——删谁比加谁更值得想清楚。
 
-### 3.1 可选：用 `gh` 一次填完 §1–§3
+### 3.1 可选：一条命令填完 §1–§3（不依赖 `gh`）
 
-UI 逐字段粘贴当然也行。本机已 `gh auth login` 的话，下面这段把 §1 的描述、`package.json` 的 `homepage` 与 §3 的 topic 列表**从本文自身读出**再写回仓库，因此不存在第二份事实源——改本文即改仓库要填的值。
+UI 逐字段粘贴当然也行。下面这段只用到系统自带的 `python3`（不需要 `gh`、也不需要 `jq`——本机两者都没装），它把 §1 的描述、`package.json` 的 `homepage` 与 §3 的 topic 列表**从本文自身读出**再写回仓库，因此不存在第二份事实源——改本文即改仓库要填的值。
+
+先建一个有权限的令牌：**classic token 勾 `public_repo` 即可**（本仓库公开；若用 fine-grained token，需要仓库的 `Administration: Read and write`，Dashboard 在该端点文档的权限表里会写明）。令牌只放环境变量，不要写进任何文件——`.env.submit` 那套是商店凭据，和这里无关。
 
 ```bash
 set -euo pipefail
-repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+export GH_TOKEN=<粘贴你的令牌>
 
-desc=$(awk '/^## 1\./{f=1;next} /^## 2\./{f=0} f && /^Chrome extension:/' GITHUB.md)
-home=$(node -p "require('./package.json').homepage")
-jq -n --arg d "$desc" --arg h "$home" '{description:$d, homepage:$h}' \
-  | gh api -X PATCH "/repos/$repo" --input -
+python3 - <<'PY'
+import json, os, re, urllib.request
 
-awk '/^## 3\./{f=1} /^## 4\./{f=0} f && /^[a-z0-9][a-z0-9-]*$/' GITHUB.md \
-  | jq -R . | jq -s '{names:.}' \
-  | gh api -X PUT "/repos/$repo/topics" --input -
+REPO = "liaolongdong/cross-origin-proxy"
+TOKEN = os.environ["GH_TOKEN"]
+
+doc = open("GITHUB.md", encoding="utf-8").read()
+desc = re.search(r"^Chrome extension:.*$", doc, re.M).group(0)
+home = json.load(open("package.json", encoding="utf-8"))["homepage"]
+slugs_section = doc.split("## 3. Topics", 1)[1].split("### 3.1", 1)[0]
+topics = re.findall(r"^[a-z0-9][a-z0-9-]{0,49}$", slugs_section, re.M)
+
+
+def call(method, path, payload):
+    req = urllib.request.Request(
+        "https://api.github.com" + path,
+        data=json.dumps(payload).encode("utf-8"),
+        method=method,
+        headers={
+            "Authorization": "Bearer " + TOKEN,
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "cross-origin-proxy-docs",
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        return resp.status
+
+
+print("description + homepage:", call("PATCH", "/repos/" + REPO, {"description": desc, "homepage": home}))
+print("topics:", call("PUT", "/repos/" + REPO + "/topics", {"names": topics}), "(%d slugs)" % len(topics))
+PY
 ```
 
 跑完用 §7 自检。三点约束：
 
 - 这是**你手动执行的一次性命令**，仓库不收录成脚本、也不建工作流去自动改设置——`description`/`homepage`/`topics` 会覆盖 GitHub 侧现值，自动化等于把展示信息交给 CI。
-- 抽 topics 依赖"§3 与 §4 之间只有那 20 行是纯 slug"。在本文里加别的代码块或纯小写行之前，先确认 awk 的输出仍是 20 行。
-- **§4 社交预览、§5 Pages 源、§6 私密漏洞报告没有可用 API**，只能在设置页点。`gh` 那条路只覆盖 §1–§3。
+- 抽 topics 依赖「`## 3. Topics` 与 `### 3.1` 之间只有那 20 行是纯 slug」。往 §3 正文里加别的纯小写行之前，先确认脚本打印的仍是 `(20 slugs)`——`tests/docs-consistency.test.ts` 用另一套等价抽取守卫同一个上限，两边都不允许超 20。
+- **§4 社交预览、§5 Pages 源、§6 私密漏洞报告没有可用 API**，只能在设置页点。这条命令只覆盖 §1–§3。
 
 ## 4. Social preview（1280×640）
 
