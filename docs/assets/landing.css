@@ -278,19 +278,32 @@ pre {
 
 .site-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1;
   gap: 18px;
   align-items: center;
+  min-width: 0;
   font-size: 15px;
 }
 
 .site-nav a {
   position: relative;
+  display: inline-flex;
+  align-items: center;
   color: var(--lp-ink-soft);
+  white-space: nowrap;
 }
 
 .site-nav a:hover {
   color: var(--lp-ink);
+}
+
+/* 对比页与隐私页没有独立的 .nav-actions，跨页链接仍挤在 .site-nav 里，
+   此时它是头部的最后一个子元素 —— 靠右排才和改版前一致。只在宽屏生效：
+   横向滚动的条一旦右对齐，最左边那几项会被推到滚动范围之外，点不到。 */
+@media (width > 900px) {
+  .site-nav:last-child {
+    justify-content: flex-end;
+  }
 }
 
 html.js .site-nav > a[aria-current] {
@@ -309,10 +322,46 @@ html.js .site-nav > a[aria-current]::after {
   border-radius: 2px;
 }
 
+/* 页内锚点之外的三个入口：另一个页面、站外仓库、语言切换。
+   与区块导航分开，窄屏时它不跟着锚点一起横向滚走。 */
+.nav-actions {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  padding-left: 16px;
+  font-size: 15px;
+  border-left: 1px solid var(--lp-line);
+}
+
+.nav-actions a {
+  display: inline-flex;
+  align-items: center;
+  color: var(--lp-ink-soft);
+  white-space: nowrap;
+}
+
+.nav-actions a:hover {
+  color: var(--lp-ink);
+}
+
 .lang-switch {
   padding: 5px 12px;
   border: 1px solid var(--lp-line-strong);
   border-radius: 999px;
+}
+
+/* 触屏上没有 hover 反馈，把三个集群的链接都撑到 44px 见方的可点区域。 */
+@media (pointer: coarse) {
+  .site-nav a,
+  .nav-actions a {
+    min-height: 44px;
+  }
+
+  .lang-switch {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
 }
 
 /* ---------- Hero ---------- */
@@ -1103,10 +1152,70 @@ details {
   border-radius: var(--lp-radius-sm);
 }
 
+/* 折叠图标：浏览器默认的三角 marker 在各引擎下尺寸与位置都不一致，展开后也
+   没有任何状态反馈。这里改成一枚纯 CSS 自绘的加减号 —— ::before 画横杠、
+   ::after 画竖杠，展开时竖杠旋转 90° 并淡出，图标读作「−」。summary 内部只有
+   文本，中英两页的 FAQ 文本与条目一致性守卫不受影响；横向铺满的一行都是点击区。 */
 summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-right: 32px;
   font-weight: 600;
   cursor: pointer;
-  list-style-position: outside;
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::before,
+summary::after {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  content: '';
+  background: var(--lp-primary-strong);
+  border-radius: 1px;
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    background-color 180ms ease;
+}
+
+summary::before {
+  width: 13px;
+  height: 2px;
+  margin-top: -1px;
+}
+
+summary::after {
+  width: 2px;
+  height: 13px;
+  margin-top: -6.5px;
+  margin-right: 5.5px;
+}
+
+summary:hover {
+  color: var(--lp-primary-strong);
+}
+
+summary:hover::before,
+summary:hover::after,
+details[open] > summary::before,
+details[open] > summary::after {
+  background: var(--lp-primary);
+}
+
+details[open] > summary::after {
+  opacity: 0;
+  transform: rotate(90deg);
+}
+
+summary:focus-visible {
+  outline-offset: 4px;
+  border-radius: var(--lp-radius-sm);
 }
 
 details p {
@@ -1344,18 +1453,22 @@ html.js .reveal.in {
   }
 }
 
-/* 10 个链接窄于此宽度就排不进一行。与其折成两行把 sticky 头部顶高，
-   不如让导航自身横向滚动（≤760px 再连同品牌一起竖排）。 */
-@media (width <= 960px) {
+/* 8 个锚点窄于此宽度就排不进一行。与其折成两行把 sticky 头部顶高，
+   不如只让锚点条自身横向滚动 —— 完整对比 / GitHub / EN 三个入口留在原位，
+   永远不需要滚动就能点。尾部留白 + 右侧渐隐遮罩让被截断的那一项看起来是
+   「右边还有」，而不是被切掉。 */
+@media (width <= 900px) {
   .site-nav {
     flex-wrap: nowrap;
     gap: 14px;
     max-width: 100%;
+    padding-right: 28px;
     padding-bottom: 4px;
     overflow-x: auto;
     font-size: 14px;
     white-space: nowrap;
     scrollbar-width: none;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
   }
 
   .site-nav::-webkit-scrollbar {
@@ -1372,11 +1485,24 @@ html.js .reveal.in {
     padding: 44px 0 40px;
   }
 
+  /* 品牌行 + 外部入口排第一行，锚点条整行落到第二行继续横向滚动。 */
   .site-header .wrap {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px 16px;
     padding-top: 10px;
     padding-bottom: 10px;
+  }
+
+  .site-nav {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .nav-actions {
+    order: 2;
+    padding-left: 0;
+    margin-left: auto;
+    border-left: 0;
   }
 
   .feature-card-lg {
@@ -1410,7 +1536,9 @@ html.js .reveal.in {
   .feature-card,
   .gallery-btn,
   .gallery-dots button,
-  .scroll-rail button {
+  .scroll-rail button,
+  summary::before,
+  summary::after {
     transition: none;
   }
 

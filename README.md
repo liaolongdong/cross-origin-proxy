@@ -321,7 +321,7 @@ tests/                  Vitest 测试（node 环境）
 
 <img src="./docs/assets/img/wechat-qr.png" alt="微信交流群二维码" width="180" />
 
-扫码添加作者微信（微信号：`lld_1025`），好友请求备注 **`cxp`**（工程名 `cross-origin-proxy` 的首字母），通过后拉进交流群。
+扫码添加作者微信（微信号：`lld_1025`），好友请求备注 **`cxp`**（`cross`→cx、`proxy`→p 的缩写），通过后拉进交流群。
 
 - 不方便用微信：写信到 [924902324@qq.com](mailto:924902324@qq.com?subject=%E8%B7%A8%E5%9F%9F%E4%BB%A3%E7%90%86%E5%8A%A9%E6%89%8B%E5%8F%8D%E9%A6%88)
 - 缺陷与功能请求优先开 [GitHub Issue](https://github.com/liaolongdong/cross-origin-proxy/issues)：带上请求日志与规则配置导出，比截图更好定位

@@ -321,7 +321,7 @@ How to write a rule, why a request did not get proxied, workarounds for a specif
 
 <img src="./docs/assets/img/wechat-qr.png" alt="WeChat group QR code" width="180" />
 
-Scan to add the author on WeChat (ID: `lld_1025`) and put **`cxp`** in the friend request note (the initials of `cross-origin-proxy`); you will be pulled into the group.
+Scan to add the author on WeChat (ID: `lld_1025`) and put **`cxp`** in the friend request note (`cross`→cx + `proxy`→p); you will be pulled into the group.
 
 - No WeChat: mail [924902324@qq.com](mailto:924902324@qq.com?subject=Cross-Origin%20Proxy%20feedback)
 - Bugs and feature requests belong in [GitHub Issues](https://github.com/liaolongdong/cross-origin-proxy/issues): attach the request log and a rules export — much easier to diagnose than a screenshot
