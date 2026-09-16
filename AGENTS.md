@@ -51,7 +51,7 @@
 | GitHub 仓库展示信息       | `GITHUB.md`（About 描述 / website / topics / 社交预览 / Pages 源 / 私密漏洞报告入口，一次性手动清单）               |
 | 版本历史                  | `CHANGELOG.md`（唯一事实源；release 工作流把对应小节切成 GitHub Release 说明）                                      |
 | 三条自动化链路            | `.github/workflows/{ci,deploy-pages,release}.yml`；共用校验 `.github/actions/verify`                                |
-| 产品落地页 / 隐私政策     | `docs/index.html`（英）、`docs/zh.html`（中）、`docs/privacy.html`、`docs/llms.txt`（GitHub Pages 以 `/docs` 为根） |
+| 产品落地页 / 隐私政策     | `docs/index.html`（中，站点根）、`docs/en.html`（英）、`docs/privacy.html`、`docs/llms.txt`（新增页面必须中英成对） |
 | 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                   |
 | WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                             |
 
@@ -84,7 +84,7 @@
 - `composables/`：响应式状态与副作用（`useRuleManagement`/`useProxyStatus`/`useRequestLog`/`useImportExport`/`useI18n`）。
 - `utils/`：与 Vue 生命周期无关的领域逻辑与纯函数（`dnrRules`/`urlMatcher`/`curlParser`/`har`/`formatters`/`generateId`/`storage`/`theme`/`i18n`/`logger`）。
 - `locales/`：应用内 i18n 文案；`public/_locales/`：仅 manifest 名称/描述。`assets/theme/tokens.css`：`--cop-*` 设计令牌。`tests/`：Vitest 单测（node 环境）。
-- `docs/`：GitHub Pages 产品站（静态 HTML/CSS + 一个零依赖、自托管的渐进增强脚本 `docs/assets/landing.js`，零外部 CDN、零远程字体；不参与 WXT 构建）。该脚本只加 `html.js` 类并接管截图廊控件、滚动淡入、导航高亮与回顶导轨，**所有依赖 JS 的样式状态写在 `html.js` 选择器下**，因此禁用或删除 JS 时页面内容依旧完整可读、可导航；改页面结构时要维持这个降级前提。`docs/assets/img/` 需入库供 Pages 访问。
+- `docs/`：GitHub Pages 产品站（静态 HTML/CSS + 一个零依赖、自托管的渐进增强脚本 `docs/assets/landing.js`，零外部 CDN、零远程字体；不参与 WXT 构建）。**中文是默认语言**：中文页占据站点根 `docs/index.html`，英文页带 `en` 前缀（`en.html`、`en-alternatives.html`），新增页面必须中英成对。该脚本只加 `html.js` 类并接管截图廊控件、滚动淡入、导航高亮、回顶导轨与微信号一键复制，**所有依赖 JS 的样式状态写在 `html.js` 选择器下**，因此禁用或删除 JS 时页面内容依旧完整可读、可导航（复制按钮不出现，号码本身是可选中文本）；改页面结构时要维持这个降级前提。微信交流群模块（`docs/assets/img/wechat-qr.png` + 微信号 `lld_1025` + 备注关键词 `cxp`）**只出现在两份落地页**：对比页与隐私页保持中立叙述，`CHROMEWEBSTORE.md` 的商店文案里不得出现——详细描述里引导添加个人微信会被判为站外引流。`docs/assets/img/` 需入库供 Pages 访问。
 - `store-assets/`、`marketing/`：均为本地可再生/仅本地产物，已进 `.gitignore`；`.test-tmp/` 严禁入库（曾因误提交 Chrome for Testing 二进制把 `.git` 撑到 195MB，2026-09 已重写历史清除）。
 - `.github/`：`workflows/{ci,deploy-pages,release}.yml` 三条链路 + `actions/verify/`（CI 与发布共用的唯一校验入口）+ `ISSUE_TEMPLATE/` 与 PR 模板；不参与扩展构建，也无法用 `act`/`docker` 在本机实跑。根目录的运维文档与它同属仓库侧：`GITHUB.md`（手动设置清单）、`RELEASING.md`（发版）、`CHANGELOG.md`（版本历史）、`SECURITY.md`（披露渠道）——均不入库到扩展包，也不放 `docs/`（那是公开站点根）。
 
@@ -168,7 +168,7 @@
 - manifest 名称/悬停短名/描述/命令文案走 `chrome.i18n`，仅维护 `public/_locales/{zh_CN,en}/messages.json`（`extensionName`/`extensionShortName`/`extensionDescription`/`commandToggleProxy`）。**Chrome 上传时硬校验 `name` ≤ 75、`description` ≤ 132 字符（按码点计数），超出直接拒包**；`tests/build-verification.test.ts` 已加回归守卫。
 - 商店关键词只加在 `public/_locales` 的 `extensionName`。它仍会出现在 Chrome 应用商店、安装确认弹窗、`chrome://extensions` 列表与工具栏扩展菜单——这是承载关键词的**已知代价**，无法由权限或代码消除；浏览器 UI 上接受显示长名。可收短的两处已收短：工具栏悬停提示走 `extensionShortName`，标签页标题由 `entrypoints/{options,popup}/main.ts` 用应用内 i18n 设置。**测试守卫的是“悬停短名 = HeaderBar 品牌名 = popup 标题”三者一致**；`optionsPageTitle` 带「- 配置 / - Options」后缀是故意设计，不要“顺手对齐”删掉后缀。
 - 文档按影响范围更新，中英文表达同一事实：
-  - 用户功能、安装或用法变化：`README.md`（英）与 `README.zh-CN.md`（中），并在 `CHANGELOG.md` 顶部记一条（发版时它就是 Release 说明）。
+  - 用户功能、安装或用法变化：`README.md`（中文主文档）与 `README.en.md`（英），并在 `CHANGELOG.md` 顶部记一条（发版时它就是 Release 说明）。
   - 发布、CI、Pages、仓库展示信息变化：`RELEASING.md`（凭据与发版流程）、`GITHUB.md`（一次性仓库设置清单）、`.github/workflows/*` 与 `.github/actions/verify`。
   - manifest 描述、权限、命令或配置变化：`wxt.config.ts` 及对应 `_locales` 文案；同时同步 `CHROMEWEBSTORE.md`（商店文案/权限/截图清单）与 `docs/` 落地页（能力、FAQ、隐私政策）。
   - 商店图或落地页图变化：改 `scripts/generate-store-assets.mjs` 后跑 `pnpm assets && pnpm assets:en`，不手工改图片。
@@ -183,7 +183,7 @@
   - Vue/CSS 样式：`pnpm lint:style`。
   - 入口、manifest、WXT/Vite 配置、依赖或打包行为：`pnpm build`。
   - 文档、JSON 等格式改动：对本次修改文件运行 `pnpm exec prettier --check <files...>`。
-  - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），`docs/assets/landing.js` 需过 `pnpm lint`（浏览器全局已在 `eslint.config.js` 的 `docs/**` 覆盖块中声明），并在浏览器里目测渲染（含禁用 JS 的降级态）。中英两页的可见文案、FAQ 条目数与 `FAQPage` 结构化数据必须一一对应：`FAQPage` 的问答需与页面 `<details>` 文本一致，两页的条目顺序也需一致。
+  - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），`docs/assets/landing.js` 需过 `pnpm lint`（浏览器全局已在 `eslint.config.js` 的 `docs/**` 覆盖块中声明），并在浏览器里目测渲染（含禁用 JS 的降级态）。中英两页的可见文案、FAQ 条目数与 `FAQPage` 结构化数据必须一一对应：`FAQPage` 的问答需与页面 `<details>` 文本一致，两页的条目顺序也需一致。微信交流群模块只允许出现在两份落地页（对比页/隐私页/商店文案出现即红），中英 README 的章节数、语言互链方向、微信号 `lld_1025`、备注关键词 `cxp` 与二维码路径可解析性由同一支测试守着——只改一边会直接红。
   - 商店文案改动：`pnpm test`（含 `name`/`description` 字符上限守卫）+ 同步 `CHROMEWEBSTORE.md`。
   - `.github/**`（工作流、复合动作、Issue/PR 模板）：`pnpm test`（`tests/docs-consistency.test.ts` 守卫关键契约与 YAML 可解析），并对改动文件跑 prettier；本机无 `act`/`docker`，**工作流无法本地实跑，必须把这一点作为未验证项写进交付说明**。
   - 发版：按 `RELEASING.md` §2（`npm version` + `CHANGELOG.md` 小节 + 全量校验 + `git tag`），推 tag 即触发发布链路。

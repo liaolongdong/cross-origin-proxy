@@ -331,7 +331,7 @@ Rationale to paste if the form asks for clarification: request and response data
 该页由 `.github/workflows/deploy-pages.yml` 在 `main` 上改动 `docs/**` 时自动部署，但**部署源必须先在 Settings → Pages 里切成「GitHub Actions」**（一次性开关，见 [GITHUB.md](./GITHUB.md) §5）。提审前用下面命令确认三个页面都是 200——隐私政策 URL 打不开是最常见的首审被拒原因：
 
 ```bash
-for p in "" zh.html privacy.html; do
+for p in "" en.html privacy.html; do
   printf '%-14s ' "/$p"
   curl -s -o /dev/null -w '%{http_code}\n' "https://liaolongdong.github.io/cross-origin-proxy/$p"
 done
@@ -459,12 +459,12 @@ done
 
 | #   | 文件                 | 位置（按可见文案定位，别记行号）                      | 现在写的是                                                          | 改成                                                                    |
 | --- | -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 1   | `docs/index.html`    | hero 区主按钮 `class="btn btn-primary"`               | `View source on GitHub` → 仓库                                      | `Add to Chrome` → 商店 URL；原 GitHub 链接降为 ghost 按钮留作次入口     |
-| 2   | `docs/zh.html`       | hero 区主按钮 `class="btn btn-primary"`               | `在 GitHub 查看源码`                                                | `添加到 Chrome`，同上                                                   |
-| 3   | `docs/index.html`    | `#install` 区第一张卡 `Runtime requirements`          | 「The store listing is in preparation, so load the unpacked build」 | 商店装法是默认路径，源码构建改为「开发者」小节的补充说明                |
-| 4   | `docs/zh.html`       | `#install` 区第一张卡「运行环境」                     | 「商店上架准备中，因此需以『加载已解压的扩展程序』方式加载」        | 同上                                                                    |
-| 5   | `README.md`          | `## Install` 首句 + `### A. Prebuilt package`         | 「The Chrome Web Store listing is in preparation」                  | 商店为方式 A；「从源码构建」降为方式 B，并把「首个 tag 之前请用 B」删掉 |
-| 6   | `README.zh-CN.md`    | 同上（`## 安装` / `### 方式 A`）                      | 「Chrome 应用商店上架准备中」                                       | 同上                                                                    |
+| 1   | `docs/index.html`    | hero 区主按钮 `class="btn btn-primary"`               | `在 GitHub 查看源码`                                                | `添加到 Chrome`，同上                                                   |
+| 2   | `docs/en.html`       | hero 区主按钮 `class="btn btn-primary"`               | `View source on GitHub` → 仓库                                      | `Add to Chrome` → 商店 URL；原 GitHub 链接降为 ghost 按钮留作次入口     |
+| 3   | `docs/index.html`    | `#install` 区第一张卡「运行环境」                     | 「商店上架准备中，因此需以『加载已解压的扩展程序』方式加载」        | 同上                                                                    |
+| 4   | `docs/en.html`       | `#install` 区第一张卡 `Runtime requirements`          | 「The store listing is in preparation, so load the unpacked build」 | 商店装法是默认路径，源码构建改为「开发者」小节的补充说明                |
+| 5   | `README.md`          | `## 安装` 首句 + `### 方式 A`                         | 「Chrome 应用商店上架准备中」                                       | 商店为方式 A；「从源码构建」降为方式 B，并把「首个 tag 之前请用 B」删掉 |
+| 6   | `README.en.md`       | `## Install` 首句 + `### A. Prebuilt package`         | 「The Chrome Web Store listing is in preparation」                  | 同上                                                                    |
 | 7   | `docs/llms.txt`      | 运行要求段                                            | 「the only install path is to build from source」                   | 商店 URL 列为第一个安装路径，源码构建附后                               |
 | 8   | `docs/llms-full.txt` | 头部 `Store listing / 商店状态`                       | 「no store URL exists yet」                                         | 直接写商店 URL，并把「上架准备中」整句删掉                              |
 | 9   | `docs/llms-full.txt` | 安装路径 B（`Tagged release`）                        | 「No tag has been published yet」                                   | 打 tag 后这条就不再成立，改为描述 Releases 是回退路径                   |
@@ -479,6 +479,6 @@ done
 
 - `pnpm test`：`tests/docs-consistency.test.ts` 对中英落地页做**逐条对等**校验（`<summary>` 列表、FAQ 答案文本、结构化数据），所以第 1–4 项必须**两页同时改**，只改英文页会直接红。
 - 同一支测试的 `PAGES_URL_SOURCES` 要求清单里每个文件仍然引用至少一个 Pages URL。第 8–11 项若把 `llms-full.txt` 里的站点信息整段替换，确认页脚/源码链接没被一起删掉。
-- 第 5–6 项改完跑一次 `pnpm exec prettier --check README.md README.zh-CN.md`（两份 README 的徽章与表格格式由 prettier 管）。
+- 第 5–6 项同样必须**两篇同改**：同一支测试在守中英 README 的章节数对等、语言互链方向与二维码路径可解析，只改一边会红。改完跑一次 `pnpm exec prettier --check README.md README.en.md`（两份 README 的徽章与表格格式由 prettier 管）。
 - 第 3–4 项改完在浏览器里目测两页 `#install` 区（含禁用 JS 的降级态），确认没有残留「上架准备中」的半句。
 - 商店侧动作与本节无关：`pnpm assets` 生成的图里烧的是**产品站地址**，不含商店 URL，所以②不需要重跑图。

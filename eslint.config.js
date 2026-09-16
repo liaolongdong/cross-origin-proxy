@@ -55,6 +55,7 @@ export default [
       globals: {
         document: 'readonly',
         window: 'readonly',
+        navigator: 'readonly',
         matchMedia: 'readonly',
         IntersectionObserver: 'readonly',
         setTimeout: 'readonly',

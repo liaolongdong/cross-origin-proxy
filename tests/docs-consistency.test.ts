@@ -32,13 +32,13 @@ const pkg = JSON.parse(read('package.json')) as {
 /** 会引用 Pages URL 的文档；新增此类文档时要加进来看得到守卫。 */
 const PAGES_URL_SOURCES = [
   'README.md',
-  'README.zh-CN.md',
+  'README.en.md',
   'CHROMEWEBSTORE.md',
   'GITHUB.md',
   'docs/index.html',
-  'docs/zh.html',
+  'docs/en.html',
   'docs/alternatives.html',
-  'docs/zh-alternatives.html',
+  'docs/en-alternatives.html',
   'docs/privacy.html',
   'docs/llms.txt',
   'docs/llms-full.txt',
@@ -49,7 +49,7 @@ const PAGES_URL_SOURCES = [
 /** 面向读者的仓库根文档；用于「过期结论」扫描。 */
 const HUMAN_DOCS = [
   'README.md',
-  'README.zh-CN.md',
+  'README.en.md',
   'CONTRIBUTING.md',
   'CHROMEWEBSTORE.md',
   'SECURITY.md',
@@ -59,10 +59,14 @@ const HUMAN_DOCS = [
   'AGENTS.md',
 ];
 
-/** 需要成对守卫的中英页面（左英右中）；新增双语页面只改这一处。 */
+/**
+ * 需要成对守卫的中英页面（左英右中）；新增双语页面只改这一处。
+ * 中文是本站默认语言，因此中文页占据 `docs/index.html`（站点根）与 `docs/alternatives.html`，
+ * 英文页带 `en-` 前缀。
+ */
 const BILINGUAL_PAIRS: Array<[string, string]> = [
-  ['docs/index.html', 'docs/zh.html'],
-  ['docs/alternatives.html', 'docs/zh-alternatives.html'],
+  ['docs/en.html', 'docs/index.html'],
+  ['docs/en-alternatives.html', 'docs/alternatives.html'],
 ];
 
 describe('[Docs] 仓库自动化与文档一致性', () => {
@@ -72,8 +76,8 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
   describe('Pages URL 必须落到 docs/ 下真实文件', () => {
     /**
-     * Pages 以 `docs/` 为站点根，所以 `/zh.html` 对应 `docs/zh.html`、`/` 对应
-     * `docs/index.html`。商店详细描述里的隐私政策 URL 打不开是首审最常见拒审理由，
+     * Pages 以 `docs/` 为站点根，所以中文页就是 `/`（`docs/index.html`）、英文页在
+     * `/en.html`（`docs/en.html`）。商店详细描述里的隐私政策 URL 打不开是首审最常见拒审理由，
      * 因此这条链接网必须静态成立（运行时可达性由 `GITHUB.md` §7 的 curl 自检覆盖）。
      */
     const pathToSiteRoot = (urlPath: string): string => {
@@ -99,10 +103,10 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(read('GITHUB.md')).toContain(PAGES_BASE);
     });
 
-    it('GitHub Releases 入口在文档里指向 /releases（发版链路的产物落点）', () => {
+    it('GitHub Releases 入口在中英 README 都指向 /releases（发版链路的产物落点）', () => {
       expect(read('docs/llms.txt')).toContain(`${REPO_BASE}/releases`);
       expect(read('README.md')).toContain(`${REPO_BASE}/releases`);
-      expect(read('README.zh-CN.md')).toContain(`${REPO_BASE}/releases`);
+      expect(read('README.en.md')).toContain(`${REPO_BASE}/releases`);
     });
   });
 
@@ -123,7 +127,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       return fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() ? path.join(target, 'index.html') : target;
     };
 
-    it.each(['index.html', 'zh.html', 'alternatives.html', 'zh-alternatives.html', 'privacy.html'])(
+    it.each(['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'])(
       '%s 的本地资源全部存在',
       file => {
         const refs = localRefs(file);
@@ -240,8 +244,9 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       );
 
     /**
-     * hreflang 的三条硬规则：每页自指、中英互指、声明 x-default。head 与 sitemap
-     * 两处标注不一致时 Google 会整对丢弃，所以下面两条用例分别守两边。
+     * hreflang 的硬规则：每页自指、中英互指、声明 x-default，且 head 与 sitemap 两处
+     * 标注必须一致（不一致时 Google 整对丢弃），所以下面两条用例分别守两边。
+     * x-default 指向站点默认语言页 = 中文页（站点根），不是英文页。
      */
     it.each(BILINGUAL_PAIRS)('%s / %s 的 hreflang 自指、互指且声明 x-default', (en, zh) => {
       const urlOf = (file: string) => `${PAGES_BASE}/${path.basename(file)}`.replace('index.html', '');
@@ -249,11 +254,85 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
       expect(enMap.en, `${en} 缺少指向自己的 hreflang="en"`).toBe(urlOf(en));
       expect(enMap.zh, `${en} 缺少 hreflang="zh"`).toBe(urlOf(zh));
-      expect(enMap['x-default'], `${en} 缺少 x-default`).toBe(urlOf(en));
+      expect(enMap['x-default'], `${en} 的 x-default 应指向默认语言的中文页`).toBe(urlOf(zh));
 
       expect(zhMap.zh, `${zh} 缺少指向自己的 hreflang="zh"`).toBe(urlOf(zh));
       expect(zhMap.en, `${zh} 缺少 hreflang="en"`).toBe(urlOf(en));
-      expect(zhMap['x-default'], `${zh} 缺少 x-default`).toBe(urlOf(en));
+      expect(zhMap['x-default'], `${zh} 的 x-default 应指向默认语言的中文页`).toBe(urlOf(zh));
+    });
+
+    it('站点根是中文页，英文页在 /en.html', () => {
+      expect(read('docs/index.html'), 'docs/index.html 必须是中文页').toContain('<html lang="zh-CN">');
+      expect(read('docs/en.html'), 'docs/en.html 必须是英文页').toContain('<html lang="en">');
+      expect(read('docs/alternatives.html')).toContain('<html lang="zh-CN">');
+      expect(read('docs/en-alternatives.html')).toContain('<html lang="en">');
+    });
+
+    /**
+     * 旧的中文页路径已下线且没有 301（Pages 是纯静态目录，无重写规则），所以文档里
+     * 出现「链接到它」的形式都会 404。`GITHUB.md` §7 与 `CHANGELOG.md` 需要按名字写出
+     * 这两条路径才能说明「已下线」这件事，因此只拦真正的引用形态：href 属性、
+     * Markdown 链接目标、完整 Pages URL；行内代码里的提及是合法的。
+     */
+    it('没有文档把已下线的 /zh.html 与 /zh-alternatives.html 当链接引用', () => {
+      const refForms = (path: string): RegExp =>
+        new RegExp(`(href="[^"]*|\\]\\([^)]*|https?://[^\\s)"]*?)${path.replace(/\./g, '\\.')}(?=["')\\s]|$)`);
+      for (const file of PAGES_URL_SOURCES) {
+        for (const retired of ['/zh.html', '/zh-alternatives.html']) {
+          expect(read(file), `${file} 仍链接到已下线的 ${retired}`).not.toMatch(refForms(retired));
+        }
+      }
+    });
+
+    /**
+     * 微信交流群是刻意只放在落地页的转化模块：对比页与隐私页要保持中立叙述，
+     * 商店详细描述里引导添加个人微信会被 Chrome Web Store 判为站外引流。
+     * 备注关键词 `cxp` 与微信号是进群的唯一路径说明，两页必须同值。
+     */
+    it('微信交流群只出现在中英落地页，且两页的微信号与备注关键词一致', () => {
+      const [landingEn, landingZh] = BILINGUAL_PAIRS[0];
+      for (const file of [landingEn, landingZh]) {
+        const html = read(file);
+        expect(html, `${file} 缺少微信二维码`).toContain('assets/img/wechat-qr.png');
+        expect(html, `${file} 缺少可复制的微信号`).toContain('data-copy="lld_1025"');
+        expect(html, `${file} 的进群备注关键词应为 cxp`).toContain('cxp');
+        expect(html, `${file} 页脚缺少指向交流群的锚点`).toContain('"#community"');
+      }
+      for (const file of [
+        'docs/alternatives.html',
+        'docs/en-alternatives.html',
+        'docs/privacy.html',
+        'CHROMEWEBSTORE.md',
+      ]) {
+        expect(read(file), `${file} 不该出现微信交流群`).not.toContain('wechat-qr');
+      }
+    });
+
+    /**
+     * README 侧的同一批契约。微信号与备注关键词一旦只改一边，进群路径就在两份文档里
+     * 分叉；语言互链此前也真的写反过（中文主文档指向自己、英文页指向已删除的
+     * `README.zh-CN.md`），而那种链接在 GitHub 上是 404 而不是红字。
+     */
+    it('中英 README 互链正确，交流群信息与二维码路径一致且可解析', () => {
+      const [zh, en] = [read('README.md'), read('README.en.md')];
+      expect(zh, 'README.md 是中文主文档，不应再自称有 zh-CN 译本').not.toContain('README.zh-CN.md');
+      expect(en, 'README.en.md 必须链回中文主文档 README.md').toContain('[简体中文](./README.md)');
+      expect(en, 'README.en.md 不应再引用已改名的 README.zh-CN.md').not.toContain('README.zh-CN.md');
+      expect(zh, 'README.md 必须链到英文版 README.en.md').toContain('[English](./README.en.md)');
+
+      for (const [name, text] of [
+        ['README.md', zh],
+        ['README.en.md', en],
+      ] as const) {
+        expect(text, `${name} 缺少微信号 lld_1025`).toContain('lld_1025');
+        expect(text, `${name} 的进群备注关键词应为 cxp`).toContain('cxp');
+        const [, qrPath] = text.match(/<img src="([^"]+wechat-qr\.png)"/) ?? [];
+        expect(qrPath, `${name} 没有引用微信二维码图片`).toBeTruthy();
+        expect(exists(qrPath.replace(/^\.\//, '')), `${name} 引用的二维码 ${qrPath} 不存在`).toBe(true);
+      }
+
+      const h2 = (text: string): number => [...text.matchAll(/^## /gm)].length;
+      expect(h2(en), '中英 README 的章节数必须对等（只改一边就是漂移）').toBe(h2(zh));
     });
 
     it('sitemap 为每个中英页面对补齐 en / zh / x-default 三条 alternate', () => {
@@ -276,7 +355,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('docs/ 页面的 SERP 预算与 JSON-LD', () => {
-    const SITE_PAGES = ['index.html', 'zh.html', 'alternatives.html', 'zh-alternatives.html', 'privacy.html'];
+    const SITE_PAGES = ['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'];
 
     /**
      * Google 按可见宽度截断摘要，而不是按码点：CJK 与全角标点约占 2 个单位。
@@ -372,13 +451,13 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         return [...(list ?? '').matchAll(/^- \*\*/gm)].length;
       };
 
-      const en = capabilityBullets('README.md');
-      expect(en, 'README 能力清单为空').toBeGreaterThan(0);
-      expect(capabilityBullets('README.zh-CN.md'), '中英 README 能力清单条目数必须一致').toBe(en);
+      const en = capabilityBullets('README.en.md');
+      expect(en, '英文 README 能力清单为空').toBeGreaterThan(0);
+      expect(capabilityBullets('README.md'), '中英 README 能力清单条目数必须一致').toBe(en);
 
       for (const [file, label] of [
-        ['docs/index.html', /per-rule capabilities/],
-        ['docs/zh.html', /规则能力/],
+        ['docs/en.html', /per-rule capabilities/],
+        ['docs/index.html', /规则能力/],
       ] as const) {
         const shown = stats(file).find(s => label.test(s.label))?.value;
         expect(shown, `${file} 统计条缺少能力数一项`).toBe(String(en));
@@ -401,7 +480,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * 三者**彼此一致**，不校验具体值，所以不会随着日期推移自己变红。
      * privacy.html 不在内：它页脚写的是法律意义上的「生效日期」，与 lastmod 本就不等。
      */
-    const FRESHNESS_PAGES = ['index.html', 'zh.html', 'alternatives.html', 'zh-alternatives.html'];
+    const FRESHNESS_PAGES = ['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html'];
 
     it.each(FRESHNESS_PAGES)('%s 的三处新鲜度日期彼此一致', file => {
       const text = read(`docs/${file}`);

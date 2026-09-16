@@ -519,6 +519,38 @@ html.js .site-nav > a[aria-current]::after {
   text-align: center;
 }
 
+.flow-node--page {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
+  border-color: var(--lp-line-strong);
+}
+
+.flow-figure {
+  margin: 0;
+}
+
+/* 详情页的双通道泳道：左网络层、右后台，窄屏自动叠成一列。 */
+
+.flow-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flow-lane-tag {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lp-ink-faint);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.flow-caption {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--lp-ink-soft);
+}
+
 /* ---------- 通用区块 ---------- */
 
 section {
@@ -1086,6 +1118,97 @@ details p + p {
   margin-top: 8px;
 }
 
+/* ---------- 微信交流群 ---------- */
+
+.community {
+  display: grid;
+  gap: 24px;
+  align-items: center;
+  padding: 26px;
+  background: var(--lp-bg-alt);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-lg);
+}
+
+@media (width >= 720px) {
+  .community {
+    grid-template-columns: 236px minmax(0, 1fr);
+    gap: 32px;
+  }
+}
+
+.community-qr {
+  margin: 0;
+}
+
+/* 二维码留在白底上：反色后多数扫码器识别不到，深色模式下也刻意不跟随。 */
+.community-qr img {
+  display: block;
+  width: 100%;
+  max-width: 236px;
+  height: auto;
+  margin-inline: auto;
+  background: #fff;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+}
+
+.community-qr figcaption {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--lp-ink-soft);
+  text-align: center;
+}
+
+.community-id {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 16px 0 0;
+  font-size: 15px;
+}
+
+.community-id code {
+  font-size: 16px;
+}
+
+.community-note {
+  margin: 12px 0 0;
+  font-size: 14.5px;
+  color: var(--lp-ink-soft);
+}
+
+.community-fallback {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--lp-ink-soft);
+}
+
+.copy-btn {
+  display: none;
+  padding: 7px 14px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+html.js .copy-btn {
+  display: inline-flex;
+}
+
+.copy-status {
+  font-size: 13.5px;
+  color: var(--lp-accent);
+}
+
+.copy-status:empty {
+  display: none;
+}
+
+.copy-status.is-failed {
+  color: var(--lp-danger);
+}
+
 /* ---------- 页脚 ---------- */
 
 .site-footer {
@@ -1221,6 +1344,25 @@ html.js .reveal.in {
   }
 }
 
+/* 10 个链接窄于此宽度就排不进一行。与其折成两行把 sticky 头部顶高，
+   不如让导航自身横向滚动（≤760px 再连同品牌一起竖排）。 */
+@media (width <= 960px) {
+  .site-nav {
+    flex-wrap: nowrap;
+    gap: 14px;
+    max-width: 100%;
+    padding-bottom: 4px;
+    overflow-x: auto;
+    font-size: 14px;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+
+  .site-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @media (width <= 760px) {
   section {
     padding: 44px 0;
@@ -1235,21 +1377,6 @@ html.js .reveal.in {
     align-items: flex-start;
     padding-top: 10px;
     padding-bottom: 10px;
-  }
-
-  .site-nav {
-    flex-wrap: nowrap;
-    gap: 14px;
-    max-width: 100%;
-    padding-bottom: 4px;
-    overflow-x: auto;
-    font-size: 14px;
-    white-space: nowrap;
-    scrollbar-width: none;
-  }
-
-  .site-nav::-webkit-scrollbar {
-    display: none;
   }
 
   .feature-card-lg {

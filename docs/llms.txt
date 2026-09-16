@@ -4,11 +4,11 @@
 >
 > A local-first Chrome extension (Manifest V3) that proxies frontend API requests to another backend environment — for example a FAT frontend calling a UAT backend — without changing application code or backend CORS configuration. Open source under MIT; collects and uploads nothing.
 
-- 产品说明（中文，含 FAQ / HowTo / SoftwareApplication 结构化数据）: https://liaolongdong.github.io/cross-origin-proxy/zh.html
-- Product overview (English, with FAQ / HowTo / SoftwareApplication structured data): https://liaolongdong.github.io/cross-origin-proxy/
+- 产品说明（中文，站点默认页，含 FAQ / HowTo / SoftwareApplication 结构化数据）: https://liaolongdong.github.io/cross-origin-proxy/
+- Product overview (English, same structured-data set): https://liaolongdong.github.io/cross-origin-proxy/en.html
 - 隐私政策 / Privacy Policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
-- 方案对比页（中文：Dev Server 代理 / 抓包代理 / API 客户端 / 改头扩展 / 改应用配置）: https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html
-- Comparison page (English, same structure): https://liaolongdong.github.io/cross-origin-proxy/alternatives.html
+- 方案对比页（中文：Dev Server 代理 / 抓包代理 / API 客户端 / 改头扩展 / 改应用配置）: https://liaolongdong.github.io/cross-origin-proxy/alternatives.html
+- Comparison page (English, same structure): https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html
 - 完整能力与参数清单 / Full reference for AI systems: https://liaolongdong.github.io/cross-origin-proxy/llms-full.txt
 - 源码仓库 / Source code: https://github.com/liaolongdong/cross-origin-proxy
 - 预构建产物 / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases （每个 tag 自动附带；尚未发布第一个 tag / attached to every tagged release; no tag published yet）

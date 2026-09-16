@@ -42,7 +42,7 @@
 
 - [ ] 可见文案已同时补 `locales/zh_CN/` 与 `locales/en/` 对应命名空间，中英 key 集一致
 - [ ] manifest 名称/描述变化时同步了 `public/_locales/{zh_CN,en}/messages.json`（≤75 / ≤132 字符由测试守卫）
-- [ ] 用户可见功能变化时同步了 `README.md` 与 `README.zh-CN.md`
+- [ ] 用户可见功能变化时同步了 `README.md`（中文主文档）与 `README.en.md`
 - [ ] 涉及权限 / 配置 / 商店文案时同步了 `wxt.config.ts`、`CHROMEWEBSTORE.md`、`docs/` 落地页（中英一一对应）
 - [ ] 值得用户感知的变化已在 `CHANGELOG.md` 顶部补条目（发版时该小节会变成 Release 说明）
 

@@ -170,7 +170,7 @@ pnpm assets:en
 
 ```bash
 # 产品站与隐私政策必须都是 200（商店提审前置条件）
-for p in "" zh.html privacy.html llms.txt llms-full.txt alternatives.html zh-alternatives.html; do
+for p in "" en.html privacy.html llms.txt llms-full.txt alternatives.html en-alternatives.html; do
   printf '%-22s %s\n' "${p:-/}" "$(curl -s -o /dev/null -w '%{http_code}' "https://liaolongdong.github.io/cross-origin-proxy/$p")"
 done
 
@@ -184,7 +184,7 @@ curl -s -H "Accept: application/vnd.github.mercy-preview+json" \
   | jq '.names | length'
 ```
 
-期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 里前五个应为 200；`alternatives.html` 与 `zh-alternatives.html` 在 `docs/**` 推上 `main` 且 `deploy-pages` 跑完之前是 404，属预期而不是配置错。
+期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 都应返回 200。两个例外窗口：本轮把中文页搬到站点根、英文页改名带 `en` 前缀，在 `docs/**` 推上 `main` 且 `deploy-pages` 跑完之前 `/en.html` 与 `/en-alternatives.html` 仍是 404，属预期而不是配置错。旧的 `/zh.html` 与 `/zh-alternatives.html` 已下线且**没有 301**（Pages 是纯静态目录，没有重写规则），所以仓库内任何文档都不许再引用它们——`tests/docs-consistency.test.ts` 已把这条钉死。
 
 还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（因为还没有任何 Release），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。
 

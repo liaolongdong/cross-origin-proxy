@@ -48,7 +48,7 @@ Every visible string needs both languages, and the two key sets must stay identi
 
 - In-app UI: `locales/zh_CN/{common,options,popup}.json` and `locales/en/{common,options,popup}.json`, consumed through `useI18n()`'s `t()`.
 - Manifest name/description: `public/_locales/{zh_CN,en}/messages.json`. Chrome enforces `name` ≤ 75 characters and `description` ≤ 132 characters, and [tests/build-verification.test.ts](./tests/build-verification.test.ts) guards both.
-- User-facing docs: `README.md` and `README.zh-CN.md` state the same facts.
+- User-facing docs: `README.md` (the Chinese original) and `README.en.md` state the same facts.
 
 ## Tests
 
@@ -68,7 +68,7 @@ You normally do not need any of this to send a patch — the maintainers cut rel
 - **The version lives in `package.json` only.** `wxt.config.ts` deliberately does not declare `manifest.version`; WXT derives it (and strips pre-release suffixes). Re-adding it creates a second source of truth that will drift, and [tests/build-verification.test.ts](./tests/build-verification.test.ts) fails on drift on purpose.
 - **User-visible changes need a `CHANGELOG.md` entry.** Add a bullet under `Unreleased` or, when cutting a version, a `## [x.y.z] - YYYY-MM-DD` section — the release workflow cuts that exact section into the GitHub Release notes, so a missing section silently downgrades to auto-generated notes.
 - **Pushing a `v*` tag is the release.** It runs [`.github/workflows/release.yml`](./.github/workflows/release.yml): full verify, build + zip, GitHub Release, then Chrome Web Store upload and review submission when the store secrets are configured. Never tag a commit you have not run the checks on.
-- **Docs under `docs/` are the product site.** Pushing to `main` deploys it via `.github/workflows/deploy-pages.yml`, and that is where the privacy-policy URL the store requires is served — so a broken link in `docs/` is a store-review blocker, not a cosmetic issue.
+- **Docs under `docs/` are the product site.** Chinese is the default language and owns the site root (`docs/index.html`); the English page of each pair carries an `en` prefix (`en.html`, `en-alternatives.html`). A new page has to ship both languages together — [tests/docs-consistency.test.ts](./tests/docs-consistency.test.ts) fails when the FAQ counts, hreflang triads or freshness stamps drift between the two. Pushing to `main` deploys the site via `.github/workflows/deploy-pages.yml`, and that is where the privacy-policy URL the store requires is served — so a broken link in `docs/` is a store-review blocker, not a cosmetic issue.
 - Repository display settings (About, topics, Pages source) are operator-only and listed in [GITHUB.md](./GITHUB.md).
 
 The full release runbook, including the one-time store credentials, is [RELEASING.md](./RELEASING.md).

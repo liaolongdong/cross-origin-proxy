@@ -19,9 +19,9 @@ Last verified / 内容核对日期: 2026-09-13, against extension v1.0.0 (`packa
 
 ## 2. Links / 链接
 
-- 产品介绍页（中文，含 FAQPage / HowTo / SoftwareApplication 结构化数据）: https://liaolongdong.github.io/cross-origin-proxy/zh.html
-- Product overview (English, same structured-data set): https://liaolongdong.github.io/cross-origin-proxy/
-- 方案对比页（中文）/ Comparison page (English) — dev-server proxy vs system capture proxy vs API client vs header-modifier extension vs editing app config: https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html · https://liaolongdong.github.io/cross-origin-proxy/alternatives.html
+- 产品介绍页（中文，站点默认页，含 FAQPage / HowTo / SoftwareApplication 结构化数据）: https://liaolongdong.github.io/cross-origin-proxy/
+- Product overview (English, same structured-data set): https://liaolongdong.github.io/cross-origin-proxy/en.html
+- 方案对比页（中文）/ Comparison page (English) — dev-server proxy vs system capture proxy vs API client vs header-modifier extension vs editing app config: https://liaolongdong.github.io/cross-origin-proxy/alternatives.html · https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html
 - 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - 源码仓库 / Source: https://github.com/liaolongdong/cross-origin-proxy
 - 预构建 zip / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases (attached per tag; no tag published yet / 尚无 tag)
@@ -140,8 +140,8 @@ A rule cannot reach traffic that does not come from a browser page: server-to-se
 规则覆盖不到非浏览器页面发出的流量：服务间调用、手机 App、桌面程序、脚本里的 `curl` 应交给系统级抓包代理。没有 headless 模式，CI 应直连后端或走流水线里的代理。`chrome://`、Chrome 应用商店与其他扩展的页面不能注入内容脚本，拦截通道在那儿不运行（网络层重定向仍生效）。规则存在你的 Chrome 配置里，因此需要全团队一致的东西应回到仓库——可导出的 JSON 是交接，不是事实来源。而一旦环境差异成为长期产品行为，它就应该属于应用自己的配置。
 
 The full comparison — five approaches, a 10-row matrix, the six cases where this extension loses — is at / 完整对比（五种做法、10 行矩阵、我们输的六种场景）见：
-- https://liaolongdong.github.io/cross-origin-proxy/alternatives.html (English)
-- https://liaolongdong.github.io/cross-origin-proxy/zh-alternatives.html (中文)
+- https://liaolongdong.github.io/cross-origin-proxy/alternatives.html (中文)
+- https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html (English)
 
 ## 11. Tech stack and repository facts / 技术栈与仓库事实
 

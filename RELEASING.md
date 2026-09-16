@@ -85,7 +85,7 @@ git tag v1.0.1
 git push origin main v1.0.1
 ```
 
-可见文案或能力有变化时，按 `AGENTS.md` 的文档矩阵同步 `README.md` / `README.zh-CN.md` / `locales/` / `CHROMEWEBSTORE.md` / `docs/`（中英必须同事实）。商店 `name` ≤ 75、`description` ≤ 132 字符由 `pnpm test` 守卫。
+可见文案或能力有变化时，按 `AGENTS.md` 的文档矩阵同步 `README.md`（中文主文档）/ `README.en.md` / `locales/` / `CHROMEWEBSTORE.md` / `docs/`（中英必须同事实）。商店 `name` ≤ 75、`description` ≤ 132 字符由 `pnpm test` 守卫。
 
 ## 3. 手动补跑 / 灰度 / 只传草稿
 

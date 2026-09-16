@@ -2,12 +2,13 @@
  * 跨域代理助手 · 落地页渐进增强脚本
  *
  * 设计前提：页面在完全禁用 JavaScript 时也必须可读、可导航、可滚动。
- * 因此本脚本只做四件事，且所有依赖 JS 的视觉状态都写在样式的 `html.js` 选择器下
+ * 因此本脚本只做五件事，且所有依赖 JS 的视觉状态都写在样式的 `html.js` 选择器下
  * （脚本加载失败不会留下空洞）：
  * 1. 截图廊的翻页按钮 / 圆点 / 自动轮播（无 JS 时仍是可横向滑动的 scroll-snap 轨道）；
  * 2. 区块滚动淡入；
  * 3. 导航当前区块高亮；
- * 4. 回顶 / 到底导轨。
+ * 4. 回顶 / 到底导轨；
+ * 5. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动。
  */
@@ -198,4 +199,62 @@
     window.addEventListener('resize', onScroll);
     onScroll();
   }
+
+  /* ─────────────── 5. 微信号一键复制 ─────────────── */
+
+  all('[data-copy]').forEach(btn => {
+    const text = btn.getAttribute('data-copy');
+    const okMsg = btn.getAttribute('data-copied') || 'Copied';
+    const errMsg = btn.getAttribute('data-copy-failed') || 'Copy failed';
+    const status = btn.parentElement ? btn.parentElement.querySelector('.copy-status') : null;
+    let timer = null;
+
+    /** 结果写在 `role="status"` 区域：按钮文字变化不一定会被辅助技术播报，这个区域会。 */
+    const report = (message, ok) => {
+      if (status) {
+        status.textContent = message;
+        status.classList.toggle('is-failed', !ok);
+      }
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (status) status.textContent = '';
+        timer = null;
+      }, 4000);
+    };
+
+    /** 兜底路径：非安全上下文与旧浏览器只有 execCommand 能写剪贴板，用完即删。 */
+    const legacyCopy = () => {
+      const box = document.createElement('textarea');
+      box.value = text;
+      box.setAttribute('readonly', '');
+      box.style.position = 'fixed';
+      box.style.top = '-40px';
+      box.style.opacity = '0';
+      document.body.appendChild(box);
+      box.select();
+      let copied = false;
+      try {
+        copied = document.execCommand('copy');
+      } catch {
+        // 视口外的临时 textarea 被拒绝时按复制失败处理，交给下面的提示文案
+      }
+      box.remove();
+      return copied;
+    };
+
+    btn.addEventListener('click', async () => {
+      if (!text) return;
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch {
+          // 权限或焦点受限时 writeText 会 reject，落到下面的 execCommand 兜底
+        }
+      }
+      if (!copied) copied = legacyCopy();
+      report(copied ? okMsg : errMsg, copied);
+    });
+  });
 })();

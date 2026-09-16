@@ -1,7 +1,7 @@
 name: Deploy product site
 
 # 产品站（含隐私政策）由 `docs/` 目录直接托管：`docs/` 就是站点根，
-# 所以 `/`、`/zh.html`、`/privacy.html`、`/assets/**`、`/sitemap.xml`、`/llms.txt`
+# 所以 `/`（中文页）、`/en.html`、`/privacy.html`、`/assets/**`、`/sitemap.xml`、`/llms.txt`
 # 与 README、CHROMEWEBSTORE.md、llms.txt 里引用的 URL 逐字符一致，无需任何路径改写。
 on:
   push:
