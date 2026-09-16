@@ -6,14 +6,15 @@
  * （脚本加载失败不会留下空洞）：
  * 1. 截图廊的翻页按钮 / 圆点 / 进度条驱动的自动轮播，悬停或聚焦时暂停
  *    （无 JS 时仍是可横向滑动的 scroll-snap 轨道）；
- * 2. 区块滚动淡入；
+ * 2. 区块滚动淡入，并给同一容器里的 `.reveal` 编号（`--lp-rank`），让它们依次进场；
  * 3. 导航当前区块高亮；
- * 4. 小屏汉堡菜单：点选链接后收起下拉（`<details>` 本身无 JS 也能开合）；
+ * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`，点选链接后收起下拉
+ *    （`<details>` 本身无 JS 也能开合）；
  * 5. 回顶 / 到底导轨；
  * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）；
- * 7. 页头下沿的滚动进度条（无 JS 时整条不出现）。
+ * 7. 页头下沿的滚动进度条，以及页头离顶后的投影（无 JS 时两者都不出现）。
  *
- * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动。
+ * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入。
  */
 
 (() => {
@@ -159,6 +160,19 @@
 
   const reveals = all('.reveal');
 
+  /* 同一个父元素里的 .reveal 依次错开：十几张卡同时淡入时，读者的眼睛跟不上
+     并列的变化，排个先后「一组」才像一组。样式侧是 `calc(var(--lp-rank) * 70ms)`，
+     这里只负责编号，并压到 6 档封顶，避免长网格的最后一张等太久。 */
+  if (!reduceMotion) {
+    const ranks = new Map();
+    reveals.forEach(el => {
+      const group = el.parentElement;
+      const rank = ranks.has(group) ? ranks.get(group) : 0;
+      ranks.set(group, rank + 1);
+      el.style.setProperty('--lp-rank', String(Math.min(rank, 6)));
+    });
+  }
+
   if (!reveals.length) {
     /* nothing to enhance */
   } else if (!('IntersectionObserver' in window)) {
@@ -198,14 +212,24 @@
     sections.forEach(section => navObserver.observe(section));
   }
 
-  /* ─────────────── 4. 小屏汉堡菜单：点选后收起 ─────────────── */
+  /* ─────────────── 4. 小屏汉堡菜单：展开状态与点选后收起 ─────────────── */
 
   const navMenu = document.querySelector('.nav-menu');
 
   if (navMenu) {
+    const summary = navMenu.querySelector('summary');
+
+    /* `<details>` 的开合状态辅助技术读得到，但面板现在带进场动画，
+       显式声明 `aria-expanded` 让「按钮控制的是哪块内容」说得更清楚。 */
+    const syncExpanded = () => {
+      if (summary) summary.setAttribute('aria-expanded', String(navMenu.open));
+    };
+
+    navMenu.addEventListener('toggle', syncExpanded);
     navMenu.addEventListener('click', event => {
       if (event.target.closest('a')) navMenu.removeAttribute('open');
     });
+    syncExpanded();
   }
 
   /* ─────────────── 5. 回顶 / 到底导轨 ─────────────── */
@@ -287,16 +311,24 @@
     });
   });
 
-  /* ─────────────── 7. 页头滚动进度条 ─────────────── */
+  /* ─────────────── 7. 页头进度条与离顶投影 ─────────────── */
 
+  const header = document.querySelector('.site-header');
   const scrollBar = document.querySelector('.scroll-progress i');
 
-  if (scrollBar) {
-    /** 改 `transform` 而不是 `width`：进度更新只走合成器，不触发重排。 */
+  if (header || scrollBar) {
+    /**
+     * 进度条改 `transform` 而不是 `width`：进度更新只走合成器，不触发重排。
+     * 投影用 4px 死区，避免页面在亚像素滚动时来回擦边。
+     */
     const onScroll = () => {
-      const scrollable = root.scrollHeight - window.innerHeight;
-      const ratio = scrollable > 0 ? (window.scrollY || root.scrollTop || 0) / scrollable : 0;
-      scrollBar.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
+      const y = window.scrollY || root.scrollTop || 0;
+      if (scrollBar) {
+        const scrollable = root.scrollHeight - window.innerHeight;
+        const ratio = scrollable > 0 ? y / scrollable : 0;
+        scrollBar.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
+      }
+      if (header) header.classList.toggle('is-scrolled', y > 4);
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });

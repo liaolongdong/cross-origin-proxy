@@ -235,6 +235,13 @@ pre {
   color: var(--lp-primary-strong);
   text-decoration: none;
   border-color: var(--lp-primary);
+  transform: translateY(-1px);
+}
+
+/* 按下时回落到原位：悬停是「可以点」，这条是「点到了」。
+   放在两条 :hover 之后，靠源码顺序压过悬停的抬升。 */
+.btn:active {
+  transform: translateY(1px) scale(0.985);
 }
 
 .cta-row {
@@ -335,16 +342,29 @@ html.js .site-nav > a[aria-current] {
   color: var(--lp-primary-strong);
 }
 
-html.js .site-nav > a[aria-current]::after {
+/* 一条下划线承担两件事：悬停时从左长出来（告诉读者这条链接确实可点），
+   当前区块则常驻（由 landing.js 打的 `aria-current` 驱动，因此写在 `html.js` 下）。 */
+.site-nav > a::after {
   position: absolute;
   bottom: -5px;
   left: 0;
   width: 100%;
   height: 2px;
-  color: transparent;
   content: '';
   background: var(--lp-primary);
   border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 0.24s ease;
+}
+
+.site-nav > a:hover::after,
+.site-nav > a:focus-visible::after {
+  transform: scaleX(1);
+}
+
+html.js .site-nav > a[aria-current]::after {
+  transform: scaleX(1);
 }
 
 /* 页内锚点之外的三个入口：另一个页面、站外仓库、语言切换。
@@ -451,8 +471,8 @@ html.js .site-nav > a[aria-current]::after {
   background: var(--lp-primary-faint);
 }
 
-.nav-menu-cross {
-  padding-top: 12px;
+/* 面板里的跨页出口：与页内锚点用一条分隔线分开，行高与其余条目一致。 */
+.nav-menu-exits {
   margin-top: 6px;
   border-top: 1px solid var(--lp-line);
 }
@@ -586,6 +606,7 @@ html.js .site-nav > a[aria-current]::after {
 .hero-visual {
   display: grid;
   gap: 12px;
+  animation: lp-fade 0.7s ease 200ms both;
 }
 
 .hero-visual figure {
@@ -744,6 +765,40 @@ section[aria-labelledby] {
   text-align: center;
 }
 
+/* 区块标题里的语义图标：与 .feature-icon 同一套描边语言与配色，只是收小一号，
+   让标题行有锚点又不抢正文重量。纯样式 + 内联 SVG，禁用 JS 时照常显示。 */
+.section-head h2 {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.section-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--lp-primary);
+  background: var(--lp-primary-soft);
+  border-radius: 11px;
+}
+
+.section-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.section-head.center h2 {
+  justify-content: center;
+}
+
 /* 文档标题栏：供没有 hero 的纯文档页（privacy.html）承载唯一的 <h1>。
    只覆写 padding-top，保留 .wrap 的左右留白。 */
 .page-head {
@@ -820,6 +875,12 @@ section[aria-labelledby] {
   transform: translateY(-3px);
 }
 
+/* 卡片抬起时图标跟着歪一点：让「这张卡被指向了」这件事在图标上也有回应，
+   时长与缓动沿用卡片自身的 transform，两处不会走不同步。 */
+.feature-card:hover .feature-icon {
+  transform: rotate(-6deg) scale(1.06);
+}
+
 .feature-card-lg {
   grid-column: 1 / -1;
   padding: 28px 30px;
@@ -861,6 +922,9 @@ section[aria-labelledby] {
   color: var(--lp-primary);
   background: var(--lp-primary-soft);
   border-radius: 13px;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .feature-icon--green {
@@ -1110,12 +1174,20 @@ html.js .gallery-bar {
   border-radius: 50%;
   transition:
     color 0.18s ease,
-    border-color 0.18s ease;
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
 }
 
 .gallery-btn:hover {
   color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
   border-color: var(--lp-primary);
+  transform: scale(1.08);
+}
+
+.gallery-btn:active {
+  transform: scale(0.94);
 }
 
 .gallery-dots {
@@ -1599,19 +1671,93 @@ html.js .scroll-rail.at-bottom .rail-bottom {
   display: none;
 }
 
-/* ---------- 滚动淡入（渐进增强，无 JS 时内容直接可见） ---------- */
+/* ---------- 滚动淡入与动效（纯装饰，全部在文末的 prefers-reduced-motion 里关掉） ---------- */
 
+/* 同组卡片依次进场：`--lp-rank` 由 landing.js 按「同一个父元素里的第几个 .reveal」写入，
+   延迟只加在 .reveal 这一层，因此一组是一组，不是十几件各自触发的事。
+   整段都在 `html.js` 下：禁用 JS 时内容直接可见，不做任何淡入。 */
 html.js .reveal {
   opacity: 0;
   transform: translateY(18px);
   transition:
-    opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--lp-rank, 0) * 70ms),
+    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--lp-rank, 0) * 70ms);
 }
 
 html.js .reveal.in {
   opacity: 1;
   transform: none;
+}
+
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes lp-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 首屏不等滚动就登场：`both` 让第一帧就停在起始关键帧，避免「先闪一下再位移」。
+   右侧流程图用淡入——它靠虚线与节点对齐自己讲通道，位移进场反而显得在躲。 */
+.hero-copy > * {
+  animation: lp-rise 0.62s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.hero-copy > :nth-child(2) {
+  animation-delay: 70ms;
+}
+
+.hero-copy > :nth-child(3) {
+  animation-delay: 140ms;
+}
+
+.hero-copy > :nth-child(4) {
+  animation-delay: 210ms;
+}
+
+.hero-copy > :nth-child(n + 5) {
+  animation-delay: 280ms;
+}
+
+/* 汉堡面板从页头下沿滑出，和它「被页头打开」的空间关系一致。 */
+.nav-menu[open] .nav-menu-panel {
+  transform-origin: top;
+  animation: lp-panel 0.2s ease both;
+}
+
+@keyframes lp-panel {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* 展开答案时内容淡入，配合卡片高度的变化说明「这段是新出现的」。
+   写在 `details[open]` 上，因此收起再展开会重播一次。 */
+details[open] > p {
+  animation: lp-answer 0.32s ease both;
+}
+
+@keyframes lp-answer {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+
+/* 页头离顶后加投影：只有滚起来之后才需要「页头浮在内容之上」这层信息。
+   阴影走 `html.js`——没有脚本就没有 `.is-scrolled`，不必为它留样式。 */
+html.js .site-header {
+  transition: box-shadow 0.25s ease;
+}
+
+html.js .site-header.is-scrolled {
+  box-shadow: var(--lp-shadow);
 }
 
 /* ---------- 响应式 ---------- */
@@ -1658,30 +1804,46 @@ html.js .reveal.in {
     padding: 44px 0 40px;
   }
 
+  /* 窄屏下标题徽章收小一号：40px 的方块在 390px 宽度上会挤掉两行标题的宽度。 */
+  .section-head h2 {
+    gap: 10px;
+  }
+
+  .section-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .section-icon svg {
+    width: 19px;
+    height: 19px;
+  }
+
   /* 锚点条整体收进汉堡菜单：第二行横向滚动条在 390px 宽度上仍要点准
-     14px 的链接，下拉里是 44px 的行高。跨页链接由下拉里的 .nav-menu-cross 承接。 */
+     14px 的链接，下拉里是 44px 的行高。跨页链接（完整对比 / GitHub / 语言切换）
+     由下拉里的 .nav-menu-exits 承接，因此 .nav-actions 在汉堡页直接隐藏。
+     只作用于带汉堡菜单的页头（.site-header--menu）：隐私页的三条跨页链接没有
+     汉堡可收，若一并隐藏就彻底点不到了，改走下面的换行兜底。 */
   .site-header .wrap {
     gap: 12px;
     padding-top: 10px;
     padding-bottom: 10px;
   }
 
-  .site-nav {
+  .site-header--menu .site-nav,
+  .site-header--menu .nav-actions {
     display: none;
   }
 
-  .nav-menu {
+  .site-header--menu .nav-menu {
     display: block;
-  }
-
-  .nav-actions .nav-cross-link {
-    display: none;
-  }
-
-  .nav-actions {
-    padding-left: 0;
     margin-left: auto;
-    border-left: 0;
+  }
+
+  .site-header:not(.site-header--menu) .site-nav {
+    flex-wrap: wrap;
+    gap: 12px 16px;
   }
 
   .feature-card-lg {
@@ -1768,19 +1930,33 @@ html.js .reveal.in {
     animation: none;
   }
 
+  /* 上面「动效」一节逐项关闭：进场、面板滑出、答案淡入都不再播。 */
+  .hero-copy > *,
+  .hero-visual,
+  .nav-menu[open] .nav-menu-panel,
+  details[open] > p {
+    animation: none;
+  }
+
   .btn,
   .feature-card,
+  .feature-icon,
   .gallery-btn,
   .gallery-dots button,
   .scroll-rail button,
+  .site-nav > a::after,
   summary::before,
   summary::after {
+    transition: none;
+  }
+
+  html.js .reveal,
+  html.js .site-header {
     transition: none;
   }
 
   html.js .reveal {
     opacity: 1;
     transform: none;
-    transition: none;
   }
 }

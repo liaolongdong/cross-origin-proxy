@@ -137,7 +137,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-16",
+            "dateModified": "2026-09-17",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -360,7 +360,7 @@
       >Skip to content</a
     >
 
-    <header class="site-header">
+    <header class="site-header site-header--menu">
       <div class="wrap">
         <a
           class="brand"
@@ -411,11 +411,16 @@
             <a href="#compare">Compare</a>
             <a href="#faq">FAQ</a>
             <a href="#install">Install</a>
-            <a
-              class="nav-menu-cross"
-              href="en-alternatives.html"
-              >Alternatives</a
-            >
+            <div class="nav-menu-exits">
+              <a href="en-alternatives.html">Alternatives</a>
+              <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+              <a
+                href="./"
+                hreflang="zh"
+                lang="zh"
+                >中文</a
+              >
+            </div>
           </div>
         </details>
         <nav
@@ -545,7 +550,24 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="problem-title">The problem it removes</h2>
+            <h2 id="problem-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8"
+                  />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="3.2"
+                  />
+                  <path d="M12 1.5v2.6M12 19.9v2.6M1.5 12h2.6M19.9 12h2.6" /></svg></span
+              >The problem it removes
+            </h2>
             <p class="section-lede">
               Cross-environment debugging usually costs one of three things: a backend change, a config change in every
               project, or a fake local build. This extension collapses all three into a single browser rule that applies
@@ -604,7 +626,15 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="features-title">What a single rule can do</h2>
+            <h2 id="features-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M10 6h10M10 12h10M10 18h10" />
+                  <path d="M3.5 6.2 5 7.7 7.6 4.8M3.5 12.2 5 13.7 7.6 10.8M3.5 18.2 5 19.7 7.6 16.8" /></svg></span
+              >What a single rule can do
+            </h2>
             <p class="section-lede">
               A rule always has a match pattern, a target URL and a priority. Everything else is optional and additive —
               and each capability you switch on is also what decides which channel runs it.
@@ -993,7 +1023,26 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="showcase-title">See the interface</h2>
+            <h2 id="showcase-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="3"
+                    y="4.5"
+                    width="18"
+                    height="15"
+                    rx="2.5"
+                  />
+                  <circle
+                    cx="8.5"
+                    cy="10"
+                    r="1.6"
+                  />
+                  <path d="M21 15.5 15.5 10 6 19.5" /></svg></span
+              >See the interface
+            </h2>
             <p class="section-lede">
               Real screenshots from the current build. The options page holds the rule table, match tester, request logs
               and import/export; the popup keeps the global switch and the current-page preview one click away.
@@ -1189,7 +1238,25 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="hiw-title">How it works</h2>
+            <h2 id="hiw-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M6 3.5v11" />
+                  <circle
+                    cx="18"
+                    cy="6.5"
+                    r="2.8"
+                  />
+                  <circle
+                    cx="6"
+                    cy="17.5"
+                    r="2.8"
+                  />
+                  <path d="M18 9.3a9 9 0 0 1-9 9" /></svg></span
+              >How it works
+            </h2>
             <p class="section-lede">
               Every enabled rule is classified on each config sync, straight from storage. That classification decides
               whether the browser's network stack or the extension's background worker answers the request, and it is
@@ -1404,7 +1471,13 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="steps-title">Get started in four steps</h2>
+            <h2 id="steps-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24"><path d="M2.5 20h5v-5h5v-5h5V5" /></svg></span
+              >Get started in four steps
+            </h2>
             <p class="section-lede">
               No account, no server, no certificate to install. From clone to first proxied request in about a minute.
             </p>
@@ -1487,7 +1560,22 @@ pnpm build</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="use-cases-title">Use cases, with the rule behind each one</h2>
+            <h2 id="use-cases-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="3"
+                    y="7.5"
+                    width="18"
+                    height="12.5"
+                    rx="2.5"
+                  />
+                  <path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7" />
+                  <path d="M3 13h18" /></svg></span
+              >Use cases, with the rule behind each one
+            </h2>
             <p class="section-lede">
               The shortest path from a situation to a configuration. Every row below is the extension's actual
               behaviour, not a workaround.
@@ -1578,7 +1666,18 @@ pnpm build</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="compare-title">How it compares to the alternatives</h2>
+            <h2 id="compare-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 4.5V19" />
+                  <path d="M7.5 19.5h9" />
+                  <path d="M5 7.5h14" />
+                  <path d="M5 7.5 2.6 13h4.8L5 7.5Z" />
+                  <path d="M19 7.5 16.6 13h4.8L19 7.5Z" /></svg></span
+              >How it compares to the alternatives
+            </h2>
             <p class="section-lede">
               Columns are tool <em>categories</em>, not products: capabilities vary inside a category, so check the
               details against what you already use.
@@ -1702,7 +1801,22 @@ pnpm build</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="install-title">Requirements and development</h2>
+            <h2 id="install-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="3"
+                    y="4"
+                    width="18"
+                    height="16"
+                    rx="2.5"
+                  />
+                  <path d="M7.5 10.5 10 13l-2.5 2.5" />
+                  <path d="M12.5 15.5h4" /></svg></span
+              >Requirements and development
+            </h2>
           </div>
           <div class="grid">
             <div class="card">
@@ -1745,7 +1859,15 @@ pnpm assets       # regenerate store and landing images</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="privacy-title">Privacy and permissions</h2>
+            <h2 id="privacy-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 3.5 5.2 5.9v5.4c0 4.1 2.8 7.1 6.8 8.6 4-1.5 6.8-4.5 6.8-8.6V5.9L12 3.5Z" />
+                  <path d="m9.3 11.9 1.9 1.9 3.8-3.9" /></svg></span
+              >Privacy and permissions
+            </h2>
             <p class="section-lede">
               Everything is stored on your machine in <code>chrome.storage.local</code>. There is no account, no
               analytics, no telemetry and no remote service: the only network traffic is the API traffic you ask it to
@@ -1849,7 +1971,20 @@ pnpm assets       # regenerate store and landing images</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="faq-title">Frequently asked questions</h2>
+            <h2 id="faq-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8.5"
+                  />
+                  <path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.7.2-1.2.9-1.2 1.6v.4" />
+                  <path d="M12 17.2h.01" /></svg></span
+              >Frequently asked questions
+            </h2>
             <p class="section-lede">
               Everything on this page is also machine-readable: the same questions and answers are published as
               <code>FAQPage</code> structured data, and <a href="llms.txt">llms.txt</a> summarises the product for AI
@@ -2125,7 +2260,21 @@ pnpm assets       # regenerate store and landing images</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="community-title">Join the WeChat group</h2>
+            <h2 id="community-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M15.5 20v-1.6a4.2 4.2 0 0 0-4.2-4.2H7.2A4.2 4.2 0 0 0 3 18.4V20" />
+                  <circle
+                    cx="9.3"
+                    cy="7.6"
+                    r="3.6"
+                  />
+                  <path d="M21 20v-1.6a4.2 4.2 0 0 0-3.1-4" />
+                  <path d="M15.6 4.3a3.6 3.6 0 0 1 0 6.7" /></svg></span
+              >Join the WeChat group
+            </h2>
             <p class="section-lede">
               How to write a rule, why a proxy didn't kick in, how someone else worked around a given environment — ask
               it in the group. The author hangs out there, and post-mortems from the field are welcome too.
@@ -2196,7 +2345,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-16</span>
+            <span>Last updated 2026-09-17</span>
             <span
               ><a
                 href="./"

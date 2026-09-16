@@ -118,7 +118,7 @@
             "name": "跨环境 API 联调的 5 种做法对比",
             "inLanguage": "zh-CN",
             "datePublished": "2026-09-12",
-            "dateModified": "2026-09-15",
+            "dateModified": "2026-09-17",
             "about": {
               "@type": "SoftwareApplication",
               "name": "跨域代理助手",
@@ -135,7 +135,7 @@
             "inLanguage": "zh-CN",
             "author": { "@type": "Person", "name": "Better", "url": "https://github.com/liaolongdong" },
             "datePublished": "2026-09-12",
-            "dateModified": "2026-09-15",
+            "dateModified": "2026-09-17",
             "image": "https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-zh.png",
             "mainEntityOfPage": {
               "@id": "https://liaolongdong.github.io/cross-origin-proxy/alternatives.html#webpage"
@@ -216,7 +216,7 @@
       >跳到正文</a
     >
 
-    <header class="site-header">
+    <header class="site-header site-header--menu">
       <div class="wrap">
         <a
           class="brand"
@@ -249,6 +249,39 @@
             >English</a
           >
         </nav>
+        <details class="nav-menu">
+          <summary aria-label="打开区块导航">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </summary>
+          <div class="nav-menu-panel">
+            <a href="#tldr">结论速查</a>
+            <a href="#approaches">五种做法</a>
+            <a href="#matrix">对比矩阵</a>
+            <a href="#limits">我们的短板</a>
+            <a href="#switch">迁移方式</a>
+            <a href="#faq">常见问题</a>
+            <div class="nav-menu-exits">
+              <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+              <a
+                href="en-alternatives.html"
+                hreflang="en"
+                lang="en"
+                >English</a
+              >
+            </div>
+          </div>
+        </details>
       </div>
       <div
         class="scroll-progress"
@@ -265,7 +298,7 @@
       >
         <div class="wrap">
           <div class="hero-copy">
-            <span class="eyebrow"><span class="dot"></span> 只对比方案类别 · 不做任何产品宣称 · 更新于 2026-09-15</span>
+            <span class="eyebrow"><span class="dot"></span> 只对比方案类别 · 不做任何产品宣称 · 更新于 2026-09-17</span>
             <h1 id="page-title">
               把前端指向<span class="accent">另一个后端环境</span>的 5 种做法——逐一对比，也写清各自赢在哪
             </h1>
@@ -329,7 +362,16 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="tldr-title">按场景选，不要按工具选</h2>
+            <h2 id="tldr-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 3.5V20" />
+                  <path d="M12 5.5h6.5L21 8l-2.5 2.5H12" />
+                  <path d="M12 13H5.5L3 15.5 5.5 18H12" /></svg></span
+              >按场景选，不要按工具选
+            </h2>
           </div>
           <div class="table-scroll">
             <table class="compare">
@@ -389,7 +431,16 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="approaches-title">五种做法，各自按自己的标准说明</h2>
+            <h2 id="approaches-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 3 3.5 7.2 12 11.5l8.5-4.3L12 3Z" />
+                  <path d="M3.5 12.5 12 16.8l8.5-4.3" />
+                  <path d="M3.5 17 12 21.2l8.5-4.2" /></svg></span
+              >五种做法，各自按自己的标准说明
+            </h2>
             <p class="section-lede">
               每一条都先讲这个做法真正擅长什么。只列类别：同一类别内部能力差异很大，请以你实际在用的工具为准逐项核实。
             </p>
@@ -502,7 +553,41 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="matrix-title">同一份对比的矩阵形式</h2>
+            <h2 id="matrix-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="3.5"
+                    y="3.5"
+                    width="7"
+                    height="7"
+                    rx="1.5"
+                  />
+                  <rect
+                    x="13.5"
+                    y="3.5"
+                    width="7"
+                    height="7"
+                    rx="1.5"
+                  />
+                  <rect
+                    x="3.5"
+                    y="13.5"
+                    width="7"
+                    height="7"
+                    rx="1.5"
+                  />
+                  <rect
+                    x="13.5"
+                    y="13.5"
+                    width="7"
+                    height="7"
+                    rx="1.5"
+                  /></svg></span
+              >同一份对比的矩阵形式
+            </h2>
             <p class="section-lede">
               绿色对该行是有利，橙色是部分具备，灰色是不具备。列是类别，所以每个格子请读作「该类别通常如此」，而不是对某个具体产品的断言。
             </p>
@@ -634,7 +719,16 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="limits-title">哪些情况下本扩展是错误的工具</h2>
+            <h2 id="limits-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 4.5 21 19.5H3L12 4.5Z" />
+                  <path d="M12 10v4" />
+                  <path d="M12 17h.01" /></svg></span
+              >哪些情况下本扩展是错误的工具
+            </h2>
             <p class="section-lede">一份只列优点的对比是广告。下面是你应该另请高明的场景。</p>
           </div>
           <div class="grid">
@@ -689,7 +783,20 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="switch-title">迁移过来时，真正要搬的是什么</h2>
+            <h2 id="switch-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8.5"
+                  />
+                  <path d="M7.5 12h8" />
+                  <path d="m12.5 9 3 3-3 3" /></svg></span
+              >迁移过来时，真正要搬的是什么
+            </h2>
           </div>
           <div class="step-grid">
             <article class="step-card reveal">
@@ -733,7 +840,20 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="faq-title">对比相关的问题</h2>
+            <h2 id="faq-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8.5"
+                  />
+                  <path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.7.2-1.2.9-1.2 1.6v.4" />
+                  <path d="M12 17.2h.01" /></svg></span
+              >对比相关的问题
+            </h2>
             <p class="section-lede">
               产品自身的 FAQ——能力边界、隐私、权限、两条通道如何工作——在
               <a href="./">产品介绍页</a>。这里的回答只关于「在这几种做法之间怎么选」。
@@ -801,7 +921,7 @@
             <span>MIT 开源协议</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-09-15</span>
+            <span>最后更新 2026-09-17</span>
             <span
               ><a
                 href="en-alternatives.html"

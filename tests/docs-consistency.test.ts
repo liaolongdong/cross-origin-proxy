@@ -238,6 +238,37 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(schemaAnswers(file), `${file} 的 FAQ 答案与页面可见文本不一致`).toEqual(faqAnswers(file));
     });
 
+    /**
+     * 区块标题的语义图标：中英两页必须挂同一套图标、同一顺序。
+     * 图标只加一边或两边画得不一样，都是这一条守卫要拦的漂移——
+     * 读者从中文页切到英文页时，标题行的锚点应当完全对得上。
+     */
+    it.each(BILINGUAL_PAIRS)('%s / %s 的区块标题图标与顺序完全一致', (en, zh) => {
+      /** 按文档顺序取 `[标题 id, 去空白后的图标本体]`；没有图标的标题记为空串。 */
+      const iconsOf = (file: string): Array<[string, string]> =>
+        [...read(file).matchAll(/<h2 id="([^"]+)"[\s\S]*?<\/h2>/g)].map(
+          m =>
+            [m[1], (m[0].match(/class="section-icon"[\s\S]*?<\/svg>/)?.[0] ?? '').replace(/\s+/g, '')] as [
+              string,
+              string,
+            ],
+        );
+
+      const [enIcons, zhIcons] = [iconsOf(en), iconsOf(zh)];
+      expect(enIcons.length, `${en} 应有带语义图标的区块标题`).toBeGreaterThanOrEqual(6);
+      for (const [file, icons] of [
+        [en, enIcons],
+        [zh, zhIcons],
+      ] as const) {
+        for (const [id, icon] of icons) {
+          expect(icon, `${file} 的标题 #${id} 缺少 .section-icon 语义图标`).not.toBe('');
+        }
+      }
+      expect(Object.fromEntries(zhIcons), `${en} 与 ${zh} 的区块标题（id、顺序、图标本体）不一致`).toEqual(
+        Object.fromEntries(enIcons),
+      );
+    });
+
     /** 只解析 `<head>` 里的 `<link rel="alternate">` 标注：`hreflang` → 目标 URL。 */
     const hreflangMap = (file: string): Record<string, string> =>
       Object.fromEntries(

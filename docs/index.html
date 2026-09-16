@@ -137,7 +137,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-16",
+            "dateModified": "2026-09-17",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -360,7 +360,7 @@
       >跳到主要内容</a
     >
 
-    <header class="site-header">
+    <header class="site-header site-header--menu">
       <div class="wrap">
         <a
           class="brand"
@@ -411,11 +411,16 @@
             <a href="#compare">方案对比</a>
             <a href="#faq">常见问题</a>
             <a href="#install">安装</a>
-            <a
-              class="nav-menu-cross"
-              href="alternatives.html"
-              >完整对比</a
-            >
+            <div class="nav-menu-exits">
+              <a href="alternatives.html">完整对比</a>
+              <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+              <a
+                href="en.html"
+                hreflang="en"
+                lang="en"
+                >English</a
+              >
+            </div>
           </div>
         </details>
         <nav
@@ -543,7 +548,24 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="problem-title">它消掉了哪一类成本</h2>
+            <h2 id="problem-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8"
+                  />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="3.2"
+                  />
+                  <path d="M12 1.5v2.6M12 19.9v2.6M1.5 12h2.6M19.9 12h2.6" /></svg></span
+              >它消掉了哪一类成本
+            </h2>
             <p class="section-lede">
               跨环境调试通常要付出三种成本之一：改后端、每个项目改一次配置，或者本地伪造一套构建。这款扩展把这三者收敛成一条浏览器规则，并对你打开的每个页面生效。
             </p>
@@ -595,7 +617,15 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="features-title">一条规则能做到哪些事</h2>
+            <h2 id="features-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M10 6h10M10 12h10M10 18h10" />
+                  <path d="M3.5 6.2 5 7.7 7.6 4.8M3.5 12.2 5 13.7 7.6 10.8M3.5 18.2 5 19.7 7.6 16.8" /></svg></span
+              >一条规则能做到哪些事
+            </h2>
             <p class="section-lede">
               匹配模式、目标地址与优先级是一条规则的骨架。其余能力都是可选且可叠加的——而你开启的每一项能力，同时也决定了这条规则走哪条通道。
             </p>
@@ -971,7 +1001,26 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="showcase-title">界面预览</h2>
+            <h2 id="showcase-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="3"
+                    y="4.5"
+                    width="18"
+                    height="15"
+                    rx="2.5"
+                  />
+                  <circle
+                    cx="8.5"
+                    cy="10"
+                    r="1.6"
+                  />
+                  <path d="M21 15.5 15.5 10 6 19.5" /></svg></span
+              >界面预览
+            </h2>
             <p class="section-lede">
               以下均为当前版本的真实截图。配置页承载规则表、匹配测试、请求日志与导入导出；弹窗把总开关与当前页预览放在一步可达的位置。
             </p>
@@ -1161,7 +1210,25 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="hiw-title">工作原理</h2>
+            <h2 id="hiw-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M6 3.5v11" />
+                  <circle
+                    cx="18"
+                    cy="6.5"
+                    r="2.8"
+                  />
+                  <circle
+                    cx="6"
+                    cy="17.5"
+                    r="2.8"
+                  />
+                  <path d="M18 9.3a9 9 0 0 1-9 9" /></svg></span
+              >工作原理
+            </h2>
             <p class="section-lede">
               每条启用的规则在每次配置同步时从存储里重新分类。是这个分类决定请求由浏览器网络栈还是扩展后台应答，匹配测试器展示给你的也就是它的结果。总开关管着两条通道：关掉时网络层规则被整体清空，后台通道也原样放行请求。
             </p>
@@ -1352,7 +1419,13 @@
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="steps-title">四步开始使用</h2>
+            <h2 id="steps-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24"><path d="M2.5 20h5v-5h5v-5h5V5" /></svg></span
+              >四步开始使用
+            </h2>
             <p class="section-lede">无需注册、无需服务器、无需安装证书。从克隆到第一条代理请求大约一分钟。</p>
           </div>
           <div class="step-grid">
@@ -1432,7 +1505,22 @@ pnpm build</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="use-cases-title">使用场景与对应的规则写法</h2>
+            <h2 id="use-cases-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="3"
+                    y="7.5"
+                    width="18"
+                    height="12.5"
+                    rx="2.5"
+                  />
+                  <path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7" />
+                  <path d="M3 13h18" /></svg></span
+              >使用场景与对应的规则写法
+            </h2>
             <p class="section-lede">从场景到配置的最短路径。下表每一行都是扩展已实现的行为，不是变通方案。</p>
           </div>
           <div class="table-scroll">
@@ -1520,7 +1608,18 @@ pnpm build</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="compare-title">与其他方案对比</h2>
+            <h2 id="compare-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 4.5V19" />
+                  <path d="M7.5 19.5h9" />
+                  <path d="M5 7.5h14" />
+                  <path d="M5 7.5 2.6 13h4.8L5 7.5Z" />
+                  <path d="M19 7.5 16.6 13h4.8L19 7.5Z" /></svg></span
+              >与其他方案对比
+            </h2>
             <p class="section-lede">
               表头是工具<em>类别</em>而非具体产品：同一类里的能力差异很大，请以你在用的工具实际文档为准。
             </p>
@@ -1638,7 +1737,22 @@ pnpm build</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="install-title">运行要求与开发命令</h2>
+            <h2 id="install-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="3"
+                    y="4"
+                    width="18"
+                    height="16"
+                    rx="2.5"
+                  />
+                  <path d="M7.5 10.5 10 13l-2.5 2.5" />
+                  <path d="M12.5 15.5h4" /></svg></span
+              >运行要求与开发命令
+            </h2>
           </div>
           <div class="grid">
             <div class="card">
@@ -1680,7 +1794,15 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="privacy-title">隐私与权限</h2>
+            <h2 id="privacy-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 3.5 5.2 5.9v5.4c0 4.1 2.8 7.1 6.8 8.6 4-1.5 6.8-4.5 6.8-8.6V5.9L12 3.5Z" />
+                  <path d="m9.3 11.9 1.9 1.9 3.8-3.9" /></svg></span
+              >隐私与权限
+            </h2>
             <p class="section-lede">
               所有内容都存在本机的
               <code>chrome.storage.local</code
@@ -1781,7 +1903,20 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="faq-title">常见问题</h2>
+            <h2 id="faq-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8.5"
+                  />
+                  <path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.7.2-1.2.9-1.2 1.6v.4" />
+                  <path d="M12 17.2h.01" /></svg></span
+              >常见问题
+            </h2>
             <p class="section-lede">
               页面内容也是机器可读的：同样的问答以 <code>FAQPage</code> 结构化数据发布，<a href="llms.txt">llms.txt</a>
               则向 AI 助手概述这款产品的能力与架构。
@@ -2037,7 +2172,21 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="community-title">加入微信交流群</h2>
+            <h2 id="community-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M15.5 20v-1.6a4.2 4.2 0 0 0-4.2-4.2H7.2A4.2 4.2 0 0 0 3 18.4V20" />
+                  <circle
+                    cx="9.3"
+                    cy="7.6"
+                    r="3.6"
+                  />
+                  <path d="M21 20v-1.6a4.2 4.2 0 0 0-3.1-4" />
+                  <path d="M15.6 4.3a3.6 3.6 0 0 1 0 6.7" /></svg></span
+              >加入微信交流群
+            </h2>
             <p class="section-lede">
               规则怎么写、代理为什么没生效、某个环境下的坑怎么绕，都可以在群里问。作者本人常驻群里，也欢迎把踩过的坑贴出来。
             </p>
@@ -2106,7 +2255,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-09-16</span>
+            <span>最后更新 2026-09-17</span>
             <span
               ><a
                 href="en.html"
