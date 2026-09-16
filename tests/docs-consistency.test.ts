@@ -342,6 +342,36 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(h2(en), '中英 README 的章节数必须对等（只改一边就是漂移）').toBe(h2(zh));
     });
 
+    /**
+     * 目录锚点只在 GitHub 渲染后才生效，写错不会变红、只会静默失效。GitHub 的 slug
+     * 规则实测于 `/repos/…/readme` 的 HTML 渲染结果：小写，保留字母/数字/组合标记/
+     * `_`/`-`，空格转 `-`。要点是变体选择符 U+FE0F 属于组合标记、**会被留下**，而它
+     * 前面的 emoji 被删掉——所以 `## 🖼️ 界面预览` 的锚点是 `#️-界面预览`，目录里写
+     * `#-界面预览` 就是死链。被链接的标题只能用不带 FE0F 的图标。
+     */
+    it('README 与 CONTRIBUTING 的页内锚点都能对上 GitHub 的标题 slug', () => {
+      const slug = (heading: string): string =>
+        heading
+          .trim()
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\p{M}_ -]/gu, '')
+          .replace(/ /g, '-');
+
+      for (const file of ['README.md', 'README.en.md', 'CONTRIBUTING.md']) {
+        const text = read(file);
+        const slugs = new Set([...text.matchAll(/^#{1,6} (.+)$/gm)].map(m => slug(m[1])));
+        const anchors = [...text.matchAll(/\]\(#([^)]+)\)/g)].map(m => m[1]);
+        // 目录是这条守卫的主要保护对象；CONTRIBUTING 目前没有页内锚点，只在其出现时校验。
+        if (file.startsWith('README')) {
+          expect(anchors, `${file} 没有页内锚点，守卫失效`).not.toHaveLength(0);
+        }
+        for (const anchor of anchors) {
+          const base = anchor.replace(/-\d+$/, '');
+          expect(slugs.has(anchor) || slugs.has(base), `${file} 的锚点 #${anchor} 在 GitHub 上不存在`).toBe(true);
+        }
+      }
+    });
+
     it('sitemap 为每个中英页面对补齐 en / zh / x-default 三条 alternate', () => {
       const blocks = read('docs/sitemap.xml').split('<url>').slice(1);
       for (const [en, zh] of BILINGUAL_PAIRS) {
@@ -453,7 +483,10 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      */
     it('落地页统计条的「每规则能力数」与中英 README 的能力清单条目数一致', () => {
       const capabilityBullets = (file: string): number => {
-        const list = read(file).match(/### (?:Request proxy & modification|代理与请求改写)\n([\s\S]*?)\n### /)?.[1];
+        /** 标题带语义图标前缀（`### 🔀 代理与请求改写`），因此这里允许可选前缀，只锚定标题文字。 */
+        const list = read(file).match(
+          /### (?:\S+\s+)?(?:Request proxy & modification|代理与请求改写)\n([\s\S]*?)\n### /,
+        )?.[1];
         expect(list, `${file} 缺少「请求代理与改写」能力清单`).toBeTruthy();
         return [...(list ?? '').matchAll(/^- \*\*/gm)].length;
       };

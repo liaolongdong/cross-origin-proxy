@@ -22,19 +22,21 @@
 &nbsp;
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 &nbsp;
-[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#install)
+[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#-install)
 &nbsp;
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](./CONTRIBUTING.md)
 
 > Your frontend runs against FAT, the fix you need only exists on UAT. Instead of editing a devServer proxy per project, hardcoding a token, or asking the backend to open CORS and redeploy, you add one rule in Chrome: match `https://fat-api.example.com/*`, target `https://uat-api.example.com`, done. The same rule set can also rewrite headers and responses, mock data, inject latency, block requests and forward WebSocket.
 
-[Install](#install) · [How it works](#how-it-works) · [Features](#features) · [Interface preview](#interface-preview) · [Use cases](#use-cases) · [FAQ](#faq) · [Community](#community--feedback) · [Contributing](./CONTRIBUTING.md)
+> 🌐 **[Product site](https://liaolongdong.github.io/cross-origin-proxy/en.html)** ｜ ⚙️ Chrome Manifest V3 ｜ 🔒 Rules and logs stay on your machine ｜ 🧪 Vitest coverage of the proxy path ｜ 🎨 6 themes · bilingual UI
+
+**Contents**: [Why this exists](#-why-this-exists) · [What makes it different](#-what-makes-it-different) · [How it compares](#-how-it-compares) · [Install](#-install) · [How it works](#-how-it-works) · [Features](#-features) · [Interface preview](#-interface-preview) · [Use cases](#-use-cases) · [FAQ](#-faq) · [Permissions](#-permissions) · [Community](#-community--feedback) · [Contributing](./CONTRIBUTING.md)
 
 </div>
 
 ---
 
-## Why this exists
+## 🎯 Why this exists
 
 Cross-environment debugging normally costs one of three things: a backend change, a config change in every project, or a fake local build. This extension collapses all three into a browser rule.
 
@@ -47,21 +49,45 @@ Cross-environment debugging normally costs one of three things: a backend change
 
 Built with [WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite, on Manifest V3.
 
-### What makes it different
+## ✨ What makes it different
 
-| Advantage                                 | What it means while you debug                                                                                                                                   |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Zero JavaScript on the fast path          | Rules that only rewrite the URL compile to `declarativeNetRequest` redirects, so the browser's network stack does the work — no page-side hook runs per request |
-| Reads and rewrites HTTPS with no local CA | It runs inside the browser: no certificate to install, no proxy port to point DevTools at, no system-wide setting                                               |
-| Rewrites responses, not just destinations | Status code, response headers, or single JSON fields by dot path (`data.token`), plus mock bodies chosen by URL / method / query conditions                     |
-| Covers WebSocket                          | `ws://` and `wss://` connections are redirected by the same rule set that handles your HTTP calls                                                               |
-| Environments instead of one-off edits     | Named profiles snapshot the entire rule set for FAT / UAT / PROD, and an auto-off countdown stops the proxy before you forget it is on                          |
-| Nothing leaves the machine                | Rules, logs and profiles live in `chrome.storage.local`; no analytics, no telemetry, no account, no service of its own                                          |
-| Open source and bilingual                 | MIT licensed, and both the UI and the documentation ship in English and Chinese                                                                                 |
+| Advantage                                        | What it means while you debug                                                                                                                                   |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⚡ **Zero JavaScript on the fast path**          | Rules that only rewrite the URL compile to `declarativeNetRequest` redirects, so the browser's network stack does the work — no page-side hook runs per request |
+| 🌐 **Reads and rewrites HTTPS with no local CA** | It runs inside the browser: no certificate to install, no proxy port to point DevTools at, no system-wide setting                                               |
+| 📝 **Rewrites responses, not just destinations** | Status code, response headers, or single JSON fields by dot path (`data.token`), plus mock bodies chosen by URL / method / query conditions                     |
+| 🔌 **Covers WebSocket**                          | `ws://` and `wss://` connections are redirected by the same rule set that handles your HTTP calls                                                               |
+| 🔄 **Environments instead of one-off edits**     | Named profiles snapshot the entire rule set for FAT / UAT / PROD, and an auto-off countdown stops the proxy before you forget it is on                          |
+| 🔒 **Nothing leaves the machine**                | Rules, logs and profiles live in `chrome.storage.local`; no analytics, no telemetry, no account, no service of its own                                          |
+| 📖 **Open source and bilingual**                 | MIT licensed, and both the UI and the documentation ship in English and Chinese                                                                                 |
 
-The long version — this extension against dev-server proxies, capture proxies, API clients, header-modifier extensions and editing app config, including the six cases where it is the wrong tool — is on the product site: [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html) · [中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html).
+**Who it fits**
 
-## Install
+- 💻 **Frontend / client developers** — the page is on FAT and the fix is on UAT: one rule switches it, with no devServer change and no source change
+- 🧪 **Test engineers** — mock, latency, block and retry turn "wait for someone to seed data" into a rule you write yourself, so error branches stay reproducible
+- 🔧 **Full-stack / backend** — point a deployed frontend at the service on your laptop without asking for a domain or a CORS allow-list first
+- 🔁 **Anyone juggling environments** — named profiles swap the whole rule set between FAT / UAT / PRE / PROD instead of re-entering it every time
+
+## 🆚 How it compares
+
+⭐ marks this project. Each row states what a given approach can do out of the box, and matches the [comparison page](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html) in this repository.
+
+| What you care about                                 | ⭐ **Cross-Origin Proxy** | Dev-server proxy | System capture proxy | API client            | Header-modifier extension |
+| --------------------------------------------------- | ------------------------- | ---------------- | -------------------- | --------------------- | ------------------------- |
+| Needs the backend or a gateway to change anything   | ✅ No                     | ⚠️ Often         | ✅ No                | ✅ No                 | ✅ No                     |
+| One rule covers every project in the browser        | ✅ Yes                    | ❌ Per project   | ✅ System-wide       | ❌ Only its own calls | ✅ Yes                    |
+| Rewrites responses (status, headers, JSON fields)   | ✅ Yes                    | ❌ No            | ✅ Yes               | ⚠️ Mock server        | ⚠️ Response headers only  |
+| Mock / latency / block / retry                      | ✅ Conditional mock too   | ❌ Extra plugin  | ✅ Yes               | ✅ Yes                | ⚠️ Usually mock only      |
+| Covers WebSocket                                    | ✅ Yes                    | ⚠️ Rare          | ✅ Yes               | ❌ No                 | ❌ No                     |
+| Reading HTTPS needs a local CA certificate          | ✅ Not needed             | ✅ Not needed    | ❌ Required          | ✅ Not needed         | ✅ Not needed             |
+| Covers non-browser traffic (apps, desktop, servers) | ❌ Browser pages only     | ❌ No            | ✅ Yes               | ⚠️ Its own requests   | ❌ No                     |
+| Works in CI without a browser                       | ❌ No                     | ✅ Yes           | ✅ Yes               | ✅ Yes (CLI runner)   | ❌ No                     |
+
+✅ works out of the box · ⚠️ possible with conditions or extra setup · ❌ that approach does not do it.
+
+**When it is the wrong tool**: traffic from a mobile app or a desktop process (use a system capture proxy), a configuration the whole team must review and share (put it in the repository as a dev-server proxy or app config), or an endpoint that does not exist yet and whose shape you still have to agree with the backend (the request in an API client is the shareable artefact). The six criteria with their reasoning are on the comparison page: [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html) · [中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html).
+
+## 📥 Install
 
 Requires a recent desktop Google Chrome (Manifest V3). The Chrome Web Store listing is in preparation — until then, use one of these two paths.
 
@@ -101,7 +127,7 @@ Either way, once it is installed: click the icon, turn on **Proxy Switch**, add 
 
 4. Reload the page. Requests matching an enabled rule are proxied. A wildcard rewrite like this one runs in the network layer and therefore writes **no per-request log entry** — confirm it with the **URL match tester**, or with the DNR hit counts inside **Request Logs**.
 
-## How it works
+## 🧭 How it works
 
 Every enabled rule is classified from its own fields each time the rule set is synced — the classification is never stored on the rule. Rules that only rewrite the URL become `declarativeNetRequest` dynamic rules and are resolved by the browser's network stack — zero JavaScript per request. Everything richer runs through the background channel. **Proxy Switch** governs both channels: switching it off uninstalls the network-layer rules too, so nothing keeps redirecting once you think it is off.
 
@@ -125,9 +151,9 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 **Fallback.** If interception fails, the page falls back to native `fetch` / `XMLHttpRequest` / `WebSocket`, so requests still go out normally. Block rules are the deliberate exception: a blocked request is never replayed.
 
-## Features
+## 📋 Features
 
-### Request proxy & modification
+### 🔀 Request proxy & modification
 
 - **Rule-based URL rewriting** — match by wildcard, prefix or regex, then redirect to a target environment
 - **Request header overrides** — inject or replace headers per rule (e.g. the target environment's auth token)
@@ -142,7 +168,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Query parameter injection** — append or override query params on the proxied URL (`__env=uat`, gray-release tags) without rewriting the whole URL
 - **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite, handled in the page interceptor
 
-### Rule management
+### 🧰 Rule management
 
 - Add / edit / duplicate / delete via a visual form
 - **Quick templates** in the empty state, before you have any rules (wildcard API proxy, prefix path, auth header, header override), and **undo** immediately after a delete
@@ -153,7 +179,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - Keyword search across name, pattern and target URL, plus filters by status and match type
 - **Conflict warning** when the rule being edited is shadowed by a higher-priority rule with the same pattern, so a rule that can never fire does not go unnoticed
 
-### Logs & debugging
+### 🔍 Logs & debugging
 
 - Request log panel: method, status, duration, plus hit statistics for both channels — DNR over the last 5 minutes and service-worker hits since the last config change (an in-memory count that restarts when the worker is recycled)
 - Log detail viewer: request and response headers and text bodies (a binary response body is not stored), JSON auto-formatted
@@ -161,7 +187,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - Filter by method (GET / POST / PUT / DELETE), status class (2xx / 4xx / 5xx), rule or URL keyword
 - **URL match tester** in the header bar: type any URL (optionally with a method) to preview in real time the matched rule, the rewritten URL, the forwarding channel and which other rules match the same URL but lose to it
 
-### Import, export, environments
+### 📦 Import, export, environments
 
 - Export configuration as JSON; on import, replace the current rules or merge into them
 - **HAR 1.2** export of captured requests, and HAR import that auto-creates rules from recorded traffic (those rules arrive disabled until you enable them)
@@ -169,13 +195,13 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Environment profiles** — save the current rule set as a named snapshot and switch between FAT / UAT / PROD
 - Auto-off countdown (`chrome.alarms`, survives service-worker restarts) and a badge that shows proxy state
 
-### Interface
+### 🎨 Interface
 
 - Popup quick panel: global switch, today's request count (background channel only), recent requests, auto-off countdown, **current-page hit preview**, and "Create rule for this page" prefilled from the active tab
 - English / 简体中文 UI, six themes with light / dark / system modes
 - Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy (Chrome-level command), and on the options page <kbd>N</kbd> new rule, <kbd>/</kbd> or <kbd>⌘</kbd>+<kbd>F</kbd> focus search, <kbd>Esc</kbd> close the topmost dialog. <kbd>N</kbd> is a bare key, like Gmail — <kbd>⌘</kbd>+<kbd>N</kbd> is reserved by the browser and cannot be captured.
 
-## Interface preview
+## 📸 Interface preview
 
 <table>
   <tr>
@@ -214,7 +240,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 </details>
 
-## Use cases
+## 🚀 Use cases
 
 | Situation                                     | Rule configuration                                 |
 | --------------------------------------------- | -------------------------------------------------- |
@@ -227,7 +253,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 | Send only writes to the test backend          | Method filter on `POST` / `PUT` / `DELETE`         |
 | Hand the same setup to a teammate             | Export JSON, or share HAR-derived rules            |
 
-## FAQ
+## ❓ FAQ
 
 <details open>
 <summary><strong>Does this bypass CORS?</strong></summary>
@@ -273,7 +299,7 @@ Built and tested for Chrome (MV3). Edge runs Chromium extensions so the same bui
 
 </details>
 
-## Permissions
+## 🔐 Permissions
 
 | Permission                      | Why needed                                                              |
 | ------------------------------- | ----------------------------------------------------------------------- |
@@ -285,11 +311,11 @@ Built and tested for Chrome (MV3). Edge runs Chromium extensions so the same bui
 
 Every permission also has a store-facing justification in [CHROMEWEBSTORE.md](./CHROMEWEBSTORE.md).
 
-## Contributing
+## 🤝 Contributing
 
 Built with WXT + Vue 3 + TypeScript + Element Plus (Manifest V3); requires Node.js 20+ and pnpm 10 — `pnpm dev` for HMR development, `pnpm build` for `.output/chrome-mv3`, `pnpm test` for unit tests. Small fixes are welcome. The full command list, repository layout, CI and release conventions are in [CONTRIBUTING.md](./CONTRIBUTING.md); the store runbook is [RELEASING.md](./RELEASING.md) and the one-time GitHub repo checklist is [GITHUB.md](./GITHUB.md).
 
-## Community & feedback
+## 💬 Community & feedback
 
 How to write a rule, why a request did not get proxied, workarounds for a specific environment — the author hangs out in the WeChat group and answers there. The group speaks Chinese, so if you prefer English, open a GitHub Issue instead.
 
@@ -301,11 +327,11 @@ Scan to add the author on WeChat (ID: `lld_1025`) and put **`cxp`** in the frien
 - Bugs and feature requests belong in [GitHub Issues](https://github.com/liaolongdong/cross-origin-proxy/issues): attach the request log and a rules export — much easier to diagnose than a screenshot
 - Product site: [English](https://liaolongdong.github.io/cross-origin-proxy/en.html) · [中文](https://liaolongdong.github.io/cross-origin-proxy/)
 
-## Other extensions by me
+## 🧩 Other extensions by me
 
 - [Account Password Helper · 账号密码管理助手](https://github.com/liaolongdong/account-password-helper) — another Manifest V3 extension by the same author: a local-first open-source password manager that clicks the login button for you, isolates dev / test / staging / prod by exact host, and ships TOTP plus an offline security audit. It answers "who am I in this environment", this one answers "where do this environment's requests go" — the two are often on together while debugging. [Product page](https://liaolongdong.github.io/account-password-helper/) · [Chrome Web Store](https://chromewebstore.google.com/detail/account-password-helper/fgimkdodpjfkddmildjieojpfakpanli)
 
-## License
+## 📄 License
 
 [MIT](./LICENSE) · Copyright (c) 2026 Better
 

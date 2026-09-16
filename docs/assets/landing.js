@@ -10,7 +10,8 @@
  * 3. 导航当前区块高亮；
  * 4. 小屏汉堡菜单：点选链接后收起下拉（`<details>` 本身无 JS 也能开合）；
  * 5. 回顶 / 到底导轨；
- * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）。
+ * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）；
+ * 7. 页头下沿的滚动进度条（无 JS 时整条不出现）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动。
  */
@@ -285,4 +286,21 @@
       report(copied ? okMsg : errMsg, copied);
     });
   });
+
+  /* ─────────────── 7. 页头滚动进度条 ─────────────── */
+
+  const scrollBar = document.querySelector('.scroll-progress i');
+
+  if (scrollBar) {
+    /** 改 `transform` 而不是 `width`：进度更新只走合成器，不触发重排。 */
+    const onScroll = () => {
+      const scrollable = root.scrollHeight - window.innerHeight;
+      const ratio = scrollable > 0 ? (window.scrollY || root.scrollTop || 0) / scrollable : 0;
+      scrollBar.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  }
 })();

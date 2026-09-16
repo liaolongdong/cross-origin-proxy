@@ -22,19 +22,21 @@
 &nbsp;
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 &nbsp;
-[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#安装)
+[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#-安装)
 &nbsp;
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](./CONTRIBUTING.md)
 
 > 页面连着 FAT，你要的修复只在 UAT。传统做法要么改每个项目的 devServer 代理、要么硬塞一个 token、要么请后端放开 CORS 再发一次版。这里只需要在 Chrome 里加一条规则：匹配 `https://fat-api.example.com/*`，目标 `https://uat-api.example.com`。同一套规则还能改写请求头与响应、Mock 数据、注入延迟、阻断请求、转发 WebSocket。
 
-[安装](#安装) · [工作原理](#工作原理) · [功能](#功能) · [界面预览](#界面预览) · [使用场景](#使用场景) · [常见问题](#常见问题) · [交流与反馈](#交流与反馈) · [参与贡献](./CONTRIBUTING.md)
+> 🌐 **[产品站](https://liaolongdong.github.io/cross-origin-proxy/)** ｜ ⚙️ Chrome Manifest V3 ｜ 🔒 规则与日志只存本机 ｜ 🧪 Vitest 单测覆盖代理与改写链路 ｜ 🎨 6 套主题 · 中英双语
+
+**目录**：[它解决的是什么](#-它解决的是什么) · [核心优势](#-核心优势) · [横向对比](#-横向对比) · [安装](#-安装) · [工作原理](#-工作原理) · [功能](#-功能) · [界面预览](#-界面预览) · [使用场景](#-使用场景) · [常见问题](#-常见问题) · [权限](#-权限) · [交流与反馈](#-交流与反馈) · [参与贡献](./CONTRIBUTING.md)
 
 </div>
 
 ---
 
-## 它解决的是什么
+## 🎯 它解决的是什么
 
 跨环境联调通常要付出三样代价之一：改后端、改每个项目的配置、或者在本地伪造一份构建。这个扩展把它们收敛成浏览器里的一条规则。
 
@@ -47,21 +49,45 @@
 
 技术栈：[WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite，Manifest V3。
 
-### 核心优势
+## ✨ 核心优势
 
-| 优势                       | 联调时意味着什么                                                                                                |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 快通道上零 JS              | 只重写 URL 的规则编译成 `declarativeNetRequest` 重定向，由浏览器网络栈完成转发，每个请求不会跑一段页面侧钩子    |
-| 不装本地 CA 也能改写 HTTPS | 它运行在浏览器内部：不必安装证书、不必把 DevTools 指到某个代理端口、不动系统级设置                              |
-| 改写的是响应，不只是目的地 | 状态码、响应头，或按点分路径替换单个 JSON 字段（`data.token`）；Mock 还能按 URL / 方法 / 查询参数条件挑选响应体 |
-| 覆盖 WebSocket             | `ws://` 与 `wss://` 长连接用同一套规则重写，不必另配                                                            |
-| 管的是环境，不是一次性改动 | 环境配置快照把整套规则存成命名快照，在 FAT / UAT / PROD 间一键切换；自动关闭倒计时在你忘记之前把代理关掉        |
-| 数据不出本机               | 规则、日志与环境配置全部留在 `chrome.storage.local`：无统计埋点、无遥测、无账号、也没有自有服务端               |
-| 开源且双语                 | MIT 协议，界面与文档同时提供中英文两版                                                                          |
+| 优势                              | 联调时意味着什么                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| ⚡ **快通道上零 JS**              | 只重写 URL 的规则编译成 `declarativeNetRequest` 重定向，由浏览器网络栈完成转发，每个请求不会跑一段页面侧钩子    |
+| 🌐 **不装本地 CA 也能改写 HTTPS** | 它运行在浏览器内部：不必安装证书、不必把 DevTools 指到某个代理端口、不动系统级设置                              |
+| 📝 **改写的是响应，不只是目的地** | 状态码、响应头，或按点分路径替换单个 JSON 字段（`data.token`）；Mock 还能按 URL / 方法 / 查询参数条件挑选响应体 |
+| 🔌 **覆盖 WebSocket**             | `ws://` 与 `wss://` 长连接用同一套规则重写，不必另配                                                            |
+| 🔄 **管的是环境，不是一次性改动** | 环境配置快照把整套规则存成命名快照，在 FAT / UAT / PROD 间一键切换；自动关闭倒计时在你忘记之前把代理关掉        |
+| 🔒 **数据不出本机**               | 规则、日志与环境配置全部留在 `chrome.storage.local`：无统计埋点、无遥测、无账号、也没有自有服务端               |
+| 📖 **开源且双语**                 | MIT 协议，界面与文档同时提供中英文两版                                                                          |
 
-完整对比——本扩展与 devServer 代理、抓包代理工具、API 客户端、请求头改写扩展、改应用配置各自擅长什么，以及六种不该用它的情形——在产品站：[中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html) · [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html)。
+**适合谁**
 
-## 安装
+- 💻 **前端 / 客户端开发** — 页面停在 FAT，修复在 UAT：一条规则切过去，不动 devServer、不动源码
+- 🧪 **测试工程师** — Mock、延迟、阻断、重试把「等后端造数据」变成自己配一条规则，异常分支也能稳定复现
+- 🔧 **全栈 / 后端** — 本地服务起来后，让已部署的前端直接调你这台机器，不必先申请域名与 CORS 白名单
+- 🔁 **多环境切换频繁的人** — 命名快照在 FAT / UAT / PRE / PROD 间一键换，不用每次重填一遍规则
+
+## 🆚 横向对比
+
+⭐ 为本项目。各行结论取自各方案的公开能力，与本仓库[方案对比页](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html)一致。
+
+| 关心的事                                       | ⭐ **跨域代理助手** | Dev Server 代理 | 系统级抓包代理 | API 客户端          | 改请求头的扩展   |
+| ---------------------------------------------- | ------------------- | --------------- | -------------- | ------------------- | ---------------- |
+| 需要后端 / 网关配合改动                        | ✅ 不需要           | ⚠️ 常需要       | ✅ 不需要      | ✅ 不需要           | ✅ 不需要        |
+| 一次配置对浏览器里所有项目生效                 | ✅ 是               | ❌ 每个项目一份 | ✅ 系统级      | ❌ 只发自己的请求   | ✅ 是            |
+| 改写响应（状态码 / 响应头 / JSON 字段）        | ✅ 是               | ❌ 否           | ✅ 是          | ⚠️ Mock 服务        | ⚠️ 仅响应头      |
+| Mock / 延迟 / 阻断 / 重试                      | ✅ 含条件化 Mock    | ❌ 需额外插件   | ✅ 是          | ✅ 是               | ⚠️ 通常只有 Mock |
+| 覆盖 WebSocket                                 | ✅ 是               | ⚠️ 少见         | ✅ 是          | ❌ 否               | ❌ 否            |
+| 读取 HTTPS 需要装本机 CA 证书                  | ✅ 不需要           | ✅ 不需要       | ❌ 需要        | ✅ 不需要           | ✅ 不需要        |
+| 覆盖非浏览器流量（手机 App、桌面、服务端进程） | ❌ 只在浏览器内     | ❌ 否           | ✅ 能          | ⚠️ 只覆盖它自己发的 | ❌ 否            |
+| 无需浏览器即可在 CI 里跑                       | ❌ 否               | ✅ 是           | ✅ 是          | ✅ 是（CLI runner） | ❌ 否            |
+
+✅ 开箱即用 · ⚠️ 有条件或需额外配置 · ❌ 该方案做不到。
+
+**什么时候别用它**：需要覆盖手机 App 或桌面程序的流量（走系统级抓包代理）、需要一份能被 review 且全团队共用的配置（写进仓库的 devServer 代理或应用配置）、接口本身还不存在且需要先跟后端约定形状（API 客户端里那份请求才是可分享的产物）。六条判据与理由在对比页写全了：[中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html) · [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html)。
+
+## 📥 安装
 
 需要较新版本的桌面 Google Chrome（Manifest V3）。Chrome 应用商店上架准备中，在此之前走下面两条路径之一。
 
@@ -101,7 +127,7 @@ pnpm build
 
 4. 刷新页面。命中已启用规则的请求会被代理。但像上面这种通配符重写走的是网络层，**不会留下逐条请求日志**——请用 **URL 匹配预演**，或到**请求日志**里看 DNR 命中统计来确认。
 
-## 工作原理
+## 🧭 工作原理
 
 每条启用的规则在每次配置同步时按其自身字段重新判定一次，判定结果并不存储在规则上。只做 URL 重写的规则会编译成 `declarativeNetRequest` 动态规则，交给浏览器网络栈处理，单个请求零 JS 开销；能力更全的规则走后台通道。**代理开关**管住两条通道：关掉它时网络层规则同样会被卸载，不会出现「以为关了、其实还在重定向」。
 
@@ -125,9 +151,9 @@ flowchart TD
 
 **兜底行为。** 拦截失败时页面会回退到原生 `fetch` / `XMLHttpRequest` / `WebSocket`，请求照常发出，不会因为扩展异常而中断。阻断规则是唯一的例外——被阻断的请求绝不回退发出。
 
-## 功能
+## 📋 功能
 
-### 代理与请求改写
+### 🔀 代理与请求改写
 
 - **规则化 URL 重写**——按通配符、前缀、正则匹配后转发到目标环境
 - **请求头改写**——按规则注入或替换请求头（例如目标环境的鉴权 token）
@@ -142,7 +168,7 @@ flowchart TD
 - **查询参数注入**——在最终代理地址上追加或覆盖参数（`__env=uat`、灰度标识），不必整段重写 URL
 - **WebSocket 代理**——按 URL 重写转发 `ws://` / `wss://` 连接，由页面拦截器处理
 
-### 规则管理
+### 🧰 规则管理
 
 - 可视化表单新增 / 编辑 / 复制 / 删除
 - **快速模板**在规则为空时的引导区提供，覆盖常见写法（通配符 API 代理、前缀路径、鉴权头、自定义头覆盖）；删除后还可立即**撤销**
@@ -153,7 +179,7 @@ flowchart TD
 - 关键字搜索覆盖名称、匹配模式与目标地址，另可按状态和匹配类型筛选
 - **遮蔽冲突提示**——当被同模式更高优先级规则遮蔽时，编辑中即时提醒，避免写下一条永远不会命中的规则
 
-### 日志与调试
+### 🔍 日志与调试
 
 - 请求日志面板：方法、状态、耗时，以及两条通道各自的命中统计（DNR 近 5 分钟、后台服务线程自配置变更起，后者为内存计数，后台工作线程被回收后从 0 重新开始）
 - 日志详情：可看请求与响应的头与文本 body（二进制响应体不落盘），JSON 自动格式化
@@ -161,7 +187,7 @@ flowchart TD
 - 按方法（GET / POST / PUT / DELETE）、状态类别（2xx / 4xx / 5xx）、规则、URL 关键字筛选
 - 顶栏**URL 匹配预演**：输入任意地址（可再选 HTTP 方法），实时看到命中规则、重写后的地址、转发通道，以及还有哪些规则同样命中、但被它遮蔽
 
-### 导入导出与环境
+### 📦 导入导出与环境
 
 - 配置以 JSON 导出；导入支持覆盖或合并两种模式
 - **HAR 1.2** 导出抓到的请求；导入 HAR 会依据录制请求自动生成代理规则（新规则默认停用，确认后自行启用）
@@ -169,13 +195,13 @@ flowchart TD
 - **环境配置快照**——把当前规则集存成命名快照，在 FAT / UAT / PROD 间一键切换
 - 自动关闭倒计时（基于 `chrome.alarms`，后台脚本重启后仍然有效）与状态徽章
 
-### 界面
+### 🎨 界面
 
 - 弹窗快捷面板：总开关、今日请求数（只统计后台通道）、最近请求、自动关闭倒计时、**当前页面命中预演**，以及按当前标签页预填的「为本页创建规则」
 - 中英文界面，6 套主题 + 浅色 / 深色 / 跟随系统
 - 快捷键：<kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> 切换代理（Chrome 级命令）；配置页内 <kbd>N</kbd> 新建规则、<kbd>/</kbd> 或 <kbd>⌘</kbd>+<kbd>F</kbd> 聚焦搜索、<kbd>Esc</kbd> 关闭最上层弹窗。<kbd>N</kbd> 是单键（同 Gmail 风格），因为 <kbd>⌘</kbd>+<kbd>N</kbd> 被浏览器保留、页面捕获不到
 
-## 界面预览
+## 📸 界面预览
 
 <table>
   <tr>
@@ -214,7 +240,7 @@ flowchart TD
 
 </details>
 
-## 使用场景
+## 🚀 使用场景
 
 | 场景                           | 怎么配                                     |
 | ------------------------------ | ------------------------------------------ |
@@ -227,7 +253,7 @@ flowchart TD
 | 只把写操作打到测试后端         | 方法过滤，仅放行 `POST` / `PUT` / `DELETE` |
 | 把同一套配置交给同事           | 导出 JSON，或分享由 HAR 生成的规则集       |
 
-## 常见问题
+## ❓ 常见问题
 
 <details open>
 <summary><strong>它能绕过 CORS 吗？</strong></summary>
@@ -273,7 +299,7 @@ flowchart TD
 
 </details>
 
-## 权限
+## 🔐 权限
 
 | 权限                            | 用途                                               |
 | ------------------------------- | -------------------------------------------------- |
@@ -285,11 +311,11 @@ flowchart TD
 
 每项权限面向商店审核的说明文案在 [CHROMEWEBSTORE.md](./CHROMEWEBSTORE.md)。
 
-## 参与贡献
+## 🤝 参与贡献
 
 技术栈为 WXT + Vue 3 + TypeScript + Element Plus（Manifest V3），需要 Node.js 20+ 与 pnpm 10；`pnpm dev` 起 HMR 开发、`pnpm build` 产出 `.output/chrome-mv3`、`pnpm test` 跑单测。小修复也欢迎——完整命令清单、目录结构、CI 与发版约定请先读 [CONTRIBUTING.md](./CONTRIBUTING.md)，商店发布流程见 [RELEASING.md](./RELEASING.md)，GitHub 仓库设置清单见 [GITHUB.md](./GITHUB.md)。
 
-## 交流与反馈
+## 💬 交流与反馈
 
 规则怎么写、代理为什么没生效、某个环境下的坑怎么绕，都可以在群里问，作者本人常驻群里。
 
@@ -301,11 +327,11 @@ flowchart TD
 - 缺陷与功能请求优先开 [GitHub Issue](https://github.com/liaolongdong/cross-origin-proxy/issues)：带上请求日志与规则配置导出，比截图更好定位
 - 产品站：[中文](https://liaolongdong.github.io/cross-origin-proxy/) · [English](https://liaolongdong.github.io/cross-origin-proxy/en.html)
 
-## 我的其它插件
+## 🧩 我的其它插件
 
 - [账号密码管理助手 · Account Password Helper](https://github.com/liaolongdong/account-password-helper)：同一作者的另一款 Manifest V3 扩展，本地优先的开源密码管理器——一键登录连登录按钮一起点，按精确域名隔离 dev / test / staging / prod，内置 TOTP 两步验证与离线安全体检。它处理「这个环境我是谁」，本扩展处理「这个环境请求打到哪」，联调时常常一起开着。[产品页](https://liaolongdong.github.io/account-password-helper/) · [Chrome 应用商店](https://chromewebstore.google.com/detail/account-password-helper/fgimkdodpjfkddmildjieojpfakpanli)
 
-## 许可证
+## 📄 许可证
 
 [MIT](./LICENSE) · Copyright (c) 2026 Better
 
