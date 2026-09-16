@@ -23,13 +23,41 @@ Thanks for taking the look. This is a small, focused Chrome extension for cross-
 
 ## Setting up
 
+Requires Node.js 20+ and pnpm 10 (per the `packageManager` field).
+
 ```bash
-pnpm install          # pnpm 10, per the packageManager field; Node.js 20+
-pnpm dev              # WXT dev server with HMR on port 8899
-pnpm build            # → .output/chrome-mv3
+pnpm install
+pnpm dev          # WXT dev server with HMR on port 8899
+pnpm build        # production build → .output/chrome-mv3
+pnpm build:zip    # build + zip for store upload
+pnpm test         # vitest unit tests
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # eslint (autofix: pnpm lint:fix)
+pnpm lint:style   # stylelint (recess-order property sorting)
+pnpm format:check # prettier (format: pnpm format — repo-wide, use sparingly)
+pnpm assets       # regenerate store + landing images from screenshots/
 ```
 
-Load `.output/chrome-mv3` unpacked at `chrome://extensions` to try it. Run `pnpm assets` only when you want to regenerate the store and landing-page images from `screenshots/`.
+Load `.output/chrome-mv3` unpacked at `chrome://extensions` to try it. Run `pnpm assets` (and `pnpm assets:en` for the English store captions) only when you want to regenerate the store and landing-page images from `screenshots/`. Two commands matter only when releasing: `pnpm exec wxt submit --dry-run` (check store credentials without uploading) and `pnpm build:zip` (what the release workflow publishes) — see [RELEASING.md](./RELEASING.md).
+
+CI runs lint, typecheck, stylelint, Prettier and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./GITHUB.md).
+
+## Repository layout
+
+```
+entrypoints/            WXT entries: background (+ modules), content scripts, options, popup
+  background/           autoOff · badgeManager · dnrManager · dnrStats · keepalive · messageRouter · proxyHandler
+  main-interceptor.content.ts   MAIN-world fetch/XHR/WebSocket interceptor (self-contained by design)
+  content.ts           ISOLATED-world bridge to the background worker
+components/options/     Options UI (App.vue assembles; dialogs/drawers load via defineAsyncComponent)
+composables/            Reactive state and side effects
+utils/                  Framework-free domain logic: urlMatcher · dnrRules · storage · curlParser · har · i18n · theme …
+locales/                In-app UI strings (zh_CN / en, split into common/options/popup)
+public/_locales/        Manifest name and description only
+docs/                   GitHub Pages product site (Chinese is the default language): index.html (zh, site root) · en.html · alternatives.html (zh) · en-alternatives.html · privacy.html · llms.txt · llms-full.txt
+.github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR template
+tests/                  Vitest suites (node environment)
+```
 
 ## Conventions worth knowing before you write code
 
@@ -75,7 +103,7 @@ The full release runbook, including the one-time store credentials, is [RELEASIN
 
 ## 贡献要点（中文）
 
-1. 从 `main` 分支拉分支，一个分支只解决一件事。
+1. 从 `main` 分支拉分支，一个分支只解决一件事。完整命令清单见上文「Setting up」，目录结构见「Repository layout」。
 2. 按改动范围跑对应检查：TS/Vue 跑 `pnpm typecheck` + `pnpm lint` + `pnpm test`；样式跑 `pnpm lint:style`；入口/清单/依赖/打包跑 `pnpm build`；文档与 JSON 跑 `pnpm exec prettier --check <改动文件>`。仓库没有 git hook，靠手动与 CI 保证。
 3. PR 描述要写清「改动前行为 / 改动后行为 / 跑了哪些命令及结果 / 未能验证的部分」。
 

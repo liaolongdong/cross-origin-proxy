@@ -387,11 +387,46 @@
           <a href="#faq">常见问题</a>
           <a href="#install">安装</a>
         </nav>
+        <details class="nav-menu">
+          <summary aria-label="打开区块导航">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </summary>
+          <div class="nav-menu-panel">
+            <a href="#problem">解决什么</a>
+            <a href="#features">能力</a>
+            <a href="#showcase">界面预览</a>
+            <a href="#how-it-works">工作原理</a>
+            <a href="#use-cases">使用场景</a>
+            <a href="#compare">方案对比</a>
+            <a href="#faq">常见问题</a>
+            <a href="#install">安装</a>
+            <a
+              class="nav-menu-cross"
+              href="alternatives.html"
+              >完整对比</a
+            >
+          </div>
+        </details>
         <nav
           class="nav-actions"
           aria-label="其它入口"
         >
-          <a href="alternatives.html">完整对比</a>
+          <a
+            class="nav-cross-link"
+            href="alternatives.html"
+            >完整对比</a
+          >
           <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
           <a
             class="lang-switch"
@@ -936,6 +971,13 @@
             </p>
           </div>
           <div class="gallery reveal">
+            <div
+              class="gallery-progress"
+              data-gallery-progress
+              aria-hidden="true"
+            >
+              <i></i>
+            </div>
             <div
               class="gallery-track"
               data-gallery-track

@@ -197,15 +197,27 @@ async function buildScreenshot(shot) {
   console.log(`store  ${LANG}  ${shot.slug}.png  ${SHOT_W}x${SHOT_H}`);
 }
 
-/** 落地页用图：保持 16:10，转 JPG 控制首屏体积。 */
+/**
+ * 落地页用图：统一输出精确 1200×750（16:10），转 JPG 控制首屏体积。
+ * 竖屏截图（如弹窗）若只按 `fit: 'inside'` 缩放会保留原始比例，导致轮播
+ * 单帧高度不一致、滚动错位；因此先等比缩进 1200×750，再居中合成到品牌
+ * 渐变底上——横屏截图恰好铺满，输出与旧版一致。
+ */
 async function buildWebImage(shot) {
   const source = resolve(ROOT, 'screenshots', shot.file);
-  const out = resolve(WEB_IMG_DIR, `${shot.slug.replace(/^\d+-/, '')}.jpg`);
-  await sharp(source)
-    .resize(1200, 750, { fit: 'inside' })
+  const name = shot.slug.replace(/^\d+-/, '');
+  const out = resolve(WEB_IMG_DIR, `${name}.jpg`);
+  const resized = await sharp(source).resize(1200, 750, { fit: 'inside' }).png().toBuffer();
+  const { width, height } = await sharp(resized).metadata();
+  const canvas = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750">
+    <defs>${gradient('bg', BRAND.page, BRAND.pageAlt)}</defs>
+    <rect width="1200" height="750" fill="url(#bg)"/>
+  </svg>`;
+  await sharp(Buffer.from(canvas))
+    .composite([{ input: resized, left: Math.round((1200 - width) / 2), top: Math.round((750 - height) / 2) }])
     .jpeg({ quality: 74, progressive: true, mozjpeg: true })
     .toFile(out);
-  console.log(`web    ${shot.slug.replace(/^\d+-/, '')}.jpg`);
+  console.log(`web    ${name}.jpg`);
 }
 
 /** 品牌底图（图块 / Open Graph 共用版式）。 */

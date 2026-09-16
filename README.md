@@ -10,7 +10,7 @@
 
 <br/>
 
-![跨域代理助手规则总览](./docs/assets/img/rules-overview.jpg)
+<img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手规则总览" width="920" />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 &nbsp;
@@ -28,7 +28,7 @@
 
 > 页面连着 FAT，你要的修复只在 UAT。传统做法要么改每个项目的 devServer 代理、要么硬塞一个 token、要么请后端放开 CORS 再发一次版。这里只需要在 Chrome 里加一条规则：匹配 `https://fat-api.example.com/*`，目标 `https://uat-api.example.com`。同一套规则还能改写请求头与响应、Mock 数据、注入延迟、阻断请求、转发 WebSocket。
 
-[安装](#安装) · [工作原理](#工作原理) · [功能](#功能) · [使用场景](#使用场景) · [常见问题](#常见问题) · [交流与反馈](#交流与反馈) · [参与贡献](./CONTRIBUTING.md)
+[安装](#安装) · [工作原理](#工作原理) · [功能](#功能) · [界面预览](#界面预览) · [使用场景](#使用场景) · [常见问题](#常见问题) · [交流与反馈](#交流与反馈) · [参与贡献](./CONTRIBUTING.md)
 
 </div>
 
@@ -175,6 +175,45 @@ flowchart TD
 - 中英文界面，6 套主题 + 浅色 / 深色 / 跟随系统
 - 快捷键：<kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> 切换代理（Chrome 级命令）；配置页内 <kbd>N</kbd> 新建规则、<kbd>/</kbd> 或 <kbd>⌘</kbd>+<kbd>F</kbd> 聚焦搜索、<kbd>Esc</kbd> 关闭最上层弹窗。<kbd>N</kbd> 是单键（同 Gmail 风格），因为 <kbd>⌘</kbd>+<kbd>N</kbd> 被浏览器保留、页面捕获不到
 
+## 界面预览
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="./docs/assets/img/rule-editor.jpg" alt="规则编辑弹窗：匹配、重写、Mock、延迟、阻断一处配齐" width="100%" /><br /><b>规则编辑器</b>——匹配 / 重写 / 请求头与响应覆盖 / 条件化 Mock / 延迟 / 阻断 / 重试，一个表单配齐，带实时冲突提示</td>
+    <td width="50%" align="center"><img src="./docs/assets/img/url-tester.jpg" alt="URL 匹配预演：命中规则、重写后地址与转发通道" width="100%" /><br /><b>URL 匹配预演</b>——粘贴任意地址，实时查看命中规则、重写结果、转发通道与被遮蔽规则</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="./docs/assets/img/request-log.jpg" alt="请求日志抽屉：方法、状态、耗时与命中统计" width="100%" /><br /><b>请求日志</b>——最近 500 条，可筛选、复制为 cURL、导出 HAR，含两条通道各自的命中统计</td>
+    <td align="center"><img src="./docs/assets/img/popup.jpg" alt="扩展弹窗：总开关、今日请求与快捷入口" width="100%" /><br /><b>弹窗</b>——总开关、今日请求、自动关闭倒计时、当前页命中预演与「为本页创建规则」</td>
+  </tr>
+</table>
+
+<details>
+<summary>更多操作细节 · Mock 响应 · 延迟 · 阻断 · 响应改写</summary>
+
+**Mock 响应**——在规则表单里打开 Mock Response，设置状态码（默认 200），选择 Content-Type（JSON / 文本 / HTML / XML），粘贴响应内容。后端接口还没就绪时最实用。
+
+**请求延迟**——打开 Request Delay，设置毫秒数（0–60000），用来验证加载态、骨架屏与超时处理。
+
+**请求阻断**——打开 Block Request。命中请求直接收到网络错误，这就是验证异常处理与离线兜底的方式。
+
+**响应改写**——展开 Response Overrides，可设置状态码、新增或覆盖响应头，或按点分路径替换指定 JSON 字段（如 `data.token` → `"mock-token"`）。
+
+</details>
+
+<details>
+<summary>更多操作细节 · 拖拽排序 · HAR · cURL · 日志详情</summary>
+
+**拖拽排序**——拖动任意行的 ⠿ 手柄。表格按数组顺序展示，拖拽会同时更新展示顺序与优先级数值。
+
+**HAR**——导入导出对话框里「导出 HAR」会把后台通道抓到的请求下载为 `.har`；「导入 HAR」会依据录制条目自动创建代理规则（新规则默认停用，确认后自行启用）。
+
+**cURL 导入**——把 cURL 命令粘贴到「导入 cURL」区域（支持续行符与单双引号），点「解析并创建规则」。扩展会根据请求来源生成通配规则，并把请求头与请求体预填到改写区，确认后保存即生效。
+
+**日志详情**——点击任意日志行展开详情：请求 URL、请求头、请求体、响应头与文本响应体（JSON 自动格式化；二进制响应体不落盘）、错误信息，以及「复制为 cURL」按钮（按原始请求地址生成）。
+
+</details>
+
 ## 使用场景
 
 | 场景                           | 怎么配                                     |
@@ -246,74 +285,9 @@ flowchart TD
 
 每项权限面向商店审核的说明文案在 [CHROMEWEBSTORE.md](./CHROMEWEBSTORE.md)。
 
-## 开发
-
-```bash
-pnpm dev          # WXT 开发服务，端口 8899 热更新
-pnpm build        # 生产构建 → .output/chrome-mv3
-pnpm build:zip    # 构建并打包 zip（商店上传用）
-pnpm test         # vitest 单元测试
-pnpm typecheck    # tsc --noEmit
-pnpm lint         # eslint（自动修复：pnpm lint:fix）
-pnpm lint:style   # stylelint（recess-order 属性排序）
-pnpm format:check # prettier（自动格式化：pnpm format）
-pnpm assets       # 重新生成商店图与落地页图
-```
-
-只有发版时会用到两条额外命令：`pnpm exec wxt submit --dry-run`（只验商店凭据不上传）与 `pnpm build:zip`（发布链路上交给商店的包），详见 [RELEASING.md](./RELEASING.md)。
-
-需要 Node.js 20+ 与 pnpm 10（以 `packageManager` 为准）。CI 会在每次 push 与 PR 上跑 lint、typecheck、stylelint、Prettier 与测试（[.github/workflows/ci.yml](./.github/workflows/ci.yml)），检查清单统一收在复合动作 `.github/actions/verify` 里，CI 与发布链路因此不会漂移。
-
-两件事已经自动化：推 `v*` 标签就产出带 zip 的 GitHub Release 并向 Chrome 应用商店提审（[release.yml](./.github/workflows/release.yml)，流程见 [RELEASING.md](./RELEASING.md)）；`docs/**` 一旦变更就重新部署产品站与隐私政策（[deploy-pages.yml](./.github/workflows/deploy-pages.yml)）。仓库在 GitHub 侧的展示信息（About 描述、website、topics、社交预览图、Pages 源）是一次性手动清单，见 [GITHUB.md](./GITHUB.md)。
-
-### 目录结构
-
-```
-entrypoints/            WXT 入口：background（含各子模块）、内容脚本、options、popup
-  background/           autoOff · badgeManager · dnrManager · dnrStats · keepalive · messageRouter · proxyHandler
-  main-interceptor.content.ts   MAIN world 的 fetch/XHR/WebSocket 拦截器（按设计必须自包含）
-  content.ts           ISOLATED world 与后台脚本之间的桥接
-components/options/     配置页 UI（App.vue 负责装配；弹窗与抽屉用 defineAsyncComponent 异步加载）
-composables/            响应式状态与副作用
-utils/                  与框架无关的领域逻辑：urlMatcher · dnrRules · storage · curlParser · har · i18n · theme …
-locales/                应用内界面文案（zh_CN / en，分 common/options/popup 三个命名空间）
-public/_locales/        仅放 manifest 的名称与描述
-docs/                   GitHub Pages 产品站（中文为默认语言）：index.html（中，站点根）· en.html · alternatives.html（中）· en-alternatives.html · privacy.html · llms.txt · llms-full.txt
-.github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR 模板
-tests/                  Vitest 测试（node 环境）
-```
-
-### 更多操作细节
-
-<details>
-<summary>Mock 响应 · 延迟 · 阻断 · 响应改写</summary>
-
-**Mock 响应**——在规则表单里打开 Mock Response，设置状态码（默认 200），选择 Content-Type（JSON / 文本 / HTML / XML），粘贴响应内容。后端接口还没就绪时最实用。
-
-**请求延迟**——打开 Request Delay，设置毫秒数（0–60000），用来验证加载态、骨架屏与超时处理。
-
-**请求阻断**——打开 Block Request。命中请求直接收到网络错误，这就是验证异常处理与离线兜底的方式。
-
-**响应改写**——展开 Response Overrides，可设置状态码、新增或覆盖响应头，或按点分路径替换指定 JSON 字段（如 `data.token` → `"mock-token"`）。
-
-</details>
-
-<details>
-<summary>拖拽排序 · HAR · cURL · 日志详情</summary>
-
-**拖拽排序**——拖动任意行的 ⠿ 手柄。表格按数组顺序展示，拖拽会同时更新展示顺序与优先级数值。
-
-**HAR**——导入导出对话框里「导出 HAR」会把后台通道抓到的请求下载为 `.har`；「导入 HAR」会依据录制条目自动创建代理规则（新规则默认停用，确认后自行启用）。
-
-**cURL 导入**——把 cURL 命令粘贴到「导入 cURL」区域（支持续行符与单双引号），点「解析并创建规则」。扩展会根据请求来源生成通配规则，并把请求头与请求体预填到改写区，确认后保存即生效。
-
-**日志详情**——点击任意日志行展开详情：请求 URL、请求头、请求体、响应头与文本响应体（JSON 自动格式化；二进制响应体不落盘）、错误信息，以及「复制为 cURL」按钮（按原始请求地址生成）。
-
-</details>
-
 ## 参与贡献
 
-小修复也欢迎。请先读 [CONTRIBUTING.md](./CONTRIBUTING.md)：三步流程、国际化要求（每条可见文案都要同时补 `locales/zh_CN/` 与 `locales/en/`），以及提 PR 前必须通过的检查。
+技术栈为 WXT + Vue 3 + TypeScript + Element Plus（Manifest V3），需要 Node.js 20+ 与 pnpm 10；`pnpm dev` 起 HMR 开发、`pnpm build` 产出 `.output/chrome-mv3`、`pnpm test` 跑单测。小修复也欢迎——完整命令清单、目录结构、CI 与发版约定请先读 [CONTRIBUTING.md](./CONTRIBUTING.md)，商店发布流程见 [RELEASING.md](./RELEASING.md)，GitHub 仓库设置清单见 [GITHUB.md](./GITHUB.md)。
 
 ## 交流与反馈
 

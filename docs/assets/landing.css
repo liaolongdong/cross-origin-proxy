@@ -351,6 +351,87 @@ html.js .site-nav > a[aria-current]::after {
   border-radius: 999px;
 }
 
+/* 小屏汉堡菜单：`<details>` 实现，禁用 JS 也能展开——窄屏下它接替
+   .site-nav 的锚点条，「完整对比」一并收进下拉里。桌面宽度整体隐藏。
+   下面几处 reset 是必需的：FAQ 的 `details` / `summary` 元素选择器会给每个
+   `<details>` 套上卡片底色与自绘加减号，页头里因此会多出一块带「+」的白板。 */
+.nav-menu {
+  position: static;
+  display: none;
+  padding: 0;
+  font-size: 15px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.nav-menu summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding-right: 0;
+  color: var(--lp-ink);
+  cursor: pointer;
+  list-style: none;
+  border-radius: 10px;
+}
+
+.nav-menu summary::before,
+.nav-menu summary::after {
+  display: none;
+}
+
+.nav-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-menu summary:hover {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-soft);
+}
+
+.nav-menu[open] summary {
+  color: var(--lp-primary-strong);
+}
+
+.nav-menu-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  padding: 6px 0 10px;
+  background: var(--lp-bg);
+  border-bottom: 1px solid var(--lp-line);
+  box-shadow: var(--lp-shadow-lg);
+}
+
+/* 收起时必须显式隐藏：面板是绝对定位、包含块在 `<details>` 之外（.site-header），
+   因此逃过了浏览器对未展开内容的隐藏机制，会在页头上方留一块空白板。 */
+.nav-menu:not([open]) .nav-menu-panel {
+  display: none;
+}
+
+.nav-menu-panel a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 22px;
+  color: var(--lp-ink-soft);
+}
+
+.nav-menu-panel a:hover {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
+}
+
+.nav-menu-cross {
+  padding-top: 12px;
+  margin-top: 6px;
+  border-top: 1px solid var(--lp-line);
+}
+
 /* 触屏上没有 hover 反馈，把三个集群的链接都撑到 44px 见方的可点区域。 */
 @media (pointer: coarse) {
   .site-nav a,
@@ -361,6 +442,25 @@ html.js .site-nav > a[aria-current]::after {
   .lang-switch {
     min-height: 44px;
     padding: 10px 14px;
+  }
+
+  .nav-menu summary {
+    width: 44px;
+    height: 44px;
+  }
+
+  .gallery-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .gallery-dots button {
+    width: 12px;
+    height: 12px;
+  }
+
+  .gallery-dots button[aria-current='true'] {
+    width: 28px;
   }
 }
 
@@ -859,6 +959,48 @@ tbody tr:last-child td {
   position: relative;
 }
 
+/* 自动轮播进度条：landing.js 判定「可自动轮播」（非减弱动效、多张截图）时挂
+ * .gallery-autoable 才会占位，翻页时挂 .gallery-auto 驱动填充动画；
+ * 悬停/聚焦用 animation-play-state 暂停，与翻页共用同一条时间线。 */
+.gallery-progress {
+  display: none;
+}
+
+html.js .gallery-autoable .gallery-progress {
+  display: block;
+  height: 3px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  background: var(--lp-line);
+  border-radius: 999px;
+}
+
+.gallery-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--lp-primary);
+  border-radius: inherit;
+}
+
+.gallery.gallery-auto .gallery-progress i {
+  animation: lp-gallery-auto 5.2s linear forwards;
+}
+
+.gallery.gallery-auto.is-paused .gallery-progress i {
+  animation-play-state: paused;
+}
+
+@keyframes lp-gallery-auto {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
+}
+
 .gallery-track {
   display: flex;
   gap: 16px;
@@ -899,6 +1041,8 @@ html.js .slide {
 .slide img {
   display: block;
   width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: contain;
   border-radius: var(--lp-radius-sm);
 }
 
@@ -1485,21 +1629,27 @@ html.js .reveal.in {
     padding: 44px 0 40px;
   }
 
-  /* 品牌行 + 外部入口排第一行，锚点条整行落到第二行继续横向滚动。 */
+  /* 锚点条整体收进汉堡菜单：第二行横向滚动条在 390px 宽度上仍要点准
+     14px 的链接，下拉里是 44px 的行高。跨页链接由下拉里的 .nav-menu-cross 承接。 */
   .site-header .wrap {
-    flex-wrap: wrap;
-    gap: 6px 16px;
+    gap: 12px;
     padding-top: 10px;
     padding-bottom: 10px;
   }
 
   .site-nav {
-    flex-basis: 100%;
-    order: 3;
+    display: none;
+  }
+
+  .nav-menu {
+    display: block;
+  }
+
+  .nav-actions .nav-cross-link {
+    display: none;
   }
 
   .nav-actions {
-    order: 2;
     padding-left: 0;
     margin-left: auto;
     border-left: 0;
@@ -1518,8 +1668,65 @@ html.js .reveal.in {
   }
 
   .scroll-rail {
-    right: 14px;
-    bottom: 14px;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(14px, env(safe-area-inset-bottom));
+  }
+}
+
+/* 单手握持宽度：进一步压缩首屏留白与字号阶梯，保证 H1 不折成孤字行、
+   统计条四项不换行、CTA 按钮可整行点按。 */
+@media (width <= 480px) {
+  section {
+    padding: 36px 0;
+  }
+
+  .hero {
+    padding: 30px 0 34px;
+  }
+
+  .hero h1 {
+    margin-bottom: 12px;
+    font-size: 29px;
+    letter-spacing: -0.4px;
+  }
+
+  .hero .lede {
+    margin-bottom: 18px;
+    font-size: 15.5px;
+  }
+
+  .cta-row .btn {
+    flex: 1 1 100%;
+    justify-content: center;
+    padding: 12px 18px;
+  }
+
+  .stat-strip {
+    gap: 6px;
+  }
+
+  .stat {
+    padding: 10px 6px;
+  }
+
+  .stat b {
+    font-size: 22px;
+  }
+
+  .stat span {
+    font-size: 12px;
+  }
+
+  .section-lede {
+    font-size: 15px;
+  }
+
+  .slide figcaption b {
+    font-size: 14.5px;
+  }
+
+  .slide figcaption span {
+    font-size: 13px;
   }
 }
 

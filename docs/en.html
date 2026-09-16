@@ -387,11 +387,46 @@
           <a href="#faq">FAQ</a>
           <a href="#install">Install</a>
         </nav>
+        <details class="nav-menu">
+          <summary aria-label="Open section navigation">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </summary>
+          <div class="nav-menu-panel">
+            <a href="#problem">Why</a>
+            <a href="#features">Features</a>
+            <a href="#showcase">Screenshots</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#use-cases">Use cases</a>
+            <a href="#compare">Compare</a>
+            <a href="#faq">FAQ</a>
+            <a href="#install">Install</a>
+            <a
+              class="nav-menu-cross"
+              href="en-alternatives.html"
+              >Alternatives</a
+            >
+          </div>
+        </details>
         <nav
           class="nav-actions"
           aria-label="Other entry points"
         >
-          <a href="en-alternatives.html">Alternatives</a>
+          <a
+            class="nav-cross-link"
+            href="en-alternatives.html"
+            >Alternatives</a
+          >
           <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
           <a
             class="lang-switch"
@@ -959,6 +994,13 @@
             </p>
           </div>
           <div class="gallery reveal">
+            <div
+              class="gallery-progress"
+              data-gallery-progress
+              aria-hidden="true"
+            >
+              <i></i>
+            </div>
             <div
               class="gallery-track"
               data-gallery-track

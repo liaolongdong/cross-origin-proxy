@@ -10,7 +10,7 @@
 
 <br/>
 
-![Cross-Origin Proxy rules overview](./docs/assets/img/rules-overview.jpg)
+<img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy rules overview" width="920" />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 &nbsp;
@@ -28,7 +28,7 @@
 
 > Your frontend runs against FAT, the fix you need only exists on UAT. Instead of editing a devServer proxy per project, hardcoding a token, or asking the backend to open CORS and redeploy, you add one rule in Chrome: match `https://fat-api.example.com/*`, target `https://uat-api.example.com`, done. The same rule set can also rewrite headers and responses, mock data, inject latency, block requests and forward WebSocket.
 
-[Install](#install) · [How it works](#how-it-works) · [Features](#features) · [Use cases](#use-cases) · [FAQ](#faq) · [Community](#community--feedback) · [Contributing](./CONTRIBUTING.md)
+[Install](#install) · [How it works](#how-it-works) · [Features](#features) · [Interface preview](#interface-preview) · [Use cases](#use-cases) · [FAQ](#faq) · [Community](#community--feedback) · [Contributing](./CONTRIBUTING.md)
 
 </div>
 
@@ -175,6 +175,45 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - English / 简体中文 UI, six themes with light / dark / system modes
 - Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy (Chrome-level command), and on the options page <kbd>N</kbd> new rule, <kbd>/</kbd> or <kbd>⌘</kbd>+<kbd>F</kbd> focus search, <kbd>Esc</kbd> close the topmost dialog. <kbd>N</kbd> is a bare key, like Gmail — <kbd>⌘</kbd>+<kbd>N</kbd> is reserved by the browser and cannot be captured.
 
+## Interface preview
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="./docs/assets/img/rule-editor.jpg" alt="Rule editor: matching, rewriting, mock, delay and block in one form" width="100%" /><br /><b>Rule editor</b> — matching / rewriting / header & response overrides / conditional mock / delay / block / retry in one form, with live conflict hints</td>
+    <td width="50%" align="center"><img src="./docs/assets/img/url-tester.jpg" alt="URL match tester: matched rule, rewritten URL and forwarding channel" width="100%" /><br /><b>URL match tester</b> — paste any URL to see the matched rule, rewrite result, forwarding channel and shadowed rules in real time</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="./docs/assets/img/request-log.jpg" alt="Request log drawer: method, status, duration and hit stats" width="100%" /><br /><b>Request log</b> — last 500 entries, filterable, copy as cURL, HAR export, with per-channel hit statistics</td>
+    <td align="center"><img src="./docs/assets/img/popup.jpg" alt="Extension popup: global switch, today's requests and quick links" width="100%" /><br /><b>Popup</b> — global switch, today's requests, auto-off countdown, current-page hit preview and "create a rule for this page"</td>
+  </tr>
+</table>
+
+<details>
+<summary>Deeper guides · Mock response · delay · block · response modification</summary>
+
+**Mock response** — toggle Mock Response in the rule form, set the status code (default 200), pick a Content-Type (JSON / text / HTML / XML) and paste the body. Useful when the backend API does not exist yet.
+
+**Request delay** — toggle Request Delay and set milliseconds (0–60000). Useful for loading states, skeletons and timeout handling.
+
+**Request blocking** — toggle Block Request. Matched requests receive a network error, which is how you test error handling and offline fallback behaviour.
+
+**Response modification** — expand Response Overrides to set a status code, add or replace response headers, or replace specific JSON fields by dot-notation path (e.g. `data.token` → `"mock-token"`).
+
+</details>
+
+<details>
+<summary>Deeper guides · Drag-and-drop ordering · HAR · cURL · log detail viewer</summary>
+
+**Reordering** — drag the ⠿ handle on any row. The table shows rules in array order, and dragging updates both display order and priority values.
+
+**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, and imports a `.har` file to auto-create rules from recorded traffic (those rules arrive disabled until you enable them).
+
+**cURL import** — paste a cURL command into the Import cURL section (line continuations and single/double quotes supported) and press Parse & Create Rule. A wildcard rule is generated from the request origin with headers and body prefilled.
+
+**Log detail viewer** — click any log row for request URL, headers and body, response headers and text body (JSON auto-formatted; a binary response body is not stored), error details, and a Copy as cURL button that uses the original request URL.
+
+</details>
+
 ## Use cases
 
 | Situation                                     | Rule configuration                                 |
@@ -246,74 +285,9 @@ Built and tested for Chrome (MV3). Edge runs Chromium extensions so the same bui
 
 Every permission also has a store-facing justification in [CHROMEWEBSTORE.md](./CHROMEWEBSTORE.md).
 
-## Development
-
-```bash
-pnpm dev         # WXT dev server with HMR (port 8899)
-pnpm build       # production build → .output/chrome-mv3
-pnpm build:zip   # build + zip for store upload
-pnpm test        # vitest unit tests
-pnpm typecheck   # tsc --noEmit
-pnpm lint        # eslint (--fix: pnpm lint:fix)
-pnpm lint:style  # stylelint (recess-order property sorting)
-pnpm format:check# prettier (--write: pnpm format)
-pnpm assets      # regenerate store + landing images
-```
-
-Two more commands matter only when releasing: `pnpm exec wxt submit --dry-run` (check store credentials without uploading) and `pnpm build:zip` (what the release workflow publishes). Both are covered in [RELEASING.md](./RELEASING.md).
-
-Requires Node.js 20+ and pnpm 10 (see `packageManager`). CI runs lint, typecheck, stylelint, Prettier and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)) — the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart.
-
-Two things are automated from there: pushing a `v*` tag produces a GitHub Release with the built zip and submits that build to the Chrome Web Store ([release.yml](./.github/workflows/release.yml), runbook in [RELEASING.md](./RELEASING.md)), and any change under `docs/**` redeploys the product site including the privacy policy ([deploy-pages.yml](./.github/workflows/deploy-pages.yml)). Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./GITHUB.md).
-
-### Project layout
-
-```
-entrypoints/            WXT entries: background (+ modules), content scripts, options, popup
-  background/           autoOff · badgeManager · dnrManager · dnrStats · keepalive · messageRouter · proxyHandler
-  main-interceptor.content.ts   MAIN-world fetch/XHR/WebSocket interceptor (self-contained by design)
-  content.ts           ISOLATED-world bridge to the background worker
-components/options/     Options UI (App.vue assembles; dialogs/drawers load via defineAsyncComponent)
-composables/            Reactive state and side effects
-utils/                  Framework-free domain logic: urlMatcher · dnrRules · storage · curlParser · har · i18n · theme …
-locales/                In-app UI strings (zh_CN / en, split into common/options/popup)
-public/_locales/        Manifest name and description only
-docs/                   GitHub Pages product site (Chinese is the default language): index.html (zh, site root) · en.html · alternatives.html (zh) · en-alternatives.html · privacy.html · llms.txt · llms-full.txt
-.github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR template
-tests/                  Vitest suites (node environment)
-```
-
-### Deeper guides
-
-<details>
-<summary>Mock response · delay · block · response modification</summary>
-
-**Mock response** — toggle Mock Response in the rule form, set the status code (default 200), pick a Content-Type (JSON / text / HTML / XML) and paste the body. Useful when the backend API does not exist yet.
-
-**Request delay** — toggle Request Delay and set milliseconds (0–60000). Useful for loading states, skeletons and timeout handling.
-
-**Request blocking** — toggle Block Request. Matched requests receive a network error, which is how you test error handling and offline fallback behaviour.
-
-**Response modification** — expand Response Overrides to set a status code, add or replace response headers, or replace specific JSON fields by dot-notation path (e.g. `data.token` → `"mock-token"`).
-
-</details>
-
-<details>
-<summary>Drag-and-drop ordering · HAR · cURL · log detail viewer</summary>
-
-**Reordering** — drag the ⠿ handle on any row. The table shows rules in array order, and dragging updates both display order and priority values.
-
-**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, and imports a `.har` file to auto-create rules from recorded traffic (those rules arrive disabled until you enable them).
-
-**cURL import** — paste a cURL command into the Import cURL section (line continuations and single/double quotes supported) and press Parse & Create Rule. A wildcard rule is generated from the request origin with headers and body prefilled.
-
-**Log detail viewer** — click any log row for request URL, headers and body, response headers and text body (JSON auto-formatted; a binary response body is not stored), error details, and a Copy as cURL button that uses the original request URL.
-
-</details>
-
 ## Contributing
 
-Small fixes are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for the three-step flow, the i18n rule (every visible string needs both `locales/zh_CN/` and `locales/en/`), and which checks must pass before a PR.
+Built with WXT + Vue 3 + TypeScript + Element Plus (Manifest V3); requires Node.js 20+ and pnpm 10 — `pnpm dev` for HMR development, `pnpm build` for `.output/chrome-mv3`, `pnpm test` for unit tests. Small fixes are welcome. The full command list, repository layout, CI and release conventions are in [CONTRIBUTING.md](./CONTRIBUTING.md); the store runbook is [RELEASING.md](./RELEASING.md) and the one-time GitHub repo checklist is [GITHUB.md](./GITHUB.md).
 
 ## Community & feedback
 

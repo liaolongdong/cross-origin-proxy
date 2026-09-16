@@ -2,13 +2,15 @@
  * 跨域代理助手 · 落地页渐进增强脚本
  *
  * 设计前提：页面在完全禁用 JavaScript 时也必须可读、可导航、可滚动。
- * 因此本脚本只做五件事，且所有依赖 JS 的视觉状态都写在样式的 `html.js` 选择器下
+ * 因此本脚本只做几件事，且所有依赖 JS 的视觉状态都写在样式的 `html.js` 选择器下
  * （脚本加载失败不会留下空洞）：
- * 1. 截图廊的翻页按钮 / 圆点 / 自动轮播（无 JS 时仍是可横向滑动的 scroll-snap 轨道）；
+ * 1. 截图廊的翻页按钮 / 圆点 / 进度条驱动的自动轮播，悬停或聚焦时暂停
+ *    （无 JS 时仍是可横向滑动的 scroll-snap 轨道）；
  * 2. 区块滚动淡入；
  * 3. 导航当前区块高亮；
- * 4. 回顶 / 到底导轨；
- * 5. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）。
+ * 4. 小屏汉堡菜单：点选链接后收起下拉（`<details>` 本身无 JS 也能开合）；
+ * 5. 回顶 / 到底导轨；
+ * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动。
  */
@@ -36,15 +38,20 @@
   const track = document.querySelector('[data-gallery-track]');
 
   if (track) {
+    const gallery = track.closest('.gallery');
     const slides = Array.from(track.children);
     const dotsBox = document.querySelector('[data-gallery-dots]');
-    const bar = document.querySelector('[data-gallery-bar]');
     const prev = document.querySelector('[data-gallery-prev]');
     const next = document.querySelector('[data-gallery-next]');
+    const progress = document.querySelector('[data-gallery-progress]');
     const label = dotsBox ? dotsBox.getAttribute('data-gallery-dots-label') || 'Go to slide $1' : '';
     let index = 0;
-    let timer = null;
     let inView = false;
+
+    /** 自动轮播与进度条共用 `.gallery-auto` 这一条时间线：填充动画播完即翻页。 */
+    const autoPossible = !reduceMotion && slides.length > 1 && Boolean(gallery && progress);
+
+    if (autoPossible) gallery.classList.add('gallery-autoable');
 
     /** 同步圆点选中态（`aria-current` 同时驱动样式与辅助技术）。 */
     const mark = () => {
@@ -54,18 +61,18 @@
       );
     };
 
-    /** 停止自动轮播。 */
+    /** 停止自动轮播（进度条回到空轨）。 */
     const stop = () => {
-      if (timer !== null) clearTimeout(timer);
-      timer = null;
+      if (gallery) gallery.classList.remove('gallery-auto');
     };
 
-    /** 开始自动轮播；减弱动效、单张截图、页面隐藏或轮播未进入视口时不启用。 */
+    /** 重新开始一轮自动轮播；减弱动效、页面隐藏或轮播不在视口时不启动。 */
     const start = () => {
-      if (reduceMotion || slides.length < 2 || timer !== null || document.hidden || !inView) return;
-      timer = setTimeout(() => {
-        show(index + 1, true);
-      }, 5200);
+      if (!autoPossible || document.hidden || !inView) return;
+      stop();
+      // 移除后强制回流，保证同一动画能立即重新触发
+      void gallery.offsetWidth;
+      gallery.classList.add('gallery-auto');
     };
 
     /**
@@ -99,9 +106,20 @@
     if (prev) prev.addEventListener('click', () => show(index - 1, true));
     if (next) next.addEventListener('click', () => show(index + 1, true));
 
-    if (bar) {
-      ['pointerenter', 'focusin'].forEach(evt => bar.addEventListener(evt, stop));
-      ['pointerleave', 'focusout'].forEach(evt => bar.addEventListener(evt, start));
+    if (progress) {
+      progress.addEventListener('animationend', event => {
+        if (event.animationName === 'lp-gallery-auto') show(index + 1, true);
+      });
+    }
+
+    /* 指针在轮播上（或焦点落在控件里）时暂停：读完当前这张之前图不会翻走。 */
+    if (gallery && autoPossible) {
+      ['pointerenter', 'focusin'].forEach(evt =>
+        gallery.addEventListener(evt, () => gallery.classList.add('is-paused')),
+      );
+      ['pointerleave', 'focusout'].forEach(evt =>
+        gallery.addEventListener(evt, () => gallery.classList.remove('is-paused')),
+      );
     }
 
     /* 手动滑动后用相交检测把圆点校准到当前可见截图。 */
@@ -179,7 +197,17 @@
     sections.forEach(section => navObserver.observe(section));
   }
 
-  /* ─────────────── 4. 回顶 / 到底导轨 ─────────────── */
+  /* ─────────────── 4. 小屏汉堡菜单：点选后收起 ─────────────── */
+
+  const navMenu = document.querySelector('.nav-menu');
+
+  if (navMenu) {
+    navMenu.addEventListener('click', event => {
+      if (event.target.closest('a')) navMenu.removeAttribute('open');
+    });
+  }
+
+  /* ─────────────── 5. 回顶 / 到底导轨 ─────────────── */
 
   const rail = document.querySelector('.scroll-rail');
 
@@ -200,7 +228,7 @@
     onScroll();
   }
 
-  /* ─────────────── 5. 微信号一键复制 ─────────────── */
+  /* ─────────────── 6. 微信号一键复制 ─────────────── */
 
   all('[data-copy]').forEach(btn => {
     const text = btn.getAttribute('data-copy');

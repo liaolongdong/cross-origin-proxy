@@ -150,9 +150,16 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     /** 统计某文件中正则的全部命中。 */
     const countIn = (file: string, re: RegExp): number => [...read(file).matchAll(re)].length;
 
+    /**
+     * FAQ 小节的可见部分（`<section id="faq">` 到其 `</section>`）。
+     * 落地页的窄屏汉堡菜单也是 `<details>`，不限定范围会把它误计成 FAQ 条目。
+     */
+    const faqHtml = (file: string): string =>
+      read(file).match(/<section\b[^>]*\bid="faq"[\s\S]*?<\/section>/)?.[0] ?? '';
+
     /** 页面可见的 `<summary>` 文本（去标签、归一空白），保持文档顺序。 */
     const summaries = (file: string): string[] =>
-      [...read(file).matchAll(/<summary>([\s\S]*?)<\/summary>/g)]
+      [...faqHtml(file).matchAll(/<summary>([\s\S]*?)<\/summary>/g)]
         .map(m =>
           m[1]
             .replace(/<[^>]+>/g, '')
@@ -182,9 +189,9 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         .replace(/\s+/g, ' ')
         .trim();
 
-    /** 页面可见的 FAQ 答案：每个 `<details>` 里 `</summary>` 之后的部分。 */
+    /** 页面可见的 FAQ 答案：FAQ 小节内每个 `<details>` 里 `</summary>` 之后的部分。 */
     const faqAnswers = (file: string): string[] =>
-      [...read(file).matchAll(/<details\b[^>]*>[\s\S]*?<\/summary>([\s\S]*?)<\/details>/g)]
+      [...faqHtml(file).matchAll(/<details\b[^>]*>[\s\S]*?<\/summary>([\s\S]*?)<\/details>/g)]
         .map(m => asPlainText(m[1]))
         .filter(Boolean);
 
@@ -215,9 +222,9 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
 
     it.each(BILINGUAL_PAIRS)('%s / %s 的页面可见折叠条数与 schema 条数一致', (en, zh) => {
-      const enCount = countIn(en, /<details\b/g);
-      expect(enCount).toBeGreaterThan(0);
-      expect(countIn(zh, /<details\b/g)).toBe(enCount);
+      const enCount = [...faqHtml(en).matchAll(/<details\b/g)].length;
+      expect(enCount, `${en} 的 FAQ 小节应含与 schema 条数一致的折叠项`).toBeGreaterThan(0);
+      expect([...faqHtml(zh).matchAll(/<details\b/g)].length).toBe(enCount);
     });
 
     /**
