@@ -213,6 +213,10 @@ pre {
 }
 
 .btn-primary {
+  position: relative;
+
+  /* 裁剪的是「动效增强」一节那道扫过的高光：伪元素位移出边界时不该露出边角。 */
+  overflow: hidden;
   color: #fff;
   background: var(--lp-primary);
   box-shadow: 0 8px 22px rgb(64 158 255 / 28%);
@@ -317,12 +321,16 @@ html.js .scroll-progress {
   font-size: 15px;
 }
 
+/* `text-decoration: none` 是必需的：全局 `a:hover` 会加下划线，而下面那条自绘的
+   `.site-nav > a::after` 下划条也在同一行底部，两者叠加就是「双线条」。 */
 .site-nav a {
   position: relative;
   display: inline-flex;
   align-items: center;
   color: var(--lp-ink-soft);
   white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.18s ease;
 }
 
 .site-nav a:hover {
@@ -342,11 +350,12 @@ html.js .site-nav > a[aria-current] {
   color: var(--lp-primary-strong);
 }
 
-/* 一条下划线承担两件事：悬停时从左长出来（告诉读者这条链接确实可点），
-   当前区块则常驻（由 landing.js 打的 `aria-current` 驱动，因此写在 `html.js` 下）。 */
+/* 一条下划条承担两件事，但用两种强度区分：悬停时长出来的是半透明主色，只说
+   「这一项可点」；当前区块（`landing.js` 打的 `aria-current`）才是实色主色并常驻。
+   两者叠在同一行时读者看到的是一根线，而不是两根看起来等价的线。 */
 .site-nav > a::after {
   position: absolute;
-  bottom: -5px;
+  bottom: -6px;
   left: 0;
   width: 100%;
   height: 2px;
@@ -355,16 +364,25 @@ html.js .site-nav > a[aria-current] {
   border-radius: 2px;
   transform: scaleX(0);
   transform-origin: 0 50%;
-  transition: transform 0.24s ease;
+  transition:
+    transform 0.24s ease,
+    opacity 0.18s ease;
 }
 
 .site-nav > a:hover::after,
 .site-nav > a:focus-visible::after {
+  opacity: 0.45;
   transform: scaleX(1);
 }
 
 html.js .site-nav > a[aria-current]::after {
+  opacity: 1;
   transform: scaleX(1);
+}
+
+.site-nav > a:focus-visible {
+  outline-offset: 4px;
+  border-radius: 6px;
 }
 
 /* 页内锚点之外的三个入口：另一个页面、站外仓库、语言切换。
@@ -372,28 +390,51 @@ html.js .site-nav > a[aria-current]::after {
 .nav-actions {
   display: flex;
   flex: none;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   padding-left: 16px;
   font-size: 15px;
   border-left: 1px solid var(--lp-line);
 }
 
+/* 三个跨页入口做成一组等高胶囊：它们不是同一层内容（一个换页、一个出站、一个换语言），
+   但都属于「页内锚点之外的出口」，用同一种形状归为一组，再靠描边把语言切换分出来。
+   这里必须显式取消全局 `a:hover` 的下划线，否则浅底之上还压一条线。 */
 .nav-actions a {
   display: inline-flex;
+  gap: 6px;
   align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
   color: var(--lp-ink-soft);
   white-space: nowrap;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .nav-actions a:hover {
-  color: var(--lp-ink);
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-soft);
+  border-color: var(--lp-line-strong);
+}
+
+.nav-actions a:focus-visible {
+  outline-offset: 3px;
+}
+
+.nav-actions svg {
+  width: 16px;
+  height: 16px;
 }
 
 .lang-switch {
-  padding: 5px 12px;
-  border: 1px solid var(--lp-line-strong);
-  border-radius: 999px;
+  font-weight: 600;
+  border-color: var(--lp-line-strong);
 }
 
 /* 小屏汉堡菜单：`<details>` 实现，禁用 JS 也能展开——窄屏下它接替
@@ -416,7 +457,7 @@ html.js .site-nav > a[aria-current]::after {
   justify-content: center;
   width: 40px;
   height: 40px;
-  padding-right: 0;
+  padding: 0;
   color: var(--lp-ink);
   cursor: pointer;
   list-style: none;
@@ -486,7 +527,7 @@ html.js .site-nav > a[aria-current]::after {
 
   .lang-switch {
     min-height: 44px;
-    padding: 10px 14px;
+    padding: 0 16px;
   }
 
   .nav-menu summary {
@@ -914,6 +955,7 @@ section[aria-labelledby] {
 }
 
 .feature-icon {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1355,14 +1397,15 @@ ul.ticks li::before {
 
 /* ---------- FAQ ---------- */
 
+/* 单列手风琴：三列网格时同一行卡片的高度由最长的那条答案决定，展开一条会把
+   邻居一起撑高（`align-items: start` 只能止住拉伸，止不住视觉上的空洞），
+   而 FAQ 的读法是「从上往下扫问题、按需展开一条」——一列才是它的自然形状。
+   max-width 让答案保持可读行长，左边缘与 .section-head 对齐。 */
 .faq-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 12px;
-
-  /* 展开某一条时它所在的网格行会变高；默认的 stretch 会把同一行里没展开的
-     卡片一起拉成那么高，看起来像一张空卡。让每张卡保持自身高度。 */
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  max-width: 880px;
 }
 
 .faq-category {
@@ -1391,24 +1434,35 @@ ul.ticks li::before {
 }
 
 details {
-  padding: 14px 18px;
   background: var(--lp-surface);
   border: 1px solid var(--lp-line);
   border-radius: var(--lp-radius-sm);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+details[open] {
+  border-color: var(--lp-line-strong);
+  box-shadow: var(--lp-shadow);
 }
 
 /* 折叠图标：浏览器默认的三角 marker 在各引擎下尺寸与位置都不一致，展开后也
    没有任何状态反馈。这里改成一枚纯 CSS 自绘的加减号 —— ::before 画横杠、
    ::after 画竖杠，展开时竖杠旋转 90° 并淡出，图标读作「−」。summary 内部只有
-   文本，中英两页的 FAQ 文本与条目一致性守卫不受影响；横向铺满的一行都是点击区。 */
+   文本，中英两页的 FAQ 文本与条目一致性守卫不受影响；横向铺满的一行都是点击区。
+   内边距由 summary 承担而不是 details：整行（含右侧加减号那一列）都要能点。 */
 summary {
   position: relative;
   display: flex;
   align-items: center;
-  padding-right: 32px;
+  min-height: 46px;
+  padding: 12px 46px 12px 18px;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
+  border-radius: var(--lp-radius-sm);
+  transition: background-color 0.18s ease;
 }
 
 summary::-webkit-details-marker {
@@ -1444,6 +1498,7 @@ summary::after {
 
 summary:hover {
   color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
 }
 
 summary:hover::before,
@@ -1464,7 +1519,8 @@ summary:focus-visible {
 }
 
 details p {
-  margin: 10px 0 0;
+  padding: 0 18px;
+  margin: 0 0 14px;
   color: var(--lp-ink-soft);
 }
 
@@ -1472,82 +1528,251 @@ details p + p {
   margin-top: 8px;
 }
 
-/* ---------- 微信交流群 ---------- */
+/* ---------- 作者的其他插件 ---------- */
 
-.community {
+.tools-grid {
   display: grid;
-  gap: 24px;
-  align-items: center;
-  padding: 26px;
-  background: var(--lp-bg-alt);
-  border: 1px solid var(--lp-line);
-  border-radius: var(--lp-radius-lg);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
 }
 
 @media (width >= 720px) {
-  .community {
-    grid-template-columns: 236px minmax(0, 1fr);
-    gap: 32px;
+  .tools-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-.community-qr {
-  margin: 0;
+/* 整卡可点：标题链接用 ::after 铺满卡片，卡内的「源码 / 商店」链接靠自己的
+   position: relative + z-index 浮回可点层。这样读者点卡片的任何位置都成立，
+   而不必命中那行 13.5px 的小字。 */
+.tool-card {
+  position: relative;
+  padding: 22px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
-/* 二维码留在白底上：反色后多数扫码器识别不到，深色模式下也刻意不跟随。 */
-.community-qr img {
-  display: block;
-  width: 100%;
-  max-width: 236px;
-  height: auto;
-  margin-inline: auto;
-  background: #fff;
-  border: 1px solid var(--lp-line);
+.tool-card:hover {
+  border-color: var(--lp-primary);
+  box-shadow: var(--lp-shadow);
+  transform: translateY(-2px);
+}
+
+.tool-card h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.tool-card h3 a::after {
+  position: absolute;
+  inset: 0;
+  content: '';
   border-radius: var(--lp-radius);
 }
 
-.community-qr figcaption {
-  margin-top: 10px;
-  font-size: 13.5px;
-  color: var(--lp-ink-soft);
-  text-align: center;
+.tool-card h3 a:focus-visible {
+  outline-offset: 5px;
 }
 
-.community-id {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.tool-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-soft);
+  border-radius: 11px;
+}
+
+.tool-card--green .tool-mark {
+  color: var(--lp-accent);
+  background: var(--lp-accent-soft);
+}
+
+/* 这组里主推的那张：边框提到主色一档，右上角钉一枚角标。
+   角标写成 <span> 而不是 ::after 的生成内容——「作者主推」是要被读者搜到、
+   被爬虫读到的信息，塞进样式里就只剩视觉上一层皮。 */
+.tool-card--featured {
+  border-color: color-mix(in srgb, var(--lp-primary) 40%, var(--lp-line));
+}
+
+.tool-star {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  gap: 4px;
   align-items: center;
-  margin: 16px 0 0;
-  font-size: 15px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-soft);
+  border-radius: 999px;
 }
 
-.community-id code {
-  font-size: 16px;
+.tool-star svg {
+  width: 12px;
+  height: 12px;
+  fill: currentcolor;
 }
 
-.community-note {
-  margin: 12px 0 0;
+.tool-product {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--lp-ink-faint);
+}
+
+.tool-desc {
+  margin: 8px 0 0;
   font-size: 14.5px;
   color: var(--lp-ink-soft);
 }
 
-.community-fallback {
-  margin: 6px 0 0;
-  font-size: 14px;
-  color: var(--lp-ink-soft);
+.tool-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  font-size: 13.5px;
 }
 
+.tool-links a {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- 微信交流群（收在页脚里的紧凑卡片） ---------- */
+
+/* 曾经是 FAQ 之后独占一屏的大区块：236px 二维码 + 三段落，把落地页的收尾拉得
+   比正文还长。交流群是「读完之后的下一步」而不是一个内容区块，因此压成页脚里
+   一张横向小卡——二维码缩到 108px（实测在 1x 屏幕上仍可扫），文案收成两行。 */
+.footer-wechat {
+  display: flex;
+  flex: 0 1 auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: var(--lp-radius);
+}
+
+/* 二维码留在白底上：反色后多数扫码器识别不到，深色模式下也刻意不跟随。 */
+.footer-wechat-qr {
+  width: 108px;
+  height: 108px;
+  padding: 5px;
+  background: #fff;
+  border-radius: var(--lp-radius-sm);
+}
+
+.footer-wechat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.footer-wechat-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.footer-wechat-desc {
+  max-width: 320px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--lp-footer-faint);
+}
+
+.footer-wechat-id {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--lp-footer-ink);
+}
+
+/* 只放大字号，颜色交给全局 `code`：那套「主色文字 + 浅底」本来就自足，
+   在深色页脚上是一块可读的 chip。覆成白字就成了白压浅蓝，等于看不见。 */
+.footer-wechat-id code {
+  font-size: 14px;
+}
+
+.footer-wechat-fallback {
+  max-width: 360px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--lp-footer-faint);
+}
+
+.footer-wechat-fallback a {
+  text-decoration: underline;
+  text-decoration-color: rgb(255 255 255 / 25%);
+  text-underline-offset: 2px;
+}
+
+@media (width <= 560px) {
+  .footer-wechat {
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    text-align: center;
+  }
+
+  .footer-wechat-body {
+    align-items: center;
+  }
+
+  .footer-wechat-id {
+    justify-content: center;
+  }
+}
+
+/* 只在 `html.js` 下出现：无 JS 时按钮不存在，号码本身是可选中的文本。
+   它只存在于深色页脚里，因此自绘一枚暗色胶囊，不再借用浅色主题的 .btn/.btn-ghost。 */
 .copy-btn {
   display: none;
-  padding: 7px 14px;
-  font-size: 13.5px;
+  min-height: 30px;
+  padding: 4px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--lp-footer-ink);
   cursor: pointer;
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
 }
 
 html.js .copy-btn {
   display: inline-flex;
+  align-items: center;
+}
+
+.copy-btn:hover {
+  color: #fff;
+  border-color: rgb(255 255 255 / 45%);
 }
 
 .copy-status {
@@ -1614,10 +1839,12 @@ html.js .copy-btn {
 
 .site-footer nav {
   display: flex;
+  flex: 1 1 100%;
   flex-wrap: wrap;
   gap: 10px 18px;
-  align-content: center;
   align-items: center;
+  padding-top: 18px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
 }
 
 /* ---------- 回顶 / 到底导轨（仅 JS 可用时出现） ---------- */
@@ -1760,6 +1987,259 @@ html.js .site-header.is-scrolled {
   box-shadow: var(--lp-shadow);
 }
 
+/* ---------- 动效增强：数据巡航 / 光扫 / 追光 / 数字落定 ----------
+ * 全站一套动效身份：入场与循环统一用签名曲线 cubic-bezier(0.16, 1, 0.3, 1)
+ * （快进缓停、不回弹），反馈 ~180ms、屏内变化 ~280ms、进场 ~460ms；
+ * 空间位移一律不走 linear。以下每条都只动 transform 与 opacity，
+ * 并在文末 prefers-reduced-motion 里逐项关掉。 */
+
+/* 首屏流程图：一个数据包沿「页面 → 通道 → 目标环境」循环巡航，被命中的节点同一刻亮一圈光。
+   6.4s 一轮里只有前 4.5s 有动作，剩下的静默是留给读者读文案的——循环动效最怕催。
+   两条泳道先后各亮一次，讲的是「按规则分流」，不是「二选一」。
+   只作用于 .hero-visual：请求生命周期那张详图有八个箭头和若干无修饰节点，套同一批延迟会乱序。 */
+.hero-visual .flow-node,
+.hero-visual .flow-arrow {
+  position: relative;
+}
+
+.hero-visual .flow-node::before {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  content: '';
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--lp-primary) 45%, transparent),
+    0 0 16px color-mix(in srgb, var(--lp-primary) 26%, transparent);
+  opacity: 0;
+  animation: lp-hop 6.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* 小方块换成圆点：它代表的是「一次请求」，不该长得像另一个节点。 */
+.hero-visual .flow-arrow::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  pointer-events: none;
+  content: '';
+  background: var(--lp-primary);
+  border-radius: 50%;
+  opacity: 0;
+  animation: lp-travel 6.4s cubic-bezier(0.16, 1, 0.3, 1) 400ms infinite;
+}
+
+/* 错峰：延迟是上一拍走完的距离，不是随手挑的数。 */
+.hero-visual .flow-node--fast::before {
+  animation-delay: 1150ms;
+}
+
+.hero-visual .flow-node--sw::before {
+  animation-delay: 1750ms;
+}
+
+/* 两个 .flow-arrow 同属一个 .flow，兄弟选择器只命中后一个（汇聚那一跳）。 */
+.hero-visual .flow > .flow-arrow ~ .flow-arrow {
+  animation-delay: 2600ms;
+}
+
+.hero-visual .flow-node--target::before {
+  animation-delay: 3250ms;
+}
+
+@keyframes lp-hop {
+  0%,
+  20%,
+  100% {
+    opacity: 0;
+  }
+
+  3%,
+  12% {
+    opacity: 1;
+  }
+}
+
+@keyframes lp-travel {
+  0% {
+    opacity: 0;
+    transform: translateY(-11px);
+  }
+
+  2% {
+    opacity: 1;
+  }
+
+  7% {
+    opacity: 1;
+    transform: translateY(11px);
+  }
+
+  9% {
+    opacity: 0;
+    transform: translateY(11px);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-11px);
+  }
+}
+
+/* 循环动效不该在没人看的地方耗电：脚本在场时先按住，滚进视口由 landing.js 放行。
+   禁用 JS 时这条 paused 规则压根不匹配（在 `html.js` 下），巡航照常播。 */
+html.js .hero-visual .flow-node::before,
+html.js .hero-visual .flow-arrow::after {
+  animation-play-state: paused;
+}
+
+html.js .hero-visual .flow.is-live .flow-node::before,
+html.js .hero-visual .flow.is-live .flow-arrow::after {
+  animation-play-state: running;
+}
+
+/* 主 CTA：悬停时一道高光从左扫到右，按下再荡开一圈内收的亮边。
+   位移的是伪元素，背景色与阴影不动，所以和上面那条 translateY(-1px) 不抢。 */
+.btn-primary::before,
+.btn-primary::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+}
+
+.btn-primary::after {
+  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 26%) 50%, transparent 60%);
+  transform: translateX(-105%);
+  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-primary:hover::after {
+  transform: translateX(105%);
+}
+
+.btn-primary::before {
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 70%);
+  opacity: 0;
+}
+
+.btn-primary:active::before {
+  animation: lp-press 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lp-press {
+  from {
+    opacity: 0.85;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+/* 卡片追光：一层跟随指针的柔光，画在卡片背景之上、正文之下——
+   `z-index: -1` 配 `isolation: isolate` 把它关进卡片自己的层叠上下文，
+   既盖不住文字，也钻不到页面底色后面去。坐标由 landing.js 以百分比写进
+   `--lp-x` / `--lp-y`；粗指针和减弱动效下脚本压根不绑定，未加载 JS 时整条规则
+   在 `html.js` 下也不匹配，因此不会留下没有光源的空洞。 */
+html.js .feature-card,
+html.js .tool-card {
+  position: relative;
+  isolation: isolate;
+}
+
+html.js .feature-card::before,
+html.js .tool-card::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: '';
+  background: radial-gradient(
+    220px 220px at var(--lp-x, 50%) var(--lp-y, 50%),
+    color-mix(in srgb, var(--lp-glow, var(--lp-primary)) 13%, transparent),
+    transparent 70%
+  );
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+
+html.js .feature-card:hover::before,
+html.js .tool-card:hover::before {
+  opacity: 1;
+}
+
+/* 绿色那张卡的追光跟着品牌走，别统一蓝。 */
+.tool-card--green {
+  --lp-glow: var(--lp-accent);
+}
+
+/* 统计条的四个数字落进格子：比首屏正文晚半拍，数字是「结论」，
+   同时到就等于没说。过冲压到 4%，看得见落点、看不见弹。 */
+.hero-visual .stat b {
+  animation: lp-pop 0.46s cubic-bezier(0.16, 1, 0.3, 1) 260ms both;
+}
+
+.hero-visual .stat:nth-child(2) b {
+  animation-delay: 330ms;
+}
+
+.hero-visual .stat:nth-child(3) b {
+  animation-delay: 400ms;
+}
+
+.hero-visual .stat:nth-child(4) b {
+  animation-delay: 470ms;
+}
+
+@keyframes lp-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+
+  62% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 能力图标：卡片抬起时底色外呼出一圈同色光，和图标的旋转缩放是同一拍。
+   用 currentcolor，所以六种图标各自的配色不用各写一条。 */
+.feature-icon::after {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  content: '';
+  border: 1px solid currentcolor;
+  border-radius: inherit;
+  opacity: 0;
+}
+
+.feature-card:hover .feature-icon::after {
+  animation: lp-halo 0.62s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lp-halo {
+  from {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+}
+
 /* ---------- 响应式 ---------- */
 
 @media (width <= 1000px) {
@@ -1854,10 +2334,6 @@ html.js .site-header.is-scrolled {
     flex-basis: 100%;
   }
 
-  .faq-list {
-    grid-template-columns: 1fr;
-  }
-
   .scroll-rail {
     right: max(14px, env(safe-area-inset-right));
     bottom: max(14px, env(safe-area-inset-bottom));
@@ -1938,12 +2414,37 @@ html.js .site-header.is-scrolled {
     animation: none;
   }
 
+  /* 新增的四条同样逐项停：巡航的亮环与圆点、按下的亮边、数字落定、图标光晕。 */
+  .hero-visual .flow-node::before,
+  .hero-visual .flow-arrow::after,
+  .btn-primary:active::before,
+  .hero-visual .stat b,
+  .feature-card:hover .feature-icon::after {
+    animation: none;
+  }
+
+  /* 光扫与追光是纯装饰层，没有「慢一点」的意义，直接收掉比留着强。 */
+  .btn-primary::after,
+  html.js .feature-card::before,
+  html.js .tool-card::before {
+    display: none;
+  }
+
   .btn,
   .feature-card,
   .feature-icon,
   .gallery-btn,
   .gallery-dots button,
   .scroll-rail button,
+  .site-nav a,
+  .nav-actions a,
+  .tool-card,
+  details,
+  summary,
+  .copy-btn,
+  .btn-primary::after,
+  html.js .feature-card::before,
+  html.js .tool-card::before,
   .site-nav > a::after,
   summary::before,
   summary::after {

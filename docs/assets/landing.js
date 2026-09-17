@@ -12,9 +12,12 @@
  *    （`<details>` 本身无 JS 也能开合）；
  * 5. 回顶 / 到底导轨；
  * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）；
- * 7. 页头下沿的滚动进度条，以及页头离顶后的投影（无 JS 时两者都不出现）。
+ * 7. 页头下沿的滚动进度条，以及页头离顶后的投影（无 JS 时两者都不出现）；
+ * 8. 首屏流程图的「数据包巡航」只在真正滚进视口后才放行（样式默认按住，循环动效不在没人看的地方跑）；
+ * 9. 卡片的指针追光：把光斑坐标按帧写进 `--lp-x/--lp-y`，触摸设备与减弱动效下不绑定。
  *
- * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入。
+ * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
+ * 巡航与追光同样不启动。
  */
 
 (() => {
@@ -334,5 +337,66 @@
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
     onScroll();
+  }
+
+  /* ─────────────── 8. 首屏流程图：滚进视口才巡航 ─────────────── */
+
+  const flow = document.querySelector('.hero-visual .flow');
+
+  /* 循环动效在视口外照样逐帧跑，所以样式默认按住（`html.js` 下的
+     `animation-play-state: paused`），由这里加上 `.is-live` 才放行。
+     减弱动效下样式已把动画关掉，连观察器都不必建。 */
+  if (flow && !reduceMotion) {
+    if (!('IntersectionObserver' in window)) flow.classList.add('is-live');
+    else {
+      const flowObserver = new IntersectionObserver(
+        entries => {
+          entries.forEach(entry => flow.classList.toggle('is-live', entry.isIntersecting));
+        },
+        { threshold: 0.3 },
+      );
+      flowObserver.observe(flow);
+    }
+  }
+
+  /* ─────────────── 9. 卡片指针追光 ─────────────── */
+
+  /* 光斑坐标交给样式的 `radial-gradient(... at var(--lp-x) var(--lp-y))`，脚本只写两个
+     自定义属性，不碰 DOM 结构。指针事件可以比帧率更密，因此一帧只落地一次：
+     最新一次位置攒进 `pending`，交给 `requestAnimationFrame` 里的 paint 统一写入。
+     触摸设备没有悬停态，也就没有可跟的光源，直接不绑定。 */
+  const grids = all('.feature-grid, .tools-grid');
+
+  if (grids.length && !reduceMotion && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    let frame = null;
+    let pending = null;
+
+    const paint = () => {
+      frame = null;
+      if (!pending) return;
+      const { card, x, y } = pending;
+      pending = null;
+      card.style.setProperty('--lp-x', `${x}%`);
+      card.style.setProperty('--lp-y', `${y}%`);
+    };
+
+    grids.forEach(grid =>
+      grid.addEventListener(
+        'pointermove',
+        event => {
+          const card = event.target.closest('.feature-card, .tool-card');
+          if (!card) return;
+          const box = card.getBoundingClientRect();
+          if (!box.width || !box.height) return;
+          pending = {
+            card,
+            x: ((event.clientX - box.left) / box.width) * 100,
+            y: ((event.clientY - box.top) / box.height) * 100,
+          };
+          if (frame === null) frame = requestAnimationFrame(paint);
+        },
+        { passive: true },
+      ),
+    );
   }
 })();

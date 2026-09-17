@@ -334,7 +334,17 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         expect(html, `${file} 缺少微信二维码`).toContain('assets/img/wechat-qr.png');
         expect(html, `${file} 缺少可复制的微信号`).toContain('data-copy="lld_1025"');
         expect(html, `${file} 的进群备注关键词应为 cxp`).toContain('cxp');
-        expect(html, `${file} 页脚缺少指向交流群的锚点`).toContain('"#community"');
+        // 模块现在是页脚里的紧凑卡，不再是正文里的独立区块：锚点必须落在 <footer> 内，
+        // 只判断字符串是否出现会让它飘回正文、把页脚重新撑大。
+        const footer = html.match(/<footer class="site-footer">[\s\S]*?<\/footer>/)?.[0] ?? '';
+        expect(footer, `${file} 的交流群卡不在页脚内`).toContain('id="community"');
+        expect(footer, `${file} 页脚缺少微信紧凑卡`).toContain('footer-wechat-qr');
+        // landing.js 用 `btn.parentElement.querySelector('.copy-status')` 找提示区，
+        // 两者拆到不同父节点后复制结果就静默失效。
+        const idLine = html.match(/<p class="footer-wechat-id">[\s\S]*?<\/p>/)?.[0] ?? '';
+        expect(idLine, `${file} 的复制按钮与 .copy-status 不再同属一个父节点，复制提示会静默丢失`).toMatch(
+          /data-copy="lld_1025"[\s\S]*class="copy-status"/,
+        );
       }
       for (const file of [
         'docs/alternatives.html',
@@ -343,6 +353,92 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         'CHROMEWEBSTORE.md',
       ]) {
         expect(read(file), `${file} 不该出现微信交流群`).not.toContain('wechat-qr');
+      }
+    });
+
+    /**
+     * 「作者的其他插件」是落地页的互链模块：同一作者的另外两款扩展在此互相导流。
+     * 卡片标题与描述按语言各写一版，没法逐字比对，所以守住三件不会因翻译而变的事：
+     * 每卡的目标 URL 集合、每卡的主链接指向作者自己的产品站、以及 JSON-LD `ItemList`
+     * 与 HTML 卡片对等——AI 引擎读的是结构化数据，两边分叉就是页面与实体图谱各说各话。
+     * 与微信模块同样的边界：对比页与隐私页保持中立叙述，商店文案不做站外引导。
+     */
+    it('作者的其他插件只出现在中英落地页，两页的卡片、目标 URL 与 ItemList 对等', () => {
+      const [landingEn, landingZh] = BILINGUAL_PAIRS[0];
+      /** 取 `#author-tools` 小节的原始 HTML（锚点属性换行，故按 id 定位而非整标签匹配）。 */
+      const sectionOf = (file: string): string => {
+        const html = read(file);
+        const start = html.indexOf('id="author-tools"');
+        return start === -1 ? '' : html.slice(start, html.indexOf('</section>', start));
+      };
+      /** 每张卡内的 `href` 集合，按文档顺序排列。 */
+      const cardsOf = (section: string): string[][] =>
+        [...section.matchAll(/<article class="tool-card[\s\S]*?<\/article>/g)].map(card =>
+          [...card[0].matchAll(/href="([^"]+)"/g)].map(m => m[1]),
+        );
+
+      const [enCards, zhCards] = [cardsOf(sectionOf(landingEn)), cardsOf(sectionOf(landingZh))];
+      expect(zhCards.length, `${landingZh} 的互链卡片少于两张`).toBeGreaterThanOrEqual(2);
+      expect(zhCards, `${landingZh} 与 ${landingEn} 的互链卡片数量或目标 URL 不一致`).toEqual(enCards);
+      for (const [file, cards] of [
+        [landingZh, zhCards],
+        [landingEn, enCards],
+      ] as const) {
+        for (const card of cards) {
+          expect(card[0], `${file} 有一张互链卡的主链接不是产品站首页`).toMatch(
+            /^https:\/\/liaolongdong\.github\.io\/[\w-]+\/?$/,
+          );
+        }
+      }
+
+      /**
+       * 主推位三件事必须同时成立：只有一张 `tool-card--featured`、它排在网格第一、
+       * `ItemList` 的 `"position": 1` 指向同一款产品。读者看到的「主推」与机器读到的
+       * 「第一」分叉时，AI 引擎会把另一款当成代表作来引用。
+       */
+      for (const [file, starWord] of [
+        [landingZh, '主推'],
+        [landingEn, 'Featured'],
+      ] as const) {
+        const section = sectionOf(file);
+        const classes = [...section.matchAll(/<article class="([^"]+)"/g)].map(m => m[1]);
+        const featured = classes.filter(cls => cls.includes('tool-card--featured'));
+        expect(featured.length, `${file} 的主推卡应当只有一张`).toBe(1);
+        expect(featured[0], `${file} 的主推卡不是网格里的第一张`).toBe(classes[0]);
+        // 属性与 `>` 会被 Prettier 拆行（本页内联 SVG 都是这种排版），因此只锚定 class。
+        const star = section.match(/<span class="tool-star"[\s\S]*?<\/span>/);
+        expect(star, `${file} 的主推卡没有角标`).toBeTruthy();
+        expect(star?.[0], `${file} 的角标没有内联图标（只有文字会显得像随手加的标注）`).toContain('<svg');
+        expect(star?.[0], `${file} 的角标文案不是「${starWord}」`).toContain(starWord);
+
+        const list = read(file).match(/"ItemList"[\s\S]*?<\/script>/)?.[0] ?? '';
+        expect(
+          list.match(/"position":\s*1,[\s\S]*?"url":\s*"([^"]+)"/)?.[1],
+          `${file} 的 ItemList 第 1 位与页面上的主推卡不是同一款产品`,
+        ).toBe(zhCards[0][0]);
+      }
+
+      for (const file of [landingEn, landingZh]) {
+        const list =
+          [...read(file).matchAll(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g)]
+            .map(tag => tag[0].match(/"@type":\s*"ItemList"[\s\S]*/)?.[0] ?? '')
+            .find(Boolean) ?? '';
+        expect(list, `${file} 的 JSON-LD 缺少互链小节的 ItemList`).toBeTruthy();
+        const items = [...list.matchAll(/"@type":\s*"SoftwareApplication"/g)].length;
+        expect(items, `${file} 的 ItemList 条目数与卡片数不一致`).toBe(zhCards.length);
+        expect(
+          [...list.matchAll(/"creator":\s*\{\s*"@id":\s*"([^"]+#author)"/g)].length,
+          `${file} 的 ItemList 条目未全部经 creator 指回作者实体`,
+        ).toBe(items);
+      }
+
+      for (const file of [
+        'docs/alternatives.html',
+        'docs/en-alternatives.html',
+        'docs/privacy.html',
+        'CHROMEWEBSTORE.md',
+      ]) {
+        expect(read(file), `${file} 不该出现「作者的其他插件」模块`).not.toContain('author-tools');
       }
     });
 
@@ -571,6 +667,94 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         new Set([...inPage, lastmod]).size,
         `${file} 的新鲜度日期不一致：${[...new Set([...inPage, lastmod])].join(' / ')}`,
       ).toBe(1);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 落地页动效：装饰可以加，但「减弱动效下关得掉」是站点自定的硬契约
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * `landing.css` 逐项关闭动效（文末 `prefers-reduced-motion` 里一条条 `animation: none`），
+   * 不用 `* { animation: none !important }` 的一刀切——后者会连带掐掉轮播进度条的
+   * `animationend`，翻页机制本身就没了。代价是每加一条动画都得记得补关闭项，
+   * 而漏掉的那条在正常浏览器里完全看不出来，只有开了「减弱动效」的用户替你不舒服。
+   * 所以这里把「谁用了关键帧」与「减弱动效段落关掉了谁」做集合差。
+   */
+  describe('落地页动效', () => {
+    const css = read('docs/assets/landing.css');
+    const js = read('docs/assets/landing.js');
+    const flat = (text: string): string => text.replace(/\s+/g, ' ').trim();
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    /** 取 `@media` 块的正文：括号配对即可，不为这一个检查引入 CSS 解析器。 */
+    const blockBody = (from: number): string => {
+      const open = withoutComments.indexOf('{', from);
+      let depth = 0;
+      for (let i = open; i < withoutComments.length; i += 1) {
+        if (withoutComments[i] === '{') depth += 1;
+        if (withoutComments[i] === '}') depth -= 1;
+        if (depth === 0) return withoutComments.slice(open + 1, i);
+      }
+      return '';
+    };
+    const reducedStart = withoutComments.indexOf('@media (prefers-reduced-motion: reduce)');
+    const reduced = blockBody(reducedStart);
+    const rest = withoutComments.replace(reduced, '');
+    const declared = new Set([...withoutComments.matchAll(/@keyframes\s+([\w-]+)/g)].map(m => m[1]));
+
+    /** 减弱动效段落里被 `animation: none` 或 `display: none` 收掉的选择器。 */
+    const switchedOff = new Set(
+      [...reduced.matchAll(/([^{}]+)\{[^{}]*?(?:animation(?:-name)?\s*:\s*none|display\s*:\s*none)[^{}]*?\}/g)]
+        .flatMap(match => match[1].split(','))
+        .map(selector => flat(selector).replace(/^html\.js /, '')),
+    );
+
+    /**
+     * 闸门在脚本里的动画：减弱动效下压根不会启动，不需要样式再关一次。
+     * 豁免必须同时在 `landing.js` 里找得到那道闸门，否则闸门一删这里就红。
+     */
+    const jsGated = new Map([['lp-gallery-auto', 'autoPossible']]);
+
+    it('每条使用关键帧的规则都在减弱动效段落里关掉', () => {
+      expect(reducedStart, 'landing.css 里没有 prefers-reduced-motion 段落').toBeGreaterThan(0);
+      expect(declared.size, 'landing.css 里没有 @keyframes').toBeGreaterThan(0);
+
+      const missing = [...rest.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .flatMap(([, selector, body]) =>
+          [...body.matchAll(/animation(?:-name)?\s*:\s*([^;}]+)/g)]
+            .flatMap(value => value[1].split(/\s+/).filter(token => declared.has(token)))
+            .map(name => [name, flat(selector).replace(/^html\.js /, '')] as const),
+        )
+        .filter(([name]) => !jsGated.has(name))
+        .filter(([, selector]) => !switchedOff.has(selector))
+        .map(([name, selector]) => `${selector} 播了 ${name}()，减弱动效段落没关它`);
+
+      expect(missing, '新增动画漏了减弱动效关闭项').toEqual([]);
+    });
+
+    it('减弱动效段落列出的关闭项都对应真实规则，闸门也还在脚本里', () => {
+      const normalizedRest = flat(rest);
+      const orphan = [...switchedOff].filter(
+        selector => selector && !normalizedRest.includes(`${selector} {`) && !normalizedRest.includes(`${selector},`),
+      );
+      expect(orphan, '这些关闭项对应不到任何规则，选择器已经漂移').toEqual([]);
+
+      for (const [name, gate] of jsGated) {
+        expect(declared.has(name), `豁免表里的 ${name} 已不存在于 landing.css`).toBe(true);
+        expect(js, `减弱动效下 ${name} 改由样式负责关闭，请把豁免项删掉`).toContain(gate);
+      }
+    });
+
+    /** 追光的坐标、巡航的放行都要 JS 写类名/自定义属性，样式必须与脚本用同一套名字。 */
+    it('卡片追光与流程图巡航的契约名在样式与脚本两侧一致', () => {
+      for (const hook of ['--lp-x', '--lp-y', 'is-live']) {
+        expect(css, `landing.css 不再使用 ${hook}`).toContain(hook);
+        expect(js, `landing.js 不再写入 ${hook}`).toContain(hook);
+      }
+      // 降级前提：这两条都必须在 html.js 之下，禁用脚本时不留没有光源的空洞。
+      expect(css).toMatch(/html\.js \.feature-card::before/);
+      expect(css).toMatch(/html\.js \.hero-visual \.flow-node::before/);
+      expect(js).toMatch(/matchMedia\('\(hover: hover\) and \(pointer: fine\)'\)/);
     });
   });
 

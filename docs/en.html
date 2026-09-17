@@ -211,6 +211,43 @@
             "name": "Better",
             "url": "https://github.com/liaolongdong",
             "sameAs": ["https://github.com/liaolongdong"]
+          },
+          {
+            "@type": "ItemList",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author-tools",
+            "name": "More extensions by this author",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "Account Password Helper",
+                  "alternateName": "账号密码管理助手",
+                  "applicationCategory": "SecurityApplication",
+                  "operatingSystem": "Google Chrome (Manifest V3)",
+                  "url": "https://liaolongdong.github.io/account-password-helper/",
+                  "codeRepository": "https://github.com/liaolongdong/account-password-helper",
+                  "sameAs": "https://chromewebstore.google.com/detail/account-password-helper/fgimkdodpjfkddmildjieojpfakpanli",
+                  "description": "A local-first open-source password manager: one keystroke logs you in (fill, tick, click), isolates dev / test / staging / prod accounts by exact host, and ships TOTP, an offline security audit and a generator — everything encrypted with AES-256-GCM on your machine.",
+                  "creator": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" }
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "Transfer Any File",
+                  "applicationCategory": "UtilitiesApplication",
+                  "operatingSystem": "Google Chrome",
+                  "url": "https://liaolongdong.github.io/transfer-any-file/",
+                  "codeRepository": "https://github.com/liaolongdong/transfer-any-file",
+                  "description": "14 formats converted in the browser with not one byte uploaded: Markdown, Word, PDF, Excel, CSV, JSON, HTML and images, with mixed-format batches, automatic multi-step chains, preview and inline editing and ZIP packaging. No account, no upload, no network request.",
+                  "creator": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" }
+                }
+              }
+            ]
           }
         ]
       }
@@ -432,7 +469,19 @@
             href="en-alternatives.html"
             >Alternatives</a
           >
-          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+          <a
+            class="nav-gh"
+            href="https://github.com/liaolongdong/cross-origin-proxy"
+            ><svg
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+              /></svg
+            >GitHub</a
+          >
           <a
             class="lang-switch"
             href="./"
@@ -2255,70 +2304,97 @@ pnpm assets       # regenerate store and landing images</code></pre>
         </div>
       </section>
       <section
-        id="community"
-        aria-labelledby="community-title"
+        id="author-tools"
+        aria-labelledby="author-tools-title"
       >
         <div class="wrap">
           <div class="section-head">
-            <h2 id="community-title">
+            <h2 id="author-tools-title">
               <span
                 class="section-icon"
                 aria-hidden="true"
                 ><svg viewBox="0 0 24 24">
-                  <path d="M15.5 20v-1.6a4.2 4.2 0 0 0-4.2-4.2H7.2A4.2 4.2 0 0 0 3 18.4V20" />
-                  <circle
-                    cx="9.3"
-                    cy="7.6"
-                    r="3.6"
+                  <rect
+                    x="3.5"
+                    y="3.5"
+                    width="7"
+                    height="7"
+                    rx="2"
                   />
-                  <path d="M21 20v-1.6a4.2 4.2 0 0 0-3.1-4" />
-                  <path d="M15.6 4.3a3.6 3.6 0 0 1 0 6.7" /></svg></span
-              >Join the WeChat group
+                  <rect
+                    x="13.5"
+                    y="3.5"
+                    width="7"
+                    height="7"
+                    rx="2"
+                  />
+                  <rect
+                    x="3.5"
+                    y="13.5"
+                    width="7"
+                    height="7"
+                    rx="2"
+                  />
+                  <rect
+                    x="13.5"
+                    y="13.5"
+                    width="7"
+                    height="7"
+                    rx="2"
+                  /></svg></span
+              >More extensions by this author
             </h2>
             <p class="section-lede">
-              How to write a rule, why a proxy didn't kick in, how someone else worked around a given environment — ask
-              it in the group. The author hangs out there, and post-mortems from the field are welcome too.
+              Same author, same rules: Manifest V3, open source, data stays on your machine, no service of our own. They
+              are often switched on together while debugging.
             </p>
           </div>
-          <div class="community reveal">
-            <figure class="community-qr">
-              <img
-                src="assets/img/wechat-qr.png"
-                alt="QR code for the author's WeChat contact, which adds you to the extension user group"
-                width="739"
-                height="742"
-                loading="lazy"
-              />
-              <figcaption>Scan to add on WeChat · mention <code>cxp</code></figcaption>
-            </figure>
-            <div>
-              <h3>Can't scan? Add the ID directly</h3>
-              <p class="community-id">
-                <code>lld_1025</code>
-                <button
-                  class="btn btn-ghost copy-btn"
-                  type="button"
-                  data-copy="lld_1025"
-                  data-copied="Copied ✓"
-                  data-copy-failed="Copy failed — select the text"
+          <div class="tools-grid">
+            <article class="tool-card tool-card--featured reveal">
+              <span class="tool-mark">AP</span>
+              <span class="tool-star"
+                ><svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
                 >
-                  Copy WeChat ID
-                </button>
-                <span
-                  class="copy-status"
-                  role="status"
-                ></span>
+                  <path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 6.9L12 17.9 5.8 21.5l1.6-6.9L2 9.2l7.1-.6z" /></svg
+                >Featured</span
+              >
+              <h3>
+                <a href="https://liaolongdong.github.io/account-password-helper/">Account Password Helper</a>
+              </h3>
+              <p class="tool-product">账号密码管理助手</p>
+              <p class="tool-desc">
+                A local-first open-source password manager: <span class="kbd">Ctrl</span> +
+                <span class="kbd">Shift</span> + <span class="kbd">F</span> logs you in (fill, tick, click), isolates
+                dev / test / staging / prod accounts by exact host, and ships TOTP, an offline security audit and a
+                generator — everything encrypted with AES-256-GCM on your machine. It answers "who am I in this
+                environment"; this extension answers "where do this environment's requests go".
               </p>
-              <p class="community-note">
-                Put <code>cxp</code> in the friend request (<code>cross</code>→cx + <code>proxy</code>→p); the group
-                invite follows once it is accepted.
+              <p class="tool-links">
+                <a href="https://github.com/liaolongdong/account-password-helper">Source</a>
+                <a
+                  href="https://chromewebstore.google.com/detail/account-password-helper/fgimkdodpjfkddmildjieojpfakpanli"
+                  >Chrome Web Store</a
+                >
               </p>
-              <p class="community-fallback">
-                If the QR has expired, WeChat isn't convenient, or the question needs logs and config attached: write to
-                <a href="mailto:924902324@qq.com">924902324@qq.com</a>. Bugs and feature requests are welcome as
-                <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">GitHub issues</a> too.
+            </article>
+            <article class="tool-card tool-card--green reveal">
+              <span class="tool-mark">TF</span>
+              <h3>
+                <a href="https://liaolongdong.github.io/transfer-any-file/">Transfer Any File</a>
+              </h3>
+              <p class="tool-product">Offline format conversion</p>
+              <p class="tool-desc">
+                14 formats converted in the browser, not one byte uploaded: Markdown, Word, PDF, Excel, CSV, JSON, HTML
+                and images all convert on your own machine, with mixed-format batches, automatic multi-step chains,
+                preview and inline editing, and ZIP packaging. No account, no upload, no network request.
               </p>
-            </div>
+              <p class="tool-links">
+                <a href="https://github.com/liaolongdong/transfer-any-file">Source</a>
+              </p>
+            </article>
           </div>
         </div>
       </section>
@@ -2356,13 +2432,57 @@ pnpm assets       # regenerate store and landing images</code></pre>
             >
           </div>
         </div>
+        <div
+          class="footer-wechat"
+          id="community"
+        >
+          <img
+            class="footer-wechat-qr"
+            src="assets/img/wechat-qr.png"
+            alt="QR code for the author's WeChat contact, which adds you to the extension user group"
+            width="739"
+            height="742"
+            loading="lazy"
+          />
+          <div class="footer-wechat-body">
+            <h3 class="footer-wechat-title">Join the WeChat group</h3>
+            <p class="footer-wechat-desc">
+              How to write a rule, why a proxy didn't kick in, how someone else worked around a given environment — ask
+              it in the group. The author hangs out there.
+            </p>
+            <p class="footer-wechat-id">
+              WeChat ID <code>lld_1025</code>
+              <button
+                class="copy-btn"
+                type="button"
+                data-copy="lld_1025"
+                data-copied="Copied ✓"
+                data-copy-failed="Copy failed — select the text"
+              >
+                Copy WeChat ID
+              </button>
+              <span
+                class="copy-status"
+                role="status"
+              ></span>
+            </p>
+            <p class="footer-wechat-desc">
+              Put <code>cxp</code> in the friend request (<code>cross</code>→cx + <code>proxy</code>→p); the group
+              invite follows once it is accepted.
+            </p>
+            <p class="footer-wechat-fallback">
+              If the QR has expired, WeChat isn't convenient, or the question needs logs and config attached: write to
+              <a href="mailto:924902324@qq.com">924902324@qq.com</a>. Bugs and feature requests are welcome as
+              <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">GitHub issues</a> too.
+            </p>
+          </div>
+        </div>
         <nav aria-label="Footer navigation">
           <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
           <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
           <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">Issues</a>
           <a href="https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md">Contributing</a>
           <a href="https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md">Store copy</a>
-          <a href="#community">WeChat group</a>
           <a href="privacy.html">Privacy policy</a>
           <a href="en-alternatives.html">vs. dev-server proxy, mitmproxy, API clients</a>
           <a href="llms.txt">llms.txt</a>

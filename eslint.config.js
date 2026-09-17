@@ -58,6 +58,7 @@ export default [
         navigator: 'readonly',
         matchMedia: 'readonly',
         IntersectionObserver: 'readonly',
+        requestAnimationFrame: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
       },

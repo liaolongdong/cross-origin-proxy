@@ -329,7 +329,8 @@ flowchart TD
 
 ## 🧩 我的其它插件
 
-- [账号密码管理助手 · Account Password Helper](https://github.com/liaolongdong/account-password-helper)：同一作者的另一款 Manifest V3 扩展，本地优先的开源密码管理器——一键登录连登录按钮一起点，按精确域名隔离 dev / test / staging / prod，内置 TOTP 两步验证与离线安全体检。它处理「这个环境我是谁」，本扩展处理「这个环境请求打到哪」，联调时常常一起开着。[产品页](https://liaolongdong.github.io/account-password-helper/) · [Chrome 应用商店](https://chromewebstore.google.com/detail/account-password-helper/fgimkdodpjfkddmildjieojpfakpanli)
+- ⭐ [账号密码管理助手 · Account Password Helper](https://github.com/liaolongdong/account-password-helper)：同一作者的另一款 Manifest V3 扩展，本地优先的开源密码管理器——一键登录连登录按钮一起点，按精确域名隔离 dev / test / staging / prod，内置 TOTP 两步验证与离线安全体检。它处理「这个环境我是谁」，本扩展处理「这个环境请求打到哪」，联调时常常一起开着。[产品页](https://liaolongdong.github.io/account-password-helper/) · [Chrome 应用商店](https://chromewebstore.google.com/detail/account-password-helper/fgimkdodpjfkddmildjieojpfakpanli)
+- [Transfer Any File](https://github.com/liaolongdong/transfer-any-file)：同一作者的另一款 Manifest V3 扩展，14 种格式在浏览器里互转、一个字节也不上传的离线文件转换器——Markdown、Word、PDF、Excel、CSV、JSON、HTML 与图片在自己电脑上完成转换，支持批量混合格式、自动多步链路、预览与内联编辑、ZIP 打包。无账号、无上传、无网络请求。[产品页](https://liaolongdong.github.io/transfer-any-file/)
 
 ## 📄 许可证
 
