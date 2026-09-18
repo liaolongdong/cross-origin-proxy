@@ -12,7 +12,7 @@ vi.stubGlobal('chrome', {
 
 // Now import after mocking
 const { isRetryableError, matchesMockCondition } = await import('@/entrypoints/background/proxyHandler');
-const { deduplicateRules } = await import('@/entrypoints/background/messageRouter');
+const { deduplicateRules } = await import('@/utils/ruleConflicts');
 
 function makeRule(overrides: Partial<ProxyRule>): ProxyRule {
   return {

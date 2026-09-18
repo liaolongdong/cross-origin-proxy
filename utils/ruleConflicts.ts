@@ -46,3 +46,14 @@ export function computeShadowedRuleIds(allRules: ProxyRule[]): Set<string> {
   }
   return shadowed;
 }
+
+/**
+ * 过滤掉与现有规则重复的导入条目（按 name + matchPattern 判定），保持文件内原有顺序。
+ *
+ * 住在规则集分析模块而非消息路由层，是因为存储层的合并必须在持有互斥锁时调用它：
+ * 去重依据的是「写入那一刻」的现有规则，锁外算好的差集可能已被并发写入作废。
+ */
+export function deduplicateRules(existing: ProxyRule[], incoming: ProxyRule[]): ProxyRule[] {
+  const existingKeys = new Set(existing.map(r => `${r.name}::${r.matchPattern}`));
+  return incoming.filter(r => !existingKeys.has(`${r.name}::${r.matchPattern}`));
+}

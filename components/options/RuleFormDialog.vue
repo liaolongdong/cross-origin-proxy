@@ -65,6 +65,9 @@
             v-model="form.priority"
             :min="1"
             :max="999"
+            :step="1"
+            :precision="0"
+            step-strictly
           />
         </el-form-item>
 
@@ -626,12 +629,14 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue';
+import { ElMessage } from 'element-plus';
 import { Delete, Plus, Close } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
 import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
+import { findInvalidHeaderNames } from '@/utils/headerValidation';
 import { matchRule, rewriteUrl, applyQueryOverrides } from '@/utils/urlMatcher';
 
 const props = defineProps<{
@@ -739,6 +744,9 @@ const matchPatternPlaceholder = computed(() => {
   return placeholders[form.matchType] || '';
 });
 
+// `immediate` 不可省：本弹窗是异步分片，`#add-rule` / `#add-rule-from-tab=` hash 直达时
+// 父组件 onMounted 已把 visible 置为 true，分片取回后组件是带着 visible === true 挂载的，
+// 无 immediate 的 watcher 永不触发 → 打开一个空白表单，被预填/编辑的规则静默丢失。
 watch(
   () => props.visible,
   val => {
@@ -818,6 +826,7 @@ watch(
       testResult.value = null;
     }
   },
+  { immediate: true },
 );
 
 // Reset test result when form pattern/target changes
@@ -854,6 +863,21 @@ async function handleSave() {
   const valid = await formRef.value.validate().catch(() => false);
   if (!valid) return;
 
+  // 保存侧拦截非法头条目：这类规则存进去会在请求时被整体拒绝（页面拿到 status 0），
+  // 表单这里报错比运行时日志更早、更可修正。判据与后台运行时同源（utils/headerValidation）。
+  const invalidRequestHeaders = findInvalidHeaderNames(headerList.value);
+  if (invalidRequestHeaders.length > 0) {
+    ElMessage.error(t('invalidRequestHeader', [invalidRequestHeaders.join(', ')]));
+    return;
+  }
+  if (enableResponseOverrides.value) {
+    const invalidResponseHeaders = findInvalidHeaderNames(responseHeaderList.value);
+    if (invalidResponseHeaders.length > 0) {
+      ElMessage.error(t('invalidResponseHeader', [invalidResponseHeaders.join(', ')]));
+      return;
+    }
+  }
+
   const headerOverrides: Record<string, string> = {};
   headerList.value.forEach(({ key, value }) => {
     if (key.trim()) {
@@ -887,12 +911,7 @@ async function handleSave() {
     result.requestBodyOverride = form.requestBodyOverride;
   }
 
-  if (enableMockResponse.value && form.mockBody) {
-    result.mockResponse = {
-      body: form.mockBody,
-      contentType: form.mockContentType,
-      status: form.mockStatus,
-    };
+  if (enableMockResponse.value) {
     // 条件化 Mock
     const conditions = mockConditions.value
       .filter(c => c.body || c.matchUrl || c.matchMethod || c.queryPairs.some(q => q.key))
@@ -908,8 +927,20 @@ async function handleSave() {
         if (c.contentType !== 'application/json') cond.contentType = c.contentType;
         return cond;
       });
-    if (conditions.length > 0) {
-      result.mockResponse.conditions = conditions;
+    // 只要有一项真实内容就写入：以前只看默认 body，导致「只配条件」和「只返回某个状态码」
+    // 这两种合法用法被静默丢弃，用户看到保存成功却完全没有 Mock 效果。
+    if (form.mockBody || form.mockStatus !== 200 || conditions.length > 0) {
+      result.mockResponse = {
+        body: form.mockBody,
+        contentType: form.mockContentType,
+        status: form.mockStatus,
+      };
+      if (conditions.length > 0) {
+        result.mockResponse.conditions = conditions;
+      }
+    } else {
+      // 开关开着却什么都没填：不假装保存了 Mock，明确告知这次不生效
+      ElMessage.warning(t('mockIgnored'));
     }
   }
 

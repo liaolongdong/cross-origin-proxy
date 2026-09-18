@@ -166,7 +166,8 @@ export interface ProxyResponseMessage {
     status: number;
     statusText: string;
     headers: Record<string, string>;
-    body: string; // base64 encoded for binary support
+    /** base64 编码的二进制正文；null 表示「无正文」——204/205/304 只能配 null */
+    body: string | null;
     isBase64: boolean;
   };
 }
@@ -267,10 +268,13 @@ export interface GetProxyStatusMessage {
   type: MessageType.GET_PROXY_STATUS;
 }
 
+/** 导入模式：整体替换当前规则集，或按 name + matchPattern 去重后合并 */
+export type ImportMode = 'replace' | 'merge';
+
 /** 导入配置 */
 export interface ImportConfigMessage {
   type: MessageType.IMPORT_CONFIG;
-  data: ExportData & { mode?: 'replace' | 'merge' };
+  data: ExportData & { mode?: ImportMode };
 }
 
 /** 导出配置 */

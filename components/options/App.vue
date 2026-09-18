@@ -29,10 +29,16 @@
     <!-- 规则计数信息行 -->
     <div class="rules-count-info">
       {{ t('rulesCountInfo', [rules.length, enabledCount]) }}
+      <span
+        v-if="dnrSkippedRules.size > 0"
+        class="dnr-skipped-summary"
+        >{{ t('dnrSkippedSummary', [dnrSkippedRules.size]) }}</span
+      >
     </div>
 
     <!-- 规则表格卡片 -->
     <RuleTable
+      ref="ruleTableRef"
       :rules="filteredRules"
       :loading="ruleLoading"
       :has-any-rules="rules.length > 0"
@@ -40,6 +46,7 @@
       :search-text="searchText"
       :hit-stats="combinedHitStats"
       :shadowed-rule-ids="shadowedRuleIds"
+      :dnr-skipped-rules="dnrSkippedRules"
       @add="handleAddRule"
       @edit="handleEditRule"
       @duplicate="handleDuplicateRule"
@@ -61,7 +68,7 @@
     <ImportExportDialog
       v-model:visible="showImportExport"
       @export="handleExport"
-      @import="handleImport"
+      @imported="handleImported"
       @import-har-rules="handleImportHarRules"
       @import-curl="handleImportCurl"
     />
@@ -72,6 +79,7 @@
     <UrlTestDialog
       v-model:visible="showUrlTest"
       :rules="rules"
+      :dnr-skipped-rules="dnrSkippedRules"
       :proxy-enabled="proxyEnabled"
     />
     <MigrateTargetsDialog
@@ -108,10 +116,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, h, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import type { ProxyRule, ExportData } from '@/utils/types';
+import type { ProxyRule } from '@/utils/types';
 import { MessageType } from '@/utils/types';
 import { MAX_RULES } from '@/utils/constants';
 import { useRuleManagement } from '@/composables/useRuleManagement';
+import { useDnrSupport, useDnrSkipText } from '@/composables/useDnrSupport';
+import { checkDnrRule } from '@/utils/dnrSupport';
 import { useRequestLog } from '@/composables/useRequestLog';
 import { useImportExport } from '@/composables/useImportExport';
 import { useI18n } from '@/composables/useI18n';
@@ -129,6 +139,7 @@ import { logger } from '@/utils/logger';
 import { combineHitStats } from '@/utils/ruleStats';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
+import { resolveSelectedRules } from '@/utils/ruleSelection';
 import HeaderBar from './HeaderBar.vue';
 import SearchFilterBar from './SearchFilterBar.vue';
 import RuleTable from './RuleTable.vue';
@@ -173,6 +184,8 @@ const {
   reorderRules,
   toggleProxy,
   findConflictingRule,
+  beginPendingDelete,
+  endPendingDelete,
 } = useRuleManagement();
 
 // 请求日志 + DNR 命中统计
@@ -192,7 +205,11 @@ const {
 } = useRequestLog();
 
 // 导入导出
-const { exportConfig, importConfig } = useImportExport();
+const { exportConfig } = useImportExport();
+
+// 「DNR 不会应用」的规则（RE2 不兼容 / 捕获引用越界）：这类规则界面显示已启用，实际零作用
+const { dnrSkippedRules } = useDnrSupport(rules);
+const { skipReasonText } = useDnrSkipText();
 
 // UI 状态
 const showRuleDialog = ref(false);
@@ -210,7 +227,18 @@ const highlightRuleId = ref<string | null>(null);
 const searchText = ref('');
 const statusFilter = ref('');
 const matchTypeFilter = ref('');
-const selectedRules = ref<ProxyRule[]>([]);
+/** 表格上报的原始勾选（reserve-selection 下跨筛选、跨删除都会保留） */
+const tableSelection = ref<ProxyRule[]>([]);
+/** 计数与批量操作只认它：剔除已不存在的规则，并换回列表里的最新对象 */
+const selectedRules = computed(() => resolveSelectedRules(tableSelection.value, rules.value));
+/** 表格实例：只用到 clearSelection（reserve-selection 的勾选存活在表格内部） */
+const ruleTableRef = ref<{ clearSelection: () => void } | null>(null);
+
+/** 规则集整体变化后重置选择：两边的状态都要清，否则批量操作会作用在不可见的规则上 */
+function clearRuleSelection() {
+  tableSelection.value = [];
+  ruleTableRef.value?.clearSelection();
+}
 
 // 日志抽屉过滤器（提升到容器层，避免抽屉关闭后重置）
 const logMethodFilter = ref('');
@@ -399,21 +427,34 @@ function showAddFailedMessage(error: unknown) {
 }
 
 async function handleSaveRule(ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
+  const editingId = editingRule.value?.id;
   try {
-    const conflict = findConflictingRule(ruleData, editingRule.value?.id);
+    const conflict = findConflictingRule(ruleData, editingId);
     if (conflict) {
       ElMessage.warning(t('conflictWarningMsg', [conflict.name]));
     }
 
-    if (editingRule.value) {
-      await updateRule(editingRule.value.id, ruleData);
-      ElMessage.success(t('ruleUpdated'));
+    // addRule / updateRule 成功后会同步更新 rules.value，故可直接按 id 回查刚保存的规则
+    let savedId: string;
+    if (editingId) {
+      await updateRule(editingId, ruleData);
+      savedId = editingId;
     } else {
       const rule = await addRule(ruleData);
+      savedId = rule.id;
       flashHighlight(rule.id);
-      ElMessage.success(t('ruleAdded'));
     }
     showRuleDialog.value = false;
+
+    // 「保存成功」不等于「会被应用」：走 DNR 通道的规则可能因 RE2 不兼容或捕获引用越界被跳过，
+    // 此时给一条可行动的提示，而不是让用户回头去猜为什么流量没被代理
+    const savedRule = rules.value.find(r => r.id === savedId);
+    const skipReason = savedRule ? await checkDnrRule(savedRule) : null;
+    if (skipReason) {
+      ElMessage.warning(t('dnrSkippedMsg', [skipReasonText(skipReason)]));
+    } else {
+      ElMessage.success(editingId ? t('ruleUpdated') : t('ruleAdded'));
+    }
   } catch (error) {
     showAddFailedMessage(error);
     logger.error('Save rule failed:', error);
@@ -450,6 +491,10 @@ function flashHighlight(ruleId: string) {
  *
  * `committed` 是唯一的提交点标志：定时器触发即置位并先关闭提示，之后的撤销
  * 一律拒绝（存储已删，本地插回只会得到一行随后被 storage.onChanged 抹掉的幽灵数据）。
+ *
+ * 窗口期内规则仍存在于 `storage.local`，因此 id 会登记到 `pendingDeleteIds`，
+ * 由 fetchConfig 过滤掉——否则其他标签页的改动、导入或加载环境配置会把这行捞回来，
+ * 用户再点撤销就 splice 出第二份重复行。撤销与提交两条出口都要注销登记。
  */
 function handleDeleteRule(ruleId: string) {
   const index = rules.value.findIndex(r => r.id === ruleId);
@@ -459,7 +504,9 @@ function handleDeleteRule(ruleId: string) {
   const capturedRule = structuredClone(rules.value[index]);
   const originalIndex = index;
 
-  // 乐观更新：立即从 UI 移除
+  // 乐观更新：立即从 UI 移除，并登记进撤销窗口，
+  // 避免窗口内的 fetchConfig（其他标签页改动、导入、加载环境配置）把这行捞回来
+  beginPendingDelete(ruleId);
   rules.value = rules.value.filter(r => r.id !== ruleId);
 
   let committed = false;
@@ -473,7 +520,8 @@ function handleDeleteRule(ruleId: string) {
         type: MessageType.DELETE_RULE,
         data: { ruleId: capturedRule.id },
       })
-      .catch(err => logger.error('Delete rule failed:', err));
+      .catch(err => logger.error('Delete rule failed:', err))
+      .finally(() => endPendingDelete(capturedRule.id));
   }, 5000);
 
   const message = ElMessage({
@@ -495,6 +543,7 @@ function handleDeleteRule(ruleId: string) {
               deleteTimer = null;
             }
             message.close();
+            endPendingDelete(capturedRule.id);
             rules.value.splice(Math.min(originalIndex, rules.value.length), 0, capturedRule);
             ElMessage.success(t('undoSuccess'));
           },
@@ -517,7 +566,7 @@ async function handleToggleRule(ruleId: string, enabled: boolean) {
 }
 
 function handleSelectionChange(selection: ProxyRule[]) {
-  selectedRules.value = selection;
+  tableSelection.value = selection;
 }
 
 async function handleBatchToggle(enabled: boolean) {
@@ -586,7 +635,7 @@ async function handleBatchDelete() {
   try {
     await batchDeleteRules(ids);
     ElMessage.success(t('batchDeleteSuccess', [count]));
-    selectedRules.value = [];
+    clearRuleSelection();
   } catch (error) {
     ElMessage.error(t('batchDeleteFailed'));
     logger.error('Batch delete failed:', error);
@@ -599,7 +648,7 @@ async function handleMigrateApply(updates: { id: string; targetUrl: string }[]) 
   try {
     await batchUpdateTargets(updates);
     ElMessage.success(t('migrateSuccess', [updates.length]));
-    selectedRules.value = [];
+    clearRuleSelection();
   } catch (error) {
     ElMessage.error(t('migrateFailed'));
     logger.error('Batch migrate targets failed:', error);
@@ -618,38 +667,33 @@ async function handleClearLogs() {
 }
 
 // 导入导出：exportConfig 的成功/失败反馈统一由本组件发出（子弹窗的 emit 不携带异步结果）
-async function handleExport() {
+async function handleExport(sanitize: boolean) {
   try {
-    await exportConfig();
-    ElMessage.success(t('exportSuccess'));
+    const { removedCount } = await exportConfig(sanitize);
+    ElMessage.success(removedCount > 0 ? t('exportSuccessSanitized', [removedCount]) : t('exportSuccess'));
   } catch (error) {
     ElMessage.error(t('exportFailed'));
     logger.error('Export failed:', error);
   }
 }
 
-async function handleImport(data: ExportData) {
-  try {
-    const success = await importConfig(JSON.stringify(data));
-    if (!success) {
-      ElMessage.error(t('importFailed'));
-      return;
-    }
-    // 导入由后台整体替换/合并规则，重新拉取配置保持 UI 与存储一致
-    await fetchConfig();
-    ElMessage.success(t('importSuccess'));
-    showImportExport.value = false;
-  } catch {
-    ElMessage.error(t('importFailed'));
-  }
+/** 导入成功由弹窗确认后才发出通知：这里只需刷新列表并收窗（失败时输入保留、弹窗不关） */
+async function handleImported() {
+  // 导入由后台整体替换/合并规则，重新拉取配置保持 UI 与存储一致
+  await fetchConfig();
+  clearRuleSelection();
+  ElMessage.success(t('importSuccess'));
+  showImportExport.value = false;
 }
 
 async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[]) {
   try {
     // 批量一次写入，避免逐条 sendMessage 触发 N 次 DNR 重建
     await batchAddRules(harRules);
+    ElMessage.success(t('importHarSuccess', [harRules.length]));
     showImportExport.value = false;
   } catch (error) {
+    // 失败时不关窗：达上限时用户删几条即可重试，不必重新选文件
     showAddFailedMessage(error);
   }
 }
@@ -665,7 +709,9 @@ function handleImportCurl(parsed: import('@/utils/curlParser').ParsedCurl) {
   }
   showImportExport.value = false;
 
-  const prefill = buildOriginWildcardDraft(url, `cURL: ${url.hostname}`);
+  // 规则不按方法匹配，因此把 cURL 的方法写进名字：否则 `curl -X DELETE` 与 GET 会生成同名规则，
+  // 用户无从知道这条草稿原本对应的是写操作
+  const prefill = buildOriginWildcardDraft(url, `cURL: ${parsed.method} ${url.hostname}`);
   if (Object.keys(parsed.headers).length > 0) {
     prefill.headerOverrides = { ...parsed.headers };
   }
@@ -678,6 +724,7 @@ function handleImportCurl(parsed: import('@/utils/curlParser').ParsedCurl) {
 /** 环境配置加载成功后：后台已整体替换规则集，刷新本地列表保持一致 */
 async function handleProfilesLoaded() {
   await fetchConfig();
+  clearRuleSelection();
 }
 
 /** 按 origin 预填通配符规则草稿：cURL 导入 / 日志转规则 / Popup 当前页直达共用 */
@@ -745,6 +792,11 @@ async function handleReorder(fromId: string, toId: string) {
   margin: 0 32px 10px;
   font-size: 13px;
   color: var(--cop-text-color-secondary);
+}
+
+.dnr-skipped-summary {
+  margin-left: 8px;
+  color: var(--el-color-danger, #f56c6c);
 }
 
 @media (width <= 768px) {

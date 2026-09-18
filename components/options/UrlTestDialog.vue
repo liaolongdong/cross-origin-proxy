@@ -90,12 +90,29 @@
           <div class="result-row">
             <span class="result-label">{{ t('urlTestChannel') }}</span>
             <el-tag
-              :type="channelIsDnr ? 'success' : 'warning'"
+              :type="channelIsDnr ? (matchedDnrSkipReason ? 'danger' : 'success') : 'warning'"
               effect="light"
             >
               {{ channelIsDnr ? t('urlTestChannelDnr') : t('urlTestChannelSw') }}
             </el-tag>
           </div>
+          <div
+            v-if="matchedDnrSkipReason"
+            class="dnr-skip-alert"
+          >
+            <p
+              v-for="(line, index) in skipReasonLines(matchedDnrSkipReason)"
+              :key="index"
+            >
+              {{ line }}
+            </p>
+          </div>
+          <p
+            v-else-if="channelIsDnr"
+            class="cors-note"
+          >
+            {{ t('urlTestCorsNote') }}
+          </p>
           <div
             v-if="extraActions.length > 0"
             class="result-row"
@@ -152,11 +169,15 @@ import {
   rewriteUrl,
 } from '@/utils/urlMatcher';
 import { useI18n } from '@/composables/useI18n';
+import { useDnrSkipText } from '@/composables/useDnrSupport';
+import type { DnrSkipReason } from '@/utils/dnrSupport';
 
 const props = defineProps<{
   visible: boolean;
   /** 全部规则（来自 App.vue 的响应式状态） */
   rules: ProxyRule[];
+  /** 走 DNR 通道但不会被浏览器应用的规则（ruleId → 原因） */
+  dnrSkippedRules: Map<string, DnrSkipReason>;
   /** 代理总开关状态：关闭时规则不会实际生效，需提醒 */
   proxyEnabled: boolean;
 }>();
@@ -166,6 +187,7 @@ defineEmits<{
 }>();
 
 const { t } = useI18n();
+const { skipReasonLines } = useDnrSkipText();
 
 const testUrl = ref('');
 /** 参与命中测试的 HTTP 方法（空=不限，与无方法信息时的匹配行为一致） */
@@ -184,6 +206,11 @@ const rewrittenUrl = computed(() =>
 );
 
 const channelIsDnr = computed(() => (matchedRule.value ? isSimpleRule(matchedRule.value) : false));
+
+// 走 DNR 通道却不会被浏览器应用：命中显示绿色「DNR」并不等于请求真的会被转发
+const matchedDnrSkipReason = computed<DnrSkipReason | undefined>(() =>
+  matchedRule.value ? props.dnrSkippedRules.get(matchedRule.value.id) : undefined,
+);
 
 const shadowedRules = computed(() => {
   const url = testUrl.value.trim();
@@ -276,6 +303,28 @@ const extraActions = computed(() => {
 }
 
 .result-url.unchanged {
+  color: var(--cop-text-color-secondary);
+}
+
+.dnr-skip-alert {
+  padding: 8px 10px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-color-danger, #f56c6c);
+  background: var(--el-color-danger-light-9, #fef2f2);
+  border-left: 3px solid var(--el-color-danger, #f56c6c);
+  border-radius: 0 6px 6px 0;
+}
+
+.dnr-skip-alert p {
+  margin: 0;
+}
+
+.cors-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--cop-text-color-secondary);
 }
 

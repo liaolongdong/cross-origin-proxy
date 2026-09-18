@@ -140,9 +140,11 @@ export function isSubstitutionValid(regexFilter: string, substitution: string): 
  * 业务语义为数值越小越先匹配，DNR 为数值越大越优先，需反转（下限 1）。
  * 入参先归一化：`NaN` 会被 Chrome 判定为非法 priority，代价是**整批**
  * `updateDynamicRules` 被拒（所有简单规则同时失效），而非只丢一条。
+ * 最后取整：DNR 的 `priority` 只接受整数，一个小数（输入框敲出来的 2.5、
+ * 导入文件里的 1.5）同样是整批拒绝，而不是丢一条规则。
  */
 export function toDnrPriority(priority: number): number {
-  return Math.max(1, 1000 - normalizePriority(priority));
+  return Math.max(1, Math.round(1000 - normalizePriority(priority)));
 }
 
 /**

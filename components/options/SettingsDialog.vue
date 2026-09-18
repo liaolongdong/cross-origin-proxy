@@ -159,7 +159,8 @@ const isMac = ref(navigator.platform.includes('Mac'));
 /** 代理自动关闭时长（分钟，0 = 从不） */
 const autoOffMinutes = ref(0);
 
-// 打开弹窗时读取自动关闭配置
+// 打开弹窗时读取自动关闭配置。`immediate` 不可省：本组件是异步分片，可能直到 visible
+// 已为 true 才挂载（首次点击时分片尚未取回），那时 watcher 永不触发，倒计时会静默显示为「不自动关闭」。
 watch(
   () => props.visible,
   async val => {
@@ -172,6 +173,7 @@ watch(
       autoOffMinutes.value = 0;
     }
   },
+  { immediate: true },
 );
 
 async function handleAutoOffChange(val: string | number) {

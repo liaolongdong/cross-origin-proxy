@@ -18,7 +18,7 @@ vi.stubGlobal('chrome', {
 });
 
 // Now import after mocking (transitively load utils/storage.ts which uses chrome.storage)
-const { deduplicateRules } = await import('@/entrypoints/background/messageRouter');
+const { deduplicateRules } = await import('@/utils/ruleConflicts');
 const { isRetryableError, matchesMockCondition } = await import('@/entrypoints/background/proxyHandler');
 const { REFRESH_INTERVAL_PRESETS } = await import('@/composables/useRequestLog');
 
@@ -566,6 +566,35 @@ describe('[Undo delete] 5 秒窗口与提交定时器不再各自为政', () => 
       expect(dict).toHaveProperty('undoExpired');
     }
   });
+
+  it('乐观移除前登记撤销窗口，两条出口都注销（漏注销=删除成功后该行被永久屏蔽）', () => {
+    expect(body).toMatch(/beginPendingDelete\(ruleId\);[\s\S]*?rules\.value = rules\.value\.filter/);
+    const undoBranch = body.slice(body.indexOf('if (committed)'), body.indexOf('rules.value.splice'));
+    expect(undoBranch).toContain('endPendingDelete(capturedRule.id)');
+    expect(body).toMatch(/\.finally\(\(\) => endPendingDelete\(capturedRule\.id\)\)/);
+  });
+});
+
+describe('[Mock save gate] 只配条件或只改状态码的 Mock 不再被静默丢弃', () => {
+  const formSrc = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf-8');
+  const save = formSrc.slice(formSrc.indexOf('async function handleSave'));
+  const mockBlock = save.slice(save.indexOf('if (enableMockResponse.value)'), save.indexOf('if (enableDelay.value)'));
+
+  it('条件列表先于写入门计算，门同时看 body、状态码与条件', () => {
+    expect(mockBlock.indexOf('const conditions =')).toBeLessThan(mockBlock.indexOf('if (form.mockBody'));
+    expect(mockBlock).toContain('form.mockBody || form.mockStatus !== 200 || conditions.length > 0');
+  });
+
+  it('开关打开却什么都没填时给出提示，而不是假装保存了 Mock', () => {
+    expect(mockBlock).toContain("ElMessage.warning(t('mockIgnored'))");
+    for (const dict of [zhOptions, enOptions]) {
+      expect(dict).toHaveProperty('mockIgnored');
+    }
+  });
+
+  it('不再存在旧的 `enableMockResponse && form.mockBody` 单条件门', () => {
+    expect(formSrc).not.toContain('if (enableMockResponse.value && form.mockBody)');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -910,5 +939,75 @@ describe('[Feature 7] Rule advanced search — matchType filter', () => {
     // 防御性：所有规则都是 wildcard 时，filter='prefix' 必须返回空
     const onlyWildcard = [makeRule({ id: 'a', matchType: 'wildcard' })];
     expect(applyMatchTypeFilter(onlyWildcard, 'prefix')).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 异步弹窗的挂载态初始化：hash 直达不得打开空白表单/空列表
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
+  // 弹窗全部是 defineAsyncComponent 且模板无 v-if：App.vue 的 onMounted 里
+  // handleHashNavigation() 同步把 visible 置 true，而子组件要等分片取回才执行 setup。
+  // 此时 props.visible 已是 true，无 immediate 的 watcher 永不触发——
+  // RuleFormDialog 会打开一个空白表单（丢掉被编辑/预填的规则），
+  // ProfilesDialog/SettingsDialog 会显示空列表与「不自动关闭」。
+  // el-dialog 的 `open` 事件同样不可靠：它只在 modelValue 的 watcher 里 emit，
+  // 挂载分支（use-dialog onMounted → open()）不 emit，故 @open 拉取在同一条路径上失效。
+  const initializingDialogs = [
+    'components/options/RuleFormDialog.vue',
+    'components/options/ProfilesDialog.vue',
+    'components/options/SettingsDialog.vue',
+  ];
+
+  it('承担初始化/数据拉取的 props.visible watcher 一律带 immediate', () => {
+    for (const file of initializingDialogs) {
+      const src = fs.readFileSync(file, 'utf-8');
+      expect(src, file).toMatch(/\(\)\s*=>\s*props\.visible,/);
+      // watcher 结尾必须是 `{ immediate: true }`（回调体里的 return 不算选项对象）
+      expect(src, file).toMatch(/\{\s*immediate:\s*true\s*\},\s*\n\);/);
+    }
+  });
+
+  it('弹窗不得只靠 el-dialog 的 open 事件拉数据', () => {
+    for (const file of initializingDialogs) {
+      const src = fs.readFileSync(file, 'utf-8');
+      expect(src, file).not.toMatch(/@open\s*=/);
+    }
+  });
+
+  it('hash 路由覆盖的每个入口，其弹窗组件都在守卫清单内', () => {
+    const appSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
+    const start = appSrc.indexOf('function handleHashNavigation');
+    const router = appSrc.slice(start, appSrc.indexOf('\n}\n', start));
+    // 四个 hash 入口：#add-rule / #logs / #import-export / #profiles（+ 带参的 from-tab）
+    expect(router).toContain('#add-rule');
+    expect(router).toContain('#logs');
+    expect(router).toContain('#import-export');
+    expect(router).toContain('#profiles');
+    expect(router).toContain('#add-rule-from-tab=');
+    // 对应组件：RuleFormDialog 与 ProfilesDialog 已在清单内；
+    // ImportExportDialog / UrlTestDialog 为纯受控组件（无 visible watcher），
+    // LogDrawer 的数据由 App.vue 自身的 watch(showLogs) 拉取——父组件 setup 早于 onMounted，不受本竞态影响。
+    for (const stateless of ['components/options/ImportExportDialog.vue', 'components/options/LogDrawer.vue']) {
+      const src = fs.readFileSync(stateless, 'utf-8');
+      expect(src, stateless).not.toMatch(/\(\)\s*=>\s*props\.visible,/);
+      expect(src, stateless).not.toMatch(/@open\s*=/);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 优先级必须是整数：一个小数会让整批 updateDynamicRules 被拒
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Integer priority] 表单侧不再产出小数优先级', () => {
+  const formSrc = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf-8');
+  const input = formSrc.slice(formSrc.indexOf('v-model="form.priority"'));
+  const block = input.slice(0, input.indexOf('/>'));
+
+  it('el-input-number 锁死 precision 与 step-strictly（缺任一项都能敲出 2.5）', () => {
+    expect(block).toContain(':precision="0"');
+    expect(block).toContain('step-strictly');
   });
 });

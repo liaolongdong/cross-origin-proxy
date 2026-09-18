@@ -11,11 +11,11 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 优化重心因此放在后两个字段：
 
-| 字段     | 预算       | 当前投入                | 说明                                                                                                                     |
-| -------- | ---------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 名称     | 75 码点    | 36 / 52                 | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                              |
-| 摘要     | 132 码点   | 100 / 127               | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
-| 详细描述 | 16000 码点 | 中约 3.79K / 英约 9.89K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
+| 字段     | 预算       | 当前投入                 | 说明                                                                                                                     |
+| -------- | ---------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| 名称     | 75 码点    | 36 / 52                  | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                              |
+| 摘要     | 132 码点   | 100 / 127                | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
+| 详细描述 | 16000 码点 | 中约 3.86K / 英约 10.06K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
 | 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
 | ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
@@ -110,7 +110,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - 环境轮换时批量迁移目标域名，并给出逐条变更预览
 - 规则列表为空时可直接点快速模板（通配符代理、前缀匹配、鉴权头、改请求头）起步；删除一条规则后能立即撤销，误删不用重填
 - 把整套规则保存成命名环境快照，在 FAT / UAT / PROD 间一键切换
-- 配置以 JSON 导出；导入支持覆盖或合并两种模式，同事导入即可复现同一套规则
+- 配置以 JSON 导出；导出默认开启分享模式，剔除 Authorization / Cookie 一类请求与响应头以及 token 类查询参数（取消勾选即原样备份），导入支持覆盖或合并两种模式，同事导入即可复现同一套规则
 - 两条通道各自的命中统计：网络层取近 5 分钟的命中记录，后台通道自上次配置变更起累计（内存计数，后台工作线程被回收后从 0 重新开始）
 
 一点说明（不是缺陷）：只重写 URL 的简单规则由浏览器网络层完成，那条请求不经过扩展的脚本，所以请求日志里不会出现它。这类规则请用「URL 匹配测试」验证，或看规则表里的命中次数；带任何改写、Mock、延迟能力的规则会正常出现在日志里。
@@ -214,7 +214,7 @@ Debugging and teamwork:
 - Batch-migrate target domains across rules with a per-rule change preview
 - Start from a quick template while the list is still empty (wildcard proxy, prefix match, auth header, header override), and undo a delete immediately — a mistaken removal does not mean retyping the rule
 - Save the whole rule set as a named environment profile and switch between FAT, UAT and PROD in one click
-- Export configuration as JSON; on import you replace the current rules or merge into them, so a teammate gets the identical setup
+- Export configuration as JSON; share mode is on by default, stripping Authorization / Cookie style request and response headers plus token-like query parameters (untick it for a verbatim backup). On import you replace the current rules or merge into them, so a teammate gets the identical setup
 - Per-rule hit counts for both channels: the network layer over the last 5 minutes, the background channel since the last config change (an in-memory count that restarts when the worker is recycled)
 
 One thing that is by design, not a bug: a rule that only rewrites the URL is handled by the browser's network layer, so that request never passes through the extension's scripts and does not appear in the request log. Verify those rules with the URL match tester or the rule's hit count; anything with an override, mock or delay shows up in the log normally.

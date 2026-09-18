@@ -1,4 +1,5 @@
 import type { RequestLogEntry, HarEntry, ProxyRule } from '@/utils/types';
+import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { generateId } from '@/utils/generateId';
 
 /**
@@ -98,8 +99,11 @@ export function harEntriesToRules(entries: HarEntry[]): ProxyRule[] {
         updatedAt: now,
       };
 
-      if (Object.keys(headerOverrides).length > 0) {
-        rule.headerOverrides = headerOverrides;
+      // HAR 文件是不可信输入，且这条路径不经 normalizeImportedRules：
+      // 取值含换行的头会让规则在运行时被 validateRuleHeaders 整条拒绝，故在此清洗
+      const sanitizedHeaders = sanitizeImportedHeaderMap(headerOverrides);
+      if (sanitizedHeaders) {
+        rule.headerOverrides = sanitizedHeaders;
       }
 
       rules.push(rule);

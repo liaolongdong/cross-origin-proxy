@@ -5,7 +5,6 @@
     width="640px"
     align-center
     @close="$emit('update:visible', false)"
-    @open="fetchProfiles"
   >
     <p class="profiles-desc">{{ t('profilesDesc') }}</p>
 
@@ -98,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { Folder, FolderAdd } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { MessageType } from '@/utils/types';
@@ -112,7 +111,7 @@ import { useI18n } from '@/composables/useI18n';
  * 把当前规则集保存为命名快照，支持一键加载（替换当前规则集）与删除。
  * 面向"跨环境代理"核心场景：同一套规则在 FAT / UAT / PROD 间快速切换。
  */
-defineProps<{
+const props = defineProps<{
   visible: boolean;
 }>();
 
@@ -149,6 +148,17 @@ async function fetchProfiles() {
     loading.value = false;
   }
 }
+
+// 打开即拉取。不走 el-dialog 的 `open` 事件：它只在 modelValue 的 watcher 里 emit，
+// 而组件挂载时走的是不调 emit 的那条分支——`#profiles` hash 直达时本组件是带着
+// visible === true 挂载的异步分片，`open` 永不触发，列表会一直空白。
+watch(
+  () => props.visible,
+  val => {
+    if (val) void fetchProfiles();
+  },
+  { immediate: true },
+);
 
 async function handleSaveProfile() {
   const name = newProfileName.value.trim();

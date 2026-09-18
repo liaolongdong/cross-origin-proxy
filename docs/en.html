@@ -179,7 +179,7 @@
               "WebSocket (ws and wss) forwarding by URL rewrite",
               "declarativeNetRequest network-layer fast path for rules that only rewrite the URL",
               "Page-level interceptor with native fallback for rules the network layer cannot express",
-              "Priority ordering with drag and drop, plus conflict warnings for shadowed rules",
+              "Priority ordering with drag and drop, conflict warnings for shadowed rules, and a flag on rules Chrome will never apply (RE2-incompatible regex syntax, out-of-range capture references)",
               "Real-time URL match test showing matched rule, rewritten URL, channel and which other rules match the same URL but lose to it",
               "Quick rule templates in the empty state, duplicate, undo delete, batch enable, disable and delete",
               "Batch target-domain migration with a change preview",
@@ -187,7 +187,7 @@
               "Hit statistics for both channels (DNR last 5 minutes, service worker since last config change — an in-memory count that restarts when the worker is recycled)",
               "HAR 1.2 export and HAR import that creates rules from captured traffic (those rules arrive disabled until you enable them)",
               "cURL import from DevTools Copy as cURL output",
-              "JSON config export, with replace or merge modes on import",
+              "JSON config export with share mode on by default, stripping credentials, and replace or merge modes on import",
               "Named environment profiles for one-click FAT / UAT / PROD switching",
               "Auto-off countdown that disables the proxy after 30 minutes to 4 hours",
               "Popup with global switch, today's request count (background channel only), current-page match preview and create-rule-for-this-page",
@@ -377,7 +377,7 @@
             "name": "Can I share rules with my team?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. Export the full configuration as JSON and teammates import it either as a replacement or merged into what they already have. Export captured traffic as a HAR 1.2 file, or import a HAR recorded elsewhere to create rules automatically. Anyone can paste a cURL command — DevTools “Copy as cURL” output — to prefill a rule. Environment profiles store a named snapshot of the whole rule set."
+              "text": "Yes. Export the full configuration as JSON — share mode is on by default, stripping Authorization, Cookie and similar request/response headers plus token-like query parameters, untick it for a verbatim local backup — and teammates import it either as a replacement or merged into what they already have. Export captured traffic as a HAR 1.2 file, or import a HAR recorded elsewhere to create rules automatically. Anyone can paste a cURL command — DevTools “Copy as cURL” output — to prefill a rule. Environment profiles store a named snapshot of the whole rule set."
             }
           },
           {
@@ -965,7 +965,9 @@
                 Start from a quick template while the list is empty, duplicate a rule, drag to reorder priority, batch
                 enable, disable or delete, and undo a deletion. Search by name, match pattern or target URL, then narrow
                 the list with the status and match-type filters. A rule shadowed by a higher-priority rule with the same
-                pattern is flagged while you edit, so a rule that can never fire does not go unnoticed.
+                pattern is flagged while you edit, so a rule that can never fire does not go unnoticed. A rule that
+                Chrome's network layer will not apply at all — regex syntax RE2 does not support, or a capture reference
+                out of range — is tagged "Not applied" in the list.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1012,11 +1014,12 @@
               ></span>
               <h3>Import, export and environment profiles</h3>
               <p>
-                JSON config export, with replace or merge modes on import; HAR 1.2 export of captured traffic and HAR
-                import that turns recorded requests into rules (those rules arrive disabled until you enable them); cURL
-                paste that prefills the form; copy-as-cURL on every log entry, using its original URL. Named profiles
-                snapshot the whole rule set so FAT, UAT and PROD are one click apart, and batch migration rewrites
-                target domains across selected rules with a change preview.
+                JSON config export — share mode is on by default, stripping Authorization, Cookie and similar headers
+                plus token-like query parameters — with replace or merge modes on import; HAR 1.2 export of captured
+                traffic and HAR import that turns recorded requests into rules (those rules arrive disabled until you
+                enable them); cURL paste that prefills the form; copy-as-cURL on every log entry, using its original
+                URL. Named profiles snapshot the whole rule set so FAT, UAT and PROD are one click apart, and batch
+                migration rewrites target domains across selected rules with a change preview.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1721,7 +1724,7 @@ pnpm build</code></pre>
                 </tr>
                 <tr>
                   <td>Hand the same setup to a teammate</td>
-                  <td>Export JSON, or share a HAR-derived rule set.</td>
+                  <td>Export JSON (share mode strips credentials by default), or share a HAR-derived rule set.</td>
                   <td>—</td>
                 </tr>
                 <tr>
@@ -2266,10 +2269,12 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <details>
               <summary>Can I share rules with my team?</summary>
               <p>
-                Yes. Export the full configuration as JSON and teammates import it either as a replacement or merged
-                into what they already have. Export captured traffic as a HAR 1.2 file, or import a HAR recorded
-                elsewhere to create rules automatically. Anyone can paste a cURL command — DevTools “Copy as cURL”
-                output — to prefill a rule. Environment profiles store a named snapshot of the whole rule set.
+                Yes. Export the full configuration as JSON — share mode is on by default, stripping Authorization,
+                Cookie and similar request/response headers plus token-like query parameters, untick it for a verbatim
+                local backup — and teammates import it either as a replacement or merged into what they already have.
+                Export captured traffic as a HAR 1.2 file, or import a HAR recorded elsewhere to create rules
+                automatically. Anyone can paste a cURL command — DevTools “Copy as cURL” output — to prefill a rule.
+                Environment profiles store a named snapshot of the whole rule set.
               </p>
             </details>
             <details>

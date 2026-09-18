@@ -6,6 +6,7 @@
  * 本文件即补上的那层网。响应信封侧的同类守卫见 `proxyResponseGuard.test.ts`。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
 
 vi.stubGlobal('chrome', {
   storage: {
@@ -28,10 +29,10 @@ const {
   isValidHeaderEntry,
   filterIncomingHeaders,
   validateRuleHeaders,
-  exceedsBodyCap,
-  handleProxyRequest,
-  MAX_BODY_SIZE,
-} = await import('@/entrypoints/background/proxyHandler');
+  findInvalidHeaderNames,
+  sanitizeImportedHeaderMap,
+} = await import('@/utils/headerValidation');
+const { exceedsBodyCap, handleProxyRequest, MAX_BODY_SIZE } = await import('@/entrypoints/background/proxyHandler');
 
 describe('头名与 CRLF 校验（isValidHeaderEntry）', () => {
   it('接受 RFC 7230 token 字符集中常见的头名', () => {
@@ -87,6 +88,56 @@ describe('规则配置头：严格整体拒绝并指名道姓（validateRuleHead
     const res = validateRuleHeaders({ Authorization: secret, 'X-Bad\r': 'v' });
     expect(res.invalidKey).toBe('X-Bad\r');
     expect(JSON.stringify(res)).not.toContain(secret);
+  });
+});
+
+describe('保存侧头校验（findInvalidHeaderNames / sanitizeImportedHeaderMap）', () => {
+  it('表单按键值行收集非法项，只报头名不回头值', () => {
+    const names = findInvalidHeaderNames([
+      { key: 'Accept', value: 'application/json' },
+      { key: '  X Bad  ', value: 'v' },
+      { key: 'X-Ok', value: 'a\r\nb' },
+      { key: '   ', value: 'ignored-empty-name' },
+    ]);
+    expect(names).toEqual(['X Bad', 'X-Ok']);
+    expect(JSON.stringify(names)).not.toContain('a\r\nb');
+  });
+
+  it('导入的 headerOverrides：脏条目剔除、非法结构整体丢弃、全空时返回 undefined', () => {
+    expect(sanitizeImportedHeaderMap({ Accept: 'application/json', 'X Bad': 'v' })).toEqual({
+      Accept: 'application/json',
+    });
+    expect(sanitizeImportedHeaderMap({ 'X Bad': 'v' })).toBeUndefined();
+    expect(sanitizeImportedHeaderMap(undefined)).toBeUndefined();
+    expect(sanitizeImportedHeaderMap('not-a-map')).toBeUndefined();
+    // 数组的索引会被当成头名，属于结构不对，一并丢弃
+    expect(sanitizeImportedHeaderMap(['a', 'b'])).toBeUndefined();
+  });
+});
+
+describe('保存侧必须与运行时同源校验（防两处判据漂移）', () => {
+  const formSrc = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf-8');
+  const handlerSrc = fs.readFileSync('entrypoints/background/proxyHandler.ts', 'utf-8');
+  const zhOptions = JSON.parse(fs.readFileSync('locales/zh_CN/options.json', 'utf-8'));
+  const enOptions = JSON.parse(fs.readFileSync('locales/en/options.json', 'utf-8'));
+
+  it('表单在拼出 result 之前就拦下非法的请求头/响应头覆盖', () => {
+    const save = formSrc.slice(formSrc.indexOf('async function handleSave'));
+    const beforeBuild = save.slice(0, save.indexOf('const headerOverrides'));
+    expect(beforeBuild).toContain('findInvalidHeaderNames(headerList.value)');
+    expect(beforeBuild).toContain('findInvalidHeaderNames(responseHeaderList.value)');
+  });
+
+  it('proxyHandler 不再自带判据，一律走 utils/headerValidation', () => {
+    expect(handlerSrc).not.toContain('HEADER_NAME_RE');
+    expect(handlerSrc).toContain("from '@/utils/headerValidation'");
+  });
+
+  it('两条拦截文案中英齐备', () => {
+    for (const dict of [zhOptions, enOptions]) {
+      expect(dict.invalidRequestHeader).toContain('$1');
+      expect(dict.invalidResponseHeader).toContain('$1');
+    }
   });
 });
 

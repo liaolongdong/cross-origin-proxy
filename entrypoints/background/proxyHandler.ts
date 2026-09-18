@@ -1,4 +1,5 @@
 import { findMatchingRule, rewriteUrl, applyQueryOverrides } from '@/utils/urlMatcher';
+import { filterIncomingHeaders, isValidHeaderEntry, validateRuleHeaders } from '@/utils/headerValidation';
 import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
@@ -13,8 +14,6 @@ import type {
 } from '@/utils/types';
 
 export const MAX_BODY_SIZE = 10 * 1024 * 1024;
-
-const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9a-zA-Z]+$/;
 
 /**
  * 判断字符串按 UTF-8 编码后是否超出请求体上限。
@@ -122,51 +121,6 @@ export function matchesMockCondition(url: string, method: string, condition: Moc
   return true;
 }
 
-// ─── Header 校验 ──────────────────────────────────────────────────────────────
-
-/** 单个头条目是否合法：头名符合 RFC 7230 token 字符集，且值不含 CR/LF（防头注入） */
-export function isValidHeaderEntry(key: string, value: string): boolean {
-  return HEADER_NAME_RE.test(key) && !/[\r\n]/.test(value);
-}
-
-/**
- * 过滤页面传入的请求头：跳过非法条目（非法名称或含换行的值），
- * 避免个别脏头部导致整个代理请求被拒绝
- */
-export function filterIncomingHeaders(headers: Record<string, string>): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === 'string' && isValidHeaderEntry(key, value)) {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
-/** `validateRuleHeaders` 的结果：`invalidKey` 非空表示整体拒绝，此时 `headers` 为空 */
-export interface RuleHeaderCheck {
-  headers: Record<string, string>;
-  invalidKey?: string;
-}
-
-/**
- * 校验规则配置的请求头覆盖：任一非法即整体拒绝，
- * 规则由用户直接编辑，应报错促其修正而非静默丢弃。
- *
- * 返回被拒的**头名**而不只是 null，好让请求日志能指出该去改哪一条；
- * 头值不进日志——那里存的很可能就是凭据本身。
- */
-export function validateRuleHeaders(headers: Record<string, string>): RuleHeaderCheck {
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value !== 'string' || !isValidHeaderEntry(key, value)) {
-      return { headers: {}, invalidKey: key };
-    }
-    result[key] = value;
-  }
-  return { headers: result };
-}
-
 // ─── 响应覆盖 ─────────────────────────────────────────────────────────────────
 
 /** 出现在不可信路径里会沿原型链写入的键名 */
@@ -203,6 +157,8 @@ export function setByPath(obj: Record<string, unknown>, path: string, value: unk
  *
  * 越界值会让前端构造响应失败并静默回退原生请求，覆盖因此不生效；
  * 这里按「取整 → 落到区间」收敛，非法/空值（0、NaN、负数）统一回 200。
+ * 注意：落在区间内并不等于一定可构造——204/205/304 还要求正文为 null，
+ * 那一半约束由桥接层 `utils/proxyResponse.ts` 的 `normalizeProxyResponse` 承担。
  */
 export function clampResponseStatus(status: number): number {
   return Math.min(599, Math.max(200, Math.trunc(status) || 200));
@@ -228,7 +184,7 @@ function applyResponseOverrides(
   }
   if (overrides.headers) {
     for (const [key, value] of Object.entries(overrides.headers)) {
-      if (HEADER_NAME_RE.test(key) && !/[\r\n]/.test(value)) {
+      if (isValidHeaderEntry(key, value)) {
         result.headers[key] = value;
       }
     }

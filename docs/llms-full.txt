@@ -9,7 +9,7 @@ Category / 类别: Chrome extension (Manifest V3) · 开发者工具 / developer
 License / 协议: MIT
 Source / 源码: https://github.com/liaolongdong/cross-origin-proxy
 Store listing / 商店状态: 上架准备中 — the Chrome Web Store listing is in preparation, so no store URL exists yet. Today the only install paths are building from source or unzipping a tagged release.
-Last verified / 内容核对日期: 2026-09-13, against extension v1.0.0 (`package.json` version) and its source.
+Last verified / 内容核对日期: 2026-09-18, against extension v1.0.0 (`package.json` version) and its source.
 
 ## 1. One-paragraph definition / 一段话定义
 
@@ -91,7 +91,7 @@ Requirements / 运行要求: desktop Google Chrome (Manifest V3). Microsoft Edge
 | WebSocket / 长连接 | — | `ws://` and `wss://` connections are forwarded by URL rewrite through the interception channel. 按 URL 重写转发 WebSocket 握手与连接。 |
 | Priority / 优先级 | 列表顺序（拖拽） | Lower numbers match first; internally inverted into `declarativeNetRequest` priorities. The rule form warns when a higher-priority rule with the same pattern already shadows it. 数值越小越先匹配，同模式被遮蔽时给出冲突提示。 |
 
-Capacity / 容量: 200 rules (`MAX_RULES`) enforced when adding, batch-adding or merging — a replace-mode JSON import writes the file as-is. 500 log entries (`MAX_LOG_ENTRIES`, ring buffer). 上限：新增、批量新增与合并导入时 200 条规则（替换式导入按文件原样写入）、500 条日志（环形缓冲）。
+Capacity / 容量: 200 rules (`MAX_RULES`) enforced when adding, batch-adding, and on both import modes — a replace-mode JSON import over the cap is rejected rather than written as-is. 500 log entries (`MAX_LOG_ENTRIES`, ring buffer), each body capped at 32 KB characters (`MAX_LOG_BODY_SIZE`) and the whole set at a 4 MB character budget (`MAX_LOG_BODY_TOTAL`), trimmed from the oldest while always keeping the newest entry. 上限：新增、批量新增与导入（覆盖、合并两种模式都校验，超限即拒绝整份导入）200 条规则；500 条日志（环形缓冲），单条正文 32K 字符、正文总量 4M 字符预算，超预算从最旧一侧丢弃但始终保留最新一条。
 
 ## 7. Workspace, diagnostics and export / 工作台、诊断与导出
 
@@ -100,7 +100,7 @@ Capacity / 容量: 200 rules (`MAX_RULES`) enforced when adding, batch-adding or
 - **Hit statistics / 命中统计** — per rule for both channels: `declarativeNetRequest` hits over the last 5 minutes (Chrome quotas this API to roughly 20 reads per 10 minutes, so it refreshes on demand and silently returns the previous result when the quota is exhausted) and background-channel hits counted since the last configuration change — an in-memory counter that restarts from zero when the service worker is recycled. 两条通道各自的规则级命中统计：DNR 近 5 分钟（受 Chrome 配额限制，手动刷新，超配额时静默返回上次结果）与后台通道自配置变更起的计数（内存计数，工作线程被回收后从 0 重新开始）。
 - **HAR 1.2 export**, plus **HAR import** that turns recorded requests into rules in one batched write; imported rules arrive disabled (`enabled: false`) until you enable them. HAR/cURL 导出，以及把抓包记录批量转成规则的 HAR 导入；导入生成的新规则默认停用，确认后需自行启用。
 - **cURL import** — paste DevTools' "Copy as cURL" and the rule form is prefilled. 粘贴「复制为 cURL」预填规则表单。
-- **JSON config export**, with replace or merge modes chosen on import; merging reassigns ids and is capped at 200 rules total. 配置导出为 JSON，导入时可选覆盖或合并两种模式。
+- **JSON config export**, with replace or merge modes chosen on import; merging reassigns ids and both modes are capped at 200 rules total. **Share mode is on by default**, stripping `Authorization` / `Cookie` style request and response headers and token-like query parameters, and telling you how many values it removed; untick it for a verbatim local backup. 配置导出为 JSON，导入时可选覆盖或合并两种模式（都受 200 条上限约束）；导出默认开启「分享模式」，剔除 `Authorization` / `Cookie` 类请求与响应头以及 token 类查询参数，并告知剔除了多少项，取消勾选即原样备份。
 - **Environment profiles / 环境配置快照** — named snapshots (up to 50 characters) of the whole rule set, switch FAT / UAT / PROD in one click; saving requires at least one rule. 整套规则集的命名快照，一键切换 FAT / UAT / PROD，保存至少需要一条规则。
 - **Batch target-domain migration / 目标域名批量迁移** with a change preview before you commit. 带变更预览的批量目标域名迁移。
 - **Batch operations / 批量操作** — enable, disable, delete, duplicate; undo for the last deletion; keyword search over name, match pattern and target URL plus separate status and match-type filters. 批量启停/删除/复制、撤销上一次删除、按名称与模式的关键词搜索及状态、类型筛选。
@@ -123,13 +123,13 @@ Consequences worth knowing / 由此而来的几个必要事实：
 - **Configuration delivery.** `storage.onChanged` re-syncs the DNR rule set and broadcasts to tabs with `tabs.sendMessage` (`runtime.sendMessage` does not reach content scripts); the main-world interceptor requests the current config on startup so injection order cannot lose a rule. 配置变更会重同步 DNR 并用 `tabs.sendMessage` 广播；主世界拦截器就绪后主动拉取配置回放，消除注入时序竞态。
 - **State.** `chrome.storage.local` is the single source of truth. Service-worker caches (compiled config, regex cache, hit counters) are rebuildable and invalidated on change; read-modify-write goes through a storage lock, and logs are buffered (flushed at 10 entries or after 1 s, serialised, and drained on `onSuspend`). 状态以 `chrome.storage.local` 为唯一事实源，内存缓存可重建并随变更失效；读改写走互斥锁，日志缓冲写入（10 条或 1 秒防抖、串行化、`onSuspend` 时排空）。
 - **Ceilings.** A proxied request has a 30-second ceiling per attempt; bodies are capped at 10 MB. The service worker registers a 1-minute `chrome.alarms` ping (Chrome's minimum period) as soon as it starts, so a discarded worker is back quickly rather than only on the next event. 后台通道单次请求 30 秒上限、请求体 10 MB 上限；服务线程启动即注册 1 分钟闹钟（Chrome 允许的最小周期），被回收后能较快回到可用状态。
-- **Validation before sync.** Regexes are screened for nested-quantifier ReDoS patterns, checked against Chrome's RE2 with `isRegexSupported`, and their substitution references bounds-checked — one invalid rule makes `updateDynamicRules` reject the whole batch, so invalid rules are filtered out first. 正则先做 ReDoS 筛查，再经 RE2 校验与替换引用越界检查，非法规则先过滤（一条非法会让整批规则被拒）。
+- **Validation before sync.** Regexes are screened for nested-quantifier ReDoS patterns, checked against Chrome's RE2 with `isRegexSupported`, and their substitution references bounds-checked — one invalid rule makes `updateDynamicRules` reject the whole batch, so invalid rules are filtered out first. Priorities are rounded to integers on both the form and the import path, because a single fractional value would reject the entire batch. A simple rule that fails RE2 or has an out-of-range capture reference is marked **"Not applied"** in the rule list and the URL match test instead of being silently dropped. 正则先做 ReDoS 筛查，再经 RE2 校验与替换引用越界检查，非法规则先过滤（一条非法会让整批规则被拒）。优先级在表单与导入两处都取整，因为一个小数就会导致整批被拒。RE2 不支持或捕获引用越界的简单规则，会在规则列表与 URL 匹配测试里标为「未生效」，而不是静默丢弃。
 
 ## 9. Privacy, permissions and security / 隐私、权限与安全
 
 - No collection, no analytics, no telemetry, no remote servers of its own, no certificate installation. All state stays in `chrome.storage.local`. 不收集、无埋点、无遥测、无自有远程服务、不安装证书，所有状态只存本机。
 - Permissions / 权限: `storage`, `declarativeNetRequest`, `declarativeNetRequestFeedback`, `alarms`, and the host permission `<all_urls>`. Each is justified in plain language in the store listing, the privacy policy and `CHROMEWEBSTORE.md`; `<all_urls>` exists because the extension must match the URL of whatever environment you point a page at. 逐项理由见隐私政策与 `CHROMEWEBSTORE.md`；`<all_urls>` 是因为要能匹配你指向的任意环境地址。
-- The request log stores proxied headers and bodies locally, **which may include tokens**; HAR, JSON and cURL exports are produced on your machine and are yours to redact. 日志在本机记录被代理的请求头与请求体（可能含 token），导出均在本地生成，脱敏由使用者掌控。
+- The request log stores proxied headers and bodies locally, **which may include tokens**; every export is produced on your machine. A JSON config export strips credential-like headers and token-like query parameters by default (untick share mode for a verbatim backup); HAR and cURL stay verbatim, so those two remain yours to redact. 日志在本机记录被代理的请求头与请求体（可能含 token），导出均在本地生成。JSON 配置导出默认剔除凭据类请求/响应头与 token 类查询参数（取消分享模式即原样备份）；HAR 与 cURL 保持原样，脱敏由使用者掌控。
 - Header injection is blocked by name validation plus CRLF rejection in values; rule-configured headers are rejected strictly, page-supplied headers filtered leniently. 头名校验加 CRLF 拒绝；规则配置的头严格、页面传入的头宽容过滤。
 - Message handlers validate sender origin and message shape; state-changing messages require a trusted sender. Status codes are clamped to 200–599 so the page can always construct a `Response`. 消息处理校验来源与结构，状态修改类消息需受信任来源；状态码钳制 200–599。
 
@@ -170,4 +170,4 @@ Commands / 命令: `pnpm dev`, `pnpm build`, `pnpm build:zip`, `pnpm test`, `pnp
 Questions not answered here: ask in the repository's issue tracker, or read 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 Issue tracker: https://github.com/liaolongdong/cross-origin-proxy/issues
 
-Last updated / 最后更新: 2026-09-13 (extension v1.0.0)
+Last updated / 最后更新: 2026-09-18 (extension v1.0.0)

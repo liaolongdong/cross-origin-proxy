@@ -1,11 +1,12 @@
 import { MessageType } from '@/utils/types';
-import type { RuntimeMessage, ExportData, ProxyRule } from '@/utils/types';
+import type { RuntimeMessage, ExportData, ImportMode, ProxyRule } from '@/utils/types';
 import { handleProxyRequest, getProxyStatus, getSwHitStats } from './proxyHandler';
 import { getDnrHitStats } from './dnrStats';
-import { MAX_RULES, IMPORTED_RULE_PRIORITY } from '@/utils/constants';
+import { IMPORTED_RULE_PRIORITY } from '@/utils/constants';
 import {
   getProxyConfig,
   saveProxyConfig,
+  importProxyConfig,
   addRule,
   batchAddRules,
   updateRule,
@@ -24,6 +25,7 @@ import {
   deleteProfile,
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules } from '@/utils/har';
+import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
 
@@ -43,14 +45,6 @@ function isValidRule(rule: unknown): rule is ProxyRule {
 }
 
 /**
- * 从导入规则中过滤掉与现有规则重复的条目（按 name + matchPattern 去重）
- */
-export function deduplicateRules(existing: ProxyRule[], incoming: ProxyRule[]): ProxyRule[] {
-  const existingKeys = new Set(existing.map(r => `${r.name}::${r.matchPattern}`));
-  return incoming.filter(r => !existingKeys.has(`${r.name}::${r.matchPattern}`));
-}
-
-/**
  * 导入文件是不可信输入：`typeof x === 'number'` 会放行 `NaN` 与 `Infinity`。
  * NaN 优先级会让 DNR 侧算出 NaN 而使整批规则被拒，NaN 时间戳会打乱日志与排序，
  * 因此这里只接受有限数。
@@ -60,55 +54,67 @@ function finiteOr(value: unknown, fallback: number): number {
 }
 
 /**
- * 规范化导入的规则列表：过滤结构非法的条目、重新生成 id、补全默认值。
+ * 优先级取整：DNR 的 `priority` 只接受整数，导入文件里的小数（如 1.5）
+ * 与 NaN 同样是整批 `updateDynamicRules` 被拒，而不是只丢一条规则。
+ */
+function integerPriority(value: unknown): number {
+  return Math.round(finiteOr(value, IMPORTED_RULE_PRIORITY));
+}
+
+/**
+ * 规范化导入的规则列表：过滤结构非法的条目、重新生成 id、补全默认值、清洗请求头覆盖。
  * 重新生成 id 是必要的：文件中的旧 id 可能与现有规则冲突（合并模式下
  * 会造成重复 id，引发列表 key 冲突与按 id 操作误中其他规则）。
+ *
+ * 请求头必须在导入侧清洗：带非法头名的规则落库后，运行时 `validateRuleHeaders`
+ * 会整条拒绝（页面拿到 status 0），而导入文件不会回到表单让用户修正，等于静默坏规则。
  */
 export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
-  return rawRules.filter(isValidRule).map(rule => ({
-    ...rule,
-    id: generateId(),
-    priority: finiteOr(rule.priority, IMPORTED_RULE_PRIORITY),
-    enabled: rule.enabled === true,
-    createdAt: finiteOr(rule.createdAt, Date.now()),
-    updatedAt: finiteOr(rule.updatedAt, Date.now()),
-  }));
+  return rawRules.filter(isValidRule).map(rule => {
+    const normalized: ProxyRule = {
+      ...rule,
+      id: generateId(),
+      priority: integerPriority(rule.priority),
+      enabled: rule.enabled === true,
+      createdAt: finiteOr(rule.createdAt, Date.now()),
+      updatedAt: finiteOr(rule.updatedAt, Date.now()),
+    };
+    const headerOverrides = sanitizeImportedHeaderMap(rule.headerOverrides);
+    if (headerOverrides) normalized.headerOverrides = headerOverrides;
+    else delete normalized.headerOverrides;
+    return normalized;
+  });
 }
 
 /**
  * 处理导入配置
+ *
+ * 回传给 UI 的 `error` 是稳定错误码而非英文句子：界面按码映射本地化文案，
+ * 直接透传英文会让中文界面夹一句机器话。
+ * 写入统一交给 `importProxyConfig`（存储锁内完成读-去重-上限校验-落盘）。
  */
 async function handleImportConfig(
-  data: ExportData & { mode?: 'replace' | 'merge' },
+  data: ExportData & { mode?: ImportMode },
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!data?.config || !Array.isArray(data.config.rules)) {
-      return { success: false, error: 'Invalid config data' };
+      return { success: false, error: 'INVALID_CONFIG' };
     }
     const validRules = normalizeImportedRules(data.config.rules);
+    const isMerge = data.mode === 'merge';
+    // 开关键语义与既有一致：文件显式开启才置真；合并模式下缺省沿用当前开关，替换模式下缺省关闭
+    const enabled = data.config.enabled === true ? true : isMerge ? undefined : false;
+    const result = await importProxyConfig(validRules, { mode: isMerge ? 'merge' : 'replace', enabled });
 
-    if (data.mode === 'merge') {
-      const existingConfig = await getProxyConfig();
-      const newRules = deduplicateRules(existingConfig.rules, validRules);
-      const merged = [...existingConfig.rules, ...newRules];
-      if (merged.length > MAX_RULES) {
-        return {
-          success: false,
-          error: `Merge would exceed max rules limit (${MAX_RULES})`,
-        };
-      }
-      await saveProxyConfig({
-        enabled: data.config.enabled === true ? true : existingConfig.enabled,
-        rules: merged,
-      });
-      logger.info(`Config merged: ${newRules.length} new, ${validRules.length - newRules.length} duplicates skipped`);
-    } else {
-      await saveProxyConfig({
-        enabled: data.config.enabled === true,
-        rules: validRules,
-      });
-      logger.info(`Config imported: ${validRules.length}/${data.config.rules.length} rules valid`);
+    if (!result.success) {
+      logger.warn(`Config import rejected (${result.error})`);
+      return { success: false, error: result.error };
     }
+    logger.info(
+      isMerge
+        ? `Config merged: ${result.added} new, ${result.skipped} duplicates skipped`
+        : `Config imported: ${validRules.length}/${data.config.rules.length} rules valid`,
+    );
     return { success: true };
   } catch (error) {
     logger.error('Failed to import config:', error);

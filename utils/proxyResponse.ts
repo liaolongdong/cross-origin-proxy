@@ -22,7 +22,8 @@ export interface ProxyResponsePayload {
   status: number;
   statusText: string;
   headers: Record<string, string>;
-  body: string;
+  /** null 表示「无正文」，只出现在 `isNullBodyStatus` 命中的状态码上 */
+  body: string | null;
   isBase64: boolean;
   [key: string]: unknown;
 }
@@ -37,25 +38,59 @@ function toStringRecord(value: unknown): Record<string, string> {
 }
 
 /**
+ * Fetch 规范的「null body 状态」：这些状态码只能配 null 正文，
+ * 空串同样非法（`new Response('', { status: 204 })` 直接抛 TypeError）。
+ */
+export function isNullBodyStatus(status: number): boolean {
+  return status === 204 || status === 205 || status === 304;
+}
+
+/**
+ * 收敛为 ByteString 可承载的文本：`ResponseInit.statusText` 是 ByteString，
+ * 码点大于 255 的字符（如中文状态描述）会让构造调用抛 TypeError。
+ *
+ * CR/LF 同样要剔除：规范要求状态描述不含换行，带 `\r\n` 的响应行经 hand-crafted
+ * `statusText` 传进来时同样抛 TypeError——抛出点在拦截器的 resolve 回调里，
+ * 超时已被摘掉，页面从此永久 pending。
+ */
+export function toLatin1StatusText(statusText: string): string {
+  let result = '';
+  for (const char of statusText) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code <= 0xff && code !== 0x0a && code !== 0x0d) result += char;
+  }
+  return result;
+}
+
+/**
  * 把后台回包整形成「一定能让拦截器兑现对应挂起请求」的载荷。
  *
  * 合法回包原样透传（仅补齐类型）；缺字段时逐项回落，其中 `status` 缺失回落为
  * `0`——交给拦截器的区间守卫判失败，本模块不重复决定合法状态码区间。
+ *
+ * 两处形状约束由本模块承担（`entrypoints/main-interceptor.content.ts` 镜像同一语义）：
+ * - `204/205/304` 是「null body 状态」，配任何非 null 正文都会让
+ *   `new Response(body, { status })` 抛 TypeError，而抛出点在拦截器的 resolve
+ *   回调里——既不会 reject 也已被 `clearTimeout` 摘掉超时，页面从此永久 pending；
+ * - `statusText` 走 ByteString：含码点 > 255 的字符（如中文状态描述）或 CR/LF 同样抛 TypeError。
  * @param raw 后台 `sendResponse` 的原始值，可能是失败信封或 `undefined`
  * @param requestId 桥接层持有的原始请求 id，用于失败信封无人认领的情况
  */
 export function normalizeProxyResponse(raw: unknown, requestId: string): ProxyResponsePayload {
   const payload: Record<string, unknown> = raw && typeof raw === 'object' ? { ...raw } : {};
 
+  const status = typeof payload.status === 'number' ? payload.status : 0;
+  const rawBody = typeof payload.body === 'string' ? payload.body : '';
+
   return {
     ...payload,
     requestId: typeof payload.requestId === 'string' ? payload.requestId : requestId,
-    status: typeof payload.status === 'number' ? payload.status : 0,
-    statusText: typeof payload.statusText === 'string' ? payload.statusText : 'Proxy Error',
+    status,
+    statusText: toLatin1StatusText(typeof payload.statusText === 'string' ? payload.statusText : 'Proxy Error'),
     headers: toStringRecord(payload.headers),
     // 失败信封的 error 文案不外泄给页面（它跑在 MAIN world，同源脚本可读），
     // 拦截器会退回 statusText 作为错误信息
-    body: typeof payload.body === 'string' ? payload.body : '',
+    body: isNullBodyStatus(status) ? null : rawBody,
     isBase64: payload.isBase64 === true,
   };
 }

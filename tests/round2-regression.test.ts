@@ -300,6 +300,31 @@ describe('normalizeImportedRules — 导入规则规范化', () => {
     expect(out[0].createdAt).toBe(1);
   });
 
+  it('小数优先级被取整（DNR 只接受整数，1.5 会让整批 updateDynamicRules 被拒）', async () => {
+    const { normalizeImportedRules } = await import('@/entrypoints/background/messageRouter');
+    const out = normalizeImportedRules([
+      {
+        id: 'x',
+        name: 'n',
+        matchPattern: 'https://a.com/*',
+        targetUrl: 'https://b.com',
+        matchType: 'wildcard',
+        priority: 1.5,
+      },
+      {
+        id: 'y',
+        name: 'n2',
+        matchPattern: 'https://a.com/*',
+        targetUrl: 'https://b.com',
+        matchType: 'wildcard',
+        priority: '3',
+      },
+    ]);
+    expect(out[0].priority).toBe(2);
+    // 字符串不是有限数 → 回落默认值，而不是留下 "3" 让下游算出 NaN
+    expect(out[1].priority).toBe(100);
+  });
+
   it('两次导入同一份数据不会产生重复 id', async () => {
     const { normalizeImportedRules } = await import('@/entrypoints/background/messageRouter');
     const raw = [
@@ -339,6 +364,27 @@ describe('normalizeImportedRules — 导入规则规范化', () => {
     expect(out).toHaveLength(1);
     expect(out[0].priority).toBe(100);
     expect(out[0].enabled).toBe(false);
+  });
+
+  it('清洗导入的 headerOverrides：脏头逐条剔除，合法头保留；非法结构整体丢弃', async () => {
+    const { normalizeImportedRules } = await import('@/entrypoints/background/messageRouter');
+    const base = {
+      matchPattern: 'https://a.com/*',
+      targetUrl: 'https://b.com',
+      matchType: 'wildcard',
+    };
+    const [mixed, broken] = normalizeImportedRules([
+      {
+        ...base,
+        id: 'mixed',
+        name: 'mixed',
+        headerOverrides: { Accept: 'application/json', 'X Bad': 'v', 'X-Ok': 'a\r\nb', 'X-Keep': 'y' },
+      },
+      { ...base, id: 'broken', name: 'broken', headerOverrides: 'not-a-map' },
+    ]);
+    // 只留名与值都合规的那条；运行时的整条拒绝（页面拿到 status 0）不该由导入文件触发
+    expect(mixed.headerOverrides).toEqual({ Accept: 'application/json', 'X-Keep': 'y' });
+    expect(broken).not.toHaveProperty('headerOverrides');
   });
 });
 

@@ -54,3 +54,14 @@ export function truncateUrl(url: string, maxLen: number = 40): string {
   if (url.length <= maxLen) return url;
   return url.substring(0, maxLen) + '...';
 }
+
+/**
+ * 截断待写入的日志正文，并在末尾标注原始长度。
+ *
+ * 标记是必须的：没有它，用户会把截断后的 JSON 当成完整载荷排查半天。
+ * 长度以 UTF-16 码元计（与 `String.length` 一致），对正文上限这一用途足够。
+ */
+export function truncateForLog(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars)}\n…[truncated, original ${value.length} chars]`;
+}

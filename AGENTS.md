@@ -31,29 +31,30 @@
 
 ### 关键文件速查
 
-| 职责                      | 文件                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 公共类型与消息判别联合    | `utils/types.ts`（`ProxyRule`/`MessageType`/`RuntimeMessage` 等）                                                   |
-| 常量与 Storage 键         | `utils/constants.ts`（`STORAGE_KEYS`、`MAX_RULES=200`、`MAX_LOG_ENTRIES=500`、alarm 名）                            |
-| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入）                                            |
-| DNR 规则构建（纯函数）    | `utils/dnrRules.ts`                                                                                                 |
-| URL 匹配/重写与分流判定   | `utils/urlMatcher.ts`（`findMatchingRule`/`rewriteUrl`/`isSimpleRule`）                                             |
-| 消息路由                  | `entrypoints/background/messageRouter.ts`（`isTrustedSender` 安全校验）                                             |
-| SW 代理执行               | `entrypoints/background/proxyHandler.ts`（mock/delay/block/override/retry）                                         |
-| DNR 同步与广播            | `entrypoints/background/dnrManager.ts`                                                                              |
-| DNR 命中统计              | `entrypoints/background/dnrStats.ts`（`getMatchedRules`，配额受限）                                                 |
-| SW 保活 / 自动关闭 / 徽章 | `entrypoints/background/{keepalive,autoOff,badgeManager}.ts`                                                        |
-| i18n（自研响应式）        | `utils/i18n/index.ts` + 根 `locales/{zh_CN,en}/{common,options,popup}.json`                                         |
-| 主题                      | `utils/theme.ts` + `assets/theme/tokens.css`（`--cop-*`，6 主题 + light/dark/system）                               |
-| Vue 应用工厂              | `utils/createVueApp.ts`（`createAndMountApp`）                                                                      |
-| 商店文案与权限理由        | `CHROMEWEBSTORE.md`（上架唯一素材源，不在扩展包内）                                                                 |
-| 发版与商店提审 runbook    | `RELEASING.md`（一次性凭据、日常发版、失败排查）                                                                    |
-| GitHub 仓库展示信息       | `GITHUB.md`（About 描述 / website / topics / 社交预览 / Pages 源 / 私密漏洞报告入口，一次性手动清单）               |
-| 版本历史                  | `CHANGELOG.md`（唯一事实源；release 工作流把对应小节切成 GitHub Release 说明）                                      |
-| 三条自动化链路            | `.github/workflows/{ci,deploy-pages,release}.yml`；共用校验 `.github/actions/verify`                                |
-| 产品落地页 / 隐私政策     | `docs/index.html`（中，站点根）、`docs/en.html`（英）、`docs/privacy.html`、`docs/llms.txt`（新增页面必须中英成对） |
-| 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                   |
-| WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                             |
+| 职责                      | 文件                                                                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 公共类型与消息判别联合    | `utils/types.ts`（`ProxyRule`/`MessageType`/`RuntimeMessage` 等）                                                                                                       |
+| 常量与 Storage 键         | `utils/constants.ts`（`STORAGE_KEYS`、`MAX_RULES=200`、`MAX_LOG_ENTRIES=500`、`MAX_LOG_BODY_SIZE`/`MAX_LOG_BODY_TOTAL`、alarm 名）                                      |
+| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入）                                                                                                |
+| DNR 规则构建（纯函数）    | `utils/dnrRules.ts`                                                                                                                                                     |
+| URL 匹配/重写与分流判定   | `utils/urlMatcher.ts`（`findMatchingRule`/`rewriteUrl`/`isSimpleRule`）                                                                                                 |
+| 边界校验与导出脱敏        | `utils/headerValidation.ts`（表单与导入共用的头判据）、`utils/exportSanitize.ts`（分享模式剔除凭据）、`utils/dnrSupport.ts`（RE2/替换引用可用性判定，供「未生效」标记） |
+| 消息路由                  | `entrypoints/background/messageRouter.ts`（`isTrustedSender` 安全校验）                                                                                                 |
+| SW 代理执行               | `entrypoints/background/proxyHandler.ts`（mock/delay/block/override/retry）                                                                                             |
+| DNR 同步与广播            | `entrypoints/background/dnrManager.ts`                                                                                                                                  |
+| DNR 命中统计              | `entrypoints/background/dnrStats.ts`（`getMatchedRules`，配额受限）                                                                                                     |
+| SW 保活 / 自动关闭 / 徽章 | `entrypoints/background/{keepalive,autoOff,badgeManager}.ts`                                                                                                            |
+| i18n（自研响应式）        | `utils/i18n/index.ts` + 根 `locales/{zh_CN,en}/{common,options,popup}.json`                                                                                             |
+| 主题                      | `utils/theme.ts` + `assets/theme/tokens.css`（`--cop-*`，6 主题 + light/dark/system）                                                                                   |
+| Vue 应用工厂              | `utils/createVueApp.ts`（`createAndMountApp`）                                                                                                                          |
+| 商店文案与权限理由        | `CHROMEWEBSTORE.md`（上架唯一素材源，不在扩展包内）                                                                                                                     |
+| 发版与商店提审 runbook    | `RELEASING.md`（一次性凭据、日常发版、失败排查）                                                                                                                        |
+| GitHub 仓库展示信息       | `GITHUB.md`（About 描述 / website / topics / 社交预览 / Pages 源 / 私密漏洞报告入口，一次性手动清单）                                                                   |
+| 版本历史                  | `CHANGELOG.md`（唯一事实源；release 工作流把对应小节切成 GitHub Release 说明）                                                                                          |
+| 三条自动化链路            | `.github/workflows/{ci,deploy-pages,release}.yml`；共用校验 `.github/actions/verify`                                                                                    |
+| 产品落地页 / 隐私政策     | `docs/index.html`（中，站点根）、`docs/en.html`（英）、`docs/privacy.html`、`docs/llms.txt`（新增页面必须中英成对）                                                     |
+| 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                                                                       |
+| WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                                                                                 |
 
 ## 架构总览
 
@@ -183,8 +184,8 @@
   - Vue/CSS 样式：`pnpm lint:style`。
   - 入口、manifest、WXT/Vite 配置、依赖或打包行为：`pnpm build`。
   - 文档、JSON 等格式改动：对本次修改文件运行 `pnpm exec prettier --check <files...>`。
-  - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），`docs/assets/landing.js` 需过 `pnpm lint`（浏览器全局已在 `eslint.config.js` 的 `docs/**` 覆盖块中声明），并在浏览器里目测渲染（含禁用 JS 的降级态）。中英两页的可见文案、FAQ 条目数与 `FAQPage` 结构化数据必须一一对应：`FAQPage` 的问答需与页面 `<details>` 文本一致，两页的条目顺序也需一致。微信交流群模块只允许出现在两份落地页（对比页/隐私页/商店文案出现即红），中英 README 的章节数、语言互链方向、微信号 `lld_1025`、备注关键词 `cxp` 与二维码路径可解析性由同一支测试守着——只改一边会直接红。
-  - 商店文案改动：`pnpm test`（含 `name`/`description` 字符上限守卫）+ 同步 `CHROMEWEBSTORE.md`。
+  - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），`docs/assets/landing.js` 需过 `pnpm lint`（浏览器全局已在 `eslint.config.js` 的 `docs/**` 覆盖块中声明），并在浏览器里目测渲染（含禁用 JS 的降级态）。中英两页的可见文案、FAQ 条目数与 `FAQPage` 结构化数据必须一一对应：`FAQPage` 的问答需与页面 `<details>` 文本一致，两页的条目顺序也需一致。微信交流群模块只允许出现在两份落地页（对比页/隐私页/商店文案出现即红），中英 README 的章节数、语言互链方向、微信号 `lld_1025`、备注关键词 `cxp` 与二维码路径可解析性由同一支测试守着——只改一边会直接红。改了落地页正文要手工把该页 `dateModified`、页脚「最后更新」与 `docs/sitemap.xml` 里那条的 `<lastmod>` 一起推到同一天（守卫只校验三者**彼此一致**，不校验具体值）。
+  - 商店文案改动：`pnpm test`（含 `name`/`description` 字符上限守卫）+ 同步 `CHROMEWEBSTORE.md`。注意 `CHROMEWEBSTORE.md` §0 预算表里的中英详细描述码点数是从正文反算的，改正文必须同表更新（`toBeCloseTo(..., 1)`，即 ±50 码点内），并对该文件跑一次 prettier（表格列宽会随之重排）。
   - `.github/**`（工作流、复合动作、Issue/PR 模板）：`pnpm test`（`tests/docs-consistency.test.ts` 守卫关键契约与 YAML 可解析），并对改动文件跑 prettier；本机无 `act`/`docker`，**工作流无法本地实跑，必须把这一点作为未验证项写进交付说明**。
   - 发版：按 `RELEASING.md` §2（`npm version` + `CHANGELOG.md` 小节 + 全量校验 + `git tag`），推 tag 即触发发布链路。
 - 不用会改写整个仓库的 `pnpm format` 处理局部任务；需要自动修复时只作用于本次修改文件。
@@ -197,11 +198,11 @@
 - **MAIN world 镜像必须同步**：`entrypoints/main-interceptor.content.ts` 自包含、无法 import，其中的 `rewriteWsUrl`、`applyWsQuery`、`normalizePriority`、`DEFAULT_RULE_PRIORITY` 是 `utils/urlMatcher.ts` / `utils/constants.ts` 的手工副本。改这两处 utils 的匹配、重写、查询参数编码或优先级语义，必须在同一改动里镜像到拦截器，否则 WebSocket 通道与 HTTP 通道行为分叉；`tests/channel-consistency.test.ts` 末尾的「MAIN world 镜像与 utils 侧同源」按源码契约守卫这一点。
 - **三世界内容脚本**：MAIN 自包含拦截 + ISOLATED 桥接 + SW 执行；所有 `postMessage` 用 `window.location.origin` 作 targetOrigin（非 `*`）。
 - **storage 锁 + 缓存**：read-modify-write 走 `withStorageLock` 避免竞态；配置内存缓存随 `storage.onChanged` 失效。
-- **日志缓冲写入**：达 10 条或 1s 防抖 flush，且 flush 串行化避免并发覆盖丢失；`onSuspend` 时 `flushLogs`。
+- **日志缓冲写入**：达 10 条或 1s 防抖 flush，且 flush 串行化避免并发覆盖丢失；`onSuspend` 时 `flushLogs`。flush 失败要把快照放回缓冲（仍按 `MAX_LOG_ENTRIES` 收口），否则配额持续失败时缓冲区只涨不落。写入前两道正文裁剪：单条正文超 `MAX_LOG_BODY_SIZE` 截断留痕，`trimLogsToBudget` 再按 `MAX_LOG_BODY_TOTAL` 从最新一条开始累加、超预算即丢弃其后（至少留最新一条，避免整份清空）。
 - **DNR 命中统计**：`getMatchedRules` 近 5 分钟窗口，配额约每 10 分钟 20 次，由 UI 手动刷新触发，超配额静默返回上次结果。
 - **代理自动关闭**：总开关开启且配置时长时用 `chrome.alarms` 倒计时（跨 SW 重启持久化），到期自动关闭总开关。
-- **主题**：`--cop-*` 令牌 + `data-theme`/`data-mode`；6 主题（sky/green/pink/mauve/orange/slate）+ light/dark/system；同步覆盖 Element Plus `--el-color-primary` 梯度。新增引用必须在 `assets/theme/tokens.css` 里已定义（未定义的 `var()` 让整条声明在计算值阶段静默失效），`-rgb` 通道令牌存的是空格分隔值、只能写成 `rgb(var(--cop-primary-rgb) / 15%)`；两条契约由 `tests/designTokens.test.ts` 守卫。
-- **容量限制**：`MAX_RULES=200`（新增/合并超限拒绝）、`MAX_LOG_ENTRIES=500`（环形缓冲）。
+- **主题**：`--cop-*` 令牌 + `data-theme`/`data-mode`；6 主题（sky/green/pink/mauve/orange/slate）+ light/dark/system；同步覆盖 Element Plus `--el-color-primary` 梯度。新增引用必须在 `assets/theme/tokens.css` 里已定义（未定义的 `var()` 让整条声明在计算值阶段静默失效），`-rgb` 通道令牌存的是空格分隔值、只能写成 `rgb(var(--cop-primary-rgb) / 15%)`；两条契约由 `tests/designTokens.test.ts` 守卫。首帧不闪：`initThemeSync()` 在挂载前用 `localStorage` 镜像键 `cop_theme`/`cop_mode` 同步打上标记（`storage.local` 仍是事实来源，镜像只是消掉首帧的默认主题），该契约由 `tests/themeMirror.test.ts` 守着。
+- **容量限制**：`MAX_RULES=200`（新增、批量新增与导入的两种模式都超限拒绝）、`MAX_LOG_ENTRIES=500`（环形缓冲）＋ `MAX_LOG_BODY_SIZE=32K` 字符／`MAX_LOG_BODY_TOTAL=4M` 字符（见「日志缓冲写入」）。
 - **三处已确认的可访问性/首屏取舍（2026-09-14 定，不要「顺手修」）**：
   1. **次要文字对比度维持 Element Plus 默认**：`--cop-text-color-secondary: #909399` 在白底 3.08:1、`--cop-text-color-placeholder: #c0c4cc` 1.56:1，低于 WCAG AA 的 4.5:1。刻意不压暗——这两个值与整个组件库同源，单独调会让本扩展界面与 `el-*` 其余部分观感割裂。
   2. **规则拖拽排序只有指针路径**：`RuleTable.vue` 的行 `dragstart` 无键盘等价物。键盘用户改优先级数值可达到同样的生效顺序，只有「列表顺序」这一件事是鼠标独占。
@@ -256,7 +257,7 @@
 ### Element Plus / i18n
 
 - 禁止整包导入；`ElMessage`/`ElMessageBox` 为显式导入，其样式需在入口手动 import。
-- **给弹窗加 `v-if` 之前先改初始化**：`RuleFormDialog.vue` 等弹窗靠 `watch(() => props.visible)`（**没有** `immediate: true`）把 `rule` 灌进表单。若在父组件同一次渲染里就让它挂载，组件是带着 `visible === true` 挂载的，该 watcher 永不触发——「编辑规则」会打开一个空白表单，静默丢掉被编辑的规则。真要惰性挂载，必须先把这段初始化抽成函数并在 `onMounted` 里按 `props.visible` 调一次，再配一条源码契约测试守住。
+- **异步弹窗的初始化必须挂在带 `immediate` 的 watcher 上**：7 个弹窗都是 `defineAsyncComponent` 分片，两条路径会让分片**带着 `visible === true` 挂载**——`#add-rule` / `#add-rule-from-tab=` / `#profiles` 在 `App.vue` 的 `onMounted` 里同步置位，以及首次点击时分片尚未取回。只监听变化的 `watch(() => props.visible)` 在那条路径上永不触发，初始化被静默跳过。`RuleFormDialog` / `ProfilesDialog` / `SettingsDialog` 三处现已统一带 `immediate: true`，`ProfilesDialog` 也不再靠 `el-dialog` 的 `@open` 拉列表（该事件只在 `modelValue` 的 watcher 里 emit，挂载即可见那条分支不调它）。新增弹窗若用 `props.visible` watcher 做初始化或拉数据，必须带 `immediate`、不得只靠 `@open`；`tests/full-verification.test.ts` 三条源码契约守住这两点，外加「hash 入口对应的弹窗必须在守卫清单内」。
 - 中英 key 必须一致；单一自研 i18n 体系（无 `i18n-lite`/`tl`）；`public/_locales` 仅放 manifest 名称/悬停短名/描述/命令文案。
 
 ## ESLint 已知例外

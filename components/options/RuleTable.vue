@@ -1,4 +1,3 @@
-<!-- eslint-disable vue/no-v-html -->
 <template>
   <div class="rule-table-card">
     <!-- 空状态引导（无任何规则时） -->
@@ -20,6 +19,7 @@
     <!-- 规则表格 -->
     <el-table
       v-else
+      ref="tableRef"
       v-loading="loading"
       :data="rules"
       :row-class-name="rowClassName"
@@ -32,6 +32,7 @@
       <el-table-column
         type="selection"
         width="48"
+        :reserve-selection="true"
       />
       <el-table-column
         width="36"
@@ -62,9 +63,10 @@
       >
         <template #default="{ row }">
           <span class="rule-name-cell">
-            <span
+            <HighlightText
+              :text="row.name"
+              :keyword="searchText"
               :title="row.name"
-              v-html="highlightText(row.name, searchText)"
             />
             <el-tooltip
               v-if="shadowedRuleIds.has(row.id)"
@@ -72,6 +74,22 @@
               placement="top"
             >
               <span class="shadowed-indicator">!</span>
+            </el-tooltip>
+            <el-tooltip
+              v-if="dnrSkipReason(row.id)"
+              placement="top"
+            >
+              <template #content>
+                <div class="dnr-skip-tip">
+                  <p
+                    v-for="(line, index) in skipReasonLines(dnrSkipReason(row.id))"
+                    :key="index"
+                  >
+                    {{ line }}
+                  </p>
+                </div>
+              </template>
+              <span class="dnr-dead-tag">{{ t('dnrSkippedTag') }}</span>
             </el-tooltip>
             <span class="rule-badges">
               <el-tooltip
@@ -140,9 +158,10 @@
         min-width="200"
       >
         <template #default="{ row }">
-          <span
+          <HighlightText
+            :text="row.matchPattern"
+            :keyword="searchText"
             :title="row.matchPattern"
-            v-html="highlightText(row.matchPattern, searchText)"
           />
         </template>
       </el-table-column>
@@ -167,9 +186,10 @@
         min-width="200"
       >
         <template #default="{ row }">
-          <span
+          <HighlightText
+            :text="row.targetUrl"
+            :keyword="searchText"
             :title="row.targetUrl"
-            v-html="highlightText(row.targetUrl, searchText)"
           />
         </template>
       </el-table-column>
@@ -268,12 +288,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
+import type { TableInstance } from 'element-plus';
+import type { DnrSkipReason } from '@/utils/dnrSupport';
 import { useI18n } from '@/composables/useI18n';
+import { useDnrSkipText } from '@/composables/useDnrSupport';
 import { isWebSocketRule } from '@/utils/urlMatcher';
 import EmptyGuide from './EmptyGuide.vue';
+import HighlightText from './HighlightText.vue';
 
 /**
  * 规则表格（白色圆角卡片容器）
@@ -294,6 +318,8 @@ const props = defineProps<{
   hitStats: Map<string, number>;
   /** 被更高优先级同模式规则遮蔽的规则 ID 集合 */
   shadowedRuleIds: Set<string>;
+  /** 走 DNR 通道但不会被浏览器应用的规则（ruleId → 原因） */
+  dnrSkippedRules: Map<string, DnrSkipReason>;
 }>();
 
 const emit = defineEmits<{
@@ -309,6 +335,45 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const { skipReasonLines } = useDnrSkipText();
+
+/**
+ * 表格实例：选择列开了 `reserve-selection`，勾选因此存活在表格内部而不是随 data 重建，
+ * 父组件置空 `selectedRules` 并不会清掉保留的勾选。规则集被整体替换（批量删除 /
+ * 导入 / 加载环境配置）时必须调用 {@link clearSelection}，否则批量操作会作用在
+ * 当前筛选下看不见的规则上。
+ */
+const tableRef = ref<TableInstance>();
+
+/** 清空全部勾选（含被筛选隐藏的保留项），供父组件在整体替换规则后调用 */
+function clearSelection(): void {
+  tableRef.value?.clearSelection();
+}
+
+defineExpose({ clearSelection });
+
+/**
+ * 「筛选无结果」时 `v-else` 会把整个表格卸载，存活在表格内部的保留勾选随之丢失，
+ * 而父组件还拿着上一份选中项。表格分支只在 `rules.length > 0` 时存在，故直接监听
+ * 这个渲染条件：翻转成「不渲染」后补发一次空选择，避免计数与真实勾选分叉。
+ * （`RuleTable` 在 App 里常驻，只靠 `onBeforeUnmount` 守不住筛选这条路径。）
+ */
+watch(
+  () => props.rules.length > 0,
+  (rendered, wasRendered) => {
+    if (!rendered && wasRendered) emit('selectionChange', []);
+  },
+  { flush: 'post' },
+);
+
+onBeforeUnmount(() => {
+  emit('selectionChange', []);
+});
+
+/** 该规则是否会被 DNR 同步跳过（返回原因，undefined 表示可正常应用） */
+function dnrSkipReason(ruleId: string): DnrSkipReason | undefined {
+  return props.dnrSkippedRules.get(ruleId);
+}
 
 /** matchType → el-tag 类型（静态映射，模块级避免逐行重建） */
 const MATCH_TYPE_TAG_TYPES: Record<string, 'primary' | 'success' | 'warning' | 'info'> = {
@@ -406,31 +471,6 @@ function matchTypeLabel(matchType: string) {
 /** WebSocket 规则识别：复用 utils/urlMatcher 共享判定（与分流逻辑单一事实来源） */
 function isWsRule(rule: ProxyRule): boolean {
   return isWebSocketRule(rule);
-}
-
-/** 缓存高亮正则，避免每次 highlightText 调用都 new RegExp */
-let cachedHighlightPattern = '';
-let cachedHighlightRegex: RegExp | null = null;
-
-function getHighlightRegex(pattern: string): RegExp | null {
-  if (pattern === cachedHighlightPattern) return cachedHighlightRegex;
-  cachedHighlightPattern = pattern;
-  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  cachedHighlightRegex = pattern ? new RegExp(`(${escaped})`, 'gi') : null;
-  return cachedHighlightRegex;
-}
-
-/** 将匹配的关键字用 <mark> 包裹（先转义 HTML 防止 XSS） */
-function highlightText(text: string, keyword: string): string {
-  if (!keyword || !text) return text;
-  // 先转义 HTML 实体，防止 XSS
-  const escaped = text.replace(
-    /[&<>"']/g,
-    ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!,
-  );
-  const regex = getHighlightRegex(keyword);
-  if (!regex) return escaped;
-  return escaped.replace(regex, '<mark class="search-highlight">$1</mark>');
 }
 </script>
 
@@ -666,5 +706,31 @@ function highlightText(text: string, keyword: string): string {
   cursor: help;
   background: var(--el-color-warning, #e6a23c);
   border-radius: 50%;
+}
+
+/* 「浏览器不会应用该规则」标记：比遮蔽标记更重，用危险色 + 文字而非仅用颜色表达 */
+.dnr-dead-tag {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--el-color-danger, #f56c6c);
+  cursor: help;
+  background: var(--el-color-danger-light-9, #fef2f2);
+  border: 1px solid var(--el-color-danger-light-7, #f5cccc);
+  border-radius: 4px;
+}
+
+.dnr-skip-tip p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.dnr-skip-tip p + p {
+  margin-top: 4px;
 }
 </style>

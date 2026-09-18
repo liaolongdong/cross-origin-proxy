@@ -5,12 +5,15 @@
     width="600px"
     align-center
     @close="$emit('update:visible', false)"
+    @closed="resetHarPick"
   >
     <div class="import-export-dialog dialog-body-scroll">
       <!-- 导出配置 -->
       <div class="section">
         <h3>{{ t('exportSectionTitle') }}</h3>
         <p class="section-desc">{{ t('exportDesc') }}</p>
+        <el-checkbox v-model="sanitizeExport">{{ t('exportSanitizeLabel') }}</el-checkbox>
+        <p class="section-desc export-sanitize-tip">{{ t('exportSanitizeTip') }}</p>
         <el-button
           type="primary"
           @click="handleExport"
@@ -159,11 +162,13 @@ import { ref, computed } from 'vue';
 import { Download, Upload } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadFile } from 'element-plus';
-import type { ExportData, HarImportPayload, ProxyRule } from '@/utils/types';
+import type { HarImportPayload, ImportMode, ProxyRule } from '@/utils/types';
 import { MessageType } from '@/utils/types';
+import { MAX_RULES } from '@/utils/constants';
 import { parseCurlCommand } from '@/utils/curlParser';
 import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
+import { useImportExport } from '@/composables/useImportExport';
 
 defineProps<{
   visible: boolean;
@@ -171,24 +176,31 @@ defineProps<{
 
 const emit = defineEmits<{
   'update:visible': [value: boolean];
-  import: [data: ExportData];
-  export: [];
+  /** 导入成功后通知父组件刷新列表并关闭弹窗（失败时不发，输入原样保留） */
+  imported: [];
+  /** 请求导出：`sanitize` 为弹窗里的「分享模式」勾选值，由父组件执行下载与提示 */
+  export: [sanitize: boolean];
   importHarRules: [rules: ProxyRule[]];
   importCurl: [data: ParsedCurl];
 }>();
 
 const { t } = useI18n();
 
+// 导入由弹窗自己发起并等待结果：只有拿到成败才知道要不要清空输入、要不要关窗。
+// 以前是「emit 给父组件 → 立刻清空并关窗」，父组件的异步失败到达时输入早已没了。
+const { importing, importConfig } = useImportExport();
+
 const uploadRef = ref();
 const harUploadRef = ref();
 const jsonInput = ref('');
 const curlInput = ref('');
-const importing = ref(false);
 const fileContent = ref<string | null>(null);
 const harExporting = ref(false);
 const harImporting = ref(false);
 const harFileContent = ref<string | null>(null);
-const importMode = ref<'replace' | 'merge'>('replace');
+const importMode = ref<ImportMode>('replace');
+/** 分享模式：默认开启——导出的 JSON 常被直接贴进群里，凭据一旦外泄收不回，本机备份少勾一下即可 */
+const sanitizeExport = ref(true);
 
 const canImport = computed(() => {
   return fileContent.value || jsonInput.value.trim();
@@ -197,7 +209,7 @@ const canImport = computed(() => {
 // 成功/失败反馈由父组件在异步导出完成后发出：emit 是同步调用，
 // 此处的 try/catch 拿不到父组件异步导出的结果，toast 会在导出实际完成前弹出
 function handleExport() {
-  emit('export');
+  emit('export', sanitizeExport.value);
 }
 
 function handleFileChange(file: UploadFile) {
@@ -227,24 +239,28 @@ async function handleImport() {
       type: 'warning',
     });
 
-    importing.value = true;
-    const data: ExportData & { mode?: 'replace' | 'merge' } = JSON.parse(jsonString);
-    if (!data.config || !Array.isArray(data.config.rules)) {
-      throw new Error('Invalid config format');
+    const result = await importConfig(jsonString, importMode.value);
+    if (!result.success) {
+      // 失败时不清空输入、不关窗：用户改完 JSON 可以直接重试，不必重新粘贴
+      if (result.error === 'MAX_RULES_EXCEEDED') {
+        ElMessage.error(t('maxRulesReached', [MAX_RULES]));
+      } else if (result.error === 'INVALID_CONFIG') {
+        ElMessage.error(t('importFailed'));
+      } else {
+        ElMessage.error(t('importConfigFailed'));
+      }
+      return;
     }
-    data.mode = importMode.value;
-    emit('import', data);
+
     jsonInput.value = '';
     fileContent.value = null;
     uploadRef.value?.clearFiles();
-    emit('update:visible', false);
+    emit('imported');
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(t('importFailed'));
+      ElMessage.error(t('importConfigFailed'));
       console.error('Import failed:', error);
     }
-  } finally {
-    importing.value = false;
   }
 }
 
@@ -292,6 +308,16 @@ function handleHarFileRemove() {
   harFileContent.value = null;
 }
 
+/**
+ * 弹窗关闭动画结束后收起已选中的 HAR：成功由父组件关窗、失败与取消保持打开（输入留着才能重试）。
+ * 分片不会随关闭销毁，残留的 `harFileContent` 与上传列表会让「再点一次导入」把同一批请求
+ * 原样导入两遍——HAR 通道没有去重，只有 JSON 导入会跳过重复规则。
+ */
+function resetHarPick(): void {
+  harFileContent.value = null;
+  harUploadRef.value?.clearFiles();
+}
+
 async function handleImportHar() {
   if (!harFileContent.value) return;
   harImporting.value = true;
@@ -305,10 +331,9 @@ async function handleImportHar() {
       data: harData,
     });
     if (result.success && result.rules) {
+      // 只负责把规则交给父组件写入：emit 是同步的，此处弹「成功」会在达上限时
+      // 与父组件的失败提示同时出现，输入也会被提前清掉、无法重试
       emit('importHarRules', result.rules);
-      ElMessage.success(t('importHarSuccess', String(result.rules.length)));
-      harFileContent.value = null;
-      harUploadRef.value?.clearFiles();
     } else {
       ElMessage.error(t('importHarFailed'));
     }
@@ -341,6 +366,11 @@ async function handleImportHar() {
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--cop-text-color-secondary);
+}
+
+.export-sanitize-tip {
+  margin-top: 0;
+  font-size: 12px;
 }
 
 .paste-section {

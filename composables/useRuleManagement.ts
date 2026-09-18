@@ -12,6 +12,26 @@ export function useRuleManagement() {
   const loading = ref(true);
 
   /**
+   * 处于「删除可撤销」窗口（尚未提交到存储层）的规则 id
+   *
+   * 删除是乐观更新：UI 先移除，5 秒后才真正发 DELETE_RULE。这期间存储快照里规则还在，
+   * 任何一次 fetchConfig（其他标签页改动、导入、加载环境配置）都会把这行捞回来；
+   * 用户再点撤销就又 splice 一份，列表出现重复行。故刷新时按此集合过滤。
+   * 只做集合读写、不参与模板渲染，因此不需要是响应式的。
+   */
+  const pendingDeleteIds = new Set<string>();
+
+  /** 进入撤销窗口：调用方负责先从列表里乐观移除 */
+  function beginPendingDelete(ruleId: string) {
+    pendingDeleteIds.add(ruleId);
+  }
+
+  /** 离开撤销窗口：撤销成功，或删除消息已回包（无论结果如何都不再屏蔽该行） */
+  function endPendingDelete(ruleId: string) {
+    pendingDeleteIds.delete(ruleId);
+  }
+
+  /**
    * 在已启用规则集中查找与待写入规则冲突的更高优先级规则（见 utils/ruleConflicts）
    */
   function findConflictingRule(
@@ -36,7 +56,7 @@ export function useRuleManagement() {
       });
       // SW 异常时响应可能为非标结构，仅接受含数组 rules 的配置
       if (!config || !Array.isArray(config.rules)) return;
-      rules.value = config.rules;
+      rules.value = pendingDeleteIds.size > 0 ? config.rules.filter(r => !pendingDeleteIds.has(r.id)) : config.rules;
       enabled.value = config.enabled;
     } catch (error) {
       logger.error('Failed to fetch config:', error);
@@ -258,5 +278,7 @@ export function useRuleManagement() {
     reorderRules,
     toggleProxy,
     findConflictingRule,
+    beginPendingDelete,
+    endPendingDelete,
   };
 }

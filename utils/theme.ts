@@ -7,6 +7,7 @@
  * 设计要点：
  * - 主题名持久化在 chrome.storage.local 的独立键中
  * - 显示模式（light/dark/system）独立存储
+ * - 两者各有一份 localStorage 镜像，扩展页挂载前同步应用以消除首帧闪色（与 utils/i18n 同构）
  * - 本模块直接读取 storage.local，保持轻量
  */
 
@@ -86,36 +87,86 @@ export function applyThemeMode(mode: ThemeMode, root: HTMLElement = document.doc
   }
 }
 
-/** 从存储读取当前主题 */
-export async function getStoredTheme(): Promise<ThemeName> {
+/**
+ * localStorage 镜像键（与 `utils/i18n` 的语言镜像同构）
+ *
+ * `chrome.storage.local` 只能异步读，等它回来时首帧已经按默认配色画完了，切过主题的
+ * 用户每次打开 popup/options 都会看到一次闪色。扩展页同源共享 localStorage，用它做只读
+ * 镜像即可在挂载前同步定色；storage.local 始终是数据源，镜像丢了就退回这一次 IPC。
+ */
+const THEME_MIRROR_KEY = 'cop_theme';
+const THEME_MODE_MIRROR_KEY = 'cop_mode';
+
+/** 同步读镜像（background SW 无 localStorage，需守卫） */
+function readMirror(key: string): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeMirror(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+  } catch {
+    // 镜像写入失败（隐私模式等）只影响首帧配色，不影响持久化
+  }
+}
+
+/**
+ * 读取主题原值：`undefined` 表示「读不到」（IPC 失败）。
+ *
+ * 与「存储里就是默认值」区分开——镜像（localStorage）是跨会话粘住的，
+ * 一次抖动失败若按 DEFAULT 回写，之后每次打开的首帧都会被画成错的配色。
+ */
+async function readStoredTheme(): Promise<ThemeName | undefined> {
   try {
     const result = await chrome.storage.local.get(STORAGE_KEYS.THEME);
     const theme = result[STORAGE_KEYS.THEME];
     return isThemeName(theme) ? theme : DEFAULT_THEME;
   } catch {
-    return DEFAULT_THEME;
+    return undefined;
   }
 }
 
-/** 保存主题到存储 */
-export async function setStoredTheme(theme: ThemeName): Promise<void> {
-  await chrome.storage.local.set({ [STORAGE_KEYS.THEME]: theme });
+/** 从存储读取当前主题（读失败回落默认值） */
+export async function getStoredTheme(): Promise<ThemeName> {
+  return (await readStoredTheme()) ?? DEFAULT_THEME;
 }
 
-/** 从存储读取显示模式 */
-export async function getStoredThemeMode(): Promise<ThemeMode> {
+/**
+ * 保存主题到存储
+ *
+ * 镜像在写入成功后才刷新：它表示的是「下次打开首帧该画什么」，
+ * 落盘失败时提前写会让镜像领先于事实来源，下次进来先闪一下再被校正回去。
+ */
+export async function setStoredTheme(theme: ThemeName): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.THEME]: theme });
+  writeMirror(THEME_MIRROR_KEY, theme);
+}
+
+/** 读取显示模式原值，`undefined` 表示读不到 */
+async function readStoredThemeMode(): Promise<ThemeMode | undefined> {
   try {
     const result = await chrome.storage.local.get(STORAGE_KEYS.THEME_MODE);
     const mode = result[STORAGE_KEYS.THEME_MODE];
     return isThemeMode(mode) ? mode : DEFAULT_THEME_MODE;
   } catch {
-    return DEFAULT_THEME_MODE;
+    return undefined;
   }
 }
 
-/** 保存显示模式到存储 */
+/** 从存储读取显示模式（读失败回落默认值） */
+export async function getStoredThemeMode(): Promise<ThemeMode> {
+  return (await readStoredThemeMode()) ?? DEFAULT_THEME_MODE;
+}
+
+/** 保存显示模式到存储，写入成功后刷新镜像（与主题色一样消除首帧闪色） */
 export async function setStoredThemeMode(mode: ThemeMode): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.THEME_MODE]: mode });
+  writeMirror(THEME_MODE_MIRROR_KEY, mode);
 }
 
 /**
@@ -123,24 +174,41 @@ export async function setStoredThemeMode(mode: ThemeMode): Promise<void> {
  * 在 options/popup 的 main.ts 中调用
  */
 export function initThemeSync(): void {
-  // 初始化主题色
-  void getStoredTheme().then(theme => applyThemeToRoot(theme));
+  // 先按镜像同步定色：下面的存储读取是异步的，等回来时首帧已经画成默认配色了
+  const mirroredTheme = readMirror(THEME_MIRROR_KEY);
+  if (isThemeName(mirroredTheme)) applyThemeToRoot(mirroredTheme);
+  const mirroredMode = readMirror(THEME_MODE_MIRROR_KEY);
+  if (isThemeMode(mirroredMode)) applyThemeMode(mirroredMode);
 
-  // 初始化显示模式
-  void getStoredThemeMode().then(mode => applyThemeMode(mode));
+  // 仍以存储为准校正一次（首次打开、镜像被清、其它页面改过设置时靠这里兜底）；
+  // 读失败时什么都不做——镜像里那份上一次成功读到的值仍然比默认值更接近事实
+  void readStoredTheme().then(theme => {
+    if (theme === undefined) return;
+    writeMirror(THEME_MIRROR_KEY, theme);
+    applyThemeToRoot(theme);
+  });
+  void readStoredThemeMode().then(mode => {
+    if (mode === undefined) return;
+    writeMirror(THEME_MODE_MIRROR_KEY, mode);
+    applyThemeMode(mode);
+  });
 
-  // 监听存储变更（主题色 + 显示模式）
+  // 监听存储变更（主题色 + 显示模式），实时切换并跟进镜像
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
 
     const themeChange = changes[STORAGE_KEYS.THEME];
     if (themeChange) {
-      applyThemeToRoot(isThemeName(themeChange.newValue) ? themeChange.newValue : DEFAULT_THEME);
+      const theme = isThemeName(themeChange.newValue) ? themeChange.newValue : DEFAULT_THEME;
+      writeMirror(THEME_MIRROR_KEY, theme);
+      applyThemeToRoot(theme);
     }
 
     const modeChange = changes[STORAGE_KEYS.THEME_MODE];
     if (modeChange) {
-      applyThemeMode(isThemeMode(modeChange.newValue) ? modeChange.newValue : DEFAULT_THEME_MODE);
+      const mode = isThemeMode(modeChange.newValue) ? modeChange.newValue : DEFAULT_THEME_MODE;
+      writeMirror(THEME_MODE_MIRROR_KEY, mode);
+      applyThemeMode(mode);
     }
   });
 }

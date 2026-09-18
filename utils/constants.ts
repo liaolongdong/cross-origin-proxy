@@ -31,6 +31,20 @@ export const DEFAULT_PROXY_CONFIG: ProxyConfig = {
 // Limits
 export const MAX_LOG_ENTRIES = 500;
 export const MAX_RULES = 200;
+/**
+ * 单条日志正文（请求体/响应体）的字符上限，超出部分在写入前截断并留痕。
+ *
+ * 未设上限时，一条超大 JSON 响应（代理请求体上限本就是 10MB）就能把 `storage.local`
+ * 的配额（本扩展未申请 `unlimitedStorage`，约 10MB）撑满，此后不仅日志写入失败，
+ * 连配置保存也会一起失败。取 32K 字符：足以看完任何正常接口的载荷。
+ */
+export const MAX_LOG_BODY_SIZE = 32 * 1024;
+/**
+ * 全部日志正文的字符总量预算：单条有上限不代表总量安全
+ * （500 条 × 两条正文 × 32K 仍远超配额），超预算时从尾部（最旧）丢弃，
+ * 与 {@link MAX_LOG_ENTRIES} 的环形缓冲方向一致。
+ */
+export const MAX_LOG_BODY_TOTAL = 4 * 1024 * 1024;
 
 // 规则默认值
 /**

@@ -51,7 +51,7 @@ entrypoints/            WXT entries: background (+ modules), content scripts, op
   content.ts           ISOLATED-world bridge to the background worker
 components/options/     Options UI (App.vue assembles; dialogs/drawers load via defineAsyncComponent)
 composables/            Reactive state and side effects
-utils/                  Framework-free domain logic: urlMatcher · dnrRules · storage · curlParser · har · i18n · theme …
+utils/                  Framework-free domain logic: urlMatcher · dnrRules · dnrSupport · storage · headerValidation · exportSanitize · curlParser · har · i18n · theme …
 locales/                In-app UI strings (zh_CN / en, split into common/options/popup)
 public/_locales/        Manifest name and description only
 docs/                   GitHub Pages product site (Chinese is the default language): index.html (zh, site root) · en.html · alternatives.html (zh) · en-alternatives.html · privacy.html · llms.txt · llms-full.txt

@@ -255,7 +255,8 @@ export default defineContentScript({
         pendingRequests.set(requestId, {
           resolve: (data: any) => {
             clearTimeout(timeout);
-            // status 越界或缺失一律无法构造 Response（合法范围 200-599）：
+            // status 越界或缺失一律无法构造 Response（合法范围 200-599，
+            // 其中 204/205/304 只能配 null 正文）：
             // 含旁路（Proxy Bypass）、代理失败（Proxy Error）、桥接层错误、
             // 以及后台失败信封（无 status 字段，若漏判会静默变成 200）。
             // 第一层整形在 content.ts（normalizeProxyResponse，会补回 requestId）；
@@ -273,22 +274,35 @@ export default defineContentScript({
             }
 
             // Build Response object
+            // 桥接层（utils/proxyResponse.ts）已做过整形；MAIN world 自包含无法 import，
+            // 故此处镜像同一兜底：204/205/304 只能配 null 正文，statusText 只能是 ByteString
+            // 且不含 CR/LF。
+            // 否则 new Response() 在 resolve 回调里抛 TypeError —— 超时已被 clearTimeout 摘掉、
+            // 又不会走 reject，页面的 fetch/XHR 从此永久 pending。
+            const nullBodyStatus = status === 204 || status === 205 || status === 304;
+            let statusText = '';
+            for (const char of String(data.statusText ?? '')) {
+              const code = char.codePointAt(0) ?? 0;
+              if (code <= 0xff && code !== 0x0a && code !== 0x0d) statusText += char;
+            }
             const responseInit: ResponseInit = {
-              status: data.status,
-              statusText: data.statusText,
+              status,
+              statusText,
               headers: new Headers(data.headers),
             };
 
-            let body: BodyInit;
-            if (data.isBase64) {
-              const binary = atob(data.body);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) {
-                bytes[i] = binary.charCodeAt(i);
+            let body: BodyInit | null = null;
+            if (!nullBodyStatus && typeof data.body === 'string') {
+              if (data.isBase64) {
+                const binary = atob(data.body);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                  bytes[i] = binary.charCodeAt(i);
+                }
+                body = bytes.buffer;
+              } else {
+                body = data.body;
               }
-              body = bytes.buffer;
-            } else {
-              body = data.body;
             }
 
             resolve(new Response(body, responseInit));

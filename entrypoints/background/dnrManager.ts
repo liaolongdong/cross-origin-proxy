@@ -1,5 +1,6 @@
 import { getProxyConfig } from '@/utils/storage';
-import { buildDnrRules, buildRegexFilter, buildRegexSubstitution, isSubstitutionValid } from '@/utils/dnrRules';
+import { buildDnrRules } from '@/utils/dnrRules';
+import { checkDnrRule, usesDnrChannel } from '@/utils/dnrSupport';
 import { logger } from '@/utils/logger';
 import { MessageType } from '@/utils/types';
 import { STORAGE_KEYS } from '@/utils/constants';
@@ -15,8 +16,8 @@ import { setDnrRuleIdMap } from './dnrStats';
  *   由浏览器网络层零开销完成重定向（复杂规则走 SW fetch 通道）
  * - 总开关（config.enabled）关闭时编译出空规则集：DNR 不经扩展 JS，
  *   SW 通道的开关判断拦不住它，否则「关掉代理」后简单规则仍在重定向
- * - regex 类型规则先经 isRegexSupported 校验（DNR 使用 RE2 语法，
- *   与 JS 正则不完全兼容），不支持的规则跳过并告警，避免整批同步失败
+ * - regex 类型规则先经 RE2 兼容性校验（DNR 使用 RE2 语法，与 JS 正则不完全兼容），
+ *   不支持的规则跳过并告警，避免整批同步失败；判定与前端告警共用 utils/dnrSupport
  * - 配置变化时向所有标签页广播新配置，驱动 MAIN world 拦截器实时同步
  */
 
@@ -24,28 +25,23 @@ import { setDnrRuleIdMap } from './dnrStats';
  * 过滤掉 DNR 无法应用的规则，避免单条非法规则导致 updateDynamicRules 整批拒绝：
  * - regex 规则的匹配模式需经 RE2 兼容性校验（DNR 与 JS 正则语法不完全一致）
  * - 所有规则的替换串捕获引用不得越界（越界引用是非法值）
+ *
+ * 判定与前端告警共用 `utils/dnrSupport` 的 `checkDnrRule`，两侧口径不会分叉；
+ * 非 DNR 候选（复杂规则/停用规则）由 `buildDnrRules` 过滤，无需校验。
  */
-async function filterRegexSupported(rules: ProxyRule[]): Promise<ProxyRule[]> {
+async function filterDnrApplicableRules(rules: ProxyRule[]): Promise<ProxyRule[]> {
   const results = await Promise.all(
     rules.map(async rule => {
-      if (rule.matchType === 'regex') {
-        try {
-          const { isSupported } = await chrome.declarativeNetRequest.isRegexSupported({
-            regex: rule.matchPattern,
-          });
-          if (!isSupported) {
-            logger.warn(`Rule "${rule.name}" regex not RE2-compatible, skipped in DNR:`, rule.matchPattern);
-            return null;
-          }
-        } catch {
-          return null;
-        }
-      }
-      if (!isSubstitutionValid(buildRegexFilter(rule), buildRegexSubstitution(rule))) {
-        logger.warn(`Rule "${rule.name}" substitution references missing capture group, skipped in DNR`);
-        return null;
-      }
-      return rule;
+      if (!usesDnrChannel(rule)) return rule;
+      const reason = await checkDnrRule(rule);
+      if (!reason) return rule;
+      logger.warn(
+        reason === 'regexUnsupported'
+          ? `Rule "${rule.name}" regex not RE2-compatible, skipped in DNR:`
+          : `Rule "${rule.name}" substitution references missing capture group, skipped in DNR`,
+        rule.matchPattern,
+      );
+      return null;
     }),
   );
   return results.filter((r): r is ProxyRule => r !== null);
@@ -92,7 +88,7 @@ async function doSyncDnrRules(config: ProxyConfig): Promise<void> {
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
     const removeRuleIds = existingRules.map(r => r.id);
 
-    const supported = await filterRegexSupported(Array.isArray(config.rules) ? config.rules : []);
+    const supported = await filterDnrApplicableRules(Array.isArray(config.rules) ? config.rules : []);
     const { rules: newRules, idMap } = buildDnrRules(supported, config.enabled);
 
     await chrome.declarativeNetRequest.updateDynamicRules({
@@ -137,24 +133,33 @@ async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> {
 }
 
 /**
- * 初始化 DNR 管理器：启动时全量同步，并监听配置变化增量同步 + 广播
+ * 初始化 DNR 管理器：注册配置变化监听，并做一次启动时全量同步
+ *
+ * 监听必须在函数最前面**同步**注册：Service Worker 很可能就是被这次
+ * `storage.onChanged` 唤醒的，而 Chrome 只把事件投递给同步启动阶段就注册好的监听器，
+ * 放到 `await` 之后再注册会漏掉这一次，表现为「改完规则没生效，直到下一次改动才同步」。
+ * 全量同步因此挪到监听之后异步执行。
  */
-export async function initDnrManager(): Promise<void> {
+export function initDnrManager(): void {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && STORAGE_KEYS.PROXY_CONFIG in changes) {
+      const newConfig = changes[STORAGE_KEYS.PROXY_CONFIG].newValue as ProxyConfig | undefined;
+      if (newConfig && Array.isArray(newConfig.rules)) {
+        invalidateMatcherCache();
+        void syncDnrRules(newConfig);
+        void broadcastConfigToTabs(newConfig);
+      }
+    }
+  });
+
+  void initialSync();
+}
+
+/** 启动时按存储里的配置全量重建一次 DNR 规则 */
+async function initialSync(): Promise<void> {
   try {
     const config = await getProxyConfig();
     await syncDnrRules(config);
-
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === 'local' && STORAGE_KEYS.PROXY_CONFIG in changes) {
-        const newConfig = changes[STORAGE_KEYS.PROXY_CONFIG].newValue as ProxyConfig | undefined;
-        if (newConfig && Array.isArray(newConfig.rules)) {
-          invalidateMatcherCache();
-          void syncDnrRules(newConfig);
-          void broadcastConfigToTabs(newConfig);
-        }
-      }
-    });
-
     logger.info('DNR manager initialized');
   } catch (error) {
     logger.error('Failed to initialize DNR manager:', error);

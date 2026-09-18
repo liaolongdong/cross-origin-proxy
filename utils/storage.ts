@@ -1,5 +1,15 @@
-import type { ProxyConfig, ProxyRule, RequestLogEntry, EnvironmentProfile } from '@/utils/types';
-import { STORAGE_KEYS, DEFAULT_PROXY_CONFIG, MAX_LOG_ENTRIES, MAX_RULES } from '@/utils/constants';
+import type { ProxyConfig, ProxyRule, RequestLogEntry, EnvironmentProfile, ImportMode } from '@/utils/types';
+import {
+  STORAGE_KEYS,
+  DEFAULT_PROXY_CONFIG,
+  MAX_LOG_ENTRIES,
+  MAX_LOG_BODY_SIZE,
+  MAX_LOG_BODY_TOTAL,
+  MAX_RULES,
+} from '@/utils/constants';
+import { truncateForLog } from '@/utils/formatters';
+import { logger } from '@/utils/logger';
+import { deduplicateRules } from '@/utils/ruleConflicts';
 
 // ─── Storage Mutex Lock ─────────────────────────────────────────────────────
 
@@ -49,9 +59,13 @@ export async function getProxyConfig(): Promise<ProxyConfig> {
  * 保存完整代理配置
  */
 export async function saveProxyConfig(config: ProxyConfig): Promise<void> {
-  await chrome.storage.local.set({ [STORAGE_KEYS.PROXY_CONFIG]: config });
-  // 写入后使缓存失效，确保下次读取拿到最新值
-  cachedConfig = null;
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.PROXY_CONFIG]: config });
+  } finally {
+    // 失败同样要失效缓存：多数调用链是「读出缓存对象 → 就地改 → 写回」，
+    // 写入被拒（配额/异常）时若保留缓存，内存里就留下一份 storage 里并不存在的配置
+    cachedConfig = null;
+  }
 }
 
 /**
@@ -225,6 +239,48 @@ export async function reorderRules(orderedIds: string[]): Promise<void> {
   });
 }
 
+/** `importProxyConfig` 的返回：成功时带回实际新增数与被去重跳过数 */
+export interface ImportProxyConfigResult {
+  success: boolean;
+  error?: string;
+  added?: number;
+  skipped?: number;
+}
+
+/**
+ * 导入配置：在存储锁内完成整体替换或合并
+ *
+ * 合并必须是原子的：不持锁的「读 → 去重 → 拼 → 写」会被并发的新增/导入互相覆盖，
+ * 静默丢掉另一边刚写入的规则；去重与上限校验都得基于锁内这份最新快照。
+ * 两种模式都受 MAX_RULES 约束（替换模式此前不检查，会把超限的脏配置整包收进来）。
+ *
+ * @param options.enabled 总开关目标值；`undefined` 表示沿用当前开关（合并模式的既有语义）
+ */
+export async function importProxyConfig(
+  incoming: ProxyRule[],
+  options: { mode: ImportMode; enabled?: boolean },
+): Promise<ImportProxyConfigResult> {
+  return withStorageLock(async () => {
+    const config = await getProxyConfig();
+    if (options.mode === 'merge') {
+      const newRules = deduplicateRules(config.rules, incoming);
+      if (config.rules.length + newRules.length > MAX_RULES) {
+        return { success: false, error: 'MAX_RULES_EXCEEDED' };
+      }
+      await saveProxyConfig({
+        enabled: options.enabled ?? config.enabled,
+        rules: [...config.rules, ...newRules],
+      });
+      return { success: true, added: newRules.length, skipped: incoming.length - newRules.length };
+    }
+    if (incoming.length > MAX_RULES) {
+      return { success: false, error: 'MAX_RULES_EXCEEDED' };
+    }
+    await saveProxyConfig({ enabled: options.enabled ?? false, rules: incoming });
+    return { success: true, added: incoming.length, skipped: 0 };
+  });
+}
+
 /**
  * 读取请求日志
  */
@@ -234,10 +290,26 @@ export async function getRequestLogs(): Promise<RequestLogEntry[]> {
 }
 
 /**
- * 保存请求日志（环形缓冲，最大 MAX_LOG_ENTRIES 条）
+ * 按正文总量预算裁剪日志：从头部（最新）累加，超出预算即丢弃其后的条目。
+ * 方向与 {@link saveRequestLogs} 的条数环形缓冲一致（数组尾部是最旧的日志）。
+ */
+export function trimLogsToBudget(logs: RequestLogEntry[], budget: number = MAX_LOG_BODY_TOTAL): RequestLogEntry[] {
+  let total = 0;
+  const kept: RequestLogEntry[] = [];
+  for (const log of logs) {
+    total += (log.requestBody?.length ?? 0) + (log.responseBody?.length ?? 0);
+    // 至少留下最新一条：否则「单条就超预算」会把整份日志清成空数组，刚发生的请求反而查不到
+    if (total > budget && kept.length > 0) break;
+    kept.push(log);
+  }
+  return kept;
+}
+
+/**
+ * 保存请求日志（环形缓冲，最大 MAX_LOG_ENTRIES 条，并按正文总量预算裁剪）
  */
 export async function saveRequestLogs(logs: RequestLogEntry[]): Promise<void> {
-  const trimmed = logs.slice(0, MAX_LOG_ENTRIES);
+  const trimmed = trimLogsToBudget(logs.slice(0, MAX_LOG_ENTRIES));
   await chrome.storage.local.set({ [STORAGE_KEYS.REQUEST_LOGS]: trimmed });
 }
 
@@ -274,9 +346,19 @@ async function doFlushLogs(): Promise<void> {
   const bufferSnapshot = logBuffer;
   logBuffer = [];
 
-  const logs = await getRequestLogs();
-  logs.unshift(...bufferSnapshot);
-  await saveRequestLogs(logs);
+  try {
+    const logs = await getRequestLogs();
+    // 数组约定「头部是最新」，而缓冲区是追加序（最旧在前），故倒序插到头部：
+    // 直接 unshift 会让同批日志倒着展示，超上限时 `slice(0, MAX)` 丢掉的还正是刚发生的请求。
+    // 不改动 bufferSnapshot 本身——失败回滚那条路径要按时间顺序放回去。
+    logs.unshift(...bufferSnapshot.slice().reverse());
+    await saveRequestLogs(logs);
+  } catch (error) {
+    // 快照已从缓冲区取走，直接丢弃等于静默丢日志：按时间顺序放回去等下一次刷写重试。
+    // 缓冲区是「最旧在前」的追加序，故收口时切掉头部——配额持续失败也要留下刚发生的请求。
+    logger.error('Request log flush failed, keeping entries for retry:', error);
+    logBuffer = [...bufferSnapshot, ...logBuffer].slice(-MAX_LOG_ENTRIES);
+  }
 }
 
 function scheduleLogFlush(): void {
@@ -296,10 +378,29 @@ function scheduleLogFlush(): void {
 }
 
 /**
+ * 正文收口：超过 {@link MAX_LOG_BODY_SIZE} 的正文截断并留原始长度标记。
+ *
+ * 收口放在存储层而不是各写入点：`proxyHandler` 有五条分支写日志（mock/复杂/回退/异常/WS），
+ * 漏掉任何一处都等于留一条无上限路径。未超限的条目原样返回（含 `undefined` 字段，
+ * HAR 导出按 `responseBody !== undefined` 过滤，不能把它变成空字符串）。
+ */
+export function capLogEntryBodies(entry: RequestLogEntry): RequestLogEntry {
+  const requestBody = capBody(entry.requestBody);
+  const responseBody = capBody(entry.responseBody);
+  if (requestBody === entry.requestBody && responseBody === entry.responseBody) return entry;
+  return { ...entry, requestBody, responseBody };
+}
+
+function capBody(value: string | undefined): string | undefined {
+  if (value === undefined || value.length <= MAX_LOG_BODY_SIZE) return value;
+  return truncateForLog(value, MAX_LOG_BODY_SIZE);
+}
+
+/**
  * 添加一条请求日志（缓冲写入，10 条或 1s 刷写一次）
  */
 export async function addRequestLog(entry: RequestLogEntry): Promise<void> {
-  logBuffer.push(entry);
+  logBuffer.push(capLogEntryBodies(entry));
   scheduleLogFlush();
 }
 

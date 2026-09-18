@@ -66,6 +66,31 @@ describe('toDnrPriority', () => {
     expect(toDnrPriority(1)).toBeGreaterThan(toDnrPriority(10));
     expect(toDnrPriority(9999)).toBe(1);
   });
+
+  it('小数优先级被取整（DNR 的 priority 只接受整数，一个小数会让整批规则被拒）', () => {
+    for (const priority of [2.5, 1.4, 2.6, 998.6, -0.4, 0.5]) {
+      expect(Number.isInteger(toDnrPriority(priority)), `priority=${priority}`).toBe(true);
+    }
+    expect(toDnrPriority(2.5)).toBe(998);
+    expect(toDnrPriority(2.6)).toBe(997);
+  });
+});
+
+describe('buildDnrRules：优先级整数化', () => {
+  it('整批 DNR 规则的 priority 一律为整数（混入小数也不能打穿整批）', () => {
+    const rules = [
+      makeRule({ id: 'a', priority: 1 }),
+      makeRule({ id: 'b', priority: 2.5 }),
+      makeRule({ id: 'c', priority: 3.499 }),
+    ];
+
+    const { rules: dnrRules } = buildDnrRules(rules, true);
+
+    expect(dnrRules).toHaveLength(3);
+    for (const dnrRule of dnrRules) {
+      expect(Number.isInteger(dnrRule.priority), `rule=${dnrRule.id}`).toBe(true);
+    }
+  });
 });
 
 describe('buildDnrRules', () => {
