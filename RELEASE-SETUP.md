@@ -50,13 +50,13 @@
 
 在 **GitHub Repository Settings → Secrets and variables → Actions** 中添加以下 Secret：
 
-| Secret Name | 用途 | 获取方式 |
-|-------------|------|----------|
-| `RELEASE_PLEASE_TOKEN` | Release Please 自动创建 GitHub Release | GitHub Personal Access Token（需有 `repo` 权限） |
-| `CWS_EXTENSION_ID` | Chrome Web Store 扩展 ID | Chrome Dev Console 中上传首个包后获得（32 位小写字母） |
-| `CWS_CLIENT_ID` | Google OAuth 客户端 ID | Google Cloud Console 创建 OAuth 凭据时获得 |
-| `CWS_CLIENT_SECRET` | Google OAuth 客户端密钥 | 同上 |
-| `CWS_REFRESH_TOKEN` | Google OAuth 刷新令牌 | Google OAuth Playground 授权后获得 |
+| Secret Name            | 用途                                   | 获取方式                                               |
+| ---------------------- | -------------------------------------- | ------------------------------------------------------ |
+| `RELEASE_PLEASE_TOKEN` | Release Please 自动创建 GitHub Release | GitHub Personal Access Token（需有 `repo` 权限）       |
+| `CWS_EXTENSION_ID`     | Chrome Web Store 扩展 ID               | Chrome Dev Console 中上传首个包后获得（32 位小写字母） |
+| `CWS_CLIENT_ID`        | Google OAuth 客户端 ID                 | Google Cloud Console 创建 OAuth 凭据时获得             |
+| `CWS_CLIENT_SECRET`    | Google OAuth 客户端密钥                | 同上                                                   |
+| `CWS_REFRESH_TOKEN`    | Google OAuth 刷新令牌                  | Google OAuth Playground 授权后获得                     |
 
 > **注意**：前 4 个 Secret 用于 Release Please 自动生成 GitHub Release；后 4 个 Secret 用于自动发布到 Chrome Web Store。
 
@@ -111,10 +111,10 @@ Conventional Commits → Release Please → Tag → release.yml (自动) → Chr
 
 本配置与 `account-password-helper` 完全一致，确保两个插件的发布流程统一：
 
-| 文件 | 状态 | 说明 |
-|------|------|------|
-| `release-please-config.json` | ✅ 已创建 | 与 account-password-helper 相同 |
-| `.release-please-manifest.json` | ✅ 已创建 | 初始版本为 1.0.0 |
+| 文件                            | 状态      | 说明                              |
+| ------------------------------- | --------- | --------------------------------- |
+| `release-please-config.json`    | ✅ 已创建 | 与 account-password-helper 相同   |
+| `.release-please-manifest.json` | ✅ 已创建 | 初始版本为 1.0.0                  |
 | `.github/workflows/release.yml` | ✅ 已存在 | 已支持自动发布到 Chrome Web Store |
-| `RELEASING.md` | ✅ 已存在 | 详细的发版流程文档 |
-| `CHROMEWEBSTORE.md` | ✅ 已存在 | 商店上架配置文档 |
+| `RELEASING.md`                  | ✅ 已存在 | 详细的发版流程文档                |
+| `CHROMEWEBSTORE.md`             | ✅ 已存在 | 商店上架配置文档                  |
