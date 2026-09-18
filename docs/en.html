@@ -546,8 +546,13 @@
             <div class="cta-row">
               <a
                 class="btn btn-primary"
+                href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+                >Add to Chrome</a
+              >
+              <a
+                class="btn btn-ghost"
                 href="https://github.com/liaolongdong/cross-origin-proxy"
-                >View source on GitHub</a
+                >View source</a
               >
               <a
                 class="btn btn-ghost"
@@ -561,8 +566,8 @@
               >
             </div>
             <p class="hero-note">
-              The Chrome Web Store listing is in preparation, and no tagged release has been published yet — until one
-              of the two lands, building from source below is the only install path.
+              A recent desktop Google Chrome (Manifest V3) is required. We recommend installing from Chrome Web Store,
+              or building from source.
             </p>
             <div class="badges">
               <span>No telemetry</span>
@@ -1900,11 +1905,13 @@ pnpm build</code></pre>
             <div class="card">
               <h3>Runtime requirements</h3>
               <p>
-                A recent desktop Google Chrome (Manifest V3). The store listing is in preparation, so load the unpacked
-                build from <code>.output/chrome-mv3</code> — or, once a tag has been published, the folder you unzipped
-                from <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>. Edge runs
-                Chromium extensions, so the same build normally works there; Firefox is not a supported target today
-                because of <code>declarativeNetRequest</code> differences. Chrome itself blocks every extension on
+                A recent desktop Google Chrome (Manifest V3). We recommend installing from
+                <a href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg">Chrome Web Store</a
+                >, or building from source by loading the unpacked build from <code>.output/chrome-mv3</code> — or, once
+                a tag has been published, the folder you unzipped from
+                <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>. Edge runs Chromium
+                extensions, so the same build normally works there; Firefox is not a supported target today because of
+                <code>declarativeNetRequest</code> differences. Chrome itself blocks every extension on
                 <code>chrome://</code> pages, the Web Store and other extension pages.
               </p>
             </div>

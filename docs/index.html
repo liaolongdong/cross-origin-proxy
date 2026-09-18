@@ -545,8 +545,13 @@
             <div class="cta-row">
               <a
                 class="btn btn-primary"
+                href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+                >添加到 Chrome</a
+              >
+              <a
+                class="btn btn-ghost"
                 href="https://github.com/liaolongdong/cross-origin-proxy"
-                >在 GitHub 查看源码</a
+                >查看源码</a
               >
               <a
                 class="btn btn-ghost"
@@ -560,8 +565,8 @@
               >
             </div>
             <p class="hero-note">
-              Chrome 应用商店上架准备中，且尚未发布任何打 tag
-              的版本——在两者之一就绪之前，下面的源码构建是目前唯一的安装方式。
+              需要较新版本的桌面 Google Chrome（Manifest V3）。推荐通过 Chrome Web Store
+              安装，也可以从源码构建或下载预构建包。
             </p>
             <div class="badges">
               <span>无埋点无遥测</span>
@@ -1835,10 +1840,12 @@ pnpm build</code></pre>
             <div class="card">
               <h3>运行环境</h3>
               <p>
-                较新版本的桌面版 Google Chrome（Manifest V3）。商店上架准备中，因此需以「加载已解压的扩展程序」方式加载
-                <code>.output/chrome-mv3</code>；已发布 tag 之后，也可以加载从
+                较新版本的桌面版 Google Chrome（Manifest V3）。推荐通过
+                <a href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg">Chrome Web Store</a>
+                安装；也可以从源码构建并加载
+                <code>.output/chrome-mv3</code>，或加载从
                 <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
-                下载的预构建 zip 解压出的目录。Edge 支持 Chromium 扩展，同一构建通常可用；Firefox 因为
+                下载的预构建 zip。Edge 支持 Chromium 扩展，同一构建通常可用；Firefox 因为
                 <code>declarativeNetRequest</code> 差异目前不是支持目标。与其他扩展一样，<code>chrome://</code>
                 页面、应用商店与其他扩展页面无法注入。
               </p>

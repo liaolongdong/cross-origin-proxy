@@ -14,6 +14,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
 [![Product site](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/en.html)
 [![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
+[![Chrome Web Store](https://img.shields.io/badge/CWS-v1.0.0-409eff?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
 
 <img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy options page: three rules — FAT to UAT wildcard rewrite, a mocked API and a blocked tracker — plus the global switch and search filters" width="100%" />
 
@@ -85,17 +86,22 @@ The four screens map to the four everyday actions: **write a rule → check what
 
 ## 📥 Install
 
-Requires a recent desktop Google Chrome (Manifest V3). The Chrome Web Store listing is in preparation — until then, use one of these two paths.
+Requires a recent desktop Google Chrome (Manifest V3). We recommend installing from Chrome Web Store, or building from source.
 
-### A. Prebuilt package (no toolchain needed)
+### A. Chrome Web Store (recommended)
 
-The release workflow attaches a built zip to [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) on every `v*` tag; until the first tag exists, use path B below. Once there is a release: download the zip, unzip it, then
+Install directly from [Chrome Web Store](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg).
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode** (top right).
-3. Click **Load unpacked** and select the unzipped folder (the one containing `manifest.json`).
+### B. GitHub Releases (prebuilt package)
 
-### B. Build from source
+Every `v*` tag on [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) includes a built zip:
+
+1. Download and unzip the file.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode** (top right).
+4. Click **Load unpacked** and select the unzipped folder (the one containing `manifest.json`).
+
+### C. Build from source
 
 ```bash
 git clone https://github.com/liaolongdong/cross-origin-proxy

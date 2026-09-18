@@ -14,6 +14,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
 [![产品站](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/)
 [![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
+[![Chrome Web Store](https://img.shields.io/badge/CWS-v1.0.0-409eff?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
 
 <img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手配置页规则总览：FAT → UAT 通配符重写、Mock API、阻断埋点三条规则，顶部代理总开关与搜索筛选" width="100%" />
 
@@ -85,17 +86,22 @@
 
 ## 📥 安装
 
-需要较新版本的桌面 Google Chrome（Manifest V3）。Chrome 应用商店上架准备中，在此之前走下面两条路径之一。
+需要较新版本的桌面 Google Chrome（Manifest V3）。推荐通过 Chrome Web Store 安装，也可以从源码构建。
 
-### 方式 A：下载预构建包（不需要工具链）
+### A. Chrome Web Store（推荐）
 
-发布工作流会在每个 `v*` tag 上把构建好的 zip 挂到 [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases)；首个 tag 打出来之前请先用下面的方式 B。有 Release 之后，下载 zip 并解压，然后：
+直接访问 [Chrome Web Store](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg) 添加扩展。
 
-1. 打开 `chrome://extensions`。
-2. 开启右上角「开发者模式」。
-3. 点「加载已解压的扩展程序」，选中解压出来的目录（含 `manifest.json` 的那层）。
+### B. GitHub Releases（预构建包）
 
-### 方式 B：从源码构建
+每个 `v*` tag 的 [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) 都附带构建好的 zip：
+
+1. 下载并解压 zip。
+2. 打开 `chrome://extensions`。
+3. 开启右上角「开发者模式」。
+4. 点「加载已解压的扩展程序」，选中解压出来的目录（含 `manifest.json` 的那层）。
+
+### C. 从源码构建
 
 ```bash
 git clone https://github.com/liaolongdong/cross-origin-proxy
@@ -106,7 +112,7 @@ pnpm build
 
 按上面同样三步加载 `.output/chrome-mv3`。
 
-两种安装方式结果一致：装好后点图标打开**代理开关**，加一条规则，刷新页面。
+三种安装方式结果一致：装好后点图标打开**代理开关**，加一条规则，刷新页面。
 
 ### 一分钟配出第一条规则
 

@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — 跨域代理助手 / Cross-Origin Proxy
 
-> Last Updated: 2026-09-15
+> Last Updated: 2026-09-18
 > 本文件是商店上架的唯一素材源：把这里的内容逐项复制进 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)。
 > 商店表单（名称/描述/截图/权限理由/数据披露）无法由 API 代写，只能手动粘；**包上传与提审已经自动化**，见第 11 节。
 > 本文件位于仓库根目录，不在 `.output/chrome-mv3` 内，因此不会被打进上传包。
@@ -11,11 +11,11 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 优化重心因此放在后两个字段：
 
-| 字段     | 预算       | 当前投入                 | 说明                                                                                                                     |
-| -------- | ---------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| 名称     | 75 码点    | 36 / 52                  | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                              |
-| 摘要     | 132 码点   | 100 / 127                | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
-| 详细描述 | 16000 码点 | 中约 3.86K / 英约 10.06K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
+| 字段     | 预算       | 当前投入               | 说明                                                                                                                     |
+| -------- | ---------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 名称     | 75 码点    | 36 / 52                | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                              |
+| 摘要     | 132 码点   | 100 / 127              | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
+| 详细描述 | 16000 码点 | 中约 4.7K / 英约 12.4K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
 | 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
 | ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
@@ -143,10 +143,37 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - 扩展自身零远端依赖：不加载远程脚本、不请求任何远端接口，界面、规则与日志全部从本机读取（你要求代理的那个接口当然仍然需要网络可达）
 - 关于「更改您访问的网站上的数据」权限：被代理的请求发生在每个开发者自己的内网域名、localhost 与各个测试环境之间，这些地址无法在扩展里预先枚举。扩展用它只做两件事——在你浏览的页面上注入拦截器、按你亲手创建的规则代发请求，不向任何第三方或开发者服务器发送数据
 - 隐私政策：https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+- 产品说明页：https://liaolongdong.github.io/cross-origin-proxy/
 
 限制：最多 200 条规则、最近 500 条日志、请求体上限 10MB、延迟 0–60000 毫秒、Mock 与改写的状态码钳制在 200–599（否则前端无法构造有效响应）。需要较新版本的桌面 Google Chrome（Manifest V3）。
 
 问题反馈与源码：https://github.com/liaolongdong/cross-origin-proxy
+
+常见问题：
+
+需要后端配合吗？
+不需要。规则全部在浏览器里生效，不用改后端代码、不用请后端加 CORS 头或重新部署。
+
+规则加了没生效怎么办？
+按这个顺序检查：弹窗总开关是否开启 → 该规则是否启用 → 页面是否重新加载（已发出的请求不会被追溯改写）→ 在「URL 匹配测试」里看是否被更靠前的规则遮蔽 → 正则是否覆盖整条 URL（网络层替换整个 URL，后台通道只替换命中片段，覆盖不全结果不同）。
+
+规则生效了但控制台仍报 CORS？
+只重写地址的请求仍受同源策略约束——目标环境没允许你的来源就照样被拦。给这条规则加任一改写能力（最省事的是加一个响应头覆盖），它就改由后台通道代发，页面侧的跨域校验不再适用。「URL 匹配测试」会告诉你当前走哪条通道。
+
+会跟系统代理或抓包工具冲突吗？
+不会。它只在浏览器内工作，不改系统代理设置，与公司 VPN 和 Charles 等抓包工具可以共存——改写发生在浏览器内部，外部工具看到的是改写后的请求。
+
+支持哪些匹配方式？
+三种：通配符（以 * 结尾）、前缀匹配和正则表达式。通配符和前缀规则由浏览器网络层直接处理，零脚本开销；正则和带改写、Mock、延迟、阻断、重试、请求头覆盖等高级能力的规则由扩展后台代发。
+
+规则有数量限制吗？
+最多 200 条规则、最近 500 条日志、请求体上限 10MB、延迟 0–60000 毫秒、Mock 与改写的状态码钳制在 200–599。
+
+数据会上传到服务器吗？
+不会。规则、日志与偏好全部保存在本机浏览器存储中，没有账号、没有埋点、不连接任何自有服务器，唯一的网络流量就是你自己要求代理的接口请求。
+
+支持哪些浏览器？
+需要较新版本的桌面 Google Chrome（Manifest V3），不支持 Firefox、Safari、Edge 或移动端浏览器。
 ```
 
 ### 1.2 English listing（本地化列表）
@@ -247,10 +274,37 @@ About your data:
 - The extension itself has zero remote dependencies: no remote scripts, no calls to any endpoint of ours, and its UI, rules and logs are all read from local storage (the API you proxy obviously still has to be reachable)
 - About the "change the data on websites you visit" permission: proxied requests happen on each developer's own internal domains, localhost and staging hosts, which cannot be enumerated in advance. The extension uses that permission for two things only — injecting the interceptor into pages you browse, and issuing requests on your behalf according to rules you created. Nothing is sent to any third party or to a developer-controlled server
 - Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
+- Product overview: https://liaolongdong.github.io/cross-origin-proxy/
 
 Limits: 200 rules, the last 500 log entries, 10 MB request body, delays of 0–60000 ms, and mocked or overridden status codes clamped to 200–599 so the page can always build a valid response. Requires a recent desktop Google Chrome (Manifest V3).
 
 Source code and issue tracker: https://github.com/liaolongdong/cross-origin-proxy
+
+FAQ:
+
+Does it require backend changes?
+No. Rules take effect entirely inside the browser. No backend code changes, no CORS headers to add, no redeployment needed.
+
+I added a rule but nothing changed — what do I check?
+In order: Is the global switch in the popup on? Is the rule itself enabled? Did you reload the page (sent requests are not rewritten retroactively)? Test the URL in the match tester — a higher-priority rule may be shadowing it. For regex, make sure the pattern covers the whole URL: the network layer replaces the entire URL while the background channel replaces only the matched part.
+
+The rule works but the console still says CORS?
+A URL-only rewrite is still a cross-origin request subject to same-origin policy — if the target does not allow your origin, it gets blocked. Add any override capability to that rule (a response header override is the cheapest) and it moves to the background channel, where the page's CORS check no longer applies. The URL match tester shows which channel a given address is currently taking.
+
+Does it conflict with system proxies or capture tools?
+No. It works only inside the browser and does not change system proxy settings. Company VPNs and capture tools like Charles keep working — the rewrite happens inside the browser, so external tools see the rewritten request.
+
+What matching modes are supported?
+Three: wildcard (ending with *), prefix match, and regular expression. Wildcard and prefix rules are handled by the browser's network layer with zero JavaScript overhead; regex and rules with advanced capabilities (override, mock, delay, block, retry, header override, query parameter injection) are handled by the extension's background.
+
+Are there limits on rules?
+Up to 200 rules, the last 500 log entries, 10 MB request body, delays of 0–60000 ms, and mocked or overridden status codes clamped to 200–599.
+
+Is any data uploaded to a server?
+No. Rules, logs and preferences are stored in your browser's local storage only. No accounts, no analytics, no remote endpoints. The only network traffic is the API traffic you ask it to proxy.
+
+Which browsers are supported?
+A recent desktop Google Chrome (Manifest V3) is required. Firefox, Safari, Edge and mobile browsers are not supported — the extension relies on Chrome-specific APIs.
 ```
 
 **Category**: Developer Tools
@@ -346,12 +400,13 @@ done
 
 ## 7. Developer Info
 
-| 字段           | 值                                                          | 说明                                                            |
-| -------------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
-| Publisher Name | Better                                                      | 与 `package.json` 的 `author.name` 一致                         |
-| Contact Email  | 924902324@qq.com                                            | 商店页面公开显示；Google 的整改通知发到这里，必须是能收信的邮箱 |
-| Support URL    | `https://github.com/liaolongdong/cross-origin-proxy/issues` |                                                                 |
-| Homepage URL   | `https://liaolongdong.github.io/cross-origin-proxy/`        |                                                                 |
+| 字段           | 值                                                                          | 说明                                                            |
+| -------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Publisher Name | Better                                                                      | 与 `package.json` 的 `author.name` 一致                         |
+| Contact Email  | 924902324@qq.com                                                            | 商店页面公开显示；Google 的整改通知发到这里，必须是能收信的邮箱 |
+| Support URL    | `https://github.com/liaolongdong/cross-origin-proxy/issues`                 |                                                                 |
+| Homepage URL   | `https://liaolongdong.github.io/cross-origin-proxy/`                        |                                                                 |
+| Store URL      | `https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg` |                                                                 |
 
 > 仓库已建立并公开（`liaolongdong/cross-origin-proxy`，2026-09-07）。剩下的一次性动作全部列在 [GITHUB.md](./GITHUB.md)：About 描述与 website、topics、社交预览图、**Pages 源切到 GitHub Actions**、私密漏洞报告入口。**确认 `privacy.html` 能打开后再提审。**
 >
@@ -361,9 +416,9 @@ done
 
 完整版本历史以 [CHANGELOG.md](./CHANGELOG.md) 为唯一事实源（发版链路会把它对应小节切成 GitHub Release 的说明）；本表只记**已向商店提审**的版本与状态。
 
-| Version | Date   | Changes                                                                                                                                               | Status |
-| ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1.0.0   | 待提交 | 首次提交：双通道代理（DNR + 后台）、请求/响应改写、Mock/延迟/阻断、方法与查询参数控制、WebSocket 转发、HAR/cURL 导入导出、环境快照、中英双语与 6 主题 | Draft  |
+| Version | Date       | Changes                                                                                                                                               | Status    |
+| ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 1.0.0   | 2026-09-18 | 首次提交：双通道代理（DNR + 后台）、请求/响应改写、Mock/延迟/阻断、方法与查询参数控制、WebSocket 转发、HAR/cURL 导入导出、环境快照、中英双语与 6 主题 | Published |
 
 > ⚠️ 第 1 节描述承诺了「关闭总开关时这层规则一并卸载」，而这条行为修复目前只记在 [CHANGELOG.md](./CHANGELOG.md) 的 `## [Unreleased]` 段（`1.0.0` 尚未打 tag）。首次提审的 zip 必须带上它——商店描述与包体行为不一致，既是拒审风险也是最容易吃差评的地方。上表的 Changes 列只描述条目范围，不代表 2026-09-07 那一节的功能清单。
 

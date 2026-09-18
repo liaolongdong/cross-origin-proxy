@@ -61,7 +61,9 @@
 ## Requirements / 运行要求
 
 - A recent desktop Google Chrome (Manifest V3). Edge works in practice (Chromium extensions) but is not a supported target; Firefox is not supported today because of `declarativeNetRequest` differences.
-- Chrome Web Store listing is in preparation and no tagged release has been published yet, so today the only install path is to build from source and load `.output/chrome-mv3`; once a tag exists, the Releases zip can be unzipped and loaded the same way. Chrome 应用商店上架准备中，且尚未发布任何 tag 版本：目前只能源码构建后加载 `.output/chrome-mv3`，有 tag 之后可直接解压加载 Releases 的 zip。
-- Build from source requires Node.js 20+ and pnpm 10: `pnpm install && pnpm build`, then load `.output/chrome-mv3` unpacked at `chrome://extensions`. Tagged releases are published automatically by GitHub Actions, including store submission once the store credentials are configured.
+- Install from Chrome Web Store: https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg
+- Or build from source with Node.js 20+ and pnpm 10: `pnpm install && pnpm build`, then load `.output/chrome-mv3` unpacked at `chrome://extensions`. Tagged releases are published automatically by GitHub Actions, including store submission once the store credentials are configured.
+- Chrome 应用商店已上架：https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg
+- 或从源码构建：Node.js 20+ 与 pnpm 10，执行 `pnpm install && pnpm build`，然后以「加载已解压的扩展程序」方式加载 `.output/chrome-mv3`。tag 版本由 GitHub Actions 自动发布，并在配置商店凭据后提交到商店。
 
 Last updated / 最后更新: 2026-09-18 (extension v1.0.0)
