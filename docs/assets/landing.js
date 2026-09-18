@@ -196,18 +196,25 @@
 
   /* ─────────────── 3. 导航当前区块高亮 ─────────────── */
 
-  const navLinks = all('.site-nav > a[href^="#"]');
+  /* 同一批锚点在页面上存在两簇：桌面横条 `.site-nav` 与 ≤760px 的汉堡面板
+     `.nav-menu-panel`。只查前者的话，窄屏下可见的那一簇永远拿不到 `aria-current`，
+     选中态等于没有——所以两簇一起收，按 id 存成「一个区块对应多份链接」。 */
+  const navLinks = all('.site-nav > a[href^="#"], .nav-menu-panel a[href^="#"]');
 
   if (navLinks.length && 'IntersectionObserver' in window) {
-    const linkById = new Map(navLinks.map(a => [a.getAttribute('href').slice(1), a]));
-    const sections = all('main section[id]').filter(section => linkById.has(section.id));
+    const linksById = new Map();
+    navLinks.forEach(a => {
+      const id = a.getAttribute('href').slice(1);
+      if (!linksById.has(id)) linksById.set(id, []);
+      linksById.get(id).push(a);
+    });
+    const sections = all('main section[id]').filter(section => linksById.has(section.id));
     const navObserver = new IntersectionObserver(
       entries => {
         entries.forEach(entry => {
           if (!entry.isIntersecting) return;
           navLinks.forEach(a => a.removeAttribute('aria-current'));
-          const link = linkById.get(entry.target.id);
-          if (link) link.setAttribute('aria-current', 'true');
+          (linksById.get(entry.target.id) || []).forEach(a => a.setAttribute('aria-current', 'true'));
         });
       },
       { rootMargin: '-72px 0px -62% 0px', threshold: 0 },

@@ -512,6 +512,18 @@ html.js .site-nav > a[aria-current]::after {
   background: var(--lp-primary-faint);
 }
 
+/* 当前区块。面板是纵向列表，桌面横条那根 `::after` 下划条在这里读不出来，
+   于是换一组读得出的信号：左侧 3px 主色竖条 + 软底 + 主色文字 + 加粗。
+   四个信号里只有底色是颜色依赖，灰度打印与色觉障碍下竖条和字重仍在。
+   前缀 `html.js` 是必需的：选中态由 `landing.js` 打 `aria-current`，
+   禁用 JavaScript 时没有任何链接会被标记，写在这里也就不会画出假的高亮。 */
+html.js .nav-menu-panel a[aria-current] {
+  font-weight: 600;
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-soft);
+  box-shadow: inset 3px 0 0 var(--lp-primary);
+}
+
 /* 面板里的跨页出口：与页内锚点用一条分隔线分开，行高与其余条目一致。 */
 .nav-menu-exits {
   margin-top: 6px;

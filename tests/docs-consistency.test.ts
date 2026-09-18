@@ -604,6 +604,81 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       }
     });
 
+    const SITE_ORIGIN = 'https://liaolongdong.github.io/cross-origin-proxy/';
+
+    /** 站内 `@id` → 它应当声明在哪一页；站点根即中文落地页。 */
+    const pageOfId = (id: string): string | null => {
+      if (!id.startsWith(SITE_ORIGIN)) return null;
+      const path = id.slice(SITE_ORIGIN.length).split('#')[0];
+      return path === '' ? 'index.html' : path;
+    };
+
+    /**
+     * 收集一页 JSON-LD 里「真正声明的 @id」（`@graph` 节点）与「仅作为引用出现的
+     * @id」（属性值位置上只带 `@id` 的对象，如 `isPartOf` / `about` / `author`）。
+     * 区分这两者的依据是位置而非字段数量：图节点在数组里，引用是属性的对象值。
+     */
+    const collectIds = (file: string): { declared: Set<string>; referenced: Set<string> } => {
+      const declared = new Set<string>();
+      const referenced = new Set<string>();
+      const isRefNode = (value: unknown): value is Record<string, unknown> =>
+        !!value && typeof value === 'object' && !Array.isArray(value);
+      const walk = (node: unknown, asReference: boolean): void => {
+        if (Array.isArray(node)) {
+          node.forEach(item => walk(item, asReference));
+          return;
+        }
+        if (!isRefNode(node)) return;
+        const id = node['@id'];
+        if (typeof id === 'string') (asReference ? referenced : declared).add(id);
+        for (const value of Object.values(node)) {
+          walk(value, isRefNode(value) && typeof value['@id'] === 'string');
+        }
+      };
+
+      const blocks = [...read(`docs/${file}`).matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+      for (const [, body] of blocks) walk(JSON.parse(body), false);
+      return { declared, referenced };
+    };
+
+    /**
+     * 实体之间的边现在会跨页指（对比页与隐私页的 `isPartOf` 指向首页的 `#website`，
+     * `Article.author` 指向首页的 `#author`）。锚点改名或漏声明节点时 Google 只会
+     * 静默丢掉那层关系，页面渲染毫无异常，所以逐页要求站内引用都能在目标页落地。
+     */
+    it('JSON-LD 里指向本站的 @id 引用都能在目标页找到声明的节点', () => {
+      const declaredByPage = new Map<string, Set<string>>(SITE_PAGES.map(file => [file, collectIds(file).declared]));
+
+      const dangling: string[] = [];
+      for (const file of SITE_PAGES) {
+        for (const ref of collectIds(file).referenced) {
+          const target = pageOfId(ref);
+          if (!target) continue;
+          if (!declaredByPage.get(target)?.has(ref)) dangling.push(`${file} → ${ref}`);
+        }
+      }
+      expect(dangling, `存在悬空的站内实体引用：${dangling.join('、')}`).toEqual([]);
+    });
+
+    /** 两份落地页是站点级实体唯一的声明处，缺一个就等于整张图没有根。 */
+    it.each(['index.html', 'en.html'])('%s 的 @graph 成对声明 WebSite 与 WebPage，且页面挂在站点上', file => {
+      const html = read(`docs/${file}`);
+      const graphTypes = new Set<string>();
+
+      for (const [, body] of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
+        const parsed = JSON.parse(body) as { '@graph'?: Array<{ '@type'?: unknown }> };
+        for (const node of parsed['@graph'] ?? []) {
+          if (typeof node['@type'] === 'string') graphTypes.add(node['@type']);
+        }
+      }
+
+      expect([...graphTypes], `${file} 缺少站点级实体`).toEqual(expect.arrayContaining(['WebSite', 'WebPage']));
+
+      const websiteId = file === 'index.html' ? `${SITE_ORIGIN}#website` : `${SITE_ORIGIN}en.html#website`;
+      const wiredToSite = new RegExp(`"isPartOf":\\s*\\{\\s*"@id":\\s*"${websiteId.replace(/[/.]/g, '\\$&')}"`);
+      expect(wiredToSite.test(html), `${file} 的 WebPage 未挂在本站的 WebSite 上`).toBe(true);
+    });
+
     /**
      * 统计条是页面读者看到的第一个数字，README 的能力清单是他真正会去核对的地方；
      * 两边各自数过一遍就已经错过一次（11 对 12），所以只允许它们引用同一个来源。
