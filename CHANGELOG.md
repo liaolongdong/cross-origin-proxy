@@ -6,6 +6,18 @@
 
 All user-visible changes are recorded here. Version numbers live in `package.json` only; add a `## [<new version>] - YYYY-MM-DD` section here when releasing, and the release workflow turns it into the GitHub Release notes.
 
+## [1.0.0] - 2026-09-19
+
+### Added
+
+- **跨域代理助手首发版本**：支持 FAT/UAT/PROD 等环境间请求转发、请求/响应改写、Mock、延迟、阻断与 WebSocket 代理
+
+### Changed
+
+- **初始发布**：包含所有核心功能与双语界面
+
+---
+
 ## [Unreleased]
 
 待发布的变更先记在这里，发版时整段提升为 `## [x.y.z] - YYYY-MM-DD`（未提升的小节不会进入 Release 说明）。
