@@ -1,36 +1,29 @@
 <div align="center">
 
-# Cross-Origin Proxy — CORS debugging & API environment switcher
+# Cross-Origin Proxy — CORS debugging, API environment switching & request Mock
 
 [简体中文](./README.md) | **English**
 
 **Point a FAT frontend at a UAT backend with one browser rule — no code changes, no backend CORS edits, no rebuild.**
 
-[![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/liaolongdong/cross-origin-proxy?label=Release&color=409eff)](https://github.com/liaolongdong/cross-origin-proxy/releases)
+[![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
+[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?logo=googlechrome&logoColor=white)](#-install)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
+[![Product site](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/en.html)
+[![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 
-<br/>
+<img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy options page: three rules — FAT to UAT wildcard rewrite, a mocked API and a blocked tracker — plus the global switch and search filters" width="100%" />
 
-<img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy rules overview" width="920" />
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
-&nbsp;
-[![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
-&nbsp;
-[![Release](https://img.shields.io/github/v/release/liaolongdong/cross-origin-proxy?style=for-the-badge&label=Release&color=409eff)](https://github.com/liaolongdong/cross-origin-proxy/releases)
-&nbsp;
-[![Product site](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?style=for-the-badge&label=Product%20site&logo=githubpages)](https://liaolongdong.github.io/cross-origin-proxy/en.html)
-&nbsp;
-[![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-&nbsp;
-[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#-install)
-&nbsp;
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](./CONTRIBUTING.md)
+**[📥 Install it](#-install) · [⚡ First rule in one minute](#first-rule-in-one-minute) · [🌐 Product site](https://liaolongdong.github.io/cross-origin-proxy/en.html) · [💬 Community](#-community--feedback)**
 
 > Your frontend runs against FAT, the fix you need only exists on UAT. Instead of editing a devServer proxy per project, hardcoding a token, or asking the backend to open CORS and redeploy, you add one rule in Chrome: match `https://fat-api.example.com/*`, target `https://uat-api.example.com`, done. The same rule set can also rewrite headers and responses, mock data, inject latency, block requests and forward WebSocket.
 
-> 🌐 **[Product site](https://liaolongdong.github.io/cross-origin-proxy/en.html)** ｜ ⚙️ Chrome Manifest V3 ｜ 🔒 Rules and logs stay on your machine ｜ 🧪 Vitest coverage of the proxy path ｜ 🎨 6 themes · bilingual UI
+> 🔒 Rules and logs stay on your machine — no telemetry, no backend of ours ｜ 🧪 Vitest coverage of the proxy path ｜ 🎨 6 themes · bilingual UI ｜ 📖 MIT licensed
 
-**Contents**: [Why this exists](#-why-this-exists) · [What makes it different](#-what-makes-it-different) · [How it compares](#-how-it-compares) · [Install](#-install) · [How it works](#-how-it-works) · [Features](#-features) · [Interface preview](#-interface-preview) · [Use cases](#-use-cases) · [FAQ](#-faq) · [Permissions](#-permissions) · [Community](#-community--feedback) · [Contributing](./CONTRIBUTING.md)
+**Contents**: [Why this exists](#-why-this-exists) · [Interface preview](#-interface-preview) · [Install](#-install) · [What makes it different](#-what-makes-it-different) · [How it compares](#-how-it-compares) · [How it works](#-how-it-works) · [Features](#-features) · [Use cases](#-use-cases) · [FAQ](#-faq) · [Permissions](#-permissions) · [Community](#-community--feedback) · [Contributing](./CONTRIBUTING.md)
 
 </div>
 
@@ -49,43 +42,46 @@ Cross-environment debugging normally costs one of three things: a backend change
 
 Built with [WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite, on Manifest V3.
 
-## ✨ What makes it different
+## 📸 Interface preview
 
-| Advantage                                        | What it means while you debug                                                                                                                                   |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ⚡ **Zero JavaScript on the fast path**          | Rules that only rewrite the URL compile to `declarativeNetRequest` redirects, so the browser's network stack does the work — no page-side hook runs per request |
-| 🌐 **Reads and rewrites HTTPS with no local CA** | It runs inside the browser: no certificate to install, no proxy port to point DevTools at, no system-wide setting                                               |
-| 📝 **Rewrites responses, not just destinations** | Status code, response headers, or single JSON fields by dot path (`data.token`), plus mock bodies chosen by URL / method / query conditions                     |
-| 🔌 **Covers WebSocket**                          | `ws://` and `wss://` connections are redirected by the same rule set that handles your HTTP calls                                                               |
-| 🔄 **Environments instead of one-off edits**     | Named profiles snapshot the entire rule set for FAT / UAT / PROD, and an auto-off countdown stops the proxy before you forget it is on                          |
-| 🔒 **Nothing leaves the machine**                | Rules, logs and profiles live in `chrome.storage.local`; no analytics, no telemetry, no account, no service of its own                                          |
-| 📖 **Open source and bilingual**                 | MIT licensed, and both the UI and the documentation ship in English and Chinese                                                                                 |
+The four screens map to the four everyday actions: **write a rule → check what it matches → see what actually happened → flip the switch**. Click any screenshot for the full-size image.
 
-**Who it fits**
+<table>
+  <tr>
+    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="Rule editor: matching, rewriting, mock, delay and block in one form" width="100%" /></a><br /><b>Rule editor</b> — matching / rewriting / header & response overrides / conditional mock / delay / block / retry in one form, with live conflict hints</td>
+    <td width="50%" align="center"><a href="./docs/assets/img/url-tester.jpg"><img src="./docs/assets/img/url-tester.jpg" alt="URL match tester: matched rule, rewritten URL and forwarding channel" width="100%" /></a><br /><b>URL match tester</b> — paste any URL to see the matched rule, rewrite result, forwarding channel and shadowed rules in real time</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/assets/img/request-log.jpg"><img src="./docs/assets/img/request-log.jpg" alt="Request log drawer: method, status, duration and hit stats" width="100%" /></a><br /><b>Request log</b> — last 500 entries, filterable, copy as cURL, HAR export, with per-channel hit statistics</td>
+    <td align="center"><a href="./docs/assets/img/popup.jpg"><img src="./docs/assets/img/popup.jpg" alt="Extension popup: global switch, today's requests and quick links" width="100%" /></a><br /><b>Popup</b> — global switch, today's requests, auto-off countdown, current-page hit preview and "create a rule for this page"</td>
+  </tr>
+</table>
 
-- 💻 **Frontend / client developers** — the page is on FAT and the fix is on UAT: one rule switches it, with no devServer change and no source change
-- 🧪 **Test engineers** — mock, latency, block and retry turn "wait for someone to seed data" into a rule you write yourself, so error branches stay reproducible
-- 🔧 **Full-stack / backend** — point a deployed frontend at the service on your laptop without asking for a domain or a CORS allow-list first
-- 🔁 **Anyone juggling environments** — named profiles swap the whole rule set between FAT / UAT / PRE / PROD instead of re-entering it every time
+<details>
+<summary>Deeper guides · Mock response · delay · block · response modification</summary>
 
-## 🆚 How it compares
+**Mock response** — toggle Mock Response in the rule form, set the status code (default 200), pick a Content-Type (JSON / text / HTML / XML) and paste the body. Useful when the backend API does not exist yet.
 
-⭐ marks this project. Each row states what a given approach can do out of the box, and matches the [comparison page](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html) in this repository.
+**Request delay** — toggle Request Delay and set milliseconds (0–60000). Useful for loading states, skeletons and timeout handling.
 
-| What you care about                                 | ⭐ **Cross-Origin Proxy** | Dev-server proxy | System capture proxy | API client            | Header-modifier extension |
-| --------------------------------------------------- | ------------------------- | ---------------- | -------------------- | --------------------- | ------------------------- |
-| Needs the backend or a gateway to change anything   | ✅ No                     | ⚠️ Often         | ✅ No                | ✅ No                 | ✅ No                     |
-| One rule covers every project in the browser        | ✅ Yes                    | ❌ Per project   | ✅ System-wide       | ❌ Only its own calls | ✅ Yes                    |
-| Rewrites responses (status, headers, JSON fields)   | ✅ Yes                    | ❌ No            | ✅ Yes               | ⚠️ Mock server        | ⚠️ Response headers only  |
-| Mock / latency / block / retry                      | ✅ Conditional mock too   | ❌ Extra plugin  | ✅ Yes               | ✅ Yes                | ⚠️ Usually mock only      |
-| Covers WebSocket                                    | ✅ Yes                    | ⚠️ Rare          | ✅ Yes               | ❌ No                 | ❌ No                     |
-| Reading HTTPS needs a local CA certificate          | ✅ Not needed             | ✅ Not needed    | ❌ Required          | ✅ Not needed         | ✅ Not needed             |
-| Covers non-browser traffic (apps, desktop, servers) | ❌ Browser pages only     | ❌ No            | ✅ Yes               | ⚠️ Its own requests   | ❌ No                     |
-| Works in CI without a browser                       | ❌ No                     | ✅ Yes           | ✅ Yes               | ✅ Yes (CLI runner)   | ❌ No                     |
+**Request blocking** — toggle Block Request. Matched requests receive a network error, which is how you test error handling and offline fallback behaviour.
 
-✅ works out of the box · ⚠️ possible with conditions or extra setup · ❌ that approach does not do it.
+**Response modification** — expand Response Overrides to set a status code, add or replace response headers, or replace specific JSON fields by dot-notation path (e.g. `data.token` → `"mock-token"`).
 
-**When it is the wrong tool**: traffic from a mobile app or a desktop process (use a system capture proxy), a configuration the whole team must review and share (put it in the repository as a dev-server proxy or app config), or an endpoint that does not exist yet and whose shape you still have to agree with the backend (the request in an API client is the shareable artefact). The six criteria with their reasoning are on the comparison page: [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html) · [中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html).
+</details>
+
+<details>
+<summary>Deeper guides · Drag-and-drop ordering · HAR · cURL · log detail viewer</summary>
+
+**Reordering** — drag the ⠿ handle on any row. The table shows rules in array order, and dragging updates both display order and priority values.
+
+**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, and imports a `.har` file to auto-create rules from recorded traffic (those rules arrive disabled until you enable them).
+
+**cURL import** — paste a cURL command into the Import cURL section (line continuations and single/double quotes supported) and press Parse & Create Rule. A wildcard rule is generated from the request origin with headers and body prefilled.
+
+**Log detail viewer** — click any log row for request URL, headers and body, response headers and text body (JSON auto-formatted; a binary response body is not stored), error details, and a Copy as cURL button that uses the original request URL.
+
+</details>
 
 ## 📥 Install
 
@@ -126,6 +122,44 @@ Either way, once it is installed: click the icon, turn on **Proxy Switch**, add 
    | Priority      | Lower number = matched first                                                             |
 
 4. Reload the page. Requests matching an enabled rule are proxied. A wildcard rewrite like this one runs in the network layer and therefore writes **no per-request log entry** — confirm it with the **URL match tester**, or with the DNR hit counts inside **Request Logs**.
+
+## ✨ What makes it different
+
+| Advantage                                        | What it means while you debug                                                                                                                                   |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⚡ **Zero JavaScript on the fast path**          | Rules that only rewrite the URL compile to `declarativeNetRequest` redirects, so the browser's network stack does the work — no page-side hook runs per request |
+| 🌐 **Reads and rewrites HTTPS with no local CA** | It runs inside the browser: no certificate to install, no proxy port to point DevTools at, no system-wide setting                                               |
+| 📝 **Rewrites responses, not just destinations** | Status code, response headers, or single JSON fields by dot path (`data.token`), plus mock bodies chosen by URL / method / query conditions                     |
+| 🔌 **Covers WebSocket**                          | `ws://` and `wss://` connections are redirected by the same rule set that handles your HTTP calls                                                               |
+| 🔄 **Environments instead of one-off edits**     | Named profiles snapshot the entire rule set for FAT / UAT / PROD, and an auto-off countdown stops the proxy before you forget it is on                          |
+| 🔒 **Nothing leaves the machine**                | Rules, logs and profiles live in `chrome.storage.local`; no analytics, no telemetry, no account, no service of its own                                          |
+| 📖 **Open source and bilingual**                 | MIT licensed, and both the UI and the documentation ship in English and Chinese                                                                                 |
+
+**Who it fits**
+
+- 💻 **Frontend / client developers** — the page is on FAT and the fix is on UAT: one rule switches it, with no devServer change and no source change
+- 🧪 **Test engineers** — mock, latency, block and retry turn "wait for someone to seed data" into a rule you write yourself, so error branches stay reproducible
+- 🔧 **Full-stack / backend** — point a deployed frontend at the service on your laptop without asking for a domain or a CORS allow-list first
+- 🔁 **Anyone juggling environments** — named profiles swap the whole rule set between FAT / UAT / PRE / PROD instead of re-entering it every time
+
+## 🆚 How it compares
+
+⭐ marks this project. Each row states what a given approach can do out of the box, and matches the [comparison page](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html) in this repository.
+
+| What you care about                                 | ⭐ **Cross-Origin Proxy** | Dev-server proxy | System capture proxy | API client            | Header-modifier extension |
+| --------------------------------------------------- | ------------------------- | ---------------- | -------------------- | --------------------- | ------------------------- |
+| Needs the backend or a gateway to change anything   | ✅ No                     | ⚠️ Often         | ✅ No                | ✅ No                 | ✅ No                     |
+| One rule covers every project in the browser        | ✅ Yes                    | ❌ Per project   | ✅ System-wide       | ❌ Only its own calls | ✅ Yes                    |
+| Rewrites responses (status, headers, JSON fields)   | ✅ Yes                    | ❌ No            | ✅ Yes               | ⚠️ Mock server        | ⚠️ Response headers only  |
+| Mock / latency / block / retry                      | ✅ Conditional mock too   | ❌ Extra plugin  | ✅ Yes               | ✅ Yes                | ⚠️ Usually mock only      |
+| Covers WebSocket                                    | ✅ Yes                    | ⚠️ Rare          | ✅ Yes               | ❌ No                 | ❌ No                     |
+| Reading HTTPS needs a local CA certificate          | ✅ Not needed             | ✅ Not needed    | ❌ Required          | ✅ Not needed         | ✅ Not needed             |
+| Covers non-browser traffic (apps, desktop, servers) | ❌ Browser pages only     | ❌ No            | ✅ Yes               | ⚠️ Its own requests   | ❌ No                     |
+| Works in CI without a browser                       | ❌ No                     | ✅ Yes           | ✅ Yes               | ✅ Yes (CLI runner)   | ❌ No                     |
+
+✅ works out of the box · ⚠️ possible with conditions or extra setup · ❌ that approach does not do it.
+
+**When it is the wrong tool**: traffic from a mobile app or a desktop process (use a system capture proxy), a configuration the whole team must review and share (put it in the repository as a dev-server proxy or app config), or an endpoint that does not exist yet and whose shape you still have to agree with the backend (the request in an API client is the shareable artefact). The six criteria with their reasoning are on the comparison page: [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html) · [中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html).
 
 ## 🧭 How it works
 
@@ -202,45 +236,6 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - Popup quick panel: global switch, today's request count (background channel only), recent requests, auto-off countdown, **current-page hit preview**, and "Create rule for this page" prefilled from the active tab
 - English / 简体中文 UI, six themes with light / dark / system modes
 - Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy (Chrome-level command), and on the options page <kbd>N</kbd> new rule, <kbd>/</kbd> or <kbd>⌘</kbd>+<kbd>F</kbd> focus search, <kbd>Esc</kbd> close the topmost dialog. <kbd>N</kbd> is a bare key, like Gmail — <kbd>⌘</kbd>+<kbd>N</kbd> is reserved by the browser and cannot be captured.
-
-## 📸 Interface preview
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="./docs/assets/img/rule-editor.jpg" alt="Rule editor: matching, rewriting, mock, delay and block in one form" width="100%" /><br /><b>Rule editor</b> — matching / rewriting / header & response overrides / conditional mock / delay / block / retry in one form, with live conflict hints</td>
-    <td width="50%" align="center"><img src="./docs/assets/img/url-tester.jpg" alt="URL match tester: matched rule, rewritten URL and forwarding channel" width="100%" /><br /><b>URL match tester</b> — paste any URL to see the matched rule, rewrite result, forwarding channel and shadowed rules in real time</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="./docs/assets/img/request-log.jpg" alt="Request log drawer: method, status, duration and hit stats" width="100%" /><br /><b>Request log</b> — last 500 entries, filterable, copy as cURL, HAR export, with per-channel hit statistics</td>
-    <td align="center"><img src="./docs/assets/img/popup.jpg" alt="Extension popup: global switch, today's requests and quick links" width="100%" /><br /><b>Popup</b> — global switch, today's requests, auto-off countdown, current-page hit preview and "create a rule for this page"</td>
-  </tr>
-</table>
-
-<details>
-<summary>Deeper guides · Mock response · delay · block · response modification</summary>
-
-**Mock response** — toggle Mock Response in the rule form, set the status code (default 200), pick a Content-Type (JSON / text / HTML / XML) and paste the body. Useful when the backend API does not exist yet.
-
-**Request delay** — toggle Request Delay and set milliseconds (0–60000). Useful for loading states, skeletons and timeout handling.
-
-**Request blocking** — toggle Block Request. Matched requests receive a network error, which is how you test error handling and offline fallback behaviour.
-
-**Response modification** — expand Response Overrides to set a status code, add or replace response headers, or replace specific JSON fields by dot-notation path (e.g. `data.token` → `"mock-token"`).
-
-</details>
-
-<details>
-<summary>Deeper guides · Drag-and-drop ordering · HAR · cURL · log detail viewer</summary>
-
-**Reordering** — drag the ⠿ handle on any row. The table shows rules in array order, and dragging updates both display order and priority values.
-
-**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, and imports a `.har` file to auto-create rules from recorded traffic (those rules arrive disabled until you enable them).
-
-**cURL import** — paste a cURL command into the Import cURL section (line continuations and single/double quotes supported) and press Parse & Create Rule. A wildcard rule is generated from the request origin with headers and body prefilled.
-
-**Log detail viewer** — click any log row for request URL, headers and body, response headers and text body (JSON auto-formatted; a binary response body is not stored), error details, and a Copy as cURL button that uses the original request URL.
-
-</details>
 
 ## 🚀 Use cases
 

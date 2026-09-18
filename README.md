@@ -6,31 +6,24 @@
 
 **一条浏览器规则，把 FAT 前端指到 UAT 后端——不改代码、不改后端 CORS、不用重新构建。**
 
-[![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=for-the-badge&logo=github&label=%E2%AD%90%20Star%20this%20repo&color=yellow)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/liaolongdong/cross-origin-proxy?label=Release&color=409eff)](https://github.com/liaolongdong/cross-origin-proxy/releases)
+[![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
+[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?logo=googlechrome&logoColor=white)](#-安装)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
+[![产品站](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/)
+[![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 
-<br/>
+<img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手配置页规则总览：FAT → UAT 通配符重写、Mock API、阻断埋点三条规则，顶部代理总开关与搜索筛选" width="100%" />
 
-<img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手规则总览" width="920" />
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
-&nbsp;
-[![CI](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/ci.yml?style=for-the-badge&label=CI&logo=github)](https://github.com/liaolongdong/cross-origin-proxy/actions/workflows/ci.yml)
-&nbsp;
-[![Release](https://img.shields.io/github/v/release/liaolongdong/cross-origin-proxy?style=for-the-badge&label=Release&color=409eff)](https://github.com/liaolongdong/cross-origin-proxy/releases)
-&nbsp;
-[![产品站](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?style=for-the-badge&label=Product%20site&logo=githubpages)](https://liaolongdong.github.io/cross-origin-proxy/)
-&nbsp;
-[![Manifest V3](https://img.shields.io/badge/Manifest-V3-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-&nbsp;
-[![Chrome](https://img.shields.io/badge/Chrome-110%2B-409eff?style=for-the-badge&logo=googlechrome&logoColor=white)](#-安装)
-&nbsp;
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](./CONTRIBUTING.md)
+**[📥 立即安装](#-安装) · [⚡ 一分钟配出第一条规则](#一分钟配出第一条规则) · [🌐 产品站](https://liaolongdong.github.io/cross-origin-proxy/) · [💬 交流群](#-交流与反馈)**
 
 > 页面连着 FAT，你要的修复只在 UAT。传统做法要么改每个项目的 devServer 代理、要么硬塞一个 token、要么请后端放开 CORS 再发一次版。这里只需要在 Chrome 里加一条规则：匹配 `https://fat-api.example.com/*`，目标 `https://uat-api.example.com`。同一套规则还能改写请求头与响应、Mock 数据、注入延迟、阻断请求、转发 WebSocket。
 
-> 🌐 **[产品站](https://liaolongdong.github.io/cross-origin-proxy/)** ｜ ⚙️ Chrome Manifest V3 ｜ 🔒 规则与日志只存本机 ｜ 🧪 Vitest 单测覆盖代理与改写链路 ｜ 🎨 6 套主题 · 中英双语
+> 🔒 规则与日志只存本机，无遥测、无自有服务 ｜ 🧪 代理与改写链路有 Vitest 单测覆盖 ｜ 🎨 6 套主题 · 中英双语 ｜ 📖 MIT 开源
 
-**目录**：[它解决的是什么](#-它解决的是什么) · [核心优势](#-核心优势) · [横向对比](#-横向对比) · [安装](#-安装) · [工作原理](#-工作原理) · [功能](#-功能) · [界面预览](#-界面预览) · [使用场景](#-使用场景) · [常见问题](#-常见问题) · [权限](#-权限) · [交流与反馈](#-交流与反馈) · [参与贡献](./CONTRIBUTING.md)
+**目录**：[它解决的是什么](#-它解决的是什么) · [界面预览](#-界面预览) · [安装](#-安装) · [核心优势](#-核心优势) · [横向对比](#-横向对比) · [工作原理](#-工作原理) · [功能](#-功能) · [使用场景](#-使用场景) · [常见问题](#-常见问题) · [权限](#-权限) · [交流与反馈](#-交流与反馈) · [参与贡献](./CONTRIBUTING.md)
 
 </div>
 
@@ -49,43 +42,46 @@
 
 技术栈：[WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite，Manifest V3。
 
-## ✨ 核心优势
+## 📸 界面预览
 
-| 优势                              | 联调时意味着什么                                                                                                |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| ⚡ **快通道上零 JS**              | 只重写 URL 的规则编译成 `declarativeNetRequest` 重定向，由浏览器网络栈完成转发，每个请求不会跑一段页面侧钩子    |
-| 🌐 **不装本地 CA 也能改写 HTTPS** | 它运行在浏览器内部：不必安装证书、不必把 DevTools 指到某个代理端口、不动系统级设置                              |
-| 📝 **改写的是响应，不只是目的地** | 状态码、响应头，或按点分路径替换单个 JSON 字段（`data.token`）；Mock 还能按 URL / 方法 / 查询参数条件挑选响应体 |
-| 🔌 **覆盖 WebSocket**             | `ws://` 与 `wss://` 长连接用同一套规则重写，不必另配                                                            |
-| 🔄 **管的是环境，不是一次性改动** | 环境配置快照把整套规则存成命名快照，在 FAT / UAT / PROD 间一键切换；自动关闭倒计时在你忘记之前把代理关掉        |
-| 🔒 **数据不出本机**               | 规则、日志与环境配置全部留在 `chrome.storage.local`：无统计埋点、无遥测、无账号、也没有自有服务端               |
-| 📖 **开源且双语**                 | MIT 协议，界面与文档同时提供中英文两版                                                                          |
+四张图对应四种日常动作：**建规则 → 先验证会不会命中 → 看请求实际发生了什么 → 快捷开关**。点图可看原图。
 
-**适合谁**
+<table>
+  <tr>
+    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="规则编辑弹窗：匹配、重写、Mock、延迟、阻断一处配齐" width="100%" /></a><br /><b>规则编辑器</b>——匹配 / 重写 / 请求头与响应覆盖 / 条件化 Mock / 延迟 / 阻断 / 重试，一个表单配齐，带实时冲突提示</td>
+    <td width="50%" align="center"><a href="./docs/assets/img/url-tester.jpg"><img src="./docs/assets/img/url-tester.jpg" alt="URL 匹配预演：命中规则、重写后地址与转发通道" width="100%" /></a><br /><b>URL 匹配预演</b>——粘贴任意地址，实时查看命中规则、重写结果、转发通道与被遮蔽规则</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="./docs/assets/img/request-log.jpg"><img src="./docs/assets/img/request-log.jpg" alt="请求日志抽屉：方法、状态、耗时与命中统计" width="100%" /></a><br /><b>请求日志</b>——最近 500 条，可筛选、复制为 cURL、导出 HAR，含两条通道各自的命中统计</td>
+    <td align="center"><a href="./docs/assets/img/popup.jpg"><img src="./docs/assets/img/popup.jpg" alt="扩展弹窗：总开关、今日请求与快捷入口" width="100%" /></a><br /><b>弹窗</b>——总开关、今日请求、自动关闭倒计时、当前页命中预演与「为本页创建规则」</td>
+  </tr>
+</table>
 
-- 💻 **前端 / 客户端开发** — 页面停在 FAT，修复在 UAT：一条规则切过去，不动 devServer、不动源码
-- 🧪 **测试工程师** — Mock、延迟、阻断、重试把「等后端造数据」变成自己配一条规则，异常分支也能稳定复现
-- 🔧 **全栈 / 后端** — 本地服务起来后，让已部署的前端直接调你这台机器，不必先申请域名与 CORS 白名单
-- 🔁 **多环境切换频繁的人** — 命名快照在 FAT / UAT / PRE / PROD 间一键换，不用每次重填一遍规则
+<details>
+<summary>更多操作细节 · Mock 响应 · 延迟 · 阻断 · 响应改写</summary>
 
-## 🆚 横向对比
+**Mock 响应**——在规则表单里打开 Mock Response，设置状态码（默认 200），选择 Content-Type（JSON / 文本 / HTML / XML），粘贴响应内容。后端接口还没就绪时最实用。
 
-⭐ 为本项目。各行结论取自各方案的公开能力，与本仓库[方案对比页](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html)一致。
+**请求延迟**——打开 Request Delay，设置毫秒数（0–60000），用来验证加载态、骨架屏与超时处理。
 
-| 关心的事                                       | ⭐ **跨域代理助手** | Dev Server 代理 | 系统级抓包代理 | API 客户端          | 改请求头的扩展   |
-| ---------------------------------------------- | ------------------- | --------------- | -------------- | ------------------- | ---------------- |
-| 需要后端 / 网关配合改动                        | ✅ 不需要           | ⚠️ 常需要       | ✅ 不需要      | ✅ 不需要           | ✅ 不需要        |
-| 一次配置对浏览器里所有项目生效                 | ✅ 是               | ❌ 每个项目一份 | ✅ 系统级      | ❌ 只发自己的请求   | ✅ 是            |
-| 改写响应（状态码 / 响应头 / JSON 字段）        | ✅ 是               | ❌ 否           | ✅ 是          | ⚠️ Mock 服务        | ⚠️ 仅响应头      |
-| Mock / 延迟 / 阻断 / 重试                      | ✅ 含条件化 Mock    | ❌ 需额外插件   | ✅ 是          | ✅ 是               | ⚠️ 通常只有 Mock |
-| 覆盖 WebSocket                                 | ✅ 是               | ⚠️ 少见         | ✅ 是          | ❌ 否               | ❌ 否            |
-| 读取 HTTPS 需要装本机 CA 证书                  | ✅ 不需要           | ✅ 不需要       | ❌ 需要        | ✅ 不需要           | ✅ 不需要        |
-| 覆盖非浏览器流量（手机 App、桌面、服务端进程） | ❌ 只在浏览器内     | ❌ 否           | ✅ 能          | ⚠️ 只覆盖它自己发的 | ❌ 否            |
-| 无需浏览器即可在 CI 里跑                       | ❌ 否               | ✅ 是           | ✅ 是          | ✅ 是（CLI runner） | ❌ 否            |
+**请求阻断**——打开 Block Request。命中请求直接收到网络错误，这就是验证异常处理与离线兜底的方式。
 
-✅ 开箱即用 · ⚠️ 有条件或需额外配置 · ❌ 该方案做不到。
+**响应改写**——展开 Response Overrides，可设置状态码、新增或覆盖响应头，或按点分路径替换指定 JSON 字段（如 `data.token` → `"mock-token"`）。
 
-**什么时候别用它**：需要覆盖手机 App 或桌面程序的流量（走系统级抓包代理）、需要一份能被 review 且全团队共用的配置（写进仓库的 devServer 代理或应用配置）、接口本身还不存在且需要先跟后端约定形状（API 客户端里那份请求才是可分享的产物）。六条判据与理由在对比页写全了：[中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html) · [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html)。
+</details>
+
+<details>
+<summary>更多操作细节 · 拖拽排序 · HAR · cURL · 日志详情</summary>
+
+**拖拽排序**——拖动任意行的 ⠿ 手柄。表格按数组顺序展示，拖拽会同时更新展示顺序与优先级数值。
+
+**HAR**——导入导出对话框里「导出 HAR」会把后台通道抓到的请求下载为 `.har`；「导入 HAR」会依据录制条目自动创建代理规则（新规则默认停用，确认后自行启用）。
+
+**cURL 导入**——把 cURL 命令粘贴到「导入 cURL」区域（支持续行符与单双引号），点「解析并创建规则」。扩展会根据请求来源生成通配规则，并把请求头与请求体预填到改写区，确认后保存即生效。
+
+**日志详情**——点击任意日志行展开详情：请求 URL、请求头、请求体、响应头与文本响应体（JSON 自动格式化；二进制响应体不落盘）、错误信息，以及「复制为 cURL」按钮（按原始请求地址生成）。
+
+</details>
 
 ## 📥 安装
 
@@ -126,6 +122,44 @@ pnpm build
    | 优先级   | 数值越小越先匹配                                              |
 
 4. 刷新页面。命中已启用规则的请求会被代理。但像上面这种通配符重写走的是网络层，**不会留下逐条请求日志**——请用 **URL 匹配预演**，或到**请求日志**里看 DNR 命中统计来确认。
+
+## ✨ 核心优势
+
+| 优势                              | 联调时意味着什么                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| ⚡ **快通道上零 JS**              | 只重写 URL 的规则编译成 `declarativeNetRequest` 重定向，由浏览器网络栈完成转发，每个请求不会跑一段页面侧钩子    |
+| 🌐 **不装本地 CA 也能改写 HTTPS** | 它运行在浏览器内部：不必安装证书、不必把 DevTools 指到某个代理端口、不动系统级设置                              |
+| 📝 **改写的是响应，不只是目的地** | 状态码、响应头，或按点分路径替换单个 JSON 字段（`data.token`）；Mock 还能按 URL / 方法 / 查询参数条件挑选响应体 |
+| 🔌 **覆盖 WebSocket**             | `ws://` 与 `wss://` 长连接用同一套规则重写，不必另配                                                            |
+| 🔄 **管的是环境，不是一次性改动** | 环境配置快照把整套规则存成命名快照，在 FAT / UAT / PROD 间一键切换；自动关闭倒计时在你忘记之前把代理关掉        |
+| 🔒 **数据不出本机**               | 规则、日志与环境配置全部留在 `chrome.storage.local`：无统计埋点、无遥测、无账号、也没有自有服务端               |
+| 📖 **开源且双语**                 | MIT 协议，界面与文档同时提供中英文两版                                                                          |
+
+**适合谁**
+
+- 💻 **前端 / 客户端开发** — 页面停在 FAT，修复在 UAT：一条规则切过去，不动 devServer、不动源码
+- 🧪 **测试工程师** — Mock、延迟、阻断、重试把「等后端造数据」变成自己配一条规则，异常分支也能稳定复现
+- 🔧 **全栈 / 后端** — 本地服务起来后，让已部署的前端直接调你这台机器，不必先申请域名与 CORS 白名单
+- 🔁 **多环境切换频繁的人** — 命名快照在 FAT / UAT / PRE / PROD 间一键换，不用每次重填一遍规则
+
+## 🆚 横向对比
+
+⭐ 为本项目。各行结论取自各方案的公开能力，与本仓库[方案对比页](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html)一致。
+
+| 关心的事                                       | ⭐ **跨域代理助手** | Dev Server 代理 | 系统级抓包代理 | API 客户端          | 改请求头的扩展   |
+| ---------------------------------------------- | ------------------- | --------------- | -------------- | ------------------- | ---------------- |
+| 需要后端 / 网关配合改动                        | ✅ 不需要           | ⚠️ 常需要       | ✅ 不需要      | ✅ 不需要           | ✅ 不需要        |
+| 一次配置对浏览器里所有项目生效                 | ✅ 是               | ❌ 每个项目一份 | ✅ 系统级      | ❌ 只发自己的请求   | ✅ 是            |
+| 改写响应（状态码 / 响应头 / JSON 字段）        | ✅ 是               | ❌ 否           | ✅ 是          | ⚠️ Mock 服务        | ⚠️ 仅响应头      |
+| Mock / 延迟 / 阻断 / 重试                      | ✅ 含条件化 Mock    | ❌ 需额外插件   | ✅ 是          | ✅ 是               | ⚠️ 通常只有 Mock |
+| 覆盖 WebSocket                                 | ✅ 是               | ⚠️ 少见         | ✅ 是          | ❌ 否               | ❌ 否            |
+| 读取 HTTPS 需要装本机 CA 证书                  | ✅ 不需要           | ✅ 不需要       | ❌ 需要        | ✅ 不需要           | ✅ 不需要        |
+| 覆盖非浏览器流量（手机 App、桌面、服务端进程） | ❌ 只在浏览器内     | ❌ 否           | ✅ 能          | ⚠️ 只覆盖它自己发的 | ❌ 否            |
+| 无需浏览器即可在 CI 里跑                       | ❌ 否               | ✅ 是           | ✅ 是          | ✅ 是（CLI runner） | ❌ 否            |
+
+✅ 开箱即用 · ⚠️ 有条件或需额外配置 · ❌ 该方案做不到。
+
+**什么时候别用它**：需要覆盖手机 App 或桌面程序的流量（走系统级抓包代理）、需要一份能被 review 且全团队共用的配置（写进仓库的 devServer 代理或应用配置）、接口本身还不存在且需要先跟后端约定形状（API 客户端里那份请求才是可分享的产物）。六条判据与理由在对比页写全了：[中文](https://liaolongdong.github.io/cross-origin-proxy/alternatives.html) · [English](https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html)。
 
 ## 🧭 工作原理
 
@@ -202,45 +236,6 @@ flowchart TD
 - 弹窗快捷面板：总开关、今日请求数（只统计后台通道）、最近请求、自动关闭倒计时、**当前页面命中预演**，以及按当前标签页预填的「为本页创建规则」
 - 中英文界面，6 套主题 + 浅色 / 深色 / 跟随系统
 - 快捷键：<kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> 切换代理（Chrome 级命令）；配置页内 <kbd>N</kbd> 新建规则、<kbd>/</kbd> 或 <kbd>⌘</kbd>+<kbd>F</kbd> 聚焦搜索、<kbd>Esc</kbd> 关闭最上层弹窗。<kbd>N</kbd> 是单键（同 Gmail 风格），因为 <kbd>⌘</kbd>+<kbd>N</kbd> 被浏览器保留、页面捕获不到
-
-## 📸 界面预览
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="./docs/assets/img/rule-editor.jpg" alt="规则编辑弹窗：匹配、重写、Mock、延迟、阻断一处配齐" width="100%" /><br /><b>规则编辑器</b>——匹配 / 重写 / 请求头与响应覆盖 / 条件化 Mock / 延迟 / 阻断 / 重试，一个表单配齐，带实时冲突提示</td>
-    <td width="50%" align="center"><img src="./docs/assets/img/url-tester.jpg" alt="URL 匹配预演：命中规则、重写后地址与转发通道" width="100%" /><br /><b>URL 匹配预演</b>——粘贴任意地址，实时查看命中规则、重写结果、转发通道与被遮蔽规则</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="./docs/assets/img/request-log.jpg" alt="请求日志抽屉：方法、状态、耗时与命中统计" width="100%" /><br /><b>请求日志</b>——最近 500 条，可筛选、复制为 cURL、导出 HAR，含两条通道各自的命中统计</td>
-    <td align="center"><img src="./docs/assets/img/popup.jpg" alt="扩展弹窗：总开关、今日请求与快捷入口" width="100%" /><br /><b>弹窗</b>——总开关、今日请求、自动关闭倒计时、当前页命中预演与「为本页创建规则」</td>
-  </tr>
-</table>
-
-<details>
-<summary>更多操作细节 · Mock 响应 · 延迟 · 阻断 · 响应改写</summary>
-
-**Mock 响应**——在规则表单里打开 Mock Response，设置状态码（默认 200），选择 Content-Type（JSON / 文本 / HTML / XML），粘贴响应内容。后端接口还没就绪时最实用。
-
-**请求延迟**——打开 Request Delay，设置毫秒数（0–60000），用来验证加载态、骨架屏与超时处理。
-
-**请求阻断**——打开 Block Request。命中请求直接收到网络错误，这就是验证异常处理与离线兜底的方式。
-
-**响应改写**——展开 Response Overrides，可设置状态码、新增或覆盖响应头，或按点分路径替换指定 JSON 字段（如 `data.token` → `"mock-token"`）。
-
-</details>
-
-<details>
-<summary>更多操作细节 · 拖拽排序 · HAR · cURL · 日志详情</summary>
-
-**拖拽排序**——拖动任意行的 ⠿ 手柄。表格按数组顺序展示，拖拽会同时更新展示顺序与优先级数值。
-
-**HAR**——导入导出对话框里「导出 HAR」会把后台通道抓到的请求下载为 `.har`；「导入 HAR」会依据录制条目自动创建代理规则（新规则默认停用，确认后自行启用）。
-
-**cURL 导入**——把 cURL 命令粘贴到「导入 cURL」区域（支持续行符与单双引号），点「解析并创建规则」。扩展会根据请求来源生成通配规则，并把请求头与请求体预填到改写区，确认后保存即生效。
-
-**日志详情**——点击任意日志行展开详情：请求 URL、请求头、请求体、响应头与文本响应体（JSON 自动格式化；二进制响应体不落盘）、错误信息，以及「复制为 cURL」按钮（按原始请求地址生成）。
-
-</details>
 
 ## 🚀 使用场景
 
