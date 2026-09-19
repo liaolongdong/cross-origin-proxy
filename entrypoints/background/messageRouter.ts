@@ -123,9 +123,17 @@ async function handleImportConfig(
 }
 
 /**
- * 判断消息来源是否为扩展内部页面（用于拦截外部页面的伪造写入请求）
+ * 判断消息发送上下文是否为本扩展自己的页面（popup / options / SW 自身）
+ *
+ * 只看 `sender.url`，而它由 Chrome 写入、页面伪造不了——这道 gate 挡的不是「伪造来源」，
+ * 而是来自非扩展上下文的状态修改请求：内容脚本的 `sender.url` 就是被注入页面的 URL，
+ * 与外部页面同列，所以桥接层（`entrypoints/content.ts`）只转发只读配置与 `PROXY_REQUEST`。
+ * 页面侧能让扩展代发哪些请求，判据要在桥接层与规则匹配处收紧，不靠往这些类型上加 gate。
+ *
+ * @param sender - 消息发送者的上下文信息
+ * @returns 如果是扩展内部页面返回 true，否则返回 false
  */
-function isTrustedSender(sender: chrome.runtime.MessageSender): boolean {
+export function isTrustedSender(sender: chrome.runtime.MessageSender): boolean {
   if (!sender.url) return false;
   const extensionUrl = chrome.runtime.getURL('');
   return sender.url.startsWith(extensionUrl);

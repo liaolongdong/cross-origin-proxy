@@ -6,12 +6,12 @@
 
 在 **GitHub Repository Settings → Secrets and variables → Actions** 中添加以下 4 个 Secret：
 
-| Secret 名称 | 用途 | 获取方式 |
-|------------|------|----------|
-| `CHROME_EXTENSION_ID` | Chrome Web Store 扩展 ID（32 位 a-p 小写字母） | 首次手动上传到 CWS Dashboard 后获得 |
-| `CHROME_CLIENT_ID` | Google OAuth 客户端 ID | Google Cloud Console 创建 OAuth 凭据时获得 |
-| `CHROME_CLIENT_SECRET` | Google OAuth 客户端密钥 | 同上 |
-| `CHROME_REFRESH_TOKEN` | OAuth Refresh Token | 通过 OAuth Playground 授权获得 |
+| Secret 名称            | 用途                                           | 获取方式                                   |
+| ---------------------- | ---------------------------------------------- | ------------------------------------------ |
+| `CHROME_EXTENSION_ID`  | Chrome Web Store 扩展 ID（32 位 a-p 小写字母） | 首次手动上传到 CWS Dashboard 后获得        |
+| `CHROME_CLIENT_ID`     | Google OAuth 客户端 ID                         | Google Cloud Console 创建 OAuth 凭据时获得 |
+| `CHROME_CLIENT_SECRET` | Google OAuth 客户端密钥                        | 同上                                       |
+| `CHROME_REFRESH_TOKEN` | OAuth Refresh Token                            | 通过 OAuth Playground 授权获得             |
 
 ---
 
@@ -29,7 +29,7 @@
 
 ```bash
 1. 导航到 "OAuth 同意屏幕"
-2. 选择 "External" 
+2. 选择 "External"
 3. 填写应用名称、用户支持邮箱、开发者联系邮箱
 4. 将您的测试邮箱添加到 Test users
 ```
@@ -74,11 +74,11 @@ https://accounts.google.com/o/oauth2/auth?
 
 ## 3️⃣ 不同插件的发布流程对比
 
-| 插件 | 版本管理 | 触发方式 | 上传工具 |
-|------|---------|---------|---------|
-| **transfer-any-file** | 手动 tag | `v1.0.0` tag 推送 | `wxt-publish-extension` CLI |
+| 插件                        | 版本管理       | 触发方式             | 上传工具                                 |
+| --------------------------- | -------------- | -------------------- | ---------------------------------------- |
+| **transfer-any-file**       | 手动 tag       | `v1.0.0` tag 推送    | `wxt-publish-extension` CLI              |
 | **account-password-helper** | Release Please | Conventional Commits | `mnao305/chrome-extension-upload` action |
-| **cross-origin-proxy** ✨ | Release Please | Conventional Commits | `wxt submit` CLI |
+| **cross-origin-proxy** ✨   | Release Please | Conventional Commits | `wxt submit` CLI                         |
 
 ---
 
@@ -169,13 +169,13 @@ In Production 模式：长期有效（需 Google 审核）
 
 ## 🔧 故障排查
 
-| 问题 | 可能原因 | 解决方案 |
-|------|---------|---------|
-| `invalid_grant` / 401 | Refresh token 过期 | 重新获取 refresh_token |
-| `The requested profile could not be found` | Extension ID 错误或账号不匹配 | 检查 ID 格式，确认账号权限 |
-| CI 失败 | 代码检查未通过 | 运行 `pnpm lint` / `pnpm test` / `pnpm build` |
-| 商店版本未更新 | 只上传未提审 | 检查 `skip-review` 是否勾选 |
-| 标签与版本不一致 | Tag 与 package.json 不匹配 | 先改版本号再打 tag |
+| 问题                                       | 可能原因                      | 解决方案                                      |
+| ------------------------------------------ | ----------------------------- | --------------------------------------------- |
+| `invalid_grant` / 401                      | Refresh token 过期            | 重新获取 refresh_token                        |
+| `The requested profile could not be found` | Extension ID 错误或账号不匹配 | 检查 ID 格式，确认账号权限                    |
+| CI 失败                                    | 代码检查未通过                | 运行 `pnpm lint` / `pnpm test` / `pnpm build` |
+| 商店版本未更新                             | 只上传未提审                  | 检查 `skip-review` 是否勾选                   |
+| 标签与版本不一致                           | Tag 与 package.json 不匹配    | 先改版本号再打 tag                            |
 
 ---
 

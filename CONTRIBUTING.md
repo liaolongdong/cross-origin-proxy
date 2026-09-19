@@ -40,7 +40,7 @@ pnpm assets       # regenerate store + landing images from screenshots/
 
 Load `.output/chrome-mv3` unpacked at `chrome://extensions` to try it. Run `pnpm assets` (and `pnpm assets:en` for the English store captions) only when you want to regenerate the store and landing-page images from `screenshots/`. Two commands matter only when releasing: `pnpm exec wxt submit --dry-run` (check store credentials without uploading) and `pnpm build:zip` (what the release workflow publishes) — see [RELEASING.md](./RELEASING.md).
 
-CI runs lint, typecheck, stylelint, Prettier and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./GITHUB.md).
+CI runs lint, stylelint, Prettier, typecheck, a production build and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./GITHUB.md).
 
 ## Repository layout
 
