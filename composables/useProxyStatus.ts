@@ -8,7 +8,7 @@ export function useProxyStatus() {
   const { t } = useI18n();
   const enabled = ref(false);
   const activeRuleCount = ref(0);
-  const todayRequestCount = ref(0);
+  const swRequestCount = ref(0);
   const recentLogs = ref<RequestLogEntry[]>([]);
   const rules = ref<{ id: string; name: string; enabled: boolean }[]>([]);
   const loading = ref(true);
@@ -25,7 +25,7 @@ export function useProxyStatus() {
       if (!status || typeof status.enabled !== 'boolean') return;
       enabled.value = status.enabled;
       activeRuleCount.value = status.activeRuleCount;
-      todayRequestCount.value = status.todayRequestCount;
+      swRequestCount.value = status.swRequestCount;
       recentLogs.value = Array.isArray(status.recentLogs) ? status.recentLogs : [];
       rules.value = status.rules ?? [];
       autoOffAt.value = typeof status.autoOffAt === 'number' ? status.autoOffAt : undefined;
@@ -79,7 +79,7 @@ export function useProxyStatus() {
   return {
     enabled,
     activeRuleCount,
-    todayRequestCount,
+    swRequestCount,
     recentLogs,
     rules,
     loading,

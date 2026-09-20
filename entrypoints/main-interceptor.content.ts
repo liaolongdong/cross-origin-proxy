@@ -242,6 +242,31 @@ export default defineContentScript({
       return (rule.delayMs || 0) + 30000 * (retries + 1) + (rule.retryDelay ?? 1000) * retries + 5000;
     }
 
+    /**
+     * 逐条剔掉无法作为 ByteString 交给 `new Headers()` 的响应头。
+     *
+     * 与 `utils/proxyResponse.ts` 的 `toStringRecord` 同源且必须保持一致（本 world
+     * 自包含，无法 import）：规则里手写的中文响应头只过头名字符集与 CR/LF，
+     * 值的码点没人管，而 `new Headers()` 抛出点在 resolve 回调里 = 页面永久 pending。
+     */
+    function toByteStringHeaders(raw: unknown): Record<string, string> {
+      const safe: Record<string, string> = {};
+      if (!raw || typeof raw !== 'object') return safe;
+      for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof value !== 'string') continue;
+        if (/[\r\n]/.test(name) || /[\r\n]/.test(value)) continue;
+        let printable = true;
+        for (const char of `${name}${value}`) {
+          if ((char.codePointAt(0) ?? 0) > 0xff) {
+            printable = false;
+            break;
+          }
+        }
+        if (printable) safe[name] = value;
+      }
+      return safe;
+    }
+
     function proxyFetch(url: string, rule: ProxyRule, options: RequestInit = {}): Promise<Response> {
       return new Promise((resolve, reject) => {
         const requestId = `req-${++requestCounter}-${Date.now()}`;
@@ -275,10 +300,10 @@ export default defineContentScript({
 
             // Build Response object
             // 桥接层（utils/proxyResponse.ts）已做过整形；MAIN world 自包含无法 import，
-            // 故此处镜像同一兜底：204/205/304 只能配 null 正文，statusText 只能是 ByteString
-            // 且不含 CR/LF。
+            // 故此处镜像同一兜底：204/205/304 只能配 null 正文，statusText 与 headers
+            // 只能是 ByteString 且不含 CR/LF。
             // 否则 new Response() 在 resolve 回调里抛 TypeError —— 超时已被 clearTimeout 摘掉、
-            // 又不会走 reject，页面的 fetch/XHR 从此永久 pending。
+            // 又不会走 reject，页面的 fetch/XHR 从此永久 pending（下面的 try/catch 是最后一道）。
             const nullBodyStatus = status === 204 || status === 205 || status === 304;
             let statusText = '';
             for (const char of String(data.statusText ?? '')) {
@@ -288,24 +313,31 @@ export default defineContentScript({
             const responseInit: ResponseInit = {
               status,
               statusText,
-              headers: new Headers(data.headers),
+              headers: toByteStringHeaders(data.headers),
             };
 
-            let body: BodyInit | null = null;
-            if (!nullBodyStatus && typeof data.body === 'string') {
-              if (data.isBase64) {
-                const binary = atob(data.body);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) {
-                  bytes[i] = binary.charCodeAt(i);
+            try {
+              let body: BodyInit | null = null;
+              if (!nullBodyStatus && typeof data.body === 'string') {
+                if (data.isBase64) {
+                  const binary = atob(data.body);
+                  const bytes = new Uint8Array(binary.length);
+                  for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                  }
+                  body = bytes.buffer;
+                } else {
+                  body = data.body;
                 }
-                body = bytes.buffer;
-              } else {
-                body = data.body;
               }
-            }
 
-            resolve(new Response(body, responseInit));
+              resolve(new Response(body, responseInit));
+            } catch (error) {
+              // 形状已在桥接层与本 world 各守一遍，仍抛错说明载荷超出预期。这里必须
+              // reject：超时在上面已被 clearTimeout 摘掉，抛出 promise 不 settle 的话
+              // 页面既等不到结果、也走不到下面的原生请求回退，等于永久 pending。
+              reject(error instanceof Error ? error : new Error('Proxy response error'));
+            }
           },
           reject: (err: any) => {
             clearTimeout(timeout);
@@ -330,6 +362,8 @@ export default defineContentScript({
         }
 
         // Send request to content script via postMessage
+        // ruleId 带上本 world 已选中的规则：SW 若用全量规则重匹配，一条更宽、优先级更高的
+        // 简单规则会抢走请求，窄规则的头注入/Mock 静默失效，窄规则为 blocked 时请求还会真的发出
         window.postMessage(
           {
             channel: CHANNEL,
@@ -340,6 +374,7 @@ export default defineContentScript({
               method: options.method || 'GET',
               headers,
               body: options.body ? (typeof options.body === 'string' ? options.body : null) : null,
+              ruleId: rule.id,
             },
           },
           window.location.origin,
@@ -411,12 +446,18 @@ export default defineContentScript({
     const originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
     const originalXHRAbort = XMLHttpRequest.prototype.abort;
 
+    // 同步 XHR 回退只提示一次：这类请求常出现在循环里，逐条 warn 会淹掉控制台
+    let warnedSyncXhr = false;
+
     XMLHttpRequest.prototype.open = function (method: string, url: string | URL, ...rest: any[]) {
       (this as any).__proxyMethod = method;
       (this as any).__proxyUrl = typeof url === 'string' ? url : url.href;
       (this as any).__proxyHeaders = {};
       (this as any).__proxyCancel = false;
       (this as any).__proxySettled = false;
+      // open(method, url, false) 是同步 XHR。代理要经 postMessage 往返，响应只能在
+      // 调用栈返回之后到达，因此异步写回等于让调用方读到空响应——记下来，send() 回退原生
+      (this as any).__proxySync = rest.length > 0 && rest[0] === false;
       return originalXHROpen.apply(this, [method, url, ...rest] as any);
     };
 
@@ -448,6 +489,18 @@ export default defineContentScript({
       const rule = url ? findMatchingRule(url, method) : null;
 
       if (rule) {
+        // 同步 XHR 不能代理：调用方在 send() 返回后立刻读 status/response，而代理响应只会
+        // 异步到达，页面拿到的是空响应而不是被改写后的结果。与「非字符串 body」同一类，
+        // 回退原生请求（等价于未装本扩展）。阻断规则例外——回退等于把请求真的发出去。
+        if ((this as any).__proxySync && !rule.blocked) {
+          if (!warnedSyncXhr) {
+            warnedSyncXhr = true;
+            console.warn('[CrossOriginProxy] Synchronous XHR cannot be proxied, sending it natively:', url);
+          }
+          originalXHRSend.call(this, body);
+          return;
+        }
+
         // Non-string bodies (FormData / Blob / ArrayBuffer / Document) cannot be
         // serialized across postMessage; fall back to the original XHR instead
         // of silently dropping the body. 但阻断规则不得回退，否则请求会实际发出
@@ -456,9 +509,9 @@ export default defineContentScript({
             // eslint-disable-next-line @typescript-eslint/no-this-alias
             const xhr = this;
             setTimeout(() => {
-              Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
-              Object.defineProperty(xhr, 'status', { value: 0, writable: true });
-              Object.defineProperty(xhr, 'statusText', { value: '', writable: true });
+              Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
+              Object.defineProperty(xhr, 'status', { value: 0, writable: true, configurable: true });
+              Object.defineProperty(xhr, 'statusText', { value: '', writable: true, configurable: true });
               xhr.dispatchEvent(new Event('readystatechange'));
               xhr.dispatchEvent(new Event('error'));
               xhr.dispatchEvent(new Event('loadend'));
@@ -478,9 +531,9 @@ export default defineContentScript({
           setTimeout(() => {
             if ((xhr as any).__proxyCancel || (xhr as any).__proxySettled) return;
             (xhr as any).__proxyCancel = true;
-            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
-            Object.defineProperty(xhr, 'status', { value: 0, writable: true });
-            Object.defineProperty(xhr, 'statusText', { value: '', writable: true });
+            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
+            Object.defineProperty(xhr, 'status', { value: 0, writable: true, configurable: true });
+            Object.defineProperty(xhr, 'statusText', { value: '', writable: true, configurable: true });
             xhr.dispatchEvent(new Event('readystatechange'));
             xhr.dispatchEvent(new Event('timeout'));
             xhr.dispatchEvent(new Event('loadend'));
@@ -530,25 +583,29 @@ export default defineContentScript({
             });
             const rawHeaders = headerLines.join('\r\n');
 
-            // Set readonly XHR properties
-            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
+            // Set readonly XHR properties（configurable 不可省：实例复用时要第二遍回填）
+            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
             Object.defineProperty(xhr, 'status', {
               value: response.status,
               writable: true,
+              configurable: true,
             });
             Object.defineProperty(xhr, 'statusText', {
               value: response.statusText,
               writable: true,
+              configurable: true,
             });
             Object.defineProperty(xhr, 'response', {
               value: responseValue,
               writable: true,
+              configurable: true,
             });
-            Object.defineProperty(xhr, 'responseURL', { value: url, writable: true });
+            Object.defineProperty(xhr, 'responseURL', { value: url, writable: true, configurable: true });
             if (responseTextValue !== undefined) {
               Object.defineProperty(xhr, 'responseText', {
                 value: responseTextValue,
                 writable: true,
+                configurable: true,
               });
             }
             xhr.getAllResponseHeaders = () => rawHeaders;
@@ -564,9 +621,9 @@ export default defineContentScript({
             if ((xhr as any).__proxyCancel) return;
             (xhr as any).__proxySettled = true;
             console.warn('[CrossOriginProxy] XHR proxy failed, dispatching error:', error);
-            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true });
-            Object.defineProperty(xhr, 'status', { value: 0, writable: true });
-            Object.defineProperty(xhr, 'statusText', { value: 'Proxy Error', writable: true });
+            Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
+            Object.defineProperty(xhr, 'status', { value: 0, writable: true, configurable: true });
+            Object.defineProperty(xhr, 'statusText', { value: 'Proxy Error', writable: true, configurable: true });
             xhr.dispatchEvent(new Event('readystatechange'));
             xhr.dispatchEvent(new Event('error'));
             xhr.dispatchEvent(new Event('loadend'));

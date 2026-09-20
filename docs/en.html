@@ -139,7 +139,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-18"
+            "dateModified": "2026-09-20"
           },
           {
             "@type": "SoftwareApplication",
@@ -167,7 +167,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-18",
+            "dateModified": "2026-09-20",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -180,21 +180,22 @@
               "Retry switch that adds 1 to 5 extra attempts at a 100–30000 ms interval",
               "HTTP method filtering per rule",
               "Query parameter injection on the proxied URL",
-              "WebSocket (ws and wss) forwarding by URL rewrite",
+              "Per-rule cookie sending, off by default and forwarded with credentials: include when enabled",
+              "WebSocket (ws and wss) forwarding by URL rewrite — on a socket the rewrite, query injection and blocking apply",
               "declarativeNetRequest network-layer fast path for rules that only rewrite the URL",
-              "Page-level interceptor with native fallback for rules the network layer cannot express",
+              "Page-level interceptor with native fallback for shapes the network layer cannot express, such as synchronous XHR and non-string bodies",
               "Priority ordering with drag and drop, conflict warnings for shadowed rules, and a flag on rules Chrome will never apply (RE2-incompatible regex syntax, out-of-range capture references)",
               "Real-time URL match test showing matched rule, rewritten URL, channel and which other rules match the same URL but lose to it",
               "Quick rule templates in the empty state, duplicate, undo delete, batch enable, disable and delete",
               "Batch target-domain migration with a change preview",
               "Request log of the last 500 calls with filters, detail viewer and copy as cURL using the original URL",
-              "Hit statistics for both channels (DNR last 5 minutes, service worker since last config change — an in-memory count that restarts when the worker is recycled)",
-              "HAR 1.2 export and HAR import that creates rules from captured traffic (those rules arrive disabled until you enable them)",
+              "Hit statistics for both channels (DNR last 5 minutes, service worker since last config change — an in-memory count that restarts when the worker is recycled), plus a per-tab network-layer count in the popup",
+              "HAR 1.2 export that honours the same share mode as config export, and HAR import that creates rules from captured traffic (those rules arrive disabled until you enable them)",
               "cURL import from DevTools Copy as cURL output",
               "JSON config export with share mode on by default, stripping credentials, and replace or merge modes on import",
               "Named environment profiles for one-click FAT / UAT / PROD switching",
               "Auto-off countdown that disables the proxy after 30 minutes to 4 hours",
-              "Popup with global switch, today's request count (background channel only), current-page match preview and create-rule-for-this-page",
+              "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's address match preview and create-rule-for-this-page",
               "English and Chinese UI, six themes, light / dark / system modes, keyboard shortcuts"
             ]
           },
@@ -325,7 +326,7 @@
             "name": "Does this bypass CORS restrictions?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Rules that use any advanced capability (header override, body override, response override, mock, delay, block, retry, method filter, query injection or WebSocket) are executed by the extension's background context, which holds host permissions, and the page receives a response the extension constructed — so page CORS checks do not apply. A pure URL rewrite is handled as a network-layer redirect instead, where the browser still validates Access-Control-Allow-Origin on the redirected response. If a target environment does not allow your origin, add any advanced capability (a response header override is the cheapest) and the rule switches to the background channel."
+              "text": "Rules that use any advanced capability (header override, body override, response override, mock, delay, block, retry, method filter, query injection, sending cookies or WebSocket) are executed by the extension's background context, which holds host permissions, and the page receives a response the extension constructed — so page CORS checks do not apply. A pure URL rewrite is handled as a network-layer redirect instead, where the browser still validates Access-Control-Allow-Origin on the redirected response. If a target environment does not allow your origin, add any advanced capability (a response header override is the cheapest) and the rule switches to the background channel."
             }
           },
           {
@@ -349,7 +350,7 @@
             "name": "Why is there no per-request log entry for my simple rules?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Network-layer redirects never reach the extension, so there is nothing to log per request. Their rule-level hit counts appear under DNR hits for the last five minutes; the quota Chrome allows for that read is limited, so the panel refreshes on demand and quietly keeps the previous numbers when the quota is exhausted. Background-channel hits are counted separately."
+              "text": "Network-layer redirects never reach the extension, so there is nothing to log per request. Their rule-level hit counts appear under DNR hits for the last five minutes; the quota Chrome allows for that read is limited, so the panel refreshes on demand, keeps the previous numbers when the quota is exhausted and says the stats may lag. Background-channel hits are counted separately."
             }
           },
           {
@@ -397,7 +398,7 @@
             "name": "What happens if the extension fails to handle a request?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "The page falls back to the browser's native fetch, XMLHttpRequest or WebSocket, so the request goes out as it normally would. Non-string bodies such as FormData, Blob and ArrayBuffer cannot cross the message boundary and also fall back to native. The single exception is a block rule: a blocked request is never replayed natively."
+              "text": "The page falls back to the browser's native fetch, XMLHttpRequest or WebSocket, so the request goes out as it normally would. Synchronous XHR (open() with false as its third argument) falls back the same way, as do non-string bodies such as FormData, Blob and ArrayBuffer: proxying means a round trip through other contexts, which cannot deliver the \"the result is ready when send() returns\" contract — making it async would only hand the page an empty response. The single exception is a block rule: a blocked request is never replayed natively."
             }
           },
           {
@@ -620,7 +621,7 @@
             </figure>
             <div class="stat-strip">
               <div class="stat"><b>2</b><span>forwarding channels</span></div>
-              <div class="stat"><b>12</b><span>per-rule capabilities</span></div>
+              <div class="stat"><b>13</b><span>per-rule capabilities</span></div>
               <div class="stat"><b>200</b><span>rules max</span></div>
               <div class="stat"><b>0</b><span>bytes uploaded</span></div>
             </div>
@@ -791,9 +792,10 @@
                 always gets a response it can construct.
               </p>
               <div class="chip-row">
-                <span class="cap">H</span><span class="cap">B</span><span class="cap">R</span><span class="cap">M</span
-                ><span class="cap">D</span><span class="cap">X</span><span class="cap">Re</span
-                ><span class="cap">WS</span><span class="chip">Badges on every rule row</span>
+                <span class="cap">H</span><span class="cap">C</span><span class="cap">B</span><span class="cap">R</span
+                ><span class="cap">M</span><span class="cap">D</span><span class="cap">X</span
+                ><span class="cap">Re</span><span class="cap">WS</span
+                ><span class="chip">Badges on every rule row</span>
               </div>
             </article>
             <article class="feature-card reveal">
@@ -943,7 +945,9 @@
                 Point <code>ws://</code> and <code>wss://</code> connections at another environment by rewriting the
                 socket URL, so real-time traffic follows the same switch as REST calls. Patterns may be written with
                 <code>http(s)</code> or <code>ws(s)</code>, and method filtering treats the handshake as
-                <code>GET</code>.
+                <code>GET</code>. On a socket only the URL rewrite, query parameter injection and blocking take effect;
+                header, body and response overrides, mock, delay and retry do not apply, and the badge in the rule list
+                says as much.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1061,11 +1065,11 @@
               ></span>
               <h3>The parts you touch every day</h3>
               <p>
-                The popup holds the global switch, the active-rule count and today's request count (background channel
-                only), recent requests, quick rule toggles, the auto-off countdown and a current-page match preview with
-                “create a rule for this page”. A toolbar badge shows the proxy state, and auto-off (30 minutes to 4
-                hours, on <code>chrome.alarms</code>) closes the switch so a forgotten proxy never outlives the
-                debugging session.
+                The popup holds the global switch, the active-rule count, the request count via the extension
+                (background channel only), this tab's network-layer hit count for the last 5 minutes, the recent-request
+                list, quick rule toggles, the auto-off countdown, this page's address match preview and “create a rule
+                for this page”. A toolbar badge shows the proxy state, and auto-off (30 minutes to 4 hours, on
+                <code>chrome.alarms</code>) closes the switch so a forgotten proxy never outlives the debugging session.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1162,8 +1166,9 @@
                   <figcaption>
                     <b>Rule table</b
                     ><span
-                      >Capability badges (H · B · R · M · D · X · WS), drag-to-reorder priority, per-rule hit counts,
-                      and batch enable, disable, delete and migrate.</span
+                      >Capability badges (H · C · B · R · M · D · X · WS), drag-to-reorder priority, per-rule hit counts
+                      shown as two cells (network layer and background), and batch enable, disable, delete and
+                      migrate.</span
                     >
                   </figcaption>
                 </figure>
@@ -1181,8 +1186,9 @@
                   <figcaption>
                     <b>Rule editor</b
                     ><span
-                      >Match, rewrite, method filter, query injection, header and body override, response override,
-                      conditional mock, delay, block and retry — one form, with a live conflict warning.</span
+                      >Match, rewrite, method filter, query injection, header and body override, sending cookies,
+                      response override, conditional mock, delay, block and retry — one form, with a live conflict
+                      warning.</span
                     >
                   </figcaption>
                 </figure>
@@ -1239,8 +1245,9 @@
                   <figcaption>
                     <b>Popup</b
                     ><span
-                      >Global switch, active rules, today's requests (background channel only), recent calls, quick rule
-                      toggles, auto-off countdown, current-page hit preview and “create rule for this page”.</span
+                      >Global switch, active rules, requests via the extension (background channel only), this tab's
+                      network-layer hits (5 min), recent calls, quick rule toggles, auto-off countdown, this page's
+                      address match preview and “create rule for this page”.</span
                     >
                   </figcaption>
                 </figure>
@@ -2164,12 +2171,13 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <summary>Does this bypass CORS restrictions?</summary>
               <p>
                 Rules that use any advanced capability (header override, body override, response override, mock, delay,
-                block, retry, method filter, query injection or WebSocket) are executed by the extension's background
-                context, which holds host permissions, and the page receives a response the extension constructed — so
-                page CORS checks do not apply. A pure URL rewrite is handled as a network-layer redirect instead, where
-                the browser still validates <code>Access-Control-Allow-Origin</code> on the redirected response. If a
-                target environment does not allow your origin, add any advanced capability (a response header override
-                is the cheapest) and the rule switches to the background channel.
+                block, retry, method filter, query injection, sending cookies or WebSocket) are executed by the
+                extension's background context, which holds host permissions, and the page receives a response the
+                extension constructed — so page CORS checks do not apply. A pure URL rewrite is handled as a
+                network-layer redirect instead, where the browser still validates
+                <code>Access-Control-Allow-Origin</code> on the redirected response. If a target environment does not
+                allow your origin, add any advanced capability (a response header override is the cheapest) and the rule
+                switches to the background channel.
               </p>
             </details>
             <details>
@@ -2197,8 +2205,8 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <p>
                 Network-layer redirects never reach the extension, so there is nothing to log per request. Their
                 rule-level hit counts appear under DNR hits for the last five minutes; the quota Chrome allows for that
-                read is limited, so the panel refreshes on demand and quietly keeps the previous numbers when the quota
-                is exhausted. Background-channel hits are counted separately.
+                read is limited, so the panel refreshes on demand, keeps the previous numbers when the quota is
+                exhausted and says the stats may lag. Background-channel hits are counted separately.
               </p>
             </details>
 
@@ -2301,9 +2309,14 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <summary>What happens if the extension fails to handle a request?</summary>
               <p>
                 The page falls back to the browser's native <code>fetch</code>, <code>XMLHttpRequest</code> or
-                <code>WebSocket</code>, so the request goes out as it normally would. Non-string bodies such as
-                FormData, Blob and ArrayBuffer cannot cross the message boundary and also fall back to native. The
-                single exception is a block rule: a blocked request is never replayed natively.
+                <code>WebSocket</code>, so the request goes out as it normally would. Synchronous XHR (<code
+                  >open()</code
+                >
+                with <code>false</code> as its third argument) falls back the same way, as do non-string bodies such as
+                FormData, Blob and ArrayBuffer: proxying means a round trip through other contexts, which cannot deliver
+                the "the result is ready when <code>send()</code> returns" contract — making it async would only hand
+                the page an empty response. The single exception is a block rule: a blocked request is never replayed
+                natively.
               </p>
             </details>
 
@@ -2463,7 +2476,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-18</span>
+            <span>Last updated 2026-09-20</span>
             <span
               ><a
                 href="./"

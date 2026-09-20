@@ -89,6 +89,8 @@ let isTrustedSender: RouterModule['isTrustedSender'];
 let listener: RouterListener | undefined;
 let setSpy: ReturnType<typeof vi.fn>;
 let extensionUrlBase: string;
+let getMatchedRulesFn: ReturnType<typeof vi.fn>;
+let getDynamicRulesFn: ReturnType<typeof vi.fn>;
 const store: Record<string, unknown> = {};
 
 beforeEach(async () => {
@@ -101,6 +103,12 @@ beforeEach(async () => {
   setSpy = vi.fn(async (obj: Record<string, unknown>) => {
     Object.assign(store, obj);
   });
+  // GET_DNR_STATS 会打到采样器：默认给一份「有动态规则 + 一条命中」的桩，
+  // 让「所有消息类型都被 dispatch 一遍」的那两个用例不会因为缺桩而 reject。
+  getMatchedRulesFn = vi.fn(async () => ({
+    rulesMatchedInfo: [{ rule: { ruleId: 10001, rulesetId: '_dynamic' }, tabId: 7, timeStamp: Date.now() }],
+  }));
+  getDynamicRulesFn = vi.fn(async () => [{ id: 10001 }]);
   vi.stubGlobal('chrome', {
     runtime: {
       id: SELF_ID,
@@ -118,6 +126,10 @@ beforeEach(async () => {
         set: setSpy,
       },
       onChanged: { addListener: vi.fn() },
+    },
+    declarativeNetRequest: {
+      getMatchedRules: getMatchedRulesFn,
+      getDynamicRules: getDynamicRulesFn,
     },
   });
 
@@ -274,4 +286,48 @@ describe('可信 sender 与未被 gate 的消息 — 路由照常往下走', () 
       expect(lastResponse(sendResponse)?.error).not.toBe('Unauthorized sender');
     });
   }
+});
+
+describe('GET_DNR_STATS — 只读、可带 tabId、采样失败不拖垮消息', () => {
+  /** 取本次响应的 Promise 结果（`dispatch` 已把响应灌进 mock 的 sendResponse） */
+  async function respondWith(data: unknown) {
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.GET_DNR_STATS, TRUSTED_PAGE_URL, data);
+    expect(keepChannelOpen).toBe(true);
+    await flush();
+    return sendResponse.mock.calls.at(-1)?.[0];
+  }
+
+  it('缺省走全局聚合：不带 filter 内容，返回 DnrSample', async () => {
+    const sample = (await respondWith(undefined)) as { stats?: unknown; sampledAt?: number; stale?: boolean };
+    expect(getMatchedRulesFn).toHaveBeenCalledWith({});
+    expect(Array.isArray(sample.stats)).toBe(true);
+    expect(typeof sample.sampledAt).toBe('number');
+    expect(typeof sample.stale).toBe('boolean');
+  });
+
+  it('带 tabId 走按标签页采样（popup 用，不吃第二次配额）', async () => {
+    await respondWith({ tabId: 7 });
+    expect(getMatchedRulesFn).toHaveBeenCalledWith({ tabId: 7 });
+  });
+
+  it('非数字 tabId 视为未提供，不产生 `{ tabId: undefined }` 这种歧义 filter', async () => {
+    await respondWith({ tabId: '7' });
+    expect(getMatchedRulesFn).toHaveBeenCalledWith({});
+  });
+
+  it('采样抛错时仍回结构完整的 DnrSample（stale 为真），读端才分得清「0 次」和「不知道」', async () => {
+    getMatchedRulesFn.mockRejectedValueOnce(new Error('Quota exceeded'));
+    const sample = (await respondWith(undefined)) as { stats?: unknown; stale?: boolean; error?: string };
+    expect(sample.error).toBeUndefined();
+    expect(Array.isArray(sample.stats)).toBe(true);
+    expect(sample.stale).toBe(true);
+  });
+
+  it('内容脚本来源的 sender 也能读（只读消息不得加 gate）', async () => {
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.GET_DNR_STATS, EXTERNAL_PAGE_URL, undefined);
+    expect(keepChannelOpen).toBe(true);
+    await flush();
+    const sample = sendResponse.mock.calls.at(-1)?.[0] as { error?: string };
+    expect(sample.error).toBeUndefined();
+  });
 });

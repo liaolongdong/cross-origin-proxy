@@ -65,3 +65,15 @@ export function truncateForLog(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   return `${value.slice(0, maxChars)}\n…[truncated, original ${value.length} chars]`;
 }
+
+/**
+ * 把 epoch ms 渲染成 `HH:MM:SS`（本地时区）
+ *
+ * 只用于「采样于 ……」这类相对本机时刻的说明，不做跨时区比较、不带日期。
+ */
+export function formatClock(timestamp: number): string {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}

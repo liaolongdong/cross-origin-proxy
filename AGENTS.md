@@ -31,30 +31,32 @@
 
 ### 关键文件速查
 
-| 职责                      | 文件                                                                                                                                                                    |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 公共类型与消息判别联合    | `utils/types.ts`（`ProxyRule`/`MessageType`/`RuntimeMessage` 等）                                                                                                       |
-| 常量与 Storage 键         | `utils/constants.ts`（`STORAGE_KEYS`、`MAX_RULES=200`、`MAX_LOG_ENTRIES=500`、`MAX_LOG_BODY_SIZE`/`MAX_LOG_BODY_TOTAL`、alarm 名）                                      |
-| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入）                                                                                                |
-| DNR 规则构建（纯函数）    | `utils/dnrRules.ts`                                                                                                                                                     |
-| URL 匹配/重写与分流判定   | `utils/urlMatcher.ts`（`findMatchingRule`/`rewriteUrl`/`isSimpleRule`）                                                                                                 |
-| 边界校验与导出脱敏        | `utils/headerValidation.ts`（表单与导入共用的头判据）、`utils/exportSanitize.ts`（分享模式剔除凭据）、`utils/dnrSupport.ts`（RE2/替换引用可用性判定，供「未生效」标记） |
-| 消息路由                  | `entrypoints/background/messageRouter.ts`（`isTrustedSender` 安全校验）                                                                                                 |
-| SW 代理执行               | `entrypoints/background/proxyHandler.ts`（mock/delay/block/override/retry）                                                                                             |
-| DNR 同步与广播            | `entrypoints/background/dnrManager.ts`                                                                                                                                  |
-| DNR 命中统计              | `entrypoints/background/dnrStats.ts`（`getMatchedRules`，配额受限）                                                                                                     |
-| SW 保活 / 自动关闭 / 徽章 | `entrypoints/background/{keepalive,autoOff,badgeManager}.ts`                                                                                                            |
-| i18n（自研响应式）        | `utils/i18n/index.ts` + 根 `locales/{zh_CN,en}/{common,options,popup}.json`                                                                                             |
-| 主题                      | `utils/theme.ts` + `assets/theme/tokens.css`（`--cop-*`，6 主题 + light/dark/system）                                                                                   |
-| Vue 应用工厂              | `utils/createVueApp.ts`（`createAndMountApp`）                                                                                                                          |
-| 商店文案与权限理由        | `CHROMEWEBSTORE.md`（上架唯一素材源，不在扩展包内）                                                                                                                     |
-| 发版与商店提审 runbook    | `RELEASING.md`（一次性凭据、日常发版、失败排查）                                                                                                                        |
-| GitHub 仓库展示信息       | `GITHUB.md`（About 描述 / website / topics / 社交预览 / Pages 源 / 私密漏洞报告入口，一次性手动清单）                                                                   |
-| 版本历史                  | `CHANGELOG.md`（唯一事实源；release 工作流把对应小节切成 GitHub Release 说明）                                                                                          |
-| 三条自动化链路            | `.github/workflows/{ci,deploy-pages,release}.yml`；共用校验 `.github/actions/verify`                                                                                    |
-| 产品落地页 / 隐私政策     | `docs/index.html`（中，站点根）、`docs/en.html`（英）、`docs/privacy.html`、`docs/llms.txt`（新增页面必须中英成对）                                                     |
-| 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                                                                       |
-| WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                                                                                 |
+| 职责                      | 文件                                                                                                                                                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 公共类型与消息判别联合    | `utils/types.ts`（`ProxyRule`/`MessageType`/`RuntimeMessage` 等）                                                                                                                                                                   |
+| 常量与 Storage 键         | `utils/constants.ts`（`STORAGE_KEYS`、`MAX_RULES=200`、`MAX_LOG_ENTRIES=500`、`MAX_LOG_BODY_SIZE`/`MAX_LOG_FIELD_SIZE`/`MAX_LOG_HEADER_COUNT`/`MAX_LOG_TOTAL_SIZE`、`DNR_MAX_PRIORITY`、alarm 名）                                  |
+| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入）                                                                                                                                                            |
+| DNR 规则构建（纯函数）    | `utils/dnrRules.ts`                                                                                                                                                                                                                 |
+| URL 匹配/重写与分流判定   | `utils/urlMatcher.ts`（`findMatchingRule`/`rewriteUrl`/`isSimpleRule`/`isRegexSafe`）                                                                                                                                               |
+| 边界校验与导出脱敏        | `utils/headerValidation.ts`（表单与导入共用的头判据）、`utils/exportSanitize.ts`（分享模式剔除凭据，`sanitizeExportData` 管配置、`sanitizeExportedLogs` 管 HAR）、`utils/dnrSupport.ts`（RE2/替换引用可用性判定，供「未生效」标记） |
+| 回包整形与采样状态        | `utils/proxyResponse.ts`（桥接层兜底，形状约束被 MAIN world 镜像）、`utils/dnrSample.ts`（`DnrSample` → 五态判据 + `isDnrCountReadable`，popup/options/规则列表共用）                                                               |
+| 规则级统计聚合            | `utils/ruleStats.ts`（`computeLogStats`、`groupHitStatsByRule` → `{net, ext}`：两通道窗口不同，**只分格、绝不相加**）                                                                                                               |
+| 消息路由                  | `entrypoints/background/messageRouter.ts`（`isTrustedSender` 安全校验）                                                                                                                                                             |
+| SW 代理执行               | `entrypoints/background/proxyHandler.ts`（mock/delay/block/override/retry；`resolveSelectedRule` 尊重页面侧已选规则）                                                                                                               |
+| DNR 同步与广播            | `entrypoints/background/dnrManager.ts`                                                                                                                                                                                              |
+| DNR 命中统计              | `entrypoints/background/dnrStats.ts`（`getMatchedRules`，配额受限）、`entrypoints/background/dnrSampler.ts`（唯一的采样出口：TTL 缓存 + 滑窗预算 + 退避）                                                                           |
+| SW 保活 / 自动关闭 / 徽章 | `entrypoints/background/{keepalive,autoOff,badgeManager}.ts`                                                                                                                                                                        |
+| i18n（自研响应式）        | `utils/i18n/index.ts` + 根 `locales/{zh_CN,en}/{common,options,popup}.json`                                                                                                                                                         |
+| 主题                      | `utils/theme.ts` + `assets/theme/tokens.css`（`--cop-*`，6 主题 + light/dark/system）                                                                                                                                               |
+| Vue 应用工厂              | `utils/createVueApp.ts`（`createAndMountApp`）                                                                                                                                                                                      |
+| 商店文案与权限理由        | `CHROMEWEBSTORE.md`（上架唯一素材源，不在扩展包内）                                                                                                                                                                                 |
+| 发版与商店提审 runbook    | `RELEASING.md`（一次性凭据、日常发版、失败排查）                                                                                                                                                                                    |
+| GitHub 仓库展示信息       | `GITHUB.md`（About 描述 / website / topics / 社交预览 / Pages 源 / 私密漏洞报告入口，一次性手动清单）                                                                                                                               |
+| 版本历史                  | `CHANGELOG.md`（唯一事实源；release 工作流把对应小节切成 GitHub Release 说明）                                                                                                                                                      |
+| 三条自动化链路            | `.github/workflows/{ci,deploy-pages,release}.yml`；共用校验 `.github/actions/verify`                                                                                                                                                |
+| 产品落地页 / 隐私政策     | `docs/index.html`（中，站点根）、`docs/en.html`（英）、`docs/privacy.html`、`docs/llms.txt`（新增页面必须中英成对）                                                                                                                 |
+| 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                                                                                                                                   |
+| WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                                                                                                                                             |
 
 ## 架构总览
 
@@ -193,16 +195,17 @@
 
 ## 项目特有约定
 
-- **双通道分流**：`isSimpleRule` 决定走 DNR 还是 SW。wildcard（以 `*` 结尾）与 prefix 的重写在两通道语义一致，**regex 不一致**：SW 走 `url.replace(regex, targetUrl)`，只替换匹配到的片段；DNR 的 `regexSubstitution` 整体替换整个 URL。因此覆盖不全的正则两通道结果必然不同，这是已知差异而非待修缺陷（只有「规则该走哪条通道」的分流判定需要保持一致）。
+- **双通道分流**：`isSimpleRule` 决定走 DNR 还是 SW。wildcard（以 `*` 结尾）与 prefix 的重写在两通道语义一致，**regex 不一致**：SW 走 `url.replace(regex, targetUrl)`，只替换匹配到的片段；DNR 的 `regexSubstitution` 整体替换整个 URL。因此覆盖不全的正则两通道结果必然不同，这是已知差异而非待修缺陷（只有「规则该走哪条通道」的分流判定需要保持一致）。**新增任何 SW 专属能力都必须让 `isSimpleRule` 返回 false**，否则该能力在网络层通道上静默失效（`sendCredentials` 就是这么加的）。
 - **两处已接受的通道差异**（不要再试图"修平"，改之前先读注释与 `tests/channel-consistency.test.ts`）：① wildcard 末尾 `*` 捕获为空时，DNR 的静态模板补分隔斜杠（`https://b.com/`）而 `rewriteUrl` 省略（`https://b.com`）——两者指向同一资源，且既有测试刻意守护 SW 输出；② regex 的整体替换 vs 片段替换（见上一条）。
-- **MAIN world 镜像必须同步**：`entrypoints/main-interceptor.content.ts` 自包含、无法 import，其中的 `rewriteWsUrl`、`applyWsQuery`、`normalizePriority`、`DEFAULT_RULE_PRIORITY` 是 `utils/urlMatcher.ts` / `utils/constants.ts` 的手工副本。改这两处 utils 的匹配、重写、查询参数编码或优先级语义，必须在同一改动里镜像到拦截器，否则 WebSocket 通道与 HTTP 通道行为分叉；`tests/channel-consistency.test.ts` 末尾的「MAIN world 镜像与 utils 侧同源」按源码契约守卫这一点。
-- **三世界内容脚本**：MAIN 自包含拦截 + ISOLATED 桥接 + SW 执行；所有 `postMessage` 用 `window.location.origin` 作 targetOrigin（非 `*`）。
+- **MAIN world 镜像必须同步**：`entrypoints/main-interceptor.content.ts` 自包含、无法 import，其中的 `rewriteWsUrl`、`applyWsQuery`、`normalizePriority`、`DEFAULT_RULE_PRIORITY` 是 `utils/urlMatcher.ts` / `utils/constants.ts` 的手工副本，`null body 状态` / `statusText` / 响应头的 ByteString 过滤是 `utils/proxyResponse.ts` 的语义副本。改这几处 utils 的匹配、重写、查询参数编码、优先级或回包形状约束，必须在同一改动里镜像到拦截器，否则 WebSocket 通道与 HTTP 通道行为分叉、或约束只在桥接层生效（页面侧仍会因 `new Response()` 抛错而永久 pending）；`tests/channel-consistency.test.ts` 末尾的「MAIN world 镜像与 utils 侧同源」按源码契约守卫前一组，`tests/interceptorResponseGuard.test.ts` 守卫后一组。**长连接的能力面只有三件事**：地址重写（`rewriteWsUrl`）、查询参数注入（`applyWsQuery` → `queryOverrides`）、阻断（连到 `ws://127.0.0.1:1`）；头/体/响应覆盖、Mock、delay、retry、`sendCredentials` 在握手上一律不生效，方法过滤把握手当 `GET` 处理。这条边界由 `tests/wsCapabilitySurface.test.ts` 守着——UI 侧的规则能力徽章与落地页文案都必须按它说话，不要把「WebSocket 支持 Mock/改头」写成卖点。
+- **三世界内容脚本**：MAIN 自包含拦截 + ISOLATED 桥接 + SW 执行；所有 `postMessage` 用 `window.location.origin` 作 targetOrigin（非 `*`）。**targetOrigin 只挡跨窗口，挡不住同页任意脚本**，所以桥接层下发前还要按「本 world 用不用得到」收窄（`entrypoints/content.ts` 的 `toInterceptorConfig` / `PAGE_IRRELEVANT_FIELDS`）：只发复杂规则，并剥掉头/体/响应覆盖、Mock、`sendCredentials`，非 WS 规则连 `queryOverrides` 一起剥——留着就等于把用户放进规则的凭据广播给站点。
+- **页面侧选定的规则必须被 SW 尊重**（`proxyHandler.ts` 的 `resolveSelectedRule`）：拦截器把它命中的 `ruleId` 随 `PROXY_REQUEST` 发出，SW 侧复核（存在 + enabled + 仍匹配该 url/method）后才采纳，不过则回落全量重匹配。这个 id 属不可信输入，**只能当候选校验**，绝不能拿它直接取规则执行——否则伪造 id 就能借别的规则的能力。漏了这道尊重，一条更宽的简单规则会抢走页面已选的窄规则（头注入/Mock 静默失效，`blocked` 形同可绕过）。
 - **storage 锁 + 缓存**：read-modify-write 走 `withStorageLock` 避免竞态；配置内存缓存随 `storage.onChanged` 失效。
-- **日志缓冲写入**：达 10 条或 1s 防抖 flush，且 flush 串行化避免并发覆盖丢失；`onSuspend` 时 `flushLogs`。flush 失败要把快照放回缓冲（仍按 `MAX_LOG_ENTRIES` 收口），否则配额持续失败时缓冲区只涨不落。写入前两道正文裁剪：单条正文超 `MAX_LOG_BODY_SIZE` 截断留痕，`trimLogsToBudget` 再按 `MAX_LOG_BODY_TOTAL` 从最新一条开始累加、超预算即丢弃其后（至少留最新一条，避免整份清空）。
-- **DNR 命中统计**：`getMatchedRules` 近 5 分钟窗口，配额约每 10 分钟 20 次，由 UI 手动刷新触发，超配额静默返回上次结果。
+- **日志缓冲写入**：达 10 条或 1s 防抖 flush，且 flush 串行化避免并发覆盖丢失；`onSuspend` 时 `flushLogs`。flush 失败要把快照放回缓冲（仍按 `MAX_LOG_ENTRIES` 收口），否则配额持续失败时缓冲区只涨不落。写入前两道收口（都在 `utils/storage.ts` 的 `capLogEntry` 一处，因为 `proxyHandler` 有五条分支写日志）：正文超 `MAX_LOG_BODY_SIZE` 截断留痕，URL/方法/规则名/错误文案/头值超 `MAX_LOG_FIELD_SIZE` 同样截断、头表超 `MAX_LOG_HEADER_COUNT` 条丢弃多余；`trimLogsToBudget` 再按 `MAX_LOG_TOTAL_SIZE`（**整条日志的字符量**，不只正文）从最新一条开始累加、超预算即丢弃其后（至少留最新一条，避免整份清空）。
+- **DNR 命中统计**：`getMatchedRules` 近 5 分钟窗口，配额约每 10 分钟 20 次；采样出口只有 `entrypoints/background/dnrSampler.ts`（全局 60s TTL、按标签页 15s TTL、滑窗 18 次预算、超限 60s 退避，退避期返回 `stale: true` 的缓存而不是报错）。读端返回的是 `DnrSample`，UI 侧的五态判据只有 `utils/dnrSample.ts`：`fresh`/`stale`/`notApplicable`（无生效的网络层规则）/`unavailable`（读不到）/`pending`，「0 次」与「不知道」绝不能合并成一句，也绝不能渲染成 0；能不能把计数当命中数画出来，只问 `isDnrCountReadable`（`fresh`/`stale` 才是「有读数」），`hits: null` 统一表达「没有读数」。两个统计窗口（DNR 的近 5 分钟 vs SW 的自配置变更以来）**不可相加**，聚合入口 `utils/ruleStats.ts` 的 `groupHitStatsByRule` 返回 `{ net, ext }`，规则列表因此分两格显示、绝不相加，只有一格有读数时另一格画「—」。
 - **代理自动关闭**：总开关开启且配置时长时用 `chrome.alarms` 倒计时（跨 SW 重启持久化），到期自动关闭总开关。
 - **主题**：`--cop-*` 令牌 + `data-theme`/`data-mode`；6 主题（sky/green/pink/mauve/orange/slate）+ light/dark/system；同步覆盖 Element Plus `--el-color-primary` 梯度。新增引用必须在 `assets/theme/tokens.css` 里已定义（未定义的 `var()` 让整条声明在计算值阶段静默失效），`-rgb` 通道令牌存的是空格分隔值、只能写成 `rgb(var(--cop-primary-rgb) / 15%)`；两条契约由 `tests/designTokens.test.ts` 守卫。首帧不闪：`initThemeSync()` 在挂载前用 `localStorage` 镜像键 `cop_theme`/`cop_mode` 同步打上标记（`storage.local` 仍是事实来源，镜像只是消掉首帧的默认主题），该契约由 `tests/themeMirror.test.ts` 守着。
-- **容量限制**：`MAX_RULES=200`（新增、批量新增与导入的两种模式都超限拒绝）、`MAX_LOG_ENTRIES=500`（环形缓冲）＋ `MAX_LOG_BODY_SIZE=32K` 字符／`MAX_LOG_BODY_TOTAL=4M` 字符（见「日志缓冲写入」）。
+- **容量限制**：`MAX_RULES=200`（新增、批量新增与导入的两种模式都超限拒绝）、`MAX_LOG_ENTRIES=500`（环形缓冲）＋ `MAX_LOG_BODY_SIZE=32K` 字符／`MAX_LOG_FIELD_SIZE=8K` 字符／`MAX_LOG_HEADER_COUNT=64` 条／`MAX_LOG_TOTAL_SIZE=4M` 字符（见「日志缓冲写入」）。
 - **三处已确认的可访问性/首屏取舍（2026-09-14 定，不要「顺手修」）**：
   1. **次要文字对比度维持 Element Plus 默认**：`--cop-text-color-secondary: #909399` 在白底 3.08:1、`--cop-text-color-placeholder: #c0c4cc` 1.56:1，低于 WCAG AA 的 4.5:1。刻意不压暗——这两个值与整个组件库同源，单独调会让本扩展界面与 `el-*` 其余部分观感割裂。
   2. **规则拖拽排序只有指针路径**：`RuleTable.vue` 的行 `dragstart` 无键盘等价物。键盘用户改优先级数值可达到同样的生效顺序，只有「列表顺序」这一件事是鼠标独占。
@@ -222,13 +225,15 @@
 
 - `regexSubstitution` 必须配合 `regexFilter` 的捕获组（旧实现用 `urlFilter` + `\1` 从未生效）。
 - regex 需 RE2 兼容（`isRegexSupported` 校验），替换引用不得越界（`isSubstitutionValid`）；任一非法会导致 `updateDynamicRules` 整批被拒，故同步前必须过滤。
-- 业务优先级与 DNR 优先级方向相反（数值越小越先匹配 → `toDnrPriority` 反转）。
+- 业务优先级与 DNR 优先级方向相反（数值越小越先匹配 → `toDnrPriority` 反转）。反转结果必须钳制在 `[1, DNR_MAX_PRIORITY]`：`priority` 越界与 NaN/小数同罪，是**整批** `updateDynamicRules` 被拒，而表单给不出的负数优先级（导入文件、手改 storage）恰好会翻过上限。
 
 ### 内容脚本
 
 - `runtime.sendMessage` 不到达内容脚本，广播配置需 `tabs.sendMessage`（未注入页面报错，静默忽略）。
 - MAIN-world 必须自包含：重复类型定义、无 `chrome.*`、不能 import logger（直接用 `console.warn`）。
 - 阻断规则不得回退原生 `fetch`/`XHR`/`WebSocket`，否则被阻断的请求会实际发出；非字符串 body（FormData/Blob/ArrayBuffer）不能跨 `postMessage`，除阻断外回退原生。
+- **同步 XHR（`open(m, u, false)`）同样只能回退原生**：代理要经 postMessage 往返 ISOLATED world 与 SW，响应只能在调用栈返回**之后**到达，而 `send()` 返回时结果必须已就绪——代理它等于把 `status`/`response` 读成空值，比报错更糟（看起来像服务端返回了空响应）。判据只认第三个实参**显式为 `false`**（省略即异步），`__proxySync && !rule.blocked` 才走回退，回退提示一个页面只打一次（同步 XHR 常在循环里）；由 `tests/syncXhrFallback.test.ts` 按源码契约守着。
+- 回包形状三处约束（`204/205/304` 只能配 null 正文；`statusText` 与响应头的名/值必须是 ByteString，即码点 ≤ 255 且不含 CR/LF）任何一处漏了，`new Response()`/`new Headers()` 就在 `resolve` 回调里抛 TypeError——超时已被 `clearTimeout` 摘掉、又不走 reject，页面的 fetch/XHR 从此永久 pending。判据住在 `utils/proxyResponse.ts`（桥接层）并被 MAIN world 镜像一份（那边自包含无法 import），拦截器另有 `try/catch → reject` 兜底；两侧契约由 `tests/proxyResponseGuard.test.ts` 与 `tests/interceptorResponseGuard.test.ts` 守着。
 
 ### Storage
 

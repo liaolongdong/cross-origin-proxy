@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildRegexFilter, buildRegexSubstitution, buildDnrRules, toDnrPriority } from '@/utils/dnrRules';
-import { DNR_RULE_ID_PREFIX } from '@/utils/constants';
+import { DNR_RULE_ID_PREFIX, DNR_MAX_PRIORITY } from '@/utils/constants';
 import type { ProxyRule } from '@/utils/types';
 
 function makeRule(overrides: Partial<ProxyRule>): ProxyRule {
@@ -73,6 +73,20 @@ describe('toDnrPriority', () => {
     }
     expect(toDnrPriority(2.5)).toBe(998);
     expect(toDnrPriority(2.6)).toBe(997);
+  });
+
+  it('钳制在 DNR 合法区间内：负得离谱的业务优先级不得把整批规则带下水', () => {
+    // 表单只给 1..999，但导入文件与手改的 storage 数据可以带任意数。
+    // `1000 - (-1e9)` 远超 Chrome 的 priority 上限，代价不是丢一条规则，
+    // 而是整批 updateDynamicRules 被拒——所有简单规则同时停止重定向。
+    const band = (priority: number): boolean =>
+      toDnrPriority(priority) >= 1 && toDnrPriority(priority) <= DNR_MAX_PRIORITY;
+    for (const priority of [-1_000_000_000, -999_999, -1e18, 1, 999, 999_999, 1e18]) {
+      expect(band(priority), `priority=${priority}`).toBe(true);
+    }
+    // 钳制只能压平天花板，不得改变正常区间的相对顺序
+    expect(toDnrPriority(-1_000_000_000)).toBe(DNR_MAX_PRIORITY);
+    expect(toDnrPriority(-500)).toBe(1500);
   });
 });
 

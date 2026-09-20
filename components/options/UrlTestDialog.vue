@@ -234,6 +234,8 @@ const extraActions = computed(() => {
     actions.push(t('headerOverridesLabel'));
   }
   if (rule.requestBodyOverride !== undefined) actions.push(t('requestBodyOverrideLabel'));
+  // 严格判据与 isSimpleRule / proxyHandler 一致：真值字符串既不走 SW 也不带 Cookie，预览不能说谎
+  if (rule.sendCredentials === true) actions.push(t('sendCredentialsLabel'));
   if (rule.responseOverrides) actions.push(t('responseOverridesLabel'));
   if (rule.methods && rule.methods.length > 0) actions.push(t('urlTestActionMethods', rule.methods.join('/')));
   if (rule.queryOverrides && Object.keys(rule.queryOverrides).length > 0) actions.push(t('urlTestActionQuery'));

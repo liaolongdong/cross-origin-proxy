@@ -3,6 +3,7 @@ import { setupMessageRouter } from './background/messageRouter';
 import { setupKeepalive } from './background/keepalive';
 import { setupAutoOff } from './background/autoOff';
 import { initDnrManager, syncDnrRules } from './background/dnrManager';
+import { invalidateDnrSample } from './background/dnrSampler';
 import { initBadge, updateBadge } from './background/badgeManager';
 import { resetSwHitStats } from './background/proxyHandler';
 import type { ProxyConfig } from '@/utils/types';
@@ -53,10 +54,14 @@ export default defineBackground(() => {
     if (areaName !== 'local') return;
     if (STORAGE_KEYS.PROXY_CONFIG in changes) {
       const newConfig = changes[STORAGE_KEYS.PROXY_CONFIG].newValue as ProxyConfig | undefined;
+      // 配置一变，两份读数同时过期：SW 计数本来就是「自上次配置变更」口径，DNR 采样缓存
+      // 也必须作废，否则关闭代理后 popup 还能看到历史命中。刻意放在 rules 守卫之外——
+      // `proxy_config` 被整体清掉时 newValue 是 undefined，那时两份读数同样不再成立。
+      resetSwHitStats();
+      invalidateDnrSample('config-changed');
       if (newConfig?.rules) {
         const activeCount = newConfig.rules.filter(r => r.enabled).length;
         updateBadge(newConfig.enabled, activeCount);
-        resetSwHitStats();
       }
     }
   });

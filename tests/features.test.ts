@@ -96,6 +96,24 @@ describe('matchesMockCondition', () => {
     const cond: MockCondition = { body: '{}', matchUrl: '[invalid' };
     expect(matchesMockCondition('https://api.example.com/test', 'GET', cond)).toBe(false);
   });
+
+  // S4：嵌套量词此前绕过 isRegexSafe（只有 matchPattern 那条路筛查），
+  // 导入文件写一条 (a+)+$ 就能让单线程 SW 在 test() 上卡死。
+  it('catastrophic backtracking patterns are rejected before compilation', () => {
+    const dangerous: MockCondition[] = [
+      { body: '{}', matchUrl: '(a+)+$' },
+      { body: '{}', matchUrl: '(a*)*b' },
+      { body: '{}', matchUrl: 'a++b' },
+    ];
+    for (const cond of dangerous) {
+      expect(matchesMockCondition('https://api.example.com/' + 'a'.repeat(60) + 'b', 'GET', cond)).toBe(false);
+    }
+  });
+
+  it('benign quantifiers still match normally', () => {
+    const cond: MockCondition = { body: '{}', matchUrl: '/users/\\d+' };
+    expect(matchesMockCondition('https://api.example.com/users/123', 'GET', cond)).toBe(true);
+  });
 });
 
 describe('deduplicateRules', () => {

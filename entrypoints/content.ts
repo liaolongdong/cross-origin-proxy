@@ -2,9 +2,57 @@ import { defineContentScript } from 'wxt/utils/define-content-script';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig } from '@/utils/types';
 import { CONTENT_SCRIPT_CHANNEL } from '@/utils/constants';
-import { isSimpleRule } from '@/utils/urlMatcher';
+import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
 import { normalizeProxyResponse } from '@/utils/proxyResponse';
 import { logger } from '@/utils/logger';
+
+/**
+ * 仅 SW 使用、页面侧从不读取的规则字段。
+ * 拦截器只依赖 matchPattern、matchType、targetUrl、methods、blocked、delayMs、
+ * retryCount、retryDelay、name、enabled（`queryOverrides` 只有 WS 规则需要，见下）；
+ * 代理时 SW 会用 storage 里的完整规则重新应用这些能力，因此它们没有理由出现在发往页面的副本里。
+ * `sendCredentials` 同属此类：拦截器不做任何 fetch，带不带 Cookie 完全由 SW 决定，
+ * 页侧读到它没有任何作用，只是多一条可被同源脚本监听的规则能力画像。
+ */
+const PAGE_IRRELEVANT_FIELDS = [
+  'headerOverrides',
+  'requestBodyOverride',
+  'responseOverrides',
+  'mockResponse',
+  'sendCredentials',
+] as const;
+
+/**
+ * 双通道分工 + 凭据脱敏：
+ *
+ * 1. 简单规则（无 headerOverrides 等 SW 专属能力）由 DNR 在网络层重定向，
+ *    MAIN world 拦截器只需处理复杂规则，因此下发前先过滤，
+ *    避免同一请求被两条通道重复代理。
+ * 2. 再剥离仅 SW 使用的凭据字段。配置经 `postMessage` 送达 MAIN world，
+ *    而**同页面的任意脚本都能监听这些消息**（入站校验只挡跨窗口，挡不住同源），
+ *    留着 `headerOverrides` 等于把「把 token 从代码挪进规则」的凭据
+ *    广播给用户访问的每个站点。
+ * 3. `queryOverrides` 同理按能力收窄：只有 WS 规则的地址重写在本 world 完成
+ *    （`rewriteWsUrl` 要读它），HTTP 侧一律由 SW 追加，因此非 WS 规则不必带。
+ *
+ * 各步顺序不可颠倒：`isSimpleRule` 依赖这些字段判定分流。
+ *
+ * 导出仅为可测性（同 `messageRouter` 的 `isTrustedSender`）——桥接层跑在 ISOLATED world，
+ * 这条纯函数是页面侧凭据不外泄的唯一出口。
+ */
+export function toInterceptorConfig(config: ProxyConfig): ProxyConfig {
+  return {
+    enabled: config.enabled,
+    rules: (config.rules ?? [])
+      .filter(rule => !isSimpleRule(rule))
+      .map(rule => {
+        const pageRule = { ...rule };
+        for (const field of PAGE_IRRELEVANT_FIELDS) delete pageRule[field];
+        if (!isWebSocketRule(rule)) delete pageRule.queryOverrides;
+        return pageRule;
+      }),
+  };
+}
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -13,45 +61,6 @@ export default defineContentScript({
     // ISOLATED world: bridge between MAIN world (postMessage) and Background SW (chrome.runtime)
     // NOTE: All postMessage calls use window.location.origin as targetOrigin (not '*')
     // to restrict message delivery to the same origin, preventing cross-origin data leakage.
-
-    /**
-     * 仅 SW 使用、页面侧从不读取的规则字段。
-     * 拦截器只依赖 matchPattern、matchType、targetUrl、methods、blocked、delayMs、
-     * queryOverrides、retryCount、retryDelay、name、enabled；代理时 SW 会用 storage
-     * 里的完整规则重新匹配并应用这些能力，因此它们没有理由出现在发往页面的副本里。
-     */
-    const PAGE_IRRELEVANT_FIELDS = [
-      'headerOverrides',
-      'requestBodyOverride',
-      'responseOverrides',
-      'mockResponse',
-    ] as const;
-
-    /**
-     * 双通道分工 + 凭据脱敏：
-     *
-     * 1. 简单规则（无 headerOverrides 等 SW 专属能力）由 DNR 在网络层重定向，
-     *    MAIN world 拦截器只需处理复杂规则，因此下发前先过滤，
-     *    避免同一请求被两条通道重复代理。
-     * 2. 再剥离仅 SW 使用的凭据字段。配置经 `postMessage` 送达 MAIN world，
-     *    而**同页面的任意脚本都能监听这些消息**（入站校验只挡跨窗口，挡不住同源），
-     *    留着 `headerOverrides` 等于把「把 token 从代码挪进规则」的凭据
-     *    广播给用户访问的每个站点。
-     *
-     * 两步顺序不可颠倒：`isSimpleRule` 依赖这些字段判定分流。
-     */
-    function toInterceptorConfig(config: ProxyConfig): ProxyConfig {
-      return {
-        enabled: config.enabled,
-        rules: (config.rules ?? [])
-          .filter(rule => !isSimpleRule(rule))
-          .map(rule => {
-            const pageRule = { ...rule };
-            for (const field of PAGE_IRRELEVANT_FIELDS) delete pageRule[field];
-            return pageRule;
-          }),
-      };
-    }
 
     /** 最近一次下发的配置缓存（供 MAIN world 主动请求时回放，消除注入时序竞态） */
     let lastConfig: ProxyConfig | null = null;

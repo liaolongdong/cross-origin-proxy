@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { RequestLogEntry } from '@/utils/types';
-import { STORAGE_KEYS, MAX_LOG_BODY_SIZE, MAX_LOG_ENTRIES } from '@/utils/constants';
+import {
+  STORAGE_KEYS,
+  MAX_LOG_BODY_SIZE,
+  MAX_LOG_FIELD_SIZE,
+  MAX_LOG_HEADER_COUNT,
+  MAX_LOG_ENTRIES,
+} from '@/utils/constants';
 import { truncateForLog } from '@/utils/formatters';
 
 /** 真实 `chrome.storage.local.get` 每次返回反序列化副本；桩必须同样如此，否则就地改读出的对象等于改了「存储」 */
@@ -97,22 +103,71 @@ describe('日志配额收口', () => {
   });
 
   it('未超限条目不产生副本、不改写调用方对象', async () => {
-    const { capLogEntryBodies } = await import('@/utils/storage');
+    const { capLogEntry } = await import('@/utils/storage');
     const entry = logEntry('small', { requestBody: '{"a":1}' });
-    expect(capLogEntryBodies(entry)).toBe(entry);
+    expect(capLogEntry(entry)).toBe(entry);
 
     const big = logEntry('big', { responseBody: 'q'.repeat(MAX_LOG_BODY_SIZE + 1) });
-    const capped = capLogEntryBodies(big);
+    const capped = capLogEntry(big);
     expect(capped).not.toBe(big);
     expect(big.responseBody).toHaveLength(MAX_LOG_BODY_SIZE + 1); // 不就地改写
   });
 
   it('undefined 正文保持 undefined，不被写成空串（HAR 导出依赖该判定）', async () => {
-    const { capLogEntryBodies } = await import('@/utils/storage');
+    const { capLogEntry } = await import('@/utils/storage');
     const entry = logEntry('bin', { responseIsBase64: true });
-    const capped = capLogEntryBodies(entry);
+    const capped = capLogEntry(entry);
     expect('responseBody' in capped).toBe(false);
     expect(capped.responseBody).toBeUndefined();
+  });
+
+  it('URL / 方法 / 规则名 / 错误文案同样收口，且收口时不新增缺失的可选键', async () => {
+    const { capLogEntry } = await import('@/utils/storage');
+    const entry = logEntry('urls', {
+      originalUrl: 'https://a.com/?q=' + 'x'.repeat(MAX_LOG_FIELD_SIZE + 100),
+      proxiedUrl: 'https://b.com/' + 'y'.repeat(MAX_LOG_FIELD_SIZE + 100),
+      method: 'Z'.repeat(MAX_LOG_FIELD_SIZE * 2),
+      ruleName: 'n'.repeat(MAX_LOG_FIELD_SIZE * 2),
+    });
+    const capped = capLogEntry(entry);
+    expect(capped.originalUrl.length).toBeLessThan(entry.originalUrl.length);
+    expect(capped.originalUrl).toContain('original');
+    expect(capped.proxiedUrl.length).toBeLessThan(entry.proxiedUrl.length);
+    expect(capped.method.length).toBeLessThan(entry.method.length);
+    expect(capped.ruleName.length).toBeLessThan(entry.ruleName.length);
+    // 该条没有 error / 正文，收口 URL 不该顺手把这些键写成 undefined
+    expect('error' in capped).toBe(false);
+    expect('requestBody' in capped).toBe(false);
+  });
+
+  it('头表按条数与单值长度双重收口；正常头表原样透传', async () => {
+    const { capLogEntry } = await import('@/utils/storage');
+    const many: Record<string, string> = {};
+    for (let i = 0; i < MAX_LOG_HEADER_COUNT + 20; i++) many[`x-h-${i}`] = 'v';
+    const capped = capLogEntry(logEntry('headers', { requestHeaders: many }));
+    expect(Object.keys(capped.requestHeaders ?? {})).toHaveLength(MAX_LOG_HEADER_COUNT);
+
+    const longValue = capLogEntry(
+      logEntry('cookie', { requestHeaders: { cookie: 'c'.repeat(MAX_LOG_FIELD_SIZE + 1) } }),
+    ).requestHeaders?.cookie;
+    expect(longValue ?? '').toContain('original');
+
+    const normal = logEntry('normal', { requestHeaders: { 'content-type': 'application/json' } });
+    expect(capLogEntry(normal)).toBe(normal);
+  });
+
+  it('总量预算算的是整条日志：正文之外（URL/头表）超量同样要丢旧条目', async () => {
+    const { trimLogsToBudget, logEntrySize } = await import('@/utils/storage');
+    const huge = 'u'.repeat(1000);
+    const logs = [
+      logEntry('newest'),
+      logEntry('older', { originalUrl: huge }),
+      logEntry('oldest', { originalUrl: huge }),
+    ];
+    // 正文为零时旧实现算出的总量恒为 0，任何预算都留得下整份
+    expect(logEntrySize(logs[1])).toBeGreaterThan(1000);
+    expect(trimLogsToBudget(logs, 1500).map(l => l.id)).toEqual(['newest', 'older']);
+    expect(trimLogsToBudget(logs, 10).map(l => l.id)).toEqual(['newest']);
   });
 
   it('trimLogsToBudget：从最新端累加，丢弃超预算的旧条目', async () => {

@@ -111,6 +111,9 @@
       <div class="section">
         <h3>{{ t('exportHar') }}</h3>
         <p class="section-desc">{{ t('exportHarDesc') }}</p>
+        <p class="section-desc export-sanitize-tip">
+          {{ sanitizeExport ? t('exportHarRedacted') : t('exportHarFull') }}
+        </p>
         <el-button
           type="warning"
           :loading="harExporting"
@@ -279,7 +282,10 @@ function handleImportCurl() {
 async function handleExportHar() {
   harExporting.value = true;
   try {
-    const har = await chrome.runtime.sendMessage({ type: MessageType.EXPORT_HAR });
+    const har = await chrome.runtime.sendMessage({
+      type: MessageType.EXPORT_HAR,
+      data: { sanitize: sanitizeExport.value },
+    });
     const blob = new Blob([JSON.stringify(har, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

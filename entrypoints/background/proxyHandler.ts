@@ -1,4 +1,4 @@
-import { findMatchingRule, rewriteUrl, applyQueryOverrides } from '@/utils/urlMatcher';
+import { findMatchingRule, matchRule, rewriteUrl, applyQueryOverrides, isRegexSafe } from '@/utils/urlMatcher';
 import { filterIncomingHeaders, isValidHeaderEntry, validateRuleHeaders } from '@/utils/headerValidation';
 import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
 import { generateId } from '@/utils/generateId';
@@ -96,9 +96,14 @@ export function isRetryableError(error: unknown, status?: number): boolean {
 
 /**
  * 判断请求是否满足单个 Mock 条件（AND 逻辑）
+ *
+ * `matchUrl` 与规则的匹配模式同为不可信输入（表单与导入文件都能写入），因此这里跑的是
+ * `matchRule` 同一道 ReDoS 筛查：嵌套量词的条件按「不匹配」处理，落到默认 Mock 响应体，
+ * 而不是让单线程的 SW 在 `test()` 上卡死。
  */
 export function matchesMockCondition(url: string, method: string, condition: MockCondition): boolean {
   if (condition.matchUrl) {
+    if (!isRegexSafe(condition.matchUrl)) return false;
     try {
       if (!new RegExp(condition.matchUrl).test(url)) return false;
     } catch {
@@ -212,12 +217,36 @@ function applyResponseOverrides(
 
 // ─── 代理请求主逻辑 ───────────────────────────────────────────────────────────
 
+/**
+ * 页面拦截器已选中的规则优先于 SW 侧的全量重匹配
+ *
+ * 桥接层只把复杂规则下发给页面（`content.ts` 的 `toInterceptorConfig`），页面按窄规则决定代理；
+ * SW 此前却拿**完整**规则集重匹配，于是一条更宽、优先级更高的简单规则会把请求抢走：窄规则的
+ * 头注入与 Mock 静默失效，窄规则是 `blocked` 时被阻断的请求还会真的发出去。
+ *
+ * 校验复用同一条 `matchRule`（存在 + enabled + 仍匹配该 url/method），任一不成立就返回 `null`
+ * 回落全量重匹配：`ruleId` 来自页面、属不可信输入，伪造它拿不到别的规则的能力，规则刚被删除
+ * 也只是退回修复前的行为。
+ */
+function resolveSelectedRule(
+  ruleId: string | undefined,
+  url: string,
+  method: string,
+  rules: ProxyRule[],
+): ProxyRule | null {
+  if (!ruleId) return null;
+  const chosen = rules.find(rule => rule.id === ruleId && rule.enabled);
+  if (!chosen) return null;
+  return matchRule(url, chosen, method) ? chosen : null;
+}
+
 export async function handleProxyRequest(data: {
   requestId: string;
   url: string;
   method: string;
   headers: Record<string, string>;
   body?: string | null;
+  ruleId?: string;
 }): Promise<{
   requestId: string;
   status: number;
@@ -240,7 +269,9 @@ export async function handleProxyRequest(data: {
     };
   }
 
-  const rule = findMatchingRule(data.url, config.rules, data.method);
+  const rule =
+    resolveSelectedRule(data.ruleId, data.url, data.method, config.rules) ??
+    findMatchingRule(data.url, config.rules, data.method);
   if (!rule) {
     return {
       requestId: data.requestId,
@@ -368,6 +399,14 @@ export async function handleProxyRequest(data: {
       ...sanitizedOverrides,
     },
   };
+
+  // 携带凭据是规则级显式 opted-in 的能力：SW 以 chrome-extension:// 发起请求，默认的
+  // 'same-origin' 对跨源目标一律不带 Cookie，需要会话的后端因此始终 401。
+  // 不开启时这行完全不执行，出站请求与改动前逐字节一致。
+  // 严格等于 true 与 isSimpleRule 同判据，避免导入文件里的真值字符串单边生效。
+  if (rule.sendCredentials === true) {
+    fetchOptions.credentials = 'include';
+  }
 
   // GET/HEAD 不可携带 body（fetch 会直接抛 TypeError 使代理失败）；
   // method 可能是页面传入的原始小写形式，比较前需归一化
@@ -553,10 +592,10 @@ export async function getProxyStatus(): Promise<ProxyStatus> {
   todayTimestamp.setHours(0, 0, 0, 0);
   const todayTs = todayTimestamp.getTime();
 
-  let todayRequestCount = 0;
+  let swRequestCount = 0;
   // 日志按批刷写（批间新到旧、批内旧到新），整体并非严格降序，须全量遍历
   for (const l of logs) {
-    if (l.timestamp >= todayTs) todayRequestCount++;
+    if (l.timestamp >= todayTs) swRequestCount++;
   }
 
   // 代理关闭时倒计时已被清除，无需查询
@@ -569,7 +608,7 @@ export async function getProxyStatus(): Promise<ProxyStatus> {
   return {
     enabled: config.enabled,
     activeRuleCount: config.rules.filter(r => r.enabled).length,
-    todayRequestCount,
+    swRequestCount,
     recentLogs: logs.slice(0, 10),
     rules: config.rules.map(r => ({ id: r.id, name: r.name, enabled: r.enabled })),
     autoOffAt,

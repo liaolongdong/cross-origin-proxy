@@ -41,6 +41,11 @@ describe('normalizeProxyResponse：后台失败信封（回归：挂到超时后
     expect(out.statusText).toBe('Proxy Error');
   });
 
+  it('error 字段本身也不得随载荷广播（MAIN world 同源脚本可读）', () => {
+    const out = normalizeProxyResponse({ success: false, error: 'ECONNREFUSED 10.0.0.7:8080' }, REQ_ID);
+    expect(out).not.toHaveProperty('error');
+  });
+
   it('回包为 undefined / null / 非对象时仍产出完整载荷', () => {
     for (const raw of [undefined, null, 'nope', 42]) {
       const out = normalizeProxyResponse(raw, REQ_ID);
@@ -75,6 +80,20 @@ describe('normalizeProxyResponse：正常回包原样透传', () => {
   it('headers 含非字符串值时整体退回空对象，不拼接脏数据', () => {
     const out = normalizeProxyResponse({ ...ok, headers: { a: 1, b: '2' } }, 'x');
     expect(out.headers).toEqual({});
+  });
+
+  it('跳过码点 > 255 的头名/头值，保留其余（回归：中文头值让页面永久 pending）', () => {
+    const out = normalizeProxyResponse(
+      { ...ok, headers: { 'content-type': 'application/json', 'x-msg': '成功', 'x-bad\rname': 'v' } },
+      'x',
+    );
+    expect(out.headers).toEqual({ 'content-type': 'application/json' });
+  });
+
+  it('整形后的 headers 必须能被 `new Headers()` 接受', () => {
+    const out = normalizeProxyResponse({ ...ok, headers: { a: '中文', b: 'ok', 'c\n': 'x' } }, 'x');
+    expect(() => new Headers(out.headers)).not.toThrow();
+    expect(new Headers(out.headers).get('b')).toBe('ok');
   });
 
   it('requestId 类型不端时用桥接层持有的 id 顶替', () => {

@@ -1,7 +1,7 @@
 import { MessageType } from '@/utils/types';
 import type { RuntimeMessage, ExportData, ImportMode, ProxyRule } from '@/utils/types';
 import { handleProxyRequest, getProxyStatus, getSwHitStats } from './proxyHandler';
-import { getDnrHitStats } from './dnrStats';
+import { sampleAggregate, sampleForTab } from './dnrSampler';
 import { IMPORTED_RULE_PRIORITY } from '@/utils/constants';
 import {
   getProxyConfig,
@@ -26,6 +26,7 @@ import {
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules } from '@/utils/har';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
+import { sanitizeExportedLogs } from '@/utils/exportSanitize';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
 
@@ -320,8 +321,11 @@ export function setupMessageRouter(): void {
         );
       }
 
-      case MessageType.GET_DNR_STATS:
-        return respondAsync(sendResponse, getDnrHitStats());
+      case MessageType.GET_DNR_STATS: {
+        // 只读消息：刻意不加 isTrustedSender（见 .qoder/rules/wxt-rules.md 第 12 条）
+        const tabId = typeof message.data?.tabId === 'number' ? message.data.tabId : undefined;
+        return respondAsync(sendResponse, tabId === undefined ? sampleAggregate() : sampleForTab(tabId));
+      }
 
       case MessageType.GET_SW_STATS:
         sendResponse(getSwHitStats());
@@ -352,11 +356,16 @@ export function setupMessageRouter(): void {
       case MessageType.IMPORT_CONFIG:
         return respondAsync(sendResponse, handleImportConfig(message.data));
 
-      case MessageType.EXPORT_HAR:
+      case MessageType.EXPORT_HAR: {
+        // 「分享模式」同样管住 HAR：日志里的 Cookie / Authorization 是用户当时那个会话的凭据，
+        // 贴进工单就等于把会话交出去。缺省按脱敏处理——只有显式传 false（界面上取消勾选）
+        // 才导出全量头，避免出现「没传参数的那条路径反而更宽松」。
+        const sanitize = message.data?.sanitize !== false;
         return respondAsync(
           sendResponse,
-          getRequestLogs().then(logs => logsToHar(logs)),
+          getRequestLogs().then(logs => logsToHar(sanitize ? sanitizeExportedLogs(logs).logs : logs)),
         );
+      }
 
       case MessageType.IMPORT_HAR: {
         const entries = message.data?.log?.entries;

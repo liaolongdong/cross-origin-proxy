@@ -1,6 +1,8 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { MessageType } from '@/utils/types';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
+import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
+import type { DnrSampleState } from '@/utils/dnrSample';
 import { logger } from '@/utils/logger';
 
 /** 自动刷新频率预设（毫秒） */
@@ -47,6 +49,10 @@ export function useRequestLog() {
   const autoRefresh = ref(false);
   const refreshInterval = ref<number>(loadStoredInterval());
   const dnrStats = ref<DnrHitStat[]>([]);
+  /** 最近一次 DNR 采样是否只是缓存值（配额退避中），命中列据此提示「统计可能有延迟」 */
+  const dnrStatsStale = ref(false);
+  /** 最近一次采样的可渲染状态：日志抽屉据此把「零命中」与「没有读数」分开说 */
+  const dnrStatsState = ref<DnrSampleState>('pending');
   const swStats = ref<DnrHitStat[]>([]);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -107,12 +113,23 @@ export function useRequestLog() {
     }
   }
 
+  /**
+   * 拉一次 DNR 命中采样（全局聚合）
+   *
+   * 判据全部走 `describeDnrSample`：没有读数时把计数清空**并记下状态**，让读端说
+   * 「没有生效的网络层规则 / 读不到」，而不是把空数组一路传下去、在日志抽屉里
+   * 被念成「近 5 分钟无 DNR 命中」——把未知伪装成零，正是本批要消灭的那类谎报。
+   */
   async function fetchDnrStats() {
     try {
-      const result: DnrHitStat[] = await chrome.runtime.sendMessage({
+      const sample: unknown = await chrome.runtime.sendMessage({
         type: MessageType.GET_DNR_STATS,
       });
-      dnrStats.value = Array.isArray(result) ? result : [];
+      const view = describeDnrSample(sample);
+      dnrStatsState.value = view.state;
+      dnrStatsStale.value = view.state === 'stale';
+      // 没有读数就清空，让读端按 state 说人话；真读到过（含读到 0）才留下这份计数
+      dnrStats.value = view.hits === null || !isDnrSample(sample) ? [] : sample.stats;
     } catch (error) {
       logger.error('Failed to fetch DNR stats:', error);
     }
@@ -139,6 +156,8 @@ export function useRequestLog() {
     autoRefresh,
     refreshInterval,
     dnrStats,
+    dnrStatsStale,
+    dnrStatsState,
     swStats,
     fetchLogs,
     clearLogs,

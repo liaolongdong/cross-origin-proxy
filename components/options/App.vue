@@ -34,6 +34,11 @@
         class="dnr-skipped-summary"
         >{{ t('dnrSkippedSummary', [dnrSkippedRules.size]) }}</span
       >
+      <span
+        v-if="dnrStatsStale"
+        class="hit-stats-stale"
+        >{{ t('hitStatsStale') }}</span
+      >
     </div>
 
     <!-- 规则表格卡片 -->
@@ -44,7 +49,8 @@
       :has-any-rules="rules.length > 0"
       :highlight-rule-id="highlightRuleId"
       :search-text="searchText"
-      :hit-stats="combinedHitStats"
+      :hit-stats="hitStatsByRule"
+      :dnr-stats-state="dnrStatsState"
       :shadowed-rule-ids="shadowedRuleIds"
       :dnr-skipped-rules="dnrSkippedRules"
       @add="handleAddRule"
@@ -103,6 +109,7 @@
       :loading="logLoading"
       :auto-refresh="autoRefresh"
       :dnr-stats="dnrStats"
+      :dnr-stats-state="dnrStatsState"
       :sw-stats="swStats"
       @clear="handleClearLogs"
       @refresh="toggleAutoRefresh"
@@ -136,7 +143,7 @@ import {
 } from '@/utils/theme';
 import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
-import { combineHitStats } from '@/utils/ruleStats';
+import { groupHitStatsByRule } from '@/utils/ruleStats';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
@@ -195,6 +202,8 @@ const {
   autoRefresh,
   refreshInterval: logRefreshInterval,
   dnrStats,
+  dnrStatsStale,
+  dnrStatsState,
   swStats,
   fetchLogs,
   clearLogs,
@@ -263,7 +272,8 @@ const filteredRules = computed(() => {
 
 const enabledCount = computed(() => rules.value.filter(r => r.enabled).length);
 
-const combinedHitStats = computed(() => combineHitStats(dnrStats.value, swStats.value));
+/** 规则列表命中列：两条通道分开读，不相加（窗口不同，相加的数字不属于任何一段时间） */
+const hitStatsByRule = computed(() => groupHitStatsByRule(dnrStats.value, swStats.value));
 
 // 主题状态
 const currentTheme = ref<ThemeName>('sky');
@@ -294,6 +304,18 @@ watch(showLogs, visible => {
   }
 });
 
+/**
+ * 配置页回到前台时重新采样命中数
+ *
+ * 常开的配置页此前只在挂载与打开日志抽屉时各读一次，用户切回去看到的还是几分钟前的计数，
+ * 据此判断「代理没生效」。这里不加定时器：刷新与「用户真的在看」成正比，配额才够花。
+ */
+function handleVisibilityChange() {
+  if (document.visibilityState !== 'visible') return;
+  void fetchDnrStats();
+  void fetchSwStats();
+}
+
 onMounted(async () => {
   currentTheme.value = await getStoredTheme();
   themeMode.value = await getStoredThemeMode();
@@ -303,17 +325,20 @@ onMounted(async () => {
   void fetchSwStats();
 
   // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出，
+  // #profiles 打开环境配置，#url-test 打开 URL 匹配预演，
   // #add-rule-from-tab=<url> 按当前标签页地址预填通配符规则；
   // 监听 hashchange：popup 复用已打开的 Options 标签页时通过更新 hash 触发同文档导航
   handleHashNavigation();
   window.addEventListener('hashchange', handleHashNavigation);
   // 全局键盘快捷键
   window.addEventListener('keydown', handleKeydown);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
 onUnmounted(() => {
   window.removeEventListener('hashchange', handleHashNavigation);
   window.removeEventListener('keydown', handleKeydown);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 
 /** 全局键盘快捷键处理 */
@@ -377,6 +402,8 @@ function handleHashNavigation() {
     showImportExport.value = true;
   } else if (hash === '#profiles') {
     showProfiles.value = true;
+  } else if (hash === '#url-test') {
+    showUrlTest.value = true;
   } else if (hash.startsWith('#add-rule-from-tab=')) {
     // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）
     handleCreateRuleFromUrl(decodeURIComponent(hash.slice('#add-rule-from-tab='.length)));
@@ -797,6 +824,11 @@ async function handleReorder(fromId: string, toId: string) {
 .dnr-skipped-summary {
   margin-left: 8px;
   color: var(--el-color-danger, #f56c6c);
+}
+
+.hit-stats-stale {
+  margin-left: 8px;
+  color: var(--cop-text-color-secondary);
 }
 
 @media (width <= 768px) {

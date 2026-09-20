@@ -1,4 +1,4 @@
-import type { ExportData, ProxyRule } from '@/utils/types';
+import type { ExportData, ProxyRule, RequestLogEntry } from '@/utils/types';
 
 /**
  * 配置导出脱敏（分享模式的实现）
@@ -126,4 +126,43 @@ export function sanitizeExportData(data: ExportData): SanitizeResult {
     data: { ...data, config: { ...data.config, rules } },
     removedCount,
   };
+}
+
+/** 日志脱敏结果：新数组 + 被摘掉的头条目数 */
+export interface SanitizeLogsResult {
+  logs: RequestLogEntry[];
+  removedCount: number;
+}
+
+/**
+ * 摘掉导出日志里的凭据头（HAR 导出共用「分享模式」这一开关）
+ *
+ * HAR 落盘的是**真实站点的请求与响应头**：日志里的 `Cookie` / `Authorization` 就是用户当时
+ * 那个会话的凭据，一次「把 HAR 贴进工单」就等于把会话交出去。判据与配置导出同源
+ * （{@link isSensitiveHeaderName}），两条导出路径不会出现一边脱敏一边漏。
+ *
+ * 与配置导出同样的边界：不碰正文（`requestBody` / `responseBody` 是 HAR 的排障主体，
+ * 正文里的 token 需要用户自行留空），也不碰 URL（截断 URL 会打断「这条请求打到哪了」的追溯）。
+ * 纯函数：返回新数组与新对象，不改入参（同一份日志还要继续喂界面与存储）。
+ */
+export function sanitizeExportedLogs(logs: RequestLogEntry[]): SanitizeLogsResult {
+  let removedCount = 0;
+  const sanitized = logs.map(log => {
+    const requestHeaders = sanitizeMap(log.requestHeaders, SENSITIVE_HEADER_NAMES);
+    const responseHeaders = sanitizeMap(log.responseHeaders, SENSITIVE_HEADER_NAMES);
+    removedCount += requestHeaders.removed + responseHeaders.removed;
+    if (requestHeaders.removed + responseHeaders.removed === 0) return log;
+
+    const next: RequestLogEntry = { ...log };
+    if (next.requestHeaders) {
+      if (requestHeaders.value) next.requestHeaders = requestHeaders.value;
+      else delete next.requestHeaders;
+    }
+    if (next.responseHeaders) {
+      if (responseHeaders.value) next.responseHeaders = responseHeaders.value;
+      else delete next.responseHeaders;
+    }
+    return next;
+  });
+  return { logs: sanitized, removedCount };
 }

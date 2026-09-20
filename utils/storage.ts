@@ -4,7 +4,9 @@ import {
   DEFAULT_PROXY_CONFIG,
   MAX_LOG_ENTRIES,
   MAX_LOG_BODY_SIZE,
-  MAX_LOG_BODY_TOTAL,
+  MAX_LOG_FIELD_SIZE,
+  MAX_LOG_HEADER_COUNT,
+  MAX_LOG_TOTAL_SIZE,
   MAX_RULES,
 } from '@/utils/constants';
 import { truncateForLog } from '@/utils/formatters';
@@ -290,19 +292,51 @@ export async function getRequestLogs(): Promise<RequestLogEntry[]> {
 }
 
 /**
- * 按正文总量预算裁剪日志：从头部（最新）累加，超出预算即丢弃其后的条目。
+ * 按字符总量预算裁剪日志：从头部（最新）累加，超出预算即丢弃其后的条目。
  * 方向与 {@link saveRequestLogs} 的条数环形缓冲一致（数组尾部是最旧的日志）。
  */
-export function trimLogsToBudget(logs: RequestLogEntry[], budget: number = MAX_LOG_BODY_TOTAL): RequestLogEntry[] {
+export function trimLogsToBudget(logs: RequestLogEntry[], budget: number = MAX_LOG_TOTAL_SIZE): RequestLogEntry[] {
   let total = 0;
   const kept: RequestLogEntry[] = [];
   for (const log of logs) {
-    total += (log.requestBody?.length ?? 0) + (log.responseBody?.length ?? 0);
+    total += logEntrySize(log);
     // 至少留下最新一条：否则「单条就超预算」会把整份日志清成空数组，刚发生的请求反而查不到
     if (total > budget && kept.length > 0) break;
     kept.push(log);
   }
   return kept;
+}
+
+function textLength(value: string | undefined): number {
+  // 读出的历史数据可能缺字段，预算计算不该因此抛错
+  return value?.length ?? 0;
+}
+
+function headerMapSize(headers: Record<string, string> | undefined): number {
+  if (!headers) return 0;
+  let total = 0;
+  for (const [name, value] of Object.entries(headers)) total += textLength(name) + textLength(value);
+  return total;
+}
+
+/**
+ * 一条日志写进 storage 后占用的字符量
+ *
+ * 预算必须算整条日志，不是只算正文：URL、方法、规则名、错误文案与头表同样是写入的字符，
+ * 只统计正文等于在配额上留第二个无上限出口。
+ */
+export function logEntrySize(log: RequestLogEntry): number {
+  return (
+    textLength(log.requestBody) +
+    textLength(log.responseBody) +
+    textLength(log.originalUrl) +
+    textLength(log.proxiedUrl) +
+    textLength(log.method) +
+    textLength(log.ruleName) +
+    textLength(log.error) +
+    headerMapSize(log.requestHeaders) +
+    headerMapSize(log.responseHeaders)
+  );
 }
 
 /**
@@ -377,30 +411,77 @@ function scheduleLogFlush(): void {
   }, 1000);
 }
 
+/** 日志里需要按长度收口的文本字段（`id`/`timestamp`/`status` 等由本扩展生成，天然有界） */
+type TextLogField = 'requestBody' | 'responseBody' | 'originalUrl' | 'proxiedUrl' | 'method' | 'ruleName' | 'error';
+
 /**
- * 正文收口：超过 {@link MAX_LOG_BODY_SIZE} 的正文截断并留原始长度标记。
+ * 日志里各文本字段的字符上限。正文另有更大额度（它才是排障主体），其余字段一律走
+ * {@link MAX_LOG_FIELD_SIZE}——它们全都来自页面或上游响应，属于可控输入。
+ */
+const LOG_FIELD_LIMITS: Record<TextLogField, number> = {
+  requestBody: MAX_LOG_BODY_SIZE,
+  responseBody: MAX_LOG_BODY_SIZE,
+  originalUrl: MAX_LOG_FIELD_SIZE,
+  proxiedUrl: MAX_LOG_FIELD_SIZE,
+  method: MAX_LOG_FIELD_SIZE,
+  ruleName: MAX_LOG_FIELD_SIZE,
+  error: MAX_LOG_FIELD_SIZE,
+};
+
+/**
+ * 写入前收口：正文按 32K 截断，URL / 方法 / 规则名 / 错误文案按 8K 截断，
+ * 头表按条数（{@link MAX_LOG_HEADER_COUNT}）与单值长度收口。
  *
  * 收口放在存储层而不是各写入点：`proxyHandler` 有五条分支写日志（mock/复杂/回退/异常/WS），
- * 漏掉任何一处都等于留一条无上限路径。未超限的条目原样返回（含 `undefined` 字段，
- * HAR 导出按 `responseBody !== undefined` 过滤，不能把它变成空字符串）。
+ * 漏掉任何一处都等于留一条无上限路径。只裁正文同样是不够的——页面可以用
+ * `fetch('https://a.com/?' + 'x'.repeat(5e6))` 或一条超长 Cookie 头把字符写进日志，
+ * 那些字段既不进正文上限、也不进总量预算时，500 条一样能占满配额。
+ *
+ * 未超限的条目原样返回（含 `undefined` 字段，HAR 导出按 `responseBody !== undefined`
+ * 过滤，不能把它变成空字符串）；被裁过的可选字段只覆盖值，不新增键。
  */
-export function capLogEntryBodies(entry: RequestLogEntry): RequestLogEntry {
-  const requestBody = capBody(entry.requestBody);
-  const responseBody = capBody(entry.responseBody);
-  if (requestBody === entry.requestBody && responseBody === entry.responseBody) return entry;
-  return { ...entry, requestBody, responseBody };
+export function capLogEntry(entry: RequestLogEntry): RequestLogEntry {
+  const patch: Partial<RequestLogEntry> = {};
+  for (const [field, limit] of Object.entries(LOG_FIELD_LIMITS) as [TextLogField, number][]) {
+    const capped = capText(entry[field], limit);
+    if (capped !== entry[field]) patch[field] = capped;
+  }
+  const requestHeaders = capHeaderMap(entry.requestHeaders);
+  if (requestHeaders !== entry.requestHeaders) patch.requestHeaders = requestHeaders;
+  const responseHeaders = capHeaderMap(entry.responseHeaders);
+  if (responseHeaders !== entry.responseHeaders) patch.responseHeaders = responseHeaders;
+  return Object.keys(patch).length > 0 ? { ...entry, ...patch } : entry;
 }
 
-function capBody(value: string | undefined): string | undefined {
-  if (value === undefined || value.length <= MAX_LOG_BODY_SIZE) return value;
-  return truncateForLog(value, MAX_LOG_BODY_SIZE);
+function capText(value: string | undefined, limit: number): string | undefined {
+  if (value === undefined || value.length <= limit) return value;
+  return truncateForLog(value, limit);
+}
+
+/**
+ * 头表收口：超出条数上限的丢弃、值超长的截断。
+ *
+ * 头名不裁——它由浏览器的头解析器给出（超长名在建 `Headers` 时就抛错），进不到这里。
+ */
+function capHeaderMap(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!headers) return headers;
+  const all = Object.entries(headers);
+  const kept = all.slice(0, MAX_LOG_HEADER_COUNT);
+  const capped: Record<string, string> = {};
+  let trimmed = kept.length !== all.length;
+  for (const [name, value] of kept) {
+    const nextValue = capText(value, MAX_LOG_FIELD_SIZE) ?? '';
+    if (nextValue !== value) trimmed = true;
+    capped[name] = nextValue;
+  }
+  return trimmed ? capped : headers;
 }
 
 /**
  * 添加一条请求日志（缓冲写入，10 条或 1s 刷写一次）
  */
 export async function addRequestLog(entry: RequestLogEntry): Promise<void> {
-  logBuffer.push(capLogEntryBodies(entry));
+  logBuffer.push(capLogEntry(entry));
   scheduleLogFlush();
 }
 

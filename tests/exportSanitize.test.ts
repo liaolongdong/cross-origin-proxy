@@ -1,14 +1,22 @@
 /**
- * 配置导出脱敏（分享模式）
+ * 导出脱敏（分享模式）：配置导出与 HAR 导出共用同一套判据
  *
  * 规则里的请求头覆盖 / 响应头覆盖 / 查询参数覆盖是凭据最常见的落脚点，而配置文件常被
  * 直接贴进群里让同事复现环境。`sanitizeExportData` 在导出前整条摘掉这些项：
  * 导入方退化为「不覆盖该头」，比留下 `***REMOVED***` 这种会被服务端 401 的占位值更安全。
+ * `sanitizeExportedLogs` 对请求日志做同样的事，HAR 导出因此不再把浏览器真实发出的
+ * `Cookie`/`Authorization` 原样写进导出文件（正文刻意不动，与配置侧同口径）。
  */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import type { ExportData, ProxyRule } from '@/utils/types';
-import { sanitizeExportData, isSensitiveHeaderName, isSensitiveQueryName } from '@/utils/exportSanitize';
+import type { ExportData, ProxyRule, RequestLogEntry } from '@/utils/types';
+import {
+  sanitizeExportData,
+  sanitizeExportedLogs,
+  isSensitiveHeaderName,
+  isSensitiveQueryName,
+} from '@/utils/exportSanitize';
+import { logsToHar } from '@/utils/har';
 
 function makeRule(overrides: Partial<ProxyRule> = {}): ProxyRule {
   return {
@@ -171,5 +179,88 @@ describe('[功能] 弹窗默认走分享模式', () => {
     expect(appSrc).toContain('async function handleExport(sanitize: boolean)');
     expect(appSrc).toContain('await exportConfig(sanitize)');
     expect(appSrc).toContain("t('exportSuccessSanitized', [removedCount])");
+  });
+});
+
+// ─── S2：HAR 导出与配置导出共用同一个「分享模式」 ────────────────────────────
+
+function makeLog(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
+  return {
+    id: 'l1',
+    timestamp: 0,
+    ruleId: 'r1',
+    ruleName: 'rule',
+    originalUrl: 'https://fat.example.com/api/users',
+    proxiedUrl: 'https://uat.example.com/api/users',
+    method: 'GET',
+    status: 200,
+    proxyType: 'sw',
+    ...overrides,
+  };
+}
+
+describe('sanitizeExportedLogs — HAR 不再原样落盘凭据头', () => {
+  it('摘掉请求/响应头里的凭据头，其余头与正文原样保留', () => {
+    const { logs, removedCount } = sanitizeExportedLogs([
+      makeLog({
+        requestHeaders: { Accept: 'application/json', Cookie: 'session=abc', Authorization: 'Bearer sk-live' },
+        responseHeaders: { 'content-type': 'application/json', 'set-cookie': 'sid=1' },
+        requestBody: '{"q":1}',
+        responseBody: '{"ok":true}',
+      }),
+    ]);
+
+    expect(removedCount).toBe(3);
+    expect(logs[0].requestHeaders).toEqual({ Accept: 'application/json' });
+    expect(logs[0].responseHeaders).toEqual({ 'content-type': 'application/json' });
+    expect(logs[0].requestBody).toBe('{"q":1}');
+    expect(logs[0].responseBody).toBe('{"ok":true}');
+  });
+
+  it('整组头都是凭据时字段回到「未配置」，而不是留一个空对象', () => {
+    const { logs } = sanitizeExportedLogs([makeLog({ requestHeaders: { Cookie: 'session=abc' } })]);
+    expect('requestHeaders' in logs[0]).toBe(false);
+  });
+
+  it('没有凭据头时返回同一对象引用（不制造无意义的副本）', () => {
+    const log = makeLog({ requestHeaders: { Accept: '*/*' } });
+    const { logs, removedCount } = sanitizeExportedLogs([log]);
+    expect(removedCount).toBe(0);
+    expect(logs[0]).toBe(log);
+  });
+
+  it('纯函数：入参日志不被改写（同一份还要继续喂界面与存储）', () => {
+    const log = makeLog({ requestHeaders: { Cookie: 'session=abc' } });
+    sanitizeExportedLogs([log]);
+    expect(log.requestHeaders).toEqual({ Cookie: 'session=abc' });
+  });
+
+  it('脱敏后的日志转 HAR：条目里再无比名敏感的凭据头', () => {
+    const { logs } = sanitizeExportedLogs([
+      makeLog({
+        requestHeaders: { Cookie: 'session=abc' },
+        responseHeaders: { 'set-cookie': 'sid=1' },
+        responseBody: '{"ok":true}',
+      }),
+    ]);
+    const json = JSON.stringify(logsToHar(logs));
+    expect(json).not.toContain('session=abc');
+    expect(json).not.toContain('sid=1');
+  });
+});
+
+describe('[功能] HAR 导出的分享模式接线（源码契约）', () => {
+  const dialogSrc = readFileSync('components/options/ImportExportDialog.vue', 'utf-8');
+  const routerSrc = readFileSync('entrypoints/background/messageRouter.ts', 'utf-8');
+
+  it('弹窗把勾选值随 EXPORT_HAR 上报，并明示当前模式', () => {
+    expect(dialogSrc).toContain('type: MessageType.EXPORT_HAR');
+    expect(dialogSrc).toContain('data: { sanitize: sanitizeExport.value }');
+    expect(dialogSrc).toContain("sanitizeExport ? t('exportHarRedacted') : t('exportHarFull')");
+  });
+
+  it('路由侧缺省脱敏，只有显式 false 才导出全量头', () => {
+    expect(routerSrc).toContain('message.data?.sanitize !== false');
+    expect(routerSrc).toContain('sanitizeExportedLogs(logs).logs');
   });
 });

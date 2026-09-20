@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — 跨域代理助手 / Cross-Origin Proxy
 
-> Last Updated: 2026-09-18
+> Last Updated: 2026-09-20
 > 本文件是商店上架的唯一素材源：把这里的内容逐项复制进 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)。
 > 商店表单（名称/描述/截图/权限理由/数据披露）无法由 API 代写，只能手动粘；**包上传与提审已经自动化**，见第 11 节。
 > 本文件位于仓库根目录，不在 `.output/chrome-mv3` 内，因此不会被打进上传包。
@@ -15,7 +15,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 | -------- | ---------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | 名称     | 75 码点    | 36 / 52                | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                              |
 | 摘要     | 132 码点   | 100 / 127              | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
-| 详细描述 | 16000 码点 | 中约 4.7K / 英约 12.4K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
+| 详细描述 | 16000 码点 | 中约 4.9K / 英约 13.1K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
 | 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
 | ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
@@ -76,6 +76,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 它能做什么：
 - 按通配符、前缀或正则匹配请求地址，转发到你指定的另一个环境
 - 注入或替换请求头（例如目标环境的鉴权 token），替换请求体
+- 按规则携带目标环境的 Cookie（默认关闭）：开启后由扩展以 credentials: 'include' 代发，带上你在该环境已有的会话，不必把 Cookie 抄进请求头覆盖
 - 响应改写：替换响应状态码、响应头，或按路径替换 JSON 里的某个字段（如 data.token）
 - 假数据 / Mock：接口还没写好时，直接返回你准备的 JSON / 文本 / HTML / XML
 - 条件化 Mock：一条规则里配多个条件（URL 正则、请求方法、查询参数），首个命中的条件决定响应体、状态码与 Content-Type
@@ -113,7 +114,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - 配置以 JSON 导出；导出默认开启分享模式，剔除 Authorization / Cookie 一类请求与响应头以及 token 类查询参数（取消勾选即原样备份），导入支持覆盖或合并两种模式，同事导入即可复现同一套规则
 - 两条通道各自的命中统计：网络层取近 5 分钟的命中记录，后台通道自上次配置变更起累计（内存计数，后台工作线程被回收后从 0 重新开始）
 
-一点说明（不是缺陷）：只重写 URL 的简单规则由浏览器网络层完成，那条请求不经过扩展的脚本，所以请求日志里不会出现它。这类规则请用「URL 匹配测试」验证，或看规则表里的命中次数；带任何改写、Mock、延迟能力的规则会正常出现在日志里。
+一点说明（不是缺陷）：只重写 URL 的简单规则由浏览器网络层完成，那条请求不经过扩展的脚本，所以请求日志里不会出现它。这类规则可以看弹窗右上格「本页 · 近 5 分钟」的网络层命中数、用「URL 匹配测试」验证，或看规则表里的命中次数；带任何改写、Mock、延迟能力的规则会正常出现在日志里。
 
 改了规则却没生效，按这个顺序检查：
 1. 弹窗里的总开关是否开启（关闭时网络层规则也会一起卸载）
@@ -133,7 +134,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 界面：
 - 中文 / English 双语界面，6 套主题与浅色 / 深色 / 跟随系统
-- 弹窗提供总开关、今日请求数（只统计后台通道）、自动关闭倒计时、「当前页面命中哪条规则」的预览，以及「为这个页面创建规则」
+- 弹窗提供总开关、经扩展请求数（只统计后台通道）、本页近 5 分钟的网络层命中数、自动关闭倒计时、「本页地址命中哪条规则」的预览（浏览器不会应用的网络层规则会标红），以及「为这个页面创建规则」
 - 代理自动关闭：30 分钟 / 1 小时 / 2 小时 / 4 小时，基于浏览器定时器，服务工作线程重启后仍然生效
 - 快捷键：⌘⇧P（Windows/Linux 为 Ctrl+Shift+P）切换代理；配置页内 N 新建规则、/ 或 ⌘F 聚焦搜索、Esc 关闭弹窗
 
@@ -142,6 +143,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - 唯一的网络流量就是你自己要求代理的接口流量；导出文件也只写到本地
 - 扩展自身零远端依赖：不加载远程脚本、不请求任何远端接口，界面、规则与日志全部从本机读取（你要求代理的那个接口当然仍然需要网络可达）
 - 关于「更改您访问的网站上的数据」权限：被代理的请求发生在每个开发者自己的内网域名、localhost 与各个测试环境之间，这些地址无法在扩展里预先枚举。扩展用它只做两件事——在你浏览的页面上注入拦截器、按你亲手创建的规则代发请求，不向任何第三方或开发者服务器发送数据
+- 关于「携带 Cookie」：默认关闭。某条规则开启后，带出去的是你在该规则指向的那个目标环境已有的会话，请求仍然只发往该地址，不经过第三方或我们的服务器
 - 隐私政策：https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - 产品说明页：https://liaolongdong.github.io/cross-origin-proxy/
 
@@ -207,6 +209,7 @@ Reach for it if any of these is familiar:
 What it does:
 - Match requests by wildcard, prefix or regular expression and forward them to another environment
 - Inject or replace request headers (such as the target environment's auth token) and replace request bodies
+- Send the target environment's cookies per rule, off by default: when a rule turns it on the extension issues the request with credentials: 'include', carrying the session you already have there instead of a cookie pasted into the header overrides
 - Response overrides: the status code, the response headers, or individual JSON fields by dot-notation path (`data.token`)
 - Mock responses with your own fake data (JSON / text / HTML / XML) when the API is not built yet
 - Conditional mock responses: give one rule several conditions (URL pattern, request method, query parameters) and the first match decides the body, status and Content-Type
@@ -244,7 +247,7 @@ Debugging and teamwork:
 - Export configuration as JSON; share mode is on by default, stripping Authorization / Cookie style request and response headers plus token-like query parameters (untick it for a verbatim backup). On import you replace the current rules or merge into them, so a teammate gets the identical setup
 - Per-rule hit counts for both channels: the network layer over the last 5 minutes, the background channel since the last config change (an in-memory count that restarts when the worker is recycled)
 
-One thing that is by design, not a bug: a rule that only rewrites the URL is handled by the browser's network layer, so that request never passes through the extension's scripts and does not appear in the request log. Verify those rules with the URL match tester or the rule's hit count; anything with an override, mock or delay shows up in the log normally.
+One thing that is by design, not a bug: a rule that only rewrites the URL is handled by the browser's network layer, so that request never passes through the extension's scripts and does not appear in the request log. For those rules, read the "This tab · 5 min" network-layer counter in the popup, verify with the URL match tester, or check the rule's hit count; anything with an override, mock or delay shows up in the log normally.
 
 If a rule seems not to take effect, check in this order:
 1. The global switch in the popup is on (switching it off also removes the network-layer rules)
@@ -264,7 +267,7 @@ How it differs from the usual options:
 
 Interface:
 - English and Chinese UI, six themes, light / dark / system modes
-- Popup with a global switch, today's request count (background channel only), an auto-off countdown, a preview of which rule matches the page you have open, and "create a rule for this page"
+- Popup with a global switch, the request count via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, an auto-off countdown, a preview of which rule matches the page you have open (network-layer rules Chrome won't apply go red), and "create a rule for this page"
 - Auto-off countdown of 30 minutes, 1, 2 or 4 hours, built on browser alarms so it survives service-worker restarts
 - Keyboard shortcut Ctrl+Shift+P (⌘⇧P on macOS) to toggle proxying; on the options page N adds a rule, / or ⌘F focuses search, Esc closes the topmost dialog
 
@@ -273,6 +276,7 @@ About your data:
 - The only network traffic is the API traffic you ask it to proxy; exports are written locally
 - The extension itself has zero remote dependencies: no remote scripts, no calls to any endpoint of ours, and its UI, rules and logs are all read from local storage (the API you proxy obviously still has to be reachable)
 - About the "change the data on websites you visit" permission: proxied requests happen on each developer's own internal domains, localhost and staging hosts, which cannot be enumerated in advance. The extension uses that permission for two things only — injecting the interceptor into pages you browse, and issuing requests on your behalf according to rules you created. Nothing is sent to any third party or to a developer-controlled server
+- About "Send cookies": off by default. When a rule turns it on, the session that goes out is the one you already have at the environment that rule points at, and the request still travels only to that address — never through a third party or our servers
 - Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - Product overview: https://liaolongdong.github.io/cross-origin-proxy/
 
@@ -367,7 +371,7 @@ Redirects a page's API requests to another backend environment and lets develope
 | User activity                | No         | No                      | —       | No                         |
 | Website content              | No         | No                      | —       | No                         |
 
-Rationale to paste if the form asks for clarification: request and response data of proxied calls is read **inside the user's browser** to perform the transformation the user configured, and is written only to `chrome.storage.local`. The extension contains no analytics, no telemetry and no remote endpoint of its own; there is no code path that uploads user data. Blocked/mock responses never reach a third party.
+Rationale to paste if the form asks for clarification: request and response data of proxied calls is read **inside the user's browser** to perform the transformation the user configured, and is written only to `chrome.storage.local`. The extension contains no analytics, no telemetry and no remote endpoint of its own; there is no code path that uploads user data. Blocked/mock responses never reach a third party. One per-rule switch is worth naming: **Send cookies** is off by default, and a rule that turns it on sends the request with `credentials: 'include'`, so the browser attaches the session the developer already has on that same target environment. It changes nothing about who receives data — the request still goes only to the address the user's own rule points at, never to us.
 
 > ⚠️ 2026-08-01 起 Chrome 应用商店执行了更严格的数据收集与「最小必要」基准。提交前请以 Dashboard 当时的表单文案为准复核一遍上表，尤其确认 `declarativeNetRequestFeedback` 的命中统计是否被归入需要声明的类别。
 
@@ -448,7 +452,7 @@ done
 - [ ] Single purpose 一句话填写（第 1.3 节）
 - [ ] 每一项权限与 host 权限的理由都粘贴（第 3 节），`<all_urls>` 单独说明
 - [ ] 数据披露按第 4 节勾选，与隐私政策文本一致
-- [ ] 描述里的每条能力主张都对得上要提交的那个包，尤其是按实现收窄过的六处：URL 匹配测试的遮蔽方向、日志只落文本 body、cURL 仅限日志条目、覆盖/合并是**导入**模式、后台命中数是内存计数、弹窗今日请求数只含后台通道
+- [ ] 描述里的每条能力主张都对得上要提交的那个包，尤其是按实现收窄过的六处：URL 匹配测试的遮蔽方向、日志只落文本 body、cURL 仅限日志条目、覆盖/合并是**导入**模式、后台命中数是内存计数、弹窗「经扩展 · 今日」只含后台通道，网络层命中另占一格；2026-09-20 又按实现补了四处：长连接上只有地址重写、查询参数注入与阻断生效（请求头/请求体/响应改写、Mock、延迟、重试对 socket 无效）、两条通道的命中数不可相加（窗口口径不同）、HAR 导出与配置导出共用「分享模式」、携带 Cookie 是默认关闭的按规则开关
 - [ ] 隐私政策 URL 已可公开访问（第 5 节）
 - [ ] 开发者联系邮箱已验证（Developer Dashboard → Account）
 
@@ -463,9 +467,13 @@ done
 功能自检（提交前在本地最新版 Chrome 手动过一遍）：
 
 - [ ] 通配 / 前缀 / 正则三类规则均能命中并重写（正则注意：网络层重定向替换的是整个 URL，想两通道结果一致就写覆盖整条 URL 的正则）
-- [ ] 通道判定用「URL 匹配测试」面板核对：它直接显示命中的通道（网络层 / 后台）。简单规则在该面板显示网络层重定向、请求能正常转发，且规则表的「命中次数」列会增长——但**请求日志里不会有这一条**（日志只由后台通道写入，网络层重定向不经过扩展脚本）；复杂规则在面板显示后台且日志有对应行。日志抽屉另有一个只统计网络层命中的面板可交叉验证
+- [ ] 通道判定用「URL 匹配测试」面板核对：它直接显示命中的通道（网络层 / 后台）。简单规则在该面板显示网络层重定向、请求能正常转发，且弹窗右上格「本页 · 近 5 分钟」会出现网络层命中数、规则表的「命中次数」列会增长——但**请求日志里不会有这一条**（日志只由后台通道写入，网络层重定向不经过扩展脚本）；复杂规则在面板显示后台且日志有对应行。日志抽屉另有一个只统计网络层命中的面板可交叉验证
 - [ ] Mock、延迟、阻断、响应改写、方法过滤、查询参数注入逐项生效
-- [ ] WebSocket 规则能转发 `wss://` 连接
+- [ ] WebSocket 规则能转发 `wss://` 连接；规则列表里 WS 徽标的悬停说明与实现一致——只有地址重写、查询参数注入与阻断在长连接上生效，其余能力画了也不会作用到 socket
+- [ ] 「携带 Cookie」默认关闭时，目标环境收到的请求不带它的 Cookie；某条规则打开后请求以 `credentials: 'include'` 发出，且「URL 匹配测试」显示这条规则走后台通道（网络层无法表达该能力）
+- [ ] 页面里的同步 XHR（`open(m, u, false)`）命中复杂规则时回退原生并留下一条控制台提示：`send()` 返回时 `status`/`response` 已就绪，不能被异步化；命中阻断规则时不回退
+- [ ] 命中次数列分两格（网络层 / 后台），两格数字相加**不等于**弹窗里的任何一格，这是预期：前者近 5 分钟、后者自配置变更起累计；网络层读不到时那一格显示「—」而不是 0
+- [ ] 导出 HAR：默认（分享模式）不含 `Authorization`/`Cookie` 与 token 类查询参数，取消勾选后为全量；配置导出走同一个勾选
 - [ ] 拦截异常时页面回退原生请求，且阻断请求不会被回退发出
 - [ ] 弹窗、配置页、日志抽屉、导入导出无报错（`chrome://extensions` 查看 service worker 控制台）
 - [ ] 关闭总开关后不再代理任何请求；自动关闭倒计时到期真的关掉

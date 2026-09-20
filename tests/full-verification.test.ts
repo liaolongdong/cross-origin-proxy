@@ -4,7 +4,7 @@ import { findMatchingRule, rewriteUrl, isSimpleRule } from '@/utils/urlMatcher';
 import { toDnrPriority } from '@/utils/dnrRules';
 import { formatTimeAgo, getStatusColor, truncateUrl } from '@/utils/formatters';
 import { findConflictingRule, computeShadowedRuleIds } from '@/utils/ruleConflicts';
-import { computeLogStats, combineHitStats } from '@/utils/ruleStats';
+import { computeLogStats, groupHitStatsByRule } from '@/utils/ruleStats';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import type { ProxyRule, RequestLogEntry, MockCondition } from '@/utils/types';
 
@@ -319,32 +319,35 @@ describe('[Feature 1] Toggle All Rules — deep verification', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Feature 2: Per-rule hit counts — 深度验证（直接验证 utils/ruleStats.combineHitStats）
+// Feature 2: Per-rule hit counts — 深度验证（直接验证 utils/ruleStats.groupHitStatsByRule）
+//
+// 两条通道的计数窗口不同（网络层=近 5 分钟滚动，扩展通道=自上次配置变更），
+// 相加得到的数不属于任何一段时间，因此这里钉的是「分通道保留、绝不相加」。
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Feature 2] Per-rule hit counts — deep verification', () => {
-  it('should merge DNR and SW stats for same ruleId', () => {
-    const stats = combineHitStats([{ ruleId: 'r1', hitCount: 10 }], [{ ruleId: 'r1', hitCount: 5 }]);
-    expect(stats.get('r1')).toBe(15);
+  it('同一规则两侧都有读数时分开保留，不合并成一个数', () => {
+    const stats = groupHitStatsByRule([{ ruleId: 'r1', hitCount: 10 }], [{ ruleId: 'r1', hitCount: 5 }]);
+    expect(stats.get('r1')).toEqual({ net: 10, ext: 5 });
   });
 
-  it('should handle rules only in DNR stats', () => {
-    const stats = combineHitStats([{ ruleId: 'r1', hitCount: 10 }], []);
-    expect(stats.get('r1')).toBe(10);
+  it('只出现在网络层读数的规则，扩展通道记 0', () => {
+    const stats = groupHitStatsByRule([{ ruleId: 'r1', hitCount: 10 }], []);
+    expect(stats.get('r1')).toEqual({ net: 10, ext: 0 });
   });
 
-  it('should handle rules only in SW stats', () => {
-    const stats = combineHitStats([], [{ ruleId: 'r1', hitCount: 7 }]);
-    expect(stats.get('r1')).toBe(7);
+  it('只出现在扩展通道的规则，网络层记 0（渲染侧再决定 0 要不要显示）', () => {
+    const stats = groupHitStatsByRule([], [{ ruleId: 'r1', hitCount: 7 }]);
+    expect(stats.get('r1')).toEqual({ net: 0, ext: 7 });
   });
 
-  it('should handle empty stats from both channels', () => {
-    const stats = combineHitStats([], []);
+  it('两侧都为空时不产生条目', () => {
+    const stats = groupHitStatsByRule([], []);
     expect(stats.size).toBe(0);
   });
 
-  it('should handle multiple rules across both channels', () => {
-    const stats = combineHitStats(
+  it('多条规则跨通道归并：每条恰好一个条目，各通道分别累加', () => {
+    const stats = groupHitStatsByRule(
       [
         { ruleId: 'r1', hitCount: 10 },
         { ruleId: 'r2', hitCount: 20 },
@@ -355,16 +358,16 @@ describe('[Feature 2] Per-rule hit counts — deep verification', () => {
         { ruleId: 'r4', hitCount: 40 },
       ],
     );
-    expect(stats.get('r1')).toBe(11);
-    expect(stats.get('r2')).toBe(20);
-    expect(stats.get('r3')).toBe(30);
-    expect(stats.get('r4')).toBe(40);
+    expect(stats.get('r1')).toEqual({ net: 10, ext: 1 });
+    expect(stats.get('r2')).toEqual({ net: 20, ext: 0 });
+    expect(stats.get('r3')).toEqual({ net: 30, ext: 0 });
+    expect(stats.get('r4')).toEqual({ net: 0, ext: 40 });
     expect(stats.size).toBe(4);
   });
 
-  it('should return 0 for rules not in stats map', () => {
-    const stats = combineHitStats([{ ruleId: 'r1', hitCount: 5 }], []);
-    expect(stats.get('nonexistent') ?? 0).toBe(0);
+  it('未命中过的规则不在 Map 中（读端以「无条目」表示从未命中）', () => {
+    const stats = groupHitStatsByRule([{ ruleId: 'r1', hitCount: 5 }], []);
+    expect(stats.has('nonexistent')).toBe(false);
   });
 });
 
@@ -980,16 +983,22 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
     const appSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
     const start = appSrc.indexOf('function handleHashNavigation');
     const router = appSrc.slice(start, appSrc.indexOf('\n}\n', start));
-    // 四个 hash 入口：#add-rule / #logs / #import-export / #profiles（+ 带参的 from-tab）
+    // 五个 hash 入口：#add-rule / #logs / #import-export / #profiles / #url-test（+ 带参的 from-tab）
     expect(router).toContain('#add-rule');
     expect(router).toContain('#logs');
     expect(router).toContain('#import-export');
     expect(router).toContain('#profiles');
     expect(router).toContain('#add-rule-from-tab=');
+    // #url-test 是 popup「本页地址」卡的出口（可见性批次）：它打开的是既有纯受控弹窗
+    expect(router).toContain('#url-test');
     // 对应组件：RuleFormDialog 与 ProfilesDialog 已在清单内；
     // ImportExportDialog / UrlTestDialog 为纯受控组件（无 visible watcher），
     // LogDrawer 的数据由 App.vue 自身的 watch(showLogs) 拉取——父组件 setup 早于 onMounted，不受本竞态影响。
-    for (const stateless of ['components/options/ImportExportDialog.vue', 'components/options/LogDrawer.vue']) {
+    for (const stateless of [
+      'components/options/ImportExportDialog.vue',
+      'components/options/LogDrawer.vue',
+      'components/options/UrlTestDialog.vue',
+    ]) {
       const src = fs.readFileSync(stateless, 'utf-8');
       expect(src, stateless).not.toMatch(/\(\)\s*=>\s*props\.visible,/);
       expect(src, stateless).not.toMatch(/@open\s*=/);
@@ -1009,5 +1018,66 @@ describe('[Integer priority] 表单侧不再产出小数优先级', () => {
   it('el-input-number 锁死 precision 与 step-strictly（缺任一项都能敲出 2.5）', () => {
     expect(block).toContain(':precision="0"');
     expect(block).toContain('step-strictly');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 可见性批次：popup 不得继续对网络层通道保持沉默
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Visibility] popup 的生效证据来自三条独立线索，而不是一句否定', () => {
+  const popupSrc = fs.readFileSync('entrypoints/popup/App.vue', 'utf-8');
+
+  it('popup 必须接入 DNR 可用性诊断，被跳过的规则不得渲染成绿色命中', () => {
+    expect(popupSrc).toContain("from '@/utils/dnrSupport'");
+    expect(popupSrc).toContain('findDnrSkippedRules');
+    expect(popupSrc).toContain('pageHitRuleSkipped');
+  });
+
+  it('popup 必须按标签页取网络层命中数（SW 日志数不到这一半流量）', () => {
+    expect(popupSrc).toContain('MessageType.GET_DNR_STATS');
+    expect(popupSrc).toMatch(/data:\s*\{\s*tabId\s*\}/);
+  });
+
+  it('「0 次」与「不知道」必须可区分：三态判据只在 utils/dnrSample.ts 一处', () => {
+    // 判据下沉到纯函数，两个入口只把 state 映射成文案；两处各写一遍曾经写过歪
+    const sampleSrc = fs.readFileSync('utils/dnrSample.ts', 'utf-8');
+    expect(sampleSrc).toContain('sampledAt === 0');
+    expect(sampleSrc).toMatch(/stale\s*\?\s*\{\s*state:\s*'unavailable'[\s\S]{0,40}:\s*\{\s*state:\s*'notApplicable'/);
+    for (const [file, src] of [
+      ['entrypoints/popup/App.vue', popupSrc],
+      ['composables/useRequestLog.ts', fs.readFileSync('composables/useRequestLog.ts', 'utf-8')],
+    ] as const) {
+      expect(src, file).toContain('describeDnrSample');
+      expect(src, file).not.toContain('sampledAt === 0');
+    }
+    // 未采到样时渲染占位符，而不是把未知显示成 0
+    expect(popupSrc).toContain("'—'");
+  });
+
+  it('网络层命中数不得等待 DNR 可用性诊断：regex 规则的 RE2 往返会拖慢这个数字', () => {
+    const sampling = popupSrc.indexOf('void fetchTabDnrStats(');
+    const diagnosis = popupSrc.indexOf('await findDnrSkippedRules(');
+    expect(sampling).toBeGreaterThan(-1);
+    expect(diagnosis).toBeGreaterThan(-1);
+    expect(sampling).toBeLessThan(diagnosis);
+  });
+
+  it('第三格带注释行后，指标行与分隔线的对齐仍靠顶部/居中显式声明', () => {
+    // 这三条都是静默失效型：缺了不报错，只是数字下沉半行、按钮换了一副字形
+    const styleBlock = popupSrc.slice(popupSrc.indexOf('<style'));
+    expect(styleBlock).toMatch(/\.metrics-row\s*\{[^}]*align-items:\s*flex-start/);
+    expect(styleBlock).toMatch(/\.metric-divider\s*\{[^}]*align-self:\s*center/);
+    expect(styleBlock).toMatch(/\.page-hit-link\s*\{[^}]*font-family:\s*inherit/);
+  });
+
+  it('网络层命中数不得写成「接口请求数」：该计数含图片/脚本/字体等全部资源类型', () => {
+    // 窗口口径必须两侧都写出来，但中英的字面写法本就不同，不能拿一个正则套两份文案
+    const windowPattern: Record<'zh_CN' | 'en', RegExp> = { zh_CN: /近 5 分钟/, en: /5 ?min/ };
+    for (const locale of ['zh_CN', 'en'] as const) {
+      const dict = JSON.parse(fs.readFileSync(`locales/${locale}/popup.json`, 'utf-8'));
+      expect(dict.metricDnrTab, locale).toMatch(windowPattern[locale]);
+      expect(dict.metricDnrTab, locale).not.toMatch(/接口|请求数|API request/i);
+    }
   });
 });

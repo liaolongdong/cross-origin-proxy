@@ -97,10 +97,10 @@ describe('wildcard 匹配与重写的协同', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// getProxyStatus — 今日请求计数（修复：批间顺序假设导致漏计）
+// getProxyStatus — 经扩展（SW 通道）请求计数（修复：批间顺序假设导致漏计）
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('getProxyStatus — todayRequestCount', () => {
+describe('getProxyStatus — swRequestCount（原 todayRequestCount：只覆盖 SW 通道）', () => {
   const store: Record<string, unknown> = {};
 
   beforeEach(() => {
@@ -160,7 +160,7 @@ describe('getProxyStatus — todayRequestCount', () => {
 
     const { getProxyStatus } = await import('@/entrypoints/background/proxyHandler');
     const status = await getProxyStatus();
-    expect(status.todayRequestCount).toBe(3);
+    expect(status.swRequestCount).toBe(3);
   });
 
   it('无今日日志时计数为 0', async () => {
@@ -170,7 +170,16 @@ describe('getProxyStatus — todayRequestCount', () => {
 
     const { getProxyStatus } = await import('@/entrypoints/background/proxyHandler');
     const status = await getProxyStatus();
-    expect(status.todayRequestCount).toBe(0);
+    expect(status.swRequestCount).toBe(0);
+  });
+
+  it('旧字段名不得复活：它的名字在承诺「今日全部请求」，而它只数得到后台通道', async () => {
+    store['request_logs'] = [makeLog('any', Date.now())];
+    store['proxy_config'] = { enabled: true, rules: [] };
+
+    const { getProxyStatus } = await import('@/entrypoints/background/proxyHandler');
+    const status = await getProxyStatus();
+    expect(status).not.toHaveProperty('todayRequestCount');
   });
 });
 

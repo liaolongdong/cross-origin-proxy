@@ -76,7 +76,7 @@ The four screens map to the four everyday actions: **write a rule → check what
 
 **Reordering** — drag the ⠿ handle on any row. The table shows rules in array order, and dragging updates both display order and priority values.
 
-**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, and imports a `.har` file to auto-create rules from recorded traffic (those rules arrive disabled until you enable them).
+**HAR** — the Import/Export dialog exports captured background-channel logs as a `.har` file, redacted or not according to the same **share mode** tick used for config export (on by default), and imports a `.har` file to auto-create rules from recorded traffic (those rules arrive disabled until you enable them).
 
 **cURL import** — paste a cURL command into the Import cURL section (line continuations and single/double quotes supported) and press Parse & Create Rule. A wildcard rule is generated from the request origin with headers and body prefilled.
 
@@ -127,7 +127,7 @@ Either way, once it is installed: click the icon, turn on **Proxy Switch**, add 
    | Target URL    | Where matched requests are redirected. Leave empty to forward the original URL unchanged |
    | Priority      | Lower number = matched first                                                             |
 
-4. Reload the page. Requests matching an enabled rule are proxied. A wildcard rewrite like this one runs in the network layer and therefore writes **no per-request log entry** — confirm it with the **URL match tester**, or with the DNR hit counts inside **Request Logs**.
+4. Reload the page. Requests matching an enabled rule are proxied. A wildcard rewrite like this one runs in the network layer and therefore writes **no per-request log entry** — the popup's "This tab · 5 min" counter shows how many network-layer hits this tab has, and you can also confirm with the **URL match tester** or the DNR hit counts inside **Request Logs**.
 
 ## ✨ What makes it different
 
@@ -183,13 +183,13 @@ flowchart TD
     H --> I["Response handed back to the page"]
 ```
 
-A rule stops being "simple" as soon as it has any of: request header or body override, response override, mock, delay, block, retry, HTTP method filter, query parameter injection, a `ws://`/`wss://` target, a wildcard that does not end in `*`, or an empty target URL. Those conditions exist because the network layer genuinely cannot express them — see [utils/urlMatcher.ts](./utils/urlMatcher.ts).
+A rule stops being "simple" as soon as it has any of: request header or body override, response override, mock, delay, block, retry, HTTP method filter, query parameter injection, sending cookies, a `ws://`/`wss://` target, a wildcard that does not end in `*`, or an empty target URL. Those conditions exist because the network layer genuinely cannot express them — see [utils/urlMatcher.ts](./utils/urlMatcher.ts).
 
 **Regex rules must cover the whole URL.** Wildcard and prefix rewrites mean the same thing on both channels. A regex does not: the background channel replaces only the part of the URL your pattern matched and leaves the rest in place, while the network layer replaces the entire URL with the substitution string. So `^https://fat\.example\.com/api/(.*)` targeting `https://uat.example.com/$1` behaves identically either way, but a partial pattern such as `^https://fat\.example\.com/api` keeps `/users` on the background channel and drops it on the network layer. Anchor with `^`, capture the tail with `(.*)$`, and the URL match tester will show you which channel a given URL lands on. One further difference is cosmetic and intentional: when a wildcard's trailing `*` captures nothing (a request for exactly `https://fat.example.com/`), the network layer emits `https://uat.example.com/` while the background channel emits `https://uat.example.com` — the same resource either way.
 
 **CORS, precisely.** Rules on the background channel are issued by the extension, which holds host permissions, and the page receives a response the extension constructed — page CORS checks do not apply. A pure network-layer redirect still gets `Access-Control-Allow-Origin` validated. If a target environment does not allow your origin, add any capability to the rule (a response header override is the cheapest) and it switches channels.
 
-**Fallback.** If interception fails, the page falls back to native `fetch` / `XMLHttpRequest` / `WebSocket`, so requests still go out normally. Block rules are the deliberate exception: a blocked request is never replayed.
+**Fallback.** If interception fails, the page falls back to native `fetch` / `XMLHttpRequest` / `WebSocket`, so requests still go out normally. Synchronous XHR (`open()` with `false` as its third argument) falls back the same way, as do non-string bodies such as `FormData` / `Blob` / `ArrayBuffer`: proxying means a round trip through other contexts, which cannot deliver the "the result is ready when `send()` returns" contract — making it async would only hand the page an empty response. Block rules are the deliberate exception: a blocked request is never replayed.
 
 ## 📋 Features
 
@@ -197,6 +197,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 - **Rule-based URL rewriting** — match by wildcard, prefix or regex, then redirect to a target environment
 - **Request header overrides** — inject or replace headers per rule (e.g. the target environment's auth token)
+- **Send cookies** — off by default; a rule that turns it on has the extension send the request with `credentials: 'include'`, so the target environment sees the session you already have there
 - **Request body override** — replace the original body with custom content
 - **Response modification** — override status code, response headers, or individual JSON fields by dot-notation path (`data.token`)
 - **Mock response** — return custom JSON / text / HTML / XML without hitting any server
@@ -206,23 +207,24 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Retry on failure** — a per-rule switch that adds 1–5 extra attempts after a network error, a 5xx response or the 30-second per-attempt timeout, spaced 100–30000 ms apart (default 1000)
 - **HTTP method filtering** — restrict a rule to GET/POST/PUT/…; empty means any method
 - **Query parameter injection** — append or override query params on the proxied URL (`__env=uat`, gray-release tags) without rewriting the whole URL
-- **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite, handled in the page interceptor
+- **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite, handled in the page interceptor; on a socket only the URL rewrite, query parameter injection and blocking apply — header / body / response overrides, mock, delay and retry do not (the badge's tooltip says exactly this)
 
 ### 🧰 Rule management
 
 - Add / edit / duplicate / delete via a visual form
 - **Quick templates** in the empty state, before you have any rules (wildcard API proxy, prefix path, auth header, header override), and **undo** immediately after a delete
 - **Drag-and-drop reordering** of priority (grab the ⠿ handle)
-- **Capability badges** on every rule: **H** headers · **B** body · **R** response · **M** mock · **D** delay · **X** block · **Re** retry · **WS** WebSocket
+- **Capability badges** on every rule: **H** headers · **C** send cookies · **B** body · **R** response · **M** mock · **D** delay · **X** block · **Re** retry · **WS** WebSocket
 - Per-rule and batch enable / disable
 - **Batch migrate target URLs** — find/replace part of the target domain across selected rules, with a live change preview
 - Keyword search across name, pattern and target URL, plus filters by status and match type; **selections survive filtering**, and batch actions only ever hit rules that still exist
 - **"Not applied" badge** — a regex rule using syntax RE2 rejects (lookaround, backreferences), or a target URL referencing a capture group that does not exist, is never applied by the browser; such rules are flagged in the list, with the reason and the fix on hover
 - **Conflict warning** when the rule being edited is shadowed by a higher-priority rule with the same pattern, so a rule that can never fire does not go unnoticed
+- **Hit counts shown as two cells** — the network-layer cell covers a 5-minute window, the background cell is an in-memory counter since the last config change; the two windows are not addable, so they are no longer summed into one number. When a read is unavailable the cell shows "—" rather than 0, and "no active network-layer rules" is a different sentence from "the quota is spent"
 
 ### 🔍 Logs & debugging
 
-- Request log panel: method, status, duration, plus hit statistics for both channels — DNR over the last 5 minutes and service-worker hits since the last config change (an in-memory count that restarts when the worker is recycled)
+- Request log panel: method, status, duration, plus hit statistics for both channels — DNR over the last 5 minutes and service-worker hits since the last config change (an in-memory count that restarts when the worker is recycled). The DNR read is quota-limited (about 20 calls per 10 minutes), so counts are sampled on demand and say so when they may lag; the popup keeps a separate per-tab network-layer count
 - Log detail viewer: request and response headers and text bodies (a binary response body is not stored; a body longer than 32K characters is truncated with its original length annotated), JSON auto-formatted
 - **Copy as cURL** on any log entry, using that request's original URL, and **create a rule** straight from a captured request
 - Filter by method (GET / POST / PUT / DELETE), status class (2xx / 4xx / 5xx), rule or URL keyword
@@ -232,14 +234,14 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 - Export configuration as JSON with **share mode on by default**: `Authorization`, `Cookie` and similar request/response headers plus token-like query parameters are stripped, and the toast reports how many entries were removed — untick for a complete local backup
 - On import, replace the current rules or merge into them, both capped at 200 rules; a failed import **keeps your input and stays open**, so you can fix it and retry
-- **HAR 1.2** export of captured requests, and HAR import that auto-creates rules from recorded traffic (those rules arrive disabled until you enable them)
+- **HAR 1.2** export of captured requests — it follows the same **share mode** tick as config export (on by default), dropping credential-like request/response headers and token-like query parameters from every entry while leaving bodies intact; untick for a full export. HAR import auto-creates rules from recorded traffic (those rules arrive disabled until you enable them)
 - **cURL import** — paste DevTools' "Copy as cURL" output to prefill a rule
 - **Environment profiles** — save the current rule set as a named snapshot and switch between FAT / UAT / PROD
 - Auto-off countdown (`chrome.alarms`, survives service-worker restarts) and a badge that shows proxy state
 
 ### 🎨 Interface
 
-- Popup quick panel: global switch, today's request count (background channel only), recent requests, auto-off countdown, **current-page hit preview**, and "Create rule for this page" prefilled from the active tab
+- Popup quick panel: global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, recent requests, auto-off countdown, **this page's address hit preview** (with network-layer rules Chrome won't apply flagged), and "Create rule for This Page" prefilled from the active tab
 - English / 简体中文 UI, six themes with light / dark / system modes
 - Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy (Chrome-level command), and on the options page <kbd>N</kbd> new rule, <kbd>/</kbd> or <kbd>⌘</kbd>+<kbd>F</kbd> focus search, <kbd>Esc</kbd> close the topmost dialog. <kbd>N</kbd> is a bare key, like Gmail — <kbd>⌘</kbd>+<kbd>N</kbd> is reserved by the browser and cannot be captured.
 
@@ -277,7 +279,7 @@ Content scripts run on all `http` / `https` pages and rules match on request URL
 
 No. Rules, logs, profiles and preferences stay in `chrome.storage.local`. There is no analytics, no telemetry and no remote service; the only network traffic is the API traffic you ask it to proxy. See the [privacy policy](https://liaolongdong.github.io/cross-origin-proxy/privacy.html) (both languages on one page).
 
-One local caveat worth knowing: the request log stores the headers and bodies it proxies, which can include tokens. Nothing leaves the machine, but clear the log before sharing a HAR export or a screenshot. Config export defaults to share mode, which strips `Authorization`, `Cookie` and similar headers plus token-like query parameters — untick it for a full backup, and treat that file as sensitively as the log.
+One local caveat worth knowing: the request log stores the headers and bodies it proxies, which can include tokens. Nothing leaves the machine, but clear the log before pasting a detail view or taking a screenshot. Both config export and HAR export default to share mode, which strips `Authorization`, `Cookie` and similar headers plus token-like query parameters — untick it for a full backup, and treat those files as sensitively as the log.
 
 </details>
 
@@ -291,7 +293,7 @@ Because it has a capability the network layer cannot express, or because it is a
 <details>
 <summary><strong>What are the limits?</strong></summary>
 
-200 rules, the last 500 log entries (each stored body capped at 32K characters, with the original length annotated), 10 MB request body, 0–60000 ms delay, and mocked status codes clamped to 200–599 so the page can always build a valid `Response`.
+200 rules, the last 500 log entries (each stored body capped at 32K characters, with the original length annotated; URLs, methods, rule names and header values at 8K characters, at most 64 headers per map, and a 4M-character budget across the whole log), 10 MB request body, 0–60000 ms delay, and mocked status codes clamped to 200–599 so the page can always build a valid `Response`.
 
 </details>
 

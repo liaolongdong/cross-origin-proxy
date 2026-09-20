@@ -100,6 +100,13 @@
                 <span class="rule-badge rule-badge--h">H</span>
               </el-tooltip>
               <el-tooltip
+                v-if="row.sendCredentials === true"
+                :content="t('hasSendCredentials')"
+                placement="top"
+              >
+                <span class="rule-badge rule-badge--c">C</span>
+              </el-tooltip>
+              <el-tooltip
                 v-if="row.requestBodyOverride"
                 :content="t('hasBodyOverride')"
                 placement="top"
@@ -201,15 +208,28 @@
       />
       <el-table-column
         :label="t('hitCountLabel')"
-        width="70"
+        width="96"
         align="center"
       >
         <template #default="{ row }">
           <span
-            v-if="(hitStats.get(row.id) ?? 0) > 0"
-            class="hit-count-badge"
+            v-if="hitCells[row.id]"
+            class="hit-stats-pair"
           >
-            {{ hitStats.get(row.id) }}
+            <el-tooltip
+              :content="hitCells[row.id].netTip"
+              placement="top"
+            >
+              <span :class="['hit-count-badge', hitCells[row.id].netUnknown && 'hit-count-unknown']">
+                {{ hitCells[row.id].net }}
+              </span>
+            </el-tooltip>
+            <el-tooltip
+              :content="t('hitStatsExtTip')"
+              placement="top"
+            >
+              <span class="hit-count-badge hit-count-badge--ext">{{ hitCells[row.id].ext }}</span>
+            </el-tooltip>
           </span>
           <span
             v-else
@@ -288,11 +308,13 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
 import type { TableInstance } from 'element-plus';
 import type { DnrSkipReason } from '@/utils/dnrSupport';
+import type { RuleHitStats } from '@/utils/ruleStats';
+import { isDnrCountReadable, type DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
 import { isWebSocketRule } from '@/utils/urlMatcher';
@@ -314,8 +336,10 @@ const props = defineProps<{
   highlightRuleId?: string | null;
   /** 搜索关键字（用于高亮） */
   searchText: string;
-  /** 规则命中统计（ruleId → hitCount） */
-  hitStats: Map<string, number>;
+  /** 规则命中统计（ruleId → 分通道读数，**不相加**） */
+  hitStats: Map<string, RuleHitStats>;
+  /** 网络层采样的五态：决定那一格画数字、「—」还是提示「不知道 / 没有这类规则」 */
+  dnrStatsState: DnrSampleState;
   /** 被更高优先级同模式规则遮蔽的规则 ID 集合 */
   shadowedRuleIds: Set<string>;
   /** 走 DNR 通道但不会被浏览器应用的规则（ruleId → 原因） */
@@ -336,6 +360,41 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const { skipReasonLines } = useDnrSkipText();
+
+/**
+ * 命中列的两枚读数（分通道，**不相加**：网络层是近 5 分钟滚动窗口，扩展通道是自
+ * 上次配置变更以来的累计，相加出来的数不属于任何一段时间）。
+ *
+ * 只收录「至少说得出一个数」的规则：两条通道都是 0 时维持原来的「-」，避免整列噪音。
+ * 网络层读不到（商店安装态、配额退避、还没采到样）时那一格画「—」而不是 0——
+ * 「不知道」和「零次」是两件事，而且「没有生效的网络层规则」与「读不到」也不是一件事，
+ * 所以提示语按 `DnrSampleState` 逐态给，判据复用 `isDnrCountReadable`。
+ */
+const hitCells = computed(() => {
+  const state = props.dnrStatsState;
+  const readable = isDnrCountReadable(state);
+  const netTip =
+    state === 'notApplicable'
+      ? t('statsNotApplicable')
+      : state === 'stale'
+        ? t('hitStatsStale')
+        : readable
+          ? t('hitStatsNetTip')
+          : t('statsUnavailable');
+
+  const cells: Record<string, { net: string; ext: string; netTip: string; netUnknown: boolean }> = {};
+  for (const [ruleId, stat] of props.hitStats) {
+    if (!readable && stat.ext === 0) continue;
+    if (readable && stat.net === 0 && stat.ext === 0) continue;
+    cells[ruleId] = {
+      net: readable ? String(stat.net) : '—',
+      ext: String(stat.ext),
+      netTip,
+      netUnknown: !readable,
+    };
+  }
+  return cells;
+});
 
 /**
  * 表格实例：选择列开了 `reserve-selection`，勾选因此存活在表格内部而不是随 data 重建，
@@ -637,6 +696,12 @@ function isWsRule(rule: ProxyRule): boolean {
   background: var(--el-color-primary-light-9, #ecf5ff);
 }
 
+/* 凭据开关是「这条规则会带走你的会话」的提醒，用中性 info 色，不与 X（阻断）抢红 */
+.rule-badge--c {
+  color: var(--el-color-info, #909399);
+  background: var(--el-color-info-light-9, #f4f4f5);
+}
+
 .rule-badge--b {
   color: var(--el-color-warning, #e6a23c);
   background: var(--el-color-warning-light-9, #fdf6ec);
@@ -686,6 +751,24 @@ function isWsRule(rule: ProxyRule): boolean {
   color: var(--el-color-primary, #409eff);
   background: var(--el-color-primary-light-9, #ecf5ff);
   border-radius: 10px;
+}
+
+/* 两条通道各一枚：网络层（DNR）用主色，扩展通道（SW）用 warning，与抽屉里的 DNR/SW 标签同色系 */
+.hit-stats-pair {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.hit-count-badge--ext {
+  color: var(--el-color-warning, #e6a23c);
+  background: var(--el-color-warning-light-9, #fdf6ec);
+}
+
+/* 「不知道」不是「零次」：读不到网络层计数时画灰化的破折号 */
+.hit-count-unknown {
+  color: var(--el-text-color-placeholder, #c0c4cc);
+  background: var(--el-fill-color-light, #f5f7fa);
 }
 
 .hit-count-zero {

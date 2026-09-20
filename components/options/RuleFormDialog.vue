@@ -166,6 +166,14 @@
           </div>
         </el-form-item>
 
+        <!-- 携带目标环境 Cookie（仅 SW 通道） -->
+        <el-form-item :label="t('sendCredentialsLabel')">
+          <div class="header-overrides">
+            <el-switch v-model="form.sendCredentials" />
+            <div class="field-hint">{{ t('sendCredentialsHint') }}</div>
+          </div>
+        </el-form-item>
+
         <!-- 请求体覆盖 -->
         <el-form-item :label="t('requestBodyOverrideLabel')">
           <div class="override-section">
@@ -671,6 +679,7 @@ const defaultForm = {
   retryCount: 3,
   retryDelay: 1000,
   blocked: false,
+  sendCredentials: false,
 };
 
 const form = reactive({ ...defaultForm });
@@ -768,6 +777,7 @@ watch(
           retryCount: props.rule.retryCount ?? 3,
           retryDelay: props.rule.retryDelay ?? 1000,
           blocked: props.rule.blocked ?? false,
+          sendCredentials: props.rule.sendCredentials ?? false,
         });
         headerList.value = props.rule.headerOverrides
           ? Object.entries(props.rule.headerOverrides).map(([key, value]) => ({ key, value }))
@@ -813,8 +823,10 @@ watch(
         enableMockResponse.value = false;
         enableDelay.value = false;
         enableRetry.value = false;
-        // initialData 不含 blocked，Object.assign 不会重置它，需显式清除上一条规则遗留的拦截状态
+        // initialData 不含 blocked / sendCredentials，Object.assign 不会重置它们，
+        // 需显式清除上一条规则遗留的拦截与凭据状态
         form.blocked = false;
+        form.sendCredentials = false;
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
         mockConditions.value = [];
@@ -955,6 +967,11 @@ async function handleSave() {
 
   if (form.blocked) {
     result.blocked = true;
+  }
+
+  // 与 blocked 同口径：关闭时不写入字段，保持 storage 里的规则形状干净
+  if (form.sendCredentials) {
+    result.sendCredentials = true;
   }
 
   if (enableResponseOverrides.value) {

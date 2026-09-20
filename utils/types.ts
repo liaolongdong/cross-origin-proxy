@@ -34,6 +34,10 @@ export interface ProxyRule {
   methods?: string[]; // HTTP 方法白名单（大小写不敏感）；空/未定义=任意方法。非空时强制走 SW 通道（DNR 无法按方法过滤）
   queryOverrides?: Record<string, string>; // 命中后对最终 URL 追加/覆盖的查询参数（仅 SW 通道）
   headerOverrides?: Record<string, string>; // 可选请求头覆盖
+  // 携带目标环境的 Cookie（SW fetch 的 credentials: 'include'）。仅 SW 通道能力：DNR 重定向由浏览器
+  // 直接发出，跨站子请求不带 Cookie 且扩展无从干预。默认关闭——开启等于把用户在该环境的会话
+  // 交给这条规则命中的所有路径，因此非布尔值（导入文件）一律按未开启处理，见 isSimpleRule/proxyHandler
+  sendCredentials?: boolean;
   requestBodyOverride?: string; // 请求体覆盖（仅 SW 通道）
   responseOverrides?: ResponseOverrides; // 响应覆盖（仅 SW 通道）
   mockResponse?: MockResponseConfig; // Mock 响应（启用后不发真实请求）
@@ -121,7 +125,7 @@ export enum MessageType {
   // 日志相关
   GET_REQUEST_LOG = 'GET_REQUEST_LOG',
   CLEAR_REQUEST_LOG = 'CLEAR_REQUEST_LOG',
-  GET_DNR_STATS = 'GET_DNR_STATS', // Options → SW：DNR 规则级命中统计
+  GET_DNR_STATS = 'GET_DNR_STATS', // Popup/Options → SW：DNR 命中采样（可选按标签页）
   GET_SW_STATS = 'GET_SW_STATS', // Options → SW：SW 通道规则级命中统计
 
   // 状态
@@ -144,6 +148,10 @@ export enum MessageType {
 
 /**
  * 代理请求消息体
+ *
+ * `ruleId` 是 MAIN world 拦截器**已经选中**的规则 id：桥接层只下发复杂规则，页面侧的窄规则
+ * 选择必须在 SW 侧得到尊重（见 `proxyHandler` 的 `resolveSelectedRule`）。它属于不可信输入，
+ * 只作为「候选规则的校验」使用，校验不过即回落到全量重匹配。
  */
 export interface ProxyRequestMessage {
   type: MessageType.PROXY_REQUEST;
@@ -153,6 +161,7 @@ export interface ProxyRequestMessage {
     method: string;
     headers: Record<string, string>;
     body?: string | null;
+    ruleId?: string;
   };
 }
 
@@ -243,9 +252,15 @@ export interface ReorderRulesMessage {
   data: { orderedIds: string[] };
 }
 
-/** 获取 DNR 命中统计 */
+/**
+ * 获取 DNR 命中统计
+ *
+ * 带 `tabId` 时只统计该标签页（popup 的「本页 · 近 5 分钟」），缺省为全局聚合（options）。
+ * 响应是 `DnrSample` 而非 `DnrHitStat[]`：读端必须能看出「这次是缓存」和「从未采到样」。
+ */
 export interface GetDnrStatsMessage {
   type: MessageType.GET_DNR_STATS;
+  data?: { tabId?: number };
 }
 
 /** 获取 SW 通道命中统计 */
@@ -282,9 +297,15 @@ export interface ExportConfigMessage {
   type: MessageType.EXPORT_CONFIG;
 }
 
-/** 导出 HAR */
+/**
+ * 导出 HAR
+ *
+ * `sanitize` 与配置导出的「分享模式」同源：缺省按脱敏处理，只有显式传 `false`
+ * （界面上取消勾选）才导出全量请求/响应头，判据收在 `sanitizeExportedLogs`。
+ */
 export interface ExportHarMessage {
   type: MessageType.EXPORT_HAR;
+  data?: { sanitize?: boolean };
 }
 
 /** 导入 HAR */
@@ -401,12 +422,37 @@ export interface DnrHitStat {
 }
 
 /**
+ * 一次网络层（DNR）命中采样的结果
+ *
+ * 三种状态必须可区分，否则 UI 会把「不知道」说成「没有」：
+ * - `sampledAt === 0`：从未成功采样（或当前根本没有生效的动态规则）→ 渲染「—」
+ * - `stale === true`：本次未真正调用 API，`stats` 是上一次的旧值 → 灰显 + 说明
+ * - 其余：`stats` 是本次真实读数
+ */
+export interface DnrSample {
+  stats: DnrHitStat[];
+  /** 采样时刻（epoch ms）；0 = 从未成功采样 */
+  sampledAt: number;
+  /** 本次未真正调用 API，返回的是缓存 */
+  stale: boolean;
+  /** 有值 = 仅统计该标签页的命中 */
+  tabId?: number;
+}
+
+/**
  * 代理状态（Popup 使用）
  */
 export interface ProxyStatus {
   enabled: boolean;
   activeRuleCount: number;
-  todayRequestCount: number;
+  /**
+   * 今日经**后台服务线程（SW fetch 通道）**处理的请求数
+   *
+   * 简单规则由浏览器网络层重定向、不写日志，因此这里数不到它们；popup 另有一格
+   * 按标签页的网络层命中数（见 `DnrSample`）补这半边。旧名 `todayRequestCount`
+   * 会被读成「今日全部请求」，是本轮可见性缺陷的源头，不再保留。
+   */
+  swRequestCount: number;
   recentLogs: RequestLogEntry[];
   rules: { id: string; name: string; enabled: boolean }[];
   /** 自动关闭时间点（epoch ms），未配置自动关闭时为 undefined */

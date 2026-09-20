@@ -100,7 +100,7 @@
       </Transition>
     </div>
 
-    <!-- 数据点：活跃规则 / 今日请求 -->
+    <!-- 数据点：活跃规则 / 经扩展请求 / 本页网络层命中 -->
     <div class="metrics-row">
       <div class="metric">
         <span class="metric-value">{{ activeRuleCount }}</span>
@@ -108,12 +108,21 @@
       </div>
       <div class="metric-divider"></div>
       <div class="metric">
-        <span class="metric-value">{{ todayRequestCount }}</span>
+        <span class="metric-value">{{ swRequestCount }}</span>
         <span class="metric-label">{{ t('todayRequests') }}</span>
+      </div>
+      <div class="metric-divider"></div>
+      <div
+        class="metric"
+        :class="{ 'is-unknown': dnrTabDimmed }"
+      >
+        <span class="metric-value">{{ dnrTabHitsText }}</span>
+        <span class="metric-label">{{ t('metricDnrTab') }}</span>
+        <span class="metric-note">{{ dnrTabNoteText }}</span>
       </div>
     </div>
 
-    <!-- 当前页命中预览 -->
+    <!-- 本页地址命中预览（只回答页面地址本身，边界写在卡内） -->
     <div
       v-if="pageUrl"
       class="page-hit-card"
@@ -122,6 +131,7 @@
         <el-icon><Link /></el-icon>
         <span class="page-hit-title">{{ t('currentPageHit') }}</span>
       </div>
+      <p class="page-hit-boundary">{{ t('pageHitBoundary') }}</p>
       <p
         class="page-hit-url"
         :title="pageUrl"
@@ -148,9 +158,9 @@
           >
           <el-tag
             size="small"
-            type="info"
-            effect="plain"
-            >{{ pageHitChannelDnr ? t('pageHitChannelDnr') : t('pageHitChannelSw') }}</el-tag
+            :type="pageHitRuleSkipped ? 'danger' : 'info'"
+            :effect="pageHitRuleSkipped ? 'dark' : 'plain'"
+            >{{ pageHitChannelLabel }}</el-tag
           >
         </div>
         <div
@@ -171,7 +181,14 @@
         v-else
         class="page-hit-empty"
       >
-        {{ t('pageHitNoMatch') }}
+        <span>{{ t('pageHitNoMatch') }}</span>
+        <button
+          type="button"
+          class="page-hit-link"
+          @click="openOptionsPage('#url-test')"
+        >
+          {{ t('pageHitOpenUrlTest') }}
+        </button>
       </div>
     </div>
 
@@ -267,8 +284,14 @@
       >
         {{ t('noRecentRequests') }}
       </div>
+      <p
+        v-if="recentLogs.length === 0 && hasEnabledSimpleRule"
+        class="recent-empty-hint"
+      >
+        {{ t('recentRequestsDnrHint') }}
+      </p>
       <ul
-        v-else
+        v-else-if="recentLogs.length > 0"
         class="recent-list"
       >
         <li
@@ -316,7 +339,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   Promotion,
@@ -332,8 +355,11 @@ import {
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 import { MessageType } from '@/utils/types';
-import type { ProxyConfig } from '@/utils/types';
+import type { DnrSample, ProxyConfig, ProxyRule } from '@/utils/types';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
+import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
+import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
+import { formatClock } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 
 /**
@@ -346,7 +372,7 @@ const { t } = useI18n();
 const {
   enabled,
   activeRuleCount,
-  todayRequestCount,
+  swRequestCount,
   recentLogs,
   rules,
   loading,
@@ -362,35 +388,109 @@ const {
 
 const rulesExpanded = ref(false);
 
+// ─── 本页网络层命中（DNR） ────────────────────────────────────────────────
+
+/** 最近一次按标签页的网络层采样；null = 还没拿到过任何结构完整的响应 */
+const dnrTabSample = ref<DnrSample | null>(null);
+/** 走 DNR 通道但不会被应用的规则 id 集合（挂载时判定一次） */
+const dnrSkippedRuleIds = ref<Set<string>>(new Set());
+/** 是否存在「已启用的简单规则」——用来解释最近请求为什么是空的 */
+const hasEnabledSimpleRule = ref(false);
+
+const dnrTabView = computed(() => describeDnrSample(dnrTabSample.value));
+
+/** 只有真采到样才给数字；其余一律「—」，绝不用 0 冒充一个已知答案 */
+const dnrTabHitsText = computed(() => {
+  const { hits } = dnrTabView.value;
+  return hits === null ? '—' : String(hits);
+});
+
+/** 注释按状态分档：「没有网络层规则」与「读不到」是两件事，说反了就是误导 */
+const dnrTabNoteText = computed(() => {
+  const { state } = dnrTabView.value;
+  if (state === 'fresh') return t('sampledAt', formatClock(dnrTabSample.value?.sampledAt ?? 0));
+  if (state === 'stale') return t('statsMayLag');
+  if (state === 'notApplicable') return t('statsNotApplicable');
+  if (state === 'unavailable') return t('statsUnavailable');
+  return '';
+});
+
+const dnrTabDimmed = computed(() => dnrTabView.value.state !== 'fresh');
+
+async function fetchTabDnrStats(tabId: number | undefined) {
+  if (typeof tabId !== 'number') return;
+  try {
+    const sample: unknown = await chrome.runtime.sendMessage({
+      type: MessageType.GET_DNR_STATS,
+      data: { tabId },
+    });
+    // 只接受结构完整的 DnrSample：SW 异常时的 { success:false } 不得覆盖已有读数
+    if (isDnrSample(sample)) dnrTabSample.value = sample;
+  } catch (error) {
+    logger.debug('Fetch tab DNR stats failed:', error);
+  }
+}
+
 // ─── 当前页命中预览 ────────────────────────────────────────────────────
 
 const pageUrl = ref('');
 const pageHitProxiable = ref(false);
 const pageHitRuleName = ref('');
+/** 命中规则的 id：只用于查 `dnrSkippedRuleIds`，不参与渲染 */
+const pageHitRuleId = ref('');
 const pageHitRewritten = ref('');
 const pageHitChannelDnr = ref(false);
+
+/** 走 DNR 通道但浏览器不会应用它（RE2 不兼容 / 捕获引用越界） */
+const pageHitRuleSkipped = computed(() => !!pageHitRuleId.value && dnrSkippedRuleIds.value.has(pageHitRuleId.value));
+
+/** 通道标签：未生效时整枚标签转红并追加「未生效」，与 options 规则列表同一个词、同一个 key */
+const pageHitChannelLabel = computed(() => {
+  const channel = pageHitChannelDnr.value ? t('pageHitChannelDnr') : t('pageHitChannelSw');
+  return pageHitRuleSkipped.value ? `${channel} · ${t('dnrSkippedTag')}` : channel;
+});
 
 /**
  * 读取当前活动标签页地址，用与实际代理同一套 urlMatcher 纯函数计算命中预览。
  * popup 生命周期短，仅在挂载时计算一次；非 http(s) 页面不可代理，仅展示提示。
+ *
+ * 三条证据各自独立：页面地址命中（本函数）、本页网络层命中数（`fetchTabDnrStats`）、
+ * 哪些规则其实没被应用（`findDnrSkippedRules`）。任一失败都不连带另两条。
  */
 async function computePageHit() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? '';
     pageUrl.value = url;
-    if (!/^https?:/i.test(url)) {
-      pageHitProxiable.value = false;
-      return;
-    }
-    pageHitProxiable.value = true;
+    const proxiable = /^https?:/i.test(url);
+    pageHitProxiable.value = proxiable;
+
+    // 三条证据各自独立：网络层命中先发出。它不依赖配置，也不得排在可用性诊断之后——
+    // regex 型规则每条要一次 isRegexSupported 往返，那样会把数字一起拖慢。
+    if (proxiable) void fetchTabDnrStats(tab?.id);
+
+    // 配置先行：「最近请求为什么是空的」那条解释与本页能不能被代理无关，非 http 页也要给
     const config: ProxyConfig | undefined = await chrome.runtime.sendMessage({
       type: MessageType.GET_PROXY_CONFIG,
     });
     if (!config || !Array.isArray(config.rules)) return;
+    const rules: ProxyRule[] = config.rules;
+    hasEnabledSimpleRule.value = rules.some(usesDnrChannel);
+    try {
+      const skipped = await findDnrSkippedRules(rules);
+      dnrSkippedRuleIds.value = new Set(skipped.keys());
+    } catch (error) {
+      // 判定失败时保持现状：不得把「未判定」渲染成「未生效」
+      logger.debug('DNR applicability check failed:', error);
+    }
+
+    // 不可代理的标签页不测命中预览：那一块整体不显示
+    if (!proxiable) return;
+
     // 页面导航视为 GET；与实际一致地按方法白名单收窄
-    const rule = findMatchingRule(url, config.rules, 'GET');
+    const rule = findMatchingRule(url, rules, 'GET');
     if (rule) {
+      pageHitRuleId.value = rule.id;
       pageHitRuleName.value = rule.name;
       pageHitRewritten.value = applyQueryOverrides(rewriteUrl(url, rule), rule.queryOverrides);
       pageHitChannelDnr.value = isSimpleRule(rule);
@@ -623,7 +723,9 @@ async function openOptionsPage(hash = '') {
 /* 数据点 */
 .metrics-row {
   display: flex;
-  align-items: center;
+
+  /* 三格顶部对齐：只有第三格带注释行，居中会让前两格的数字下沉半行 */
+  align-items: flex-start;
   justify-content: space-around;
   padding: 8px 0 12px;
   margin-bottom: 12px;
@@ -632,9 +734,11 @@ async function openOptionsPage(hash = '') {
 
 .metric {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 2px;
   align-items: center;
+  min-width: 0;
 }
 
 .metric-value {
@@ -645,11 +749,25 @@ async function openOptionsPage(hash = '') {
 }
 
 .metric-label {
-  font-size: 12px;
+  max-width: 96px;
+  font-size: 11px;
+  line-height: 1.3;
   color: var(--cop-text-color-secondary);
 }
 
+.metric-note {
+  max-width: 100px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--cop-text-color-placeholder);
+}
+
+.metric.is-unknown .metric-value {
+  color: var(--cop-text-color-placeholder);
+}
+
 .metric-divider {
+  align-self: center;
   width: 1px;
   height: 28px;
   background: var(--cop-border-color);
@@ -679,6 +797,13 @@ async function openOptionsPage(hash = '') {
   font-weight: 600;
 }
 
+.page-hit-boundary {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--cop-text-color-secondary);
+}
+
 .page-hit-url {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -690,6 +815,27 @@ async function openOptionsPage(hash = '') {
 .page-hit-empty {
   font-size: 12px;
   color: var(--cop-text-color-secondary);
+}
+
+.page-hit-link {
+  padding: 0;
+
+  /* button 不吃继承字体，Chrome 会给它 UA 默认字形，同一句话里与正文不一致 */
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--cop-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.page-hit-link:hover {
+  text-decoration: underline;
+}
+
+.page-hit-link:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 2px;
 }
 
 .page-hit-result {
@@ -825,6 +971,13 @@ async function openOptionsPage(hash = '') {
   padding: 12px 0;
   font-size: 12px;
   color: var(--cop-text-color-placeholder);
+  text-align: center;
+}
+
+.recent-empty-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--cop-text-color-secondary);
   text-align: center;
 }
 

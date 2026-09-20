@@ -7,6 +7,7 @@ import { STORAGE_KEYS } from '@/utils/constants';
 import { invalidateMatcherCache, isSimpleRule } from '@/utils/urlMatcher';
 import type { ProxyRule, ProxyConfig } from '@/utils/types';
 import { setDnrRuleIdMap } from './dnrStats';
+import { invalidateDnrSample } from './dnrSampler';
 
 /**
  * DNR 管理器
@@ -96,6 +97,8 @@ async function doSyncDnrRules(config: ProxyConfig): Promise<void> {
       addRules: newRules,
     });
     setDnrRuleIdMap(idMap);
+    // 规则集是全量重建的，旧窗口里的计数可能已指向别的规则 id；id 映射也换了，采样缓存必须一起丢
+    invalidateDnrSample('dnr-synced');
 
     logger.info(`DNR rules synced: ${newRules.length} rules active`);
   } catch (error) {

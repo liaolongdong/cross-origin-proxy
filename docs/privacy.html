@@ -97,7 +97,7 @@
         "name": "隐私政策 / Privacy Policy",
         "inLanguage": ["zh-CN", "en"],
         "datePublished": "2026-09-06",
-        "dateModified": "2026-09-12",
+        "dateModified": "2026-09-20",
         "isPartOf": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#website" },
         "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" }
       }
@@ -151,7 +151,7 @@
       <section aria-labelledby="pp-zh">
         <div class="wrap">
           <h2 id="pp-zh">隐私政策（中文）</h2>
-          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-08</p>
+          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-20</p>
 
           <h3>1. 我们收集什么</h3>
           <p>
@@ -209,9 +209,14 @@
             500 条，可在界面中随时清空。
           </p>
           <p>
-            需要如实告知的一点：日志与由它生成的导出文件（HAR、JSON 配置、复制的 cURL）会原样保存这些内容，其中可能包含
-            <code>Authorization</code>、<code>Cookie</code>
-            等鉴权头以及请求体里的私密字段。数据仍然只在你手里，但在分享导出文件或截图之前，请先清空日志。
+            转发默认不带目标环境的 Cookie。每条规则有一个「携带 Cookie」开关，只有你显式打开，扩展才会以
+            <code>credentials: &#39;include&#39;</code>
+            代发这条请求，让目标环境认得你在它那里的会话；开关状态只存在本地，也不会被上传。
+          </p>
+          <p>
+            需要如实告知的一点：日志本身会原样保存这些内容，其中可能包含 <code>Authorization</code>、<code>Cookie</code>
+            等鉴权头以及请求体里的私密字段，从日志面板复制的 cURL 命令同样是原样的。配置导出与由日志生成的 HAR
+            导出默认处于「分享模式」，会剔除鉴权头与查询参数里的凭据，你仍然可以在导出对话框里取消勾选拿到全量内容。数据始终只在你手里，但在分享任何文件或截图之前，请先确认里面没有凭据。
           </p>
 
           <h3>5. 儿童隐私</h3>
@@ -232,7 +237,7 @@
       >
         <div class="wrap">
           <h2 id="pp-en">Privacy Policy (English)</h2>
-          <p class="section-lede"><strong>Effective date / Last updated:</strong> 2026-09-08</p>
+          <p class="section-lede"><strong>Effective date / Last updated:</strong> 2026-09-20</p>
 
           <h3>1. What we collect</h3>
           <p>
@@ -295,10 +300,18 @@
             keep the most recent 500 entries by default and can be cleared at any time from the interface.
           </p>
           <p>
-            One thing stated plainly rather than glossed over: the log — and the files generated from it (HAR, JSON
-            configuration, copy-as-cURL) — stores this content verbatim, which can include
-            <code>Authorization</code> and <code>Cookie</code> headers as well as private fields inside request bodies.
-            The data stays in your hands, but clear the log before you share an exported file or a screenshot.
+            Forwarded requests carry no cookies from the target environment by default. Each rule has a
+            <strong>Send cookies</strong> switch: only when you turn it on does the extension send that request with
+            <code>credentials: &#39;include&#39;</code>, so the target environment sees the session you already have
+            there. The switch itself lives locally and is never uploaded.
+          </p>
+          <p>
+            One thing stated plainly rather than glossed over: the log stores this content verbatim, which can include
+            <code>Authorization</code> and <code>Cookie</code> headers as well as private fields inside request bodies,
+            and the cURL command copied from the log panel is verbatim too. Config export and the HAR export generated
+            from logs run in <strong>share mode</strong> by default, which strips credential headers and secrets in
+            query parameters — you can untick it to export everything. The data stays in your hands, but check that
+            nothing sensitive remains before you share a file or a screenshot.
           </p>
 
           <h3>5. Children</h3>

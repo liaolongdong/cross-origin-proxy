@@ -139,7 +139,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-18"
+            "dateModified": "2026-09-20"
           },
           {
             "@type": "SoftwareApplication",
@@ -167,7 +167,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-18",
+            "dateModified": "2026-09-20",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -180,21 +180,22 @@
               "重试开关：开启后追加 1 至 5 次尝试，间隔 100 至 30000 毫秒",
               "规则级 HTTP 方法过滤",
               "在代理后的 URL 上追加或覆盖查询参数",
-              "按 URL 重写转发 WebSocket（ws / wss）长连接",
+              "按规则携带目标环境 Cookie（默认关闭，开启后以 credentials: include 代发）",
+              "按 URL 重写转发 WebSocket（ws / wss）长连接，长连接上生效的是地址重写、查询参数注入与阻断",
               "仅重写 URL 的简单规则编译为 declarativeNetRequest 网络层重定向，单请求零 JS 开销",
-              "网络层无法表达的能力由页面拦截器 + 后台服务线程处理，失败可回退原生请求",
+              "网络层无法表达的能力由页面拦截器 + 后台服务线程处理，同步 XHR、非字符串请求体等无法代理的形态回退原生请求",
               "优先级拖拽排序，并对被同模式更高优先级规则遮蔽的规则给出冲突提示，同时标出浏览器根本不会应用的规则（RE2 不支持的正则语法、越界的捕获引用）",
               "URL 匹配测试：实时预览命中规则、重写结果、转发通道，以及还有哪些规则同样命中、但被它遮蔽",
               "零规则空状态提供快速模板，另有复制规则、撤销删除、批量启停与批量删除",
               "带变更预览的目标域名批量迁移",
               "最近 500 条请求日志，支持筛选、详情查看与按原始请求地址复制为 cURL",
-              "两条通道各自的命中统计（DNR 近 5 分钟、后台通道自配置变更起累计；后者是内存计数，工作线程被回收后从 0 重新开始）",
-              "HAR 1.2 导出，以及把抓包记录转成规则的 HAR 导入（新规则默认停用，确认后自行启用）",
+              "两条通道各自的命中统计（DNR 近 5 分钟、后台通道自配置变更起累计；后者是内存计数，工作线程被回收后从 0 重新开始），弹窗另按当前标签页给出网络层命中数",
+              "HAR 1.2 导出（默认按分享模式剔除凭据头与查询参数），以及把抓包记录转成规则的 HAR 导入（新规则默认停用，确认后自行启用）",
               "粘贴 DevTools「复制为 cURL」命令预填规则",
               "JSON 配置导出（默认开启分享模式，剔除凭据），导入时支持覆盖与合并两种模式",
               "环境配置快照，FAT / UAT / PROD 一键切换",
               "30 分钟至 4 小时的代理自动关闭倒计时",
-              "弹窗含总开关、今日请求数（只统计后台通道）、当前页命中预览与「为此页面创建规则」",
+              "弹窗含总开关、经扩展请求数（只统计后台通道）、本页近 5 分钟网络层命中数、本页地址命中预览与「为此页面创建规则」",
               "中英文界面、6 套主题、浅色/深色/跟随系统、键盘快捷键"
             ]
           },
@@ -325,7 +326,7 @@
             "name": "它能绕过 CORS 限制吗？",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "使用了任一高级能力（请求头覆盖、请求体覆盖、响应覆盖、Mock、延迟、阻断、重试、方法过滤、查询参数注入、WebSocket）的规则，由持有主机权限的扩展后台上下文发出请求，页面拿到的是扩展构造的响应，因此不会触发页面侧的 CORS 校验。仅重写 URL 的规则走网络层重定向，浏览器仍会校验重定向后响应的 Access-Control-Allow-Origin。若目标环境不允许你的源，给规则加上任一高级能力（加一个响应头覆盖代价最小）即可切到后台通道。"
+              "text": "使用了任一高级能力（请求头覆盖、请求体覆盖、响应覆盖、Mock、延迟、阻断、重试、方法过滤、查询参数注入、携带 Cookie、WebSocket）的规则，由持有主机权限的扩展后台上下文发出请求，页面拿到的是扩展构造的响应，因此不会触发页面侧的 CORS 校验。仅重写 URL 的规则走网络层重定向，浏览器仍会校验重定向后响应的 Access-Control-Allow-Origin。若目标环境不允许你的源，给规则加上任一高级能力（加一个响应头覆盖代价最小）即可切到后台通道。"
             }
           },
           {
@@ -349,7 +350,7 @@
             "name": "为什么简单规则没有逐条请求日志？",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "网络层重定向不会经过扩展，没有可记录的逐条请求。规则级命中数会出现在「DNR 命中统计」里，统计窗口为最近 5 分钟；Chrome 对该读取接口有配额限制，因此面板改为手动刷新，超出配额时静默保留上一次结果。后台通道的命中数单独统计。"
+              "text": "网络层重定向不会经过扩展，没有可记录的逐条请求。规则级命中数会出现在「DNR 命中统计」里，统计窗口为最近 5 分钟；Chrome 对该读取接口有配额限制，因此面板按需刷新，超出配额时保留上一次结果并标出统计可能有延迟。后台通道的命中数单独统计。"
             }
           },
           {
@@ -397,7 +398,7 @@
             "name": "扩展处理失败时会怎样？",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "页面会回退到浏览器原生的 fetch、XMLHttpRequest 或 WebSocket，请求照常发出，表现如同规则不存在。FormData、Blob、ArrayBuffer 等非字符串请求体无法跨消息通道传递，同样回退原生。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。"
+              "text": "页面会回退到浏览器原生的 fetch、XMLHttpRequest 或 WebSocket，请求照常发出，表现如同规则不存在。同步 XHR（open() 第三参传 false）与 FormData、Blob、ArrayBuffer 等非字符串请求体同样回退原生：代理要跨上下文往返，兑现不了「send() 返回时结果已就绪」这个契约，异步化只会让页面读到一个空响应。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。"
             }
           },
           {
@@ -618,7 +619,7 @@
             </figure>
             <div class="stat-strip">
               <div class="stat"><b>2</b><span>条转发通道</span></div>
-              <div class="stat"><b>12</b><span>项规则能力</span></div>
+              <div class="stat"><b>13</b><span>项规则能力</span></div>
               <div class="stat"><b>200</b><span>条规则上限</span></div>
               <div class="stat"><b>0</b><span>字节外传</span></div>
             </div>
@@ -778,9 +779,9 @@
                 会被直接拒收，规则无法构造请求拆分；Mock 与改写的状态码被钳制在 200–599，保证页面总能构造出合法响应。
               </p>
               <div class="chip-row">
-                <span class="cap">H</span><span class="cap">B</span><span class="cap">R</span><span class="cap">M</span
-                ><span class="cap">D</span><span class="cap">X</span><span class="cap">Re</span
-                ><span class="cap">WS</span><span class="chip">规则列表逐条能力徽标</span>
+                <span class="cap">H</span><span class="cap">C</span><span class="cap">B</span><span class="cap">R</span
+                ><span class="cap">M</span><span class="cap">D</span><span class="cap">X</span
+                ><span class="cap">Re</span><span class="cap">WS</span><span class="chip">规则列表逐条能力徽标</span>
               </div>
             </article>
             <article class="feature-card reveal">
@@ -926,7 +927,9 @@
               <p>
                 通过重写 socket 地址把 <code>ws://</code> 与 <code>wss://</code> 连接指向另一个环境，让实时业务跟 REST
                 一起切换环境。匹配模式可以用 <code>http(s)</code> 也可以写 <code>ws(s)</code>，方法过滤把握手视为
-                <code>GET</code>。
+                <code>GET</code
+                >。长连接上生效的只有地址重写、查询参数注入与阻断——请求头、请求体与响应改写、Mock、延迟、重试都不适用于它，
+                规则列表里的 WS 徽标悬停时会把这句边界说明白。
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1038,7 +1041,8 @@
               ></span>
               <h3>每天真正要碰的部分</h3>
               <p>
-                弹窗里集中了总开关、启用规则数与今日请求数（只统计后台通道）、最近请求、规则快捷启停、自动关闭倒计时，以及当前页命中预览和「为此页面创建规则」。工具栏角标显示代理状态；自动关闭（30
+                弹窗里集中了总开关、启用规则数、经扩展请求数（只统计后台通道）、本页近 5
+                分钟的网络层命中数、最近请求、规则快捷启停、自动关闭倒计时，以及本页地址命中预览和「为此页面创建规则」。工具栏角标显示代理状态；自动关闭（30
                 分钟至 4 小时，基于 <code>chrome.alarms</code>）会到点关掉总开关，忘了关的代理不会活过调试本身。
               </p>
             </article>
@@ -1138,8 +1142,8 @@
                   <figcaption>
                     <b>规则列表</b
                     ><span
-                      >能力徽标（H · B · R · M · D · X ·
-                      WS）、拖拽排序的优先级、每条规则的命中数，以及批量启停、批量删除与目标迁移。</span
+                      >能力徽标（H · C · B · R · M · D · X ·
+                      WS）、拖拽排序的优先级、每条规则分网络层与后台两格显示的命中数，以及批量启停、批量删除与目标迁移。</span
                     >
                   </figcaption>
                 </figure>
@@ -1157,7 +1161,7 @@
                   <figcaption>
                     <b>规则编辑器</b
                     ><span
-                      >匹配、重写、方法过滤、查询参数注入、请求头与请求体覆盖、响应覆盖、条件化
+                      >匹配、重写、方法过滤、查询参数注入、请求头与请求体覆盖、携带 Cookie、响应覆盖、条件化
                       Mock、延迟、阻断与重试——全部在一个表单里，并带实时冲突提示。</span
                     >
                   </figcaption>
@@ -1214,7 +1218,8 @@
                   <figcaption>
                     <b>弹窗</b
                     ><span
-                      >总开关、启用规则数、今日请求（只统计后台通道）、最近请求、规则快捷启停、自动关闭倒计时、当前页命中预览，以及「为此页面创建规则」。</span
+                      >总开关、启用规则数、经扩展请求数（只统计后台通道）、本页近 5
+                      分钟网络层命中数、最近请求、规则快捷启停、自动关闭倒计时、本页地址命中预览，以及「为此页面创建规则」。</span
                     >
                   </figcaption>
                 </figure>
@@ -2091,7 +2096,8 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <details>
               <summary>它能绕过 CORS 限制吗？</summary>
               <p>
-                使用了任一高级能力（请求头覆盖、请求体覆盖、响应覆盖、Mock、延迟、阻断、重试、方法过滤、查询参数注入、WebSocket）的规则，由持有主机权限的扩展后台上下文发出请求，页面拿到的是扩展构造的响应，因此不会触发页面侧的
+                使用了任一高级能力（请求头覆盖、请求体覆盖、响应覆盖、Mock、延迟、阻断、重试、方法过滤、查询参数注入、携带
+                Cookie、WebSocket）的规则，由持有主机权限的扩展后台上下文发出请求，页面拿到的是扩展构造的响应，因此不会触发页面侧的
                 CORS 校验。仅重写 URL 的规则走网络层重定向，浏览器仍会校验重定向后响应的
                 <code>Access-Control-Allow-Origin</code
                 >。若目标环境不允许你的源，给规则加上任一高级能力（加一个响应头覆盖代价最小）即可切到后台通道。
@@ -2120,7 +2126,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               <p>
                 网络层重定向不会经过扩展，没有可记录的逐条请求。规则级命中数会出现在「DNR 命中统计」里，统计窗口为最近 5
                 分钟；Chrome
-                对该读取接口有配额限制，因此面板改为手动刷新，超出配额时静默保留上一次结果。后台通道的命中数单独统计。
+                对该读取接口有配额限制，因此面板按需刷新，超出配额时保留上一次结果并标出统计可能有延迟。后台通道的命中数单独统计。
               </p>
             </details>
 
@@ -2213,8 +2219,10 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               <summary>扩展处理失败时会怎样？</summary>
               <p>
                 页面会回退到浏览器原生的 <code>fetch</code>、<code>XMLHttpRequest</code> 或
-                <code>WebSocket</code>，请求照常发出，表现如同规则不存在。FormData、Blob、ArrayBuffer
-                等非字符串请求体无法跨消息通道传递，同样回退原生。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。
+                <code>WebSocket</code>，请求照常发出，表现如同规则不存在。同步 XHR（<code>open()</code> 第三参传
+                <code>false</code>）与 FormData、Blob、ArrayBuffer
+                等非字符串请求体同样回退原生：代理要跨上下文往返，兑现不了「<code>send()</code>
+                返回时结果已就绪」这个契约，异步化只会让页面读到一个空响应。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。
               </p>
             </details>
 
@@ -2370,7 +2378,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-09-18</span>
+            <span>最后更新 2026-09-20</span>
             <span
               ><a
                 href="en.html"

@@ -28,13 +28,25 @@ export interface ProxyResponsePayload {
   [key: string]: unknown;
 }
 
-/** 只接受字符串值，否则整个 headers 退回空对象（不可信回包不做逐项清洗） */
+/** Headers 的名与值都是 ByteString：码点 > 255（规则里手写的中文响应头）或含 CR/LF 会让 `new Headers()` 抛 TypeError */
+function isByteStringHeaderEntry(name: string, value: string): boolean {
+  if (/[\r\n]/.test(name) || /[\r\n]/.test(value)) return false;
+  for (const char of `${name}${value}`) {
+    if ((char.codePointAt(0) ?? 0) > 0xff) return false;
+  }
+  return true;
+}
+
+/**
+ * 非字符串值整体退回空对象（不可信回包不做逐项清洗）；全为字符串时逐条放行，
+ * 只剔掉无法作为 ByteString 交给 `new Headers()` 的条目——一条中文 mock 响应头
+ * 不该连带打掉页面本来能读到的 `content-type`。
+ */
 function toStringRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object') return {};
   const entries = Object.entries(value as Record<string, unknown>);
-  return entries.every((entry): entry is [string, string] => typeof entry[1] === 'string')
-    ? (value as Record<string, string>)
-    : {};
+  if (!entries.every((entry): entry is [string, string] => typeof entry[1] === 'string')) return {};
+  return Object.fromEntries(entries.filter(([name, val]) => isByteStringHeaderEntry(name, val)));
 }
 
 /**
@@ -68,16 +80,21 @@ export function toLatin1StatusText(statusText: string): string {
  * 合法回包原样透传（仅补齐类型）；缺字段时逐项回落，其中 `status` 缺失回落为
  * `0`——交给拦截器的区间守卫判失败，本模块不重复决定合法状态码区间。
  *
- * 两处形状约束由本模块承担（`entrypoints/main-interceptor.content.ts` 镜像同一语义）：
+ * 三处形状约束由本模块承担（`entrypoints/main-interceptor.content.ts` 镜像同一语义）：
  * - `204/205/304` 是「null body 状态」，配任何非 null 正文都会让
  *   `new Response(body, { status })` 抛 TypeError，而抛出点在拦截器的 resolve
  *   回调里——既不会 reject 也已被 `clearTimeout` 摘掉超时，页面从此永久 pending；
- * - `statusText` 走 ByteString：含码点 > 255 的字符（如中文状态描述）或 CR/LF 同样抛 TypeError。
+ * - `statusText` 走 ByteString：含码点 > 255 的字符（如中文状态描述）或 CR/LF 同样抛 TypeError；
+ * - `headers` 逐条走 ByteString：规则里手写的中文响应头（`utils/headerValidation.ts`
+ *   只挡头名字符集与 CR/LF，不管值的码点）会让 `new Headers()` 抛在同一位置。
  * @param raw 后台 `sendResponse` 的原始值，可能是失败信封或 `undefined`
  * @param requestId 桥接层持有的原始请求 id，用于失败信封无人认领的情况
  */
 export function normalizeProxyResponse(raw: unknown, requestId: string): ProxyResponsePayload {
   const payload: Record<string, unknown> = raw && typeof raw === 'object' ? { ...raw } : {};
+  // 失败信封的 error 文案不外泄给页面（它跑在 MAIN world，同源脚本可读），
+  // 拦截器会退回 statusText 作为错误信息
+  delete payload.error;
 
   const status = typeof payload.status === 'number' ? payload.status : 0;
   const rawBody = typeof payload.body === 'string' ? payload.body : '';
@@ -88,8 +105,6 @@ export function normalizeProxyResponse(raw: unknown, requestId: string): ProxyRe
     status,
     statusText: toLatin1StatusText(typeof payload.statusText === 'string' ? payload.statusText : 'Proxy Error'),
     headers: toStringRecord(payload.headers),
-    // 失败信封的 error 文案不外泄给页面（它跑在 MAIN world，同源脚本可读），
-    // 拦截器会退回 statusText 作为错误信息
     body: isNullBodyStatus(status) ? null : rawBody,
     isBase64: payload.isBase64 === true,
   };

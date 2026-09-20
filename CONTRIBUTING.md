@@ -46,7 +46,7 @@ CI runs lint, stylelint, Prettier, typecheck, a production build and tests on ev
 
 ```
 entrypoints/            WXT entries: background (+ modules), content scripts, options, popup
-  background/           autoOff · badgeManager · dnrManager · dnrStats · keepalive · messageRouter · proxyHandler
+  background/           autoOff · badgeManager · dnrManager · dnrSampler · dnrStats · keepalive · messageRouter · proxyHandler
   main-interceptor.content.ts   MAIN-world fetch/XHR/WebSocket interceptor (self-contained by design)
   content.ts           ISOLATED-world bridge to the background worker
 components/options/     Options UI (App.vue assembles; dialogs/drawers load via defineAsyncComponent)
@@ -63,8 +63,9 @@ tests/                  Vitest suites (node environment)
 
 - **Two forwarding channels.** `isSimpleRule()` in [utils/urlMatcher.ts](./utils/urlMatcher.ts) decides whether a rule becomes a `declarativeNetRequest` redirect or runs in the background. If you change what counts as "simple", both channels must stay semantically identical for URL rewriting, and the URL match tester must keep reporting the truth.
 - **`chrome.storage.local` is the only source of truth.** The service worker is killed at any time; anything cached in memory must be rebuildable and invalidated on `storage.onChanged`. Read-modify-write sequences go through `withStorageLock()`.
-- **Validate before touching DNR.** Regular expressions must pass `isRegexSupported` (RE2) and substitution references must be in range, or `updateDynamicRules` rejects the entire batch.
-- **The MAIN-world interceptor stays self-contained.** [entrypoints/main-interceptor.content.ts](./entrypoints/main-interceptor.content.ts) cannot import the logger or use `chrome.*`, and posts messages with `window.location.origin` as the target origin, never `*`.
+- **Validate before touching DNR.** Regular expressions must pass `isRegexSupported` (RE2) and substitution references must be in range, or `updateDynamicRules` rejects the entire batch. The same all-or-nothing rule applies to `priority`: `toDnrPriority()` clamps into Chrome's `[1, 1000000]` band, because the only way to feed it a number outside that band is an imported file or hand-edited storage.
+- **Network-layer evidence stays honest.** `getMatchedRules` covers a 5-minute window and is quota-limited (≈20 calls per 10 minutes), so every read goes through `entrypoints/background/dnrSampler.ts` (TTL cache, sliding-window budget, backoff) and every render decides its sentence through `utils/dnrSample.ts`. "0 hits", "no network-layer rules in effect", "cannot read right now" and "cached, may lag" are four different states — never merge them, and never render an unknown as `0`.
+- **The MAIN-world interceptor stays self-contained.** [entrypoints/main-interceptor.content.ts](./entrypoints/main-interceptor.content.ts) cannot import the logger or use `chrome.*`, and posts messages with `window.location.origin` as the target origin, never `*`. It hand-mirrors `utils/urlMatcher.ts` (matching, rewriting, query encoding, priority) and `utils/proxyResponse.ts` (response-shape guards) — change those utils and the mirror in the same commit, or the two channels silently diverge.
 - **Treat input as untrusted.** Imported HAR/cURL/JSON files, page messages and storage contents are all validated at the boundary; messages that change state are checked with `isTrustedSender`.
 - **Logging goes through `utils/logger.ts`** — no bare `console` in runtime code (the interceptor, the logger itself and `scripts/` are the documented exceptions).
 - **Never weaken a rule to make code pass.** No broad `eslint-disable`, no `@ts-ignore`, no loosening `tsconfig`, Stylelint or test assertions.

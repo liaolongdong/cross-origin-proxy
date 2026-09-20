@@ -148,8 +148,11 @@ function wildcardToRegex(pattern: string): RegExp {
 
 /**
  * 检测可能导致灾难性回溯的嵌套量词（ReDoS）
+ *
+ * 导出供 SW 侧「条件化 Mock」的 `matchUrl` 复用：那条路径每个请求都 `new RegExp().test()`，
+ * 而它此前绕过了 `getCompiledRegex` 里同一道筛查——导入文件带一条 `(a+)+$` 就能卡死单线程 SW。
  */
-function isRegexSafe(pattern: string): boolean {
+export function isRegexSafe(pattern: string): boolean {
   const dangerousPatterns = [
     /\([^)]*[+*][^)]*\)[+*]/, // (a+)+ or (a*)+ 等
     /\([^)]*[+*][^)]*\)\{/, // (a+){n} 等
@@ -327,6 +330,10 @@ export function isSimpleRule(rule: ProxyRule): boolean {
   if (rule.methods && rule.methods.length > 0) return false;
   // 查询参数注入：由 SW 在重写后统一处理，不走 DNR regexSubstitution
   if (rule.queryOverrides && Object.keys(rule.queryOverrides).length > 0) return false;
+  // 携带凭据：DNR 重定向后由浏览器直接发出请求，跨站子请求的 Cookie 扩展无从干预，
+  // 只有 SW 的 fetch 能显式 credentials: 'include'，因此必须走 SW 通道。
+  // 严格等于 true：导入文件属不可信输入，真值字符串不该悄悄打开这条凭据开关
+  if (rule.sendCredentials === true) return false;
   // 不以 * 结尾的 wildcard：DNR 的 regexSubstitution 只能引用捕获组，
   // 会丢失模式末尾的固定文本（如 "a.com/*/x" 的 "/x"）产生错误重定向，
   // 改走 SW 通道（重写语义为不改写地址，仅代理转发）

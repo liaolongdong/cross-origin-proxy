@@ -164,7 +164,7 @@
           v-if="dnrStats.length === 0"
           class="dnr-stats-empty"
         >
-          {{ t('dnrStatsEmpty') }}
+          {{ dnrStatsEmptyText }}
         </div>
         <ul
           v-else
@@ -527,6 +527,7 @@ import { computed, ref } from 'vue';
 import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
+import type { DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
 import { computeLogStats } from '@/utils/ruleStats';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
@@ -544,6 +545,8 @@ const props = defineProps<{
   autoRefresh: boolean;
   refreshInterval: number;
   dnrStats: DnrHitStat[];
+  /** 最近一次网络层采样的状态：空列表要分成「零命中」「没有读数」「无生效规则」三句话说 */
+  dnrStatsState: DnrSampleState;
   swStats: DnrHitStat[];
   methodFilter: string;
   statusFilter: string;
@@ -574,6 +577,20 @@ const uniqueRuleNames = computed(() => {
     if (log.ruleName) names.add(log.ruleName);
   }
   return Array.from(names).sort();
+});
+
+/**
+ * 命中列表为空时该说哪一句。
+ *
+ * 三条文案分三种事实：真的没人命中、这一批根本没有网络层规则、以及读不到。
+ * 只靠 `dnrStats.length === 0` 会把后两种都说成「近 5 分钟无 DNR 命中」。
+ * `statsNotApplicable` / `statsUnavailable` 住在 popup 命名空间：i18n 构建期把
+ * 三个命名空间扁平合并，同一件事全仓用同一个词（同 `dnrSkippedTag` 的先例）。
+ */
+const dnrStatsEmptyText = computed(() => {
+  if (props.dnrStatsState === 'notApplicable') return t('statsNotApplicable');
+  if (props.dnrStatsState === 'pending' || props.dnrStatsState === 'unavailable') return t('statsUnavailable');
+  return t('dnrStatsEmpty');
 });
 
 const filteredLogs = computed(() => {
