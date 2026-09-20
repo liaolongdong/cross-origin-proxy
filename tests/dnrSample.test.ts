@@ -116,3 +116,15 @@ describe('规则列表命中列：分通道显示，不相加（源码契约）'
     expect(tableSrc).toContain("t('statsUnavailable')");
   });
 });
+
+describe('日志抽屉空态：四态四句，退避期不与「无命中」共用一句（源码契约）', () => {
+  const drawerSrc = readFileSync('components/options/LogDrawer.vue', 'utf-8');
+
+  it('notApplicable / unavailable / pending / stale 各自有判据，stale 额外带上「可能滞后」', () => {
+    expect(drawerSrc).toContain("props.dnrStatsState === 'notApplicable'");
+    expect(drawerSrc).toContain("props.dnrStatsState === 'pending'");
+    expect(drawerSrc).toContain("props.dnrStatsState === 'unavailable'");
+    expect(drawerSrc).toContain("props.dnrStatsState === 'stale'");
+    expect(drawerSrc).toContain("t('hitStatsStale')");
+  });
+});

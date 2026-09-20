@@ -73,7 +73,7 @@
   "exportDesc": "Export all proxy rules as a JSON file",
   "exportButton": "Export",
   "exportSanitizeLabel": "Share mode: strip credentials from headers and query params",
-  "exportSanitizeTip": "Strips Authorization, Cookie and similar request/response headers plus token-like query parameters from both the config file and the HAR (bodies are kept as-is), so the result is safe to share. Untick for a complete local backup.",
+  "exportSanitizeTip": "Strips Authorization, Cookie and similar request/response headers from both the config file and the HAR; the config export additionally drops token-like query-parameter overrides, while the HAR keeps bodies and URLs as captured so the recording still reproduces the problem. The result is safe to share — untick for a complete local backup.",
   "importSectionTitle": "Import Config",
   "importDesc": "Import config from JSON, existing rules will be overwritten",
   "selectFile": "Select File",

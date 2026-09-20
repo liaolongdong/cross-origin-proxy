@@ -73,7 +73,7 @@
   "exportDesc": "将所有代理规则导出为 JSON 文件",
   "exportButton": "导出配置",
   "exportSanitizeLabel": "分享模式：移除可能含凭据的头与查询参数",
-  "exportSanitizeTip": "导出配置与 HAR 都会剔除 Authorization、Cookie 等请求头/响应头以及 token 类查询参数（正文原样保留），文件可直接分享；需要本机全量备份时取消勾选",
+  "exportSanitizeTip": "导出配置与 HAR 都会剔除 Authorization、Cookie 等请求头/响应头，配置导出还会剔掉 token 类查询参数覆盖；HAR 的正文与 URL 原样保留，否则抓包不再能复现问题。文件可直接分享，需要本机全量备份时取消勾选",
   "importSectionTitle": "导入配置",
   "importDesc": "从 JSON 文件导入配置，将覆盖现有规则",
   "selectFile": "选择文件",

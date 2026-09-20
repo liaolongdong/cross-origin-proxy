@@ -234,7 +234,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 - Export configuration as JSON with **share mode on by default**: `Authorization`, `Cookie` and similar request/response headers plus token-like query parameters are stripped, and the toast reports how many entries were removed — untick for a complete local backup
 - On import, replace the current rules or merge into them, both capped at 200 rules; a failed import **keeps your input and stays open**, so you can fix it and retry
-- **HAR 1.2** export of captured requests — it follows the same **share mode** tick as config export (on by default), dropping credential-like request/response headers and token-like query parameters from every entry while leaving bodies intact; untick for a full export. HAR import auto-creates rules from recorded traffic (those rules arrive disabled until you enable them)
+- **HAR 1.2** export of captured requests — it follows the same **share mode** tick as config export (on by default), dropping credential-like request/response headers from every entry while leaving bodies and URLs intact (a token sitting in a URL stays yours to handle); untick for a full export. HAR import auto-creates rules from recorded traffic (those rules arrive disabled until you enable them)
 - **cURL import** — paste DevTools' "Copy as cURL" output to prefill a rule
 - **Environment profiles** — save the current rule set as a named snapshot and switch between FAT / UAT / PROD
 - Auto-off countdown (`chrome.alarms`, survives service-worker restarts) and a badge that shows proxy state
@@ -279,7 +279,7 @@ Content scripts run on all `http` / `https` pages and rules match on request URL
 
 No. Rules, logs, profiles and preferences stay in `chrome.storage.local`. There is no analytics, no telemetry and no remote service; the only network traffic is the API traffic you ask it to proxy. See the [privacy policy](https://liaolongdong.github.io/cross-origin-proxy/privacy.html) (both languages on one page).
 
-One local caveat worth knowing: the request log stores the headers and bodies it proxies, which can include tokens. Nothing leaves the machine, but clear the log before pasting a detail view or taking a screenshot. Both config export and HAR export default to share mode, which strips `Authorization`, `Cookie` and similar headers plus token-like query parameters — untick it for a full backup, and treat those files as sensitively as the log.
+One local caveat worth knowing: the request log stores the headers and bodies it proxies, which can include tokens. Nothing leaves the machine, but clear the log before pasting a detail view or taking a screenshot. Both config export and HAR export default to share mode, which strips `Authorization`, `Cookie` and similar headers — config export additionally strips token-like query-parameter overrides — untick it for a full backup, and treat those files as sensitively as the log.
 
 </details>
 

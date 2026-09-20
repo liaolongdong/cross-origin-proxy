@@ -123,7 +123,11 @@ export function sampleAggregate(): Promise<DnrSample> {
   return readOrSample({}, aggregateCache, DNR_AGGREGATE_TTL_MS);
 }
 
-/** 按标签页采样（popup 的「本页 · 近 5 分钟」用；`tabId` 是 filter 的单数形式，见 spec §3） */
+/**
+ * 按标签页采样（popup 的「本页 · 近 5 分钟」用）。
+ * `MatchedRulesFilter` 只有单数 `tabId`，一次调用问不了多个标签页，
+ * 所以每个标签页各占一份缓存、各自消耗一次配额。
+ */
 export function sampleForTab(tabId: number): Promise<DnrSample> {
   return readOrSample({ tabId }, tabCache.get(tabId) ?? null, DNR_TAB_TTL_MS, tabId);
 }

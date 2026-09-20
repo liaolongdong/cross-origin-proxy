@@ -216,7 +216,9 @@
           <p>
             需要如实告知的一点：日志本身会原样保存这些内容，其中可能包含 <code>Authorization</code>、<code>Cookie</code>
             等鉴权头以及请求体里的私密字段，从日志面板复制的 cURL 命令同样是原样的。配置导出与由日志生成的 HAR
-            导出默认处于「分享模式」，会剔除鉴权头与查询参数里的凭据，你仍然可以在导出对话框里取消勾选拿到全量内容。数据始终只在你手里，但在分享任何文件或截图之前，请先确认里面没有凭据。
+            导出默认处于「分享模式」，两者都会剔除鉴权头；查询参数里的凭据只有配置导出会剔（它剔除规则里的 token
+            类查询参数覆盖），HAR 为了保住复现能力，正文与 URL
+            原样保留。你仍然可以在导出对话框里取消勾选拿到全量内容。数据始终只在你手里，但在分享任何文件或截图之前，请先确认里面没有凭据。
           </p>
 
           <h3>5. 儿童隐私</h3>
@@ -309,9 +311,11 @@
             One thing stated plainly rather than glossed over: the log stores this content verbatim, which can include
             <code>Authorization</code> and <code>Cookie</code> headers as well as private fields inside request bodies,
             and the cURL command copied from the log panel is verbatim too. Config export and the HAR export generated
-            from logs run in <strong>share mode</strong> by default, which strips credential headers and secrets in
-            query parameters — you can untick it to export everything. The data stays in your hands, but check that
-            nothing sensitive remains before you share a file or a screenshot.
+            from logs run in <strong>share mode</strong> by default, and both strip credential headers. Secrets in query
+            parameters are dropped by config export alone — it removes token-like query-parameter overrides from your
+            rules — while the HAR keeps bodies and URLs exactly as captured so the recording still reproduces the
+            problem. You can untick it to export everything. The data stays in your hands, but check that nothing
+            sensitive remains before you share a file or a screenshot.
           </p>
 
           <h3>5. Children</h3>

@@ -582,14 +582,17 @@ const uniqueRuleNames = computed(() => {
 /**
  * 命中列表为空时该说哪一句。
  *
- * 三条文案分三种事实：真的没人命中、这一批根本没有网络层规则、以及读不到。
- * 只靠 `dnrStats.length === 0` 会把后两种都说成「近 5 分钟无 DNR 命中」。
+ * 四条文案对应四种事实：真的没人命中、这一批根本没有网络层规则、读不到、
+ * 以及拿到的是退避期沿用的上次样本——最后这种「0」只是上次那一批里没有，
+ * 不能和 `fresh` 共用一句有把握的「近 5 分钟无 DNR 命中」。
+ * 只靠 `dnrStats.length === 0` 会把后三种都说成「无命中」。
  * `statsNotApplicable` / `statsUnavailable` 住在 popup 命名空间：i18n 构建期把
  * 三个命名空间扁平合并，同一件事全仓用同一个词（同 `dnrSkippedTag` 的先例）。
  */
 const dnrStatsEmptyText = computed(() => {
   if (props.dnrStatsState === 'notApplicable') return t('statsNotApplicable');
   if (props.dnrStatsState === 'pending' || props.dnrStatsState === 'unavailable') return t('statsUnavailable');
+  if (props.dnrStatsState === 'stale') return `${t('dnrStatsEmpty')} · ${t('hitStatsStale')}`;
   return t('dnrStatsEmpty');
 });
 
