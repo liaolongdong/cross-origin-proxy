@@ -19,7 +19,7 @@
   "autoOffCountdown": "Auto-off in $1",
   "createRuleFromTabFailed": "Cannot create a rule for this page",
   "currentPageHit": "This page's address",
-  "pageHitBoundary": "This card only checks the page address itself. For API requests, see the “This tab” count and the request log.",
+  "pageHitBoundary": "This card only checks the page address itself. For API requests, see the “This tab · 5 min” cell (network-layer hits) and the request log (extension channel).",
   "pageHitNotProxiable": "This page cannot be proxied (not http/https)",
   "pageHitRule": "Matched rule",
   "pageHitChannelDnr": "DNR",
@@ -32,6 +32,7 @@
   "sampledAt": "Sampled at $1",
   "statsMayLag": "Stats may lag",
   "statsNotApplicable": "No network-layer rules",
+  "statsProxyOff": "Proxy is off",
   "statsUnavailable": "Stats unavailable",
   "requestFailed": "Failed"
 }

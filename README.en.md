@@ -207,7 +207,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Retry on failure** — a per-rule switch that adds 1–5 extra attempts after a network error, a 5xx response or the 30-second per-attempt timeout, spaced 100–30000 ms apart (default 1000)
 - **HTTP method filtering** — restrict a rule to GET/POST/PUT/…; empty means any method
 - **Query parameter injection** — append or override query params on the proxied URL (`__env=uat`, gray-release tags) without rewriting the whole URL
-- **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite, handled in the page interceptor; on a socket only the URL rewrite, query parameter injection and blocking apply — header / body / response overrides, mock, delay and retry do not (the badge's tooltip says exactly this)
+- **WebSocket proxying** — redirect `ws://` / `wss://` connections by URL rewrite, handled in the page interceptor; on a socket only the URL rewrite, query parameter injection and blocking apply — header / body / response overrides, mock, delay, retry and sending cookies do not apply (the badge's tooltip says exactly this)
 
 ### 🧰 Rule management
 
@@ -220,7 +220,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - Keyword search across name, pattern and target URL, plus filters by status and match type; **selections survive filtering**, and batch actions only ever hit rules that still exist
 - **"Not applied" badge** — a regex rule using syntax RE2 rejects (lookaround, backreferences), or a target URL referencing a capture group that does not exist, is never applied by the browser; such rules are flagged in the list, with the reason and the fix on hover
 - **Conflict warning** when the rule being edited is shadowed by a higher-priority rule with the same pattern, so a rule that can never fire does not go unnoticed
-- **Hit counts shown as two cells** — the network-layer cell covers a 5-minute window, the background cell is an in-memory counter since the last config change; the two windows are not addable, so they are no longer summed into one number. When a read is unavailable the cell shows "—" rather than 0, and "no active network-layer rules" is a different sentence from "the quota is spent"
+- **Hit counts shown as two cells** — the network-layer cell covers a 5-minute window, the background cell is an in-memory counter since the last config change (it restarts from zero when the worker is recycled); the two windows are not addable, so they are no longer summed into one number. Each cell speaks only for its own channel, so "no reading", "quota spent" and "this rule doesn't take that path" all render as "—" rather than 0, each with its own sentence
 
 ### 🔍 Logs & debugging
 

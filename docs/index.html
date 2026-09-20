@@ -928,8 +928,8 @@
                 通过重写 socket 地址把 <code>ws://</code> 与 <code>wss://</code> 连接指向另一个环境，让实时业务跟 REST
                 一起切换环境。匹配模式可以用 <code>http(s)</code> 也可以写 <code>ws(s)</code>，方法过滤把握手视为
                 <code>GET</code
-                >。长连接上生效的只有地址重写、查询参数注入与阻断——请求头、请求体与响应改写、Mock、延迟、重试都不适用于它，
-                规则列表里的 WS 徽标悬停时会把这句边界说明白。
+                >。长连接上生效的只有地址重写、查询参数注入与阻断——请求头、请求体与响应改写、Mock、延迟、重试、携带
+                Cookie 都不适用于它，规则列表里的 WS 徽标悬停时会把这句边界说明白。
               </p>
             </article>
             <article class="feature-card reveal">

@@ -110,10 +110,23 @@ describe('规则列表命中列：分通道显示，不相加（源码契约）'
     expect(tableSrc).not.toContain('combineHitStats');
   });
 
+  it('每格只画属于自己那条通道的数：不适用的那一格是「—」而不是 0', () => {
+    // 走网络层的规则在后台通道上恒为 0，反向同理——把「不适用」画成 0 就是本轮要消灭的谎报
+    expect(tableSrc).toContain(
+      'const channelById = new Map(props.rules.map(rule => [rule.id, isSimpleRule(rule)] as const));',
+    );
+    expect(tableSrc).toContain('const netUnknown = !onNet || !readable;');
+    expect(tableSrc).toContain('const extUnknown = onNet;');
+    expect(tableSrc).toContain("net: netUnknown ? '—' : String(stat.net)");
+    expect(tableSrc).toContain("ext: extUnknown ? '—' : String(stat.ext)");
+  });
+
   it('读不到时画「—」，并且提示语区分「没有这类规则」与「统计暂不可用」', () => {
-    expect(tableSrc).toContain("net: readable ? String(stat.net) : '—'");
     expect(tableSrc).toContain("t('statsNotApplicable')");
     expect(tableSrc).toContain("t('statsUnavailable')");
+    // 两格各自的「不适用」必须有独立话术，否则悬停会解释成另一件事
+    expect(tableSrc).toContain("t('hitStatsNetNotApplicable')");
+    expect(tableSrc).toContain("t('hitStatsExtNotApplicable')");
   });
 });
 
@@ -125,6 +138,17 @@ describe('日志抽屉空态：四态四句，退避期不与「无命中」共�
     expect(drawerSrc).toContain("props.dnrStatsState === 'pending'");
     expect(drawerSrc).toContain("props.dnrStatsState === 'unavailable'");
     expect(drawerSrc).toContain("props.dnrStatsState === 'stale'");
-    expect(drawerSrc).toContain("t('hitStatsStale')");
+    // 「近 5 分钟」只能出现一次：`dnrStatsEmpty` 自带窗口，拼的那半句不得再带
+    expect(drawerSrc).toContain("t('statsMayLag')");
+    expect(drawerSrc).not.toContain("${t('dnrStatsEmpty')} · ${t('hitStatsStale')}");
+  });
+});
+
+describe('popup 第三格注释：总开关关闭不得说成「没有网络层规则」（源码契约）', () => {
+  const popupSrc = readFileSync('entrypoints/popup/App.vue', 'utf-8');
+
+  it('notApplicable 按总开关二次分因，pending / unavailable 不得留下空注释', () => {
+    expect(popupSrc).toContain("return enabled.value ? t('statsNotApplicable') : t('statsProxyOff')");
+    expect(popupSrc).toContain("if (state === 'unavailable' || state === 'pending') return t('statsUnavailable')");
   });
 });

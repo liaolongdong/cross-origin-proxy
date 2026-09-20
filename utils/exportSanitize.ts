@@ -1,17 +1,13 @@
 import type { ExportData, ProxyRule, RequestLogEntry } from '@/utils/types';
 
 /**
- * 配置导出脱敏（分享模式的实现）
+ * 导出脱敏（「分享模式」这一个勾选同时管着两条导出）
  *
- * 配置文件常被贴进群里或工单让同事复现环境，而规则里的请求头覆盖、响应头覆盖和查询参数
- * 覆盖正是凭据最常见的落脚点（`Authorization: Bearer …`、`Cookie: session=…`）。
- * 导出前把这些条目的**值**整条摘掉，分享就不再等于泄露 token；导入方拿到的规则少了这一项，
- * 行为退化成「不覆盖该头」，比塞一个占位值被服务端 401 更难踩坑。
- *
- * 有意不处理请求体 / Mock 响应体 / `bodyRaw`：它们本身就是规则要交付的内容，
- * 抹掉等于把规则改废，需要脱敏时请在表单里自行留空。
- *
- * 纯函数，不修改入参（同份配置可能还要继续用于界面展示）。
+ * 两份导出常被贴进群里或工单让同事复现环境，而凭据的落脚点不同，剔的东西也就不同：
+ * - `sanitizeExportData`（配置）：规则里的请求头覆盖、响应头覆盖与查询参数覆盖。
+ * - `sanitizeExportedLogs`（HAR）：逐条日志的**真实**请求/响应头。
+ * 两者共用同一份敏感名判据（`isSensitiveHeaderName` / `isSensitiveQueryName`），
+ * 差异只在 HAR 不碰查询参数与正文——URL 与 body 是抓包能被读懂的全部意义。
  */
 
 /**
@@ -114,7 +110,14 @@ export interface SanitizeResult {
   removedCount: number;
 }
 
-/** 摘掉导出配置里所有可能承载凭据的请求头 / 响应头 / 查询参数 */
+/**
+ * 摘掉导出配置里所有可能承载凭据的请求头 / 响应头 / 查询参数
+ *
+ * 整条摘掉而不塞占位值：导入方拿到的规则少了这一项，行为退化成「不覆盖该头」，
+ * 比一个假 token 被服务端 401 更难踩坑。有意不碰请求体 / Mock 响应体 / `bodyRaw`——
+ * 它们本身就是规则要交付的内容，抹掉等于把规则改废。
+ * 纯函数，不修改入参（同份配置可能还要继续用于界面展示）。
+ */
 export function sanitizeExportData(data: ExportData): SanitizeResult {
   let removedCount = 0;
   const rules = data.config.rules.map(rule => {

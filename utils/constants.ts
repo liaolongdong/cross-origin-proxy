@@ -53,7 +53,7 @@ export const MAX_LOG_FIELD_SIZE = 8 * 1024;
  * 单条日志保留的头表条目上限（请求头、响应头各自计）
  *
  * 与 {@link MAX_LOG_FIELD_SIZE} 一起把「头表」这一项的体积钉死：正常请求头远不到 64 条，
- * 超出部分是最旧的重复/跟踪头，丢弃它们不影响排障。
+ * 超出时留的是头表出现顺序的前 64 条、丢掉的是其后的重复/跟踪头，不影响排障。
  */
 export const MAX_LOG_HEADER_COUNT = 64;
 /**

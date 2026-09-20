@@ -225,10 +225,14 @@
               </span>
             </el-tooltip>
             <el-tooltip
-              :content="t('hitStatsExtTip')"
+              :content="hitCells[row.id].extTip"
               placement="top"
             >
-              <span class="hit-count-badge hit-count-badge--ext">{{ hitCells[row.id].ext }}</span>
+              <span
+                :class="['hit-count-badge', 'hit-count-badge--ext', hitCells[row.id].extUnknown && 'hit-count-unknown']"
+              >
+                {{ hitCells[row.id].ext }}
+              </span>
             </el-tooltip>
           </span>
           <span
@@ -317,7 +321,7 @@ import type { RuleHitStats } from '@/utils/ruleStats';
 import { isDnrCountReadable, type DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
-import { isWebSocketRule } from '@/utils/urlMatcher';
+import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
 import EmptyGuide from './EmptyGuide.vue';
 import HighlightText from './HighlightText.vue';
 
@@ -363,17 +367,17 @@ const { skipReasonLines } = useDnrSkipText();
 
 /**
  * 命中列的两枚读数（分通道，**不相加**：网络层是近 5 分钟滚动窗口，扩展通道是自
- * 上次配置变更以来的累计，相加出来的数不属于任何一段时间）。
+ * 上次配置变更或后台重启以来的累计，相加出来的数不属于任何一段时间）。
  *
- * 只收录「至少说得出一个数」的规则：两条通道都是 0 时维持原来的「-」，避免整列噪音。
- * 网络层读不到（商店安装态、配额退避、还没采到样）时那一格画「—」而不是 0——
- * 「不知道」和「零次」是两件事，而且「没有生效的网络层规则」与「读不到」也不是一件事，
- * 所以提示语按 `DnrSampleState` 逐态给，判据复用 `isDnrCountReadable`。
+ * 每格只画属于自己那条通道的数：走网络层的规则，后台那一格永远是 0，而那个 0 不是
+ * 「一次都没走后台」，是「这条规则根本不在后台执行」——反向同理。所以两格各自先问
+ * 「该不该有读数」，再问「读到了没有」；全局采样状态只决定网络层那一格读没读到。
+ * 只收录「至少说得出一个数」的规则：两格都是「—」时维持原来的「-」，避免整列噪音。
  */
 const hitCells = computed(() => {
   const state = props.dnrStatsState;
   const readable = isDnrCountReadable(state);
-  const netTip =
+  const netTipByState =
     state === 'notApplicable'
       ? t('statsNotApplicable')
       : state === 'stale'
@@ -381,16 +385,26 @@ const hitCells = computed(() => {
         : readable
           ? t('hitStatsNetTip')
           : t('statsUnavailable');
+  const channelById = new Map(props.rules.map(rule => [rule.id, isSimpleRule(rule)] as const));
 
-  const cells: Record<string, { net: string; ext: string; netTip: string; netUnknown: boolean }> = {};
+  const cells: Record<
+    string,
+    { net: string; ext: string; netTip: string; extTip: string; netUnknown: boolean; extUnknown: boolean }
+  > = {};
   for (const [ruleId, stat] of props.hitStats) {
+    // 不在当前列表里的规则（已删或被筛掉）不会渲染，判不了通道就按扩展通道处理
+    const onNet = channelById.get(ruleId) ?? false;
+    const netUnknown = !onNet || !readable;
+    const extUnknown = onNet;
     if (!readable && stat.ext === 0) continue;
     if (readable && stat.net === 0 && stat.ext === 0) continue;
     cells[ruleId] = {
-      net: readable ? String(stat.net) : '—',
-      ext: String(stat.ext),
-      netTip,
-      netUnknown: !readable,
+      net: netUnknown ? '—' : String(stat.net),
+      ext: extUnknown ? '—' : String(stat.ext),
+      netTip: onNet ? netTipByState : t('hitStatsNetNotApplicable'),
+      extTip: onNet ? t('hitStatsExtNotApplicable') : t('hitStatsExtTip'),
+      netUnknown,
+      extUnknown,
     };
   }
   return cells;

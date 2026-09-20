@@ -821,13 +821,18 @@ async function handleReorder(fromId: string, toId: string) {
   color: var(--cop-text-color-secondary);
 }
 
+/* 两条都是 v-if 的追加句：分隔符写在 CSS 里，任何一条单独出现时都不会留下孤点 */
+.dnr-skipped-summary::before,
+.hit-stats-stale::before {
+  margin-right: 5px;
+  content: '·';
+}
+
 .dnr-skipped-summary {
-  margin-left: 8px;
   color: var(--el-color-danger, #f56c6c);
 }
 
 .hit-stats-stale {
-  margin-left: 8px;
   color: var(--cop-text-color-secondary);
 }
 

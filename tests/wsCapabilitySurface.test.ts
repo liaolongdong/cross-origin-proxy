@@ -6,8 +6,9 @@ import { readFileSync } from 'node:fs';
  *
  * `wsRuleHint` 原先只写「此规则也适用于 WebSocket 连接」，读起来像整条规则原样作用到长连接上。
  * 实际只有三件事：`rewriteWsUrl`（内含 `queryOverrides` 注入）、`blocked`（连向必然拒绝的
- * 本地端口）、把握手视为 `GET` 的方法过滤。请求头/请求体/响应改写、Mock、延迟、重试都不经过
- * 这条路径——长连接没有可替换的响应体，也没有"再试一次"的语义。
+ * 本地端口）、把握手视为 `GET` 的方法过滤。请求头/请求体/响应改写、Mock、延迟、重试、
+ * `sendCredentials`（携带 Cookie）都不经过这条路径——长连接没有可替换的响应体，
+ * 也没有"再试一次"的语义，Cookie 由浏览器自己按握手请求发出。
  *
  * 文案与实现分处两地，正是它分叉的原因，所以两端一起钉住：先证明能力面（源码契约），
  * 再要求文案点名「生效项」与「无效项」。拦截器自包含、无法 import，只能读源码。
@@ -58,8 +59,8 @@ describe('[wsRuleHint] 文案必须同时说清生效项与无效项', () => {
   /** 生效侧 / 无效侧关键词，按语言各列一份 */
   const applies = { zh: ['重写', '查询', '阻断'], en: ['rewrite', 'query', 'block'] };
   const notApplies = {
-    zh: ['请求头', '响应', 'Mock', '延迟', '重试'],
-    en: ['header', 'response', 'mock', 'delay', 'retry'],
+    zh: ['请求头', '响应', 'Mock', '延迟', '重试', '携带 Cookie'],
+    en: ['header', 'response', 'mock', 'delay', 'retry', 'sending cookies'],
   };
   const hints = { zh: zhHint, en: enHint };
 

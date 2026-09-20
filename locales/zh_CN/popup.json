@@ -19,7 +19,7 @@
   "autoOffCountdown": "$1 后自动关闭",
   "createRuleFromTabFailed": "无法在当前页面创建规则",
   "currentPageHit": "本页地址",
-  "pageHitBoundary": "本卡只判断页面地址本身；接口请求是否被代理请看「本页」计数与请求日志",
+  "pageHitBoundary": "本卡只判断页面地址本身；接口请求是否被代理，请看「本页 · 近 5 分钟」（网络层命中）与请求日志（扩展通道）",
   "pageHitNotProxiable": "本页不可代理（非 http/https）",
   "pageHitRule": "命中规则",
   "pageHitChannelDnr": "DNR",
@@ -32,6 +32,7 @@
   "sampledAt": "采样于 $1",
   "statsMayLag": "统计可能有延迟",
   "statsNotApplicable": "无生效的网络层规则",
+  "statsProxyOff": "代理未开启",
   "statsUnavailable": "统计暂不可用",
   "requestFailed": "失败"
 }

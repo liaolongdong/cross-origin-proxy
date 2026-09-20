@@ -405,13 +405,19 @@ const dnrTabHitsText = computed(() => {
   return hits === null ? '—' : String(hits);
 });
 
-/** 注释按状态分档：「没有网络层规则」与「读不到」是两件事，说反了就是误导 */
+/**
+ * 注释按状态分档：「没有网络层规则」与「读不到」是两件事，说反了就是误导。
+ * `notApplicable` 还要再分一次因——总开关关闭时动态规则被整体撤下，此时说
+ * 「无生效的网络层规则」会与同屏的「活跃规则 N」正面冲突，用户此刻的事实只有「代理未开启」。
+ */
 const dnrTabNoteText = computed(() => {
   const { state } = dnrTabView.value;
   if (state === 'fresh') return t('sampledAt', formatClock(dnrTabSample.value?.sampledAt ?? 0));
   if (state === 'stale') return t('statsMayLag');
-  if (state === 'notApplicable') return t('statsNotApplicable');
-  if (state === 'unavailable') return t('statsUnavailable');
+  if (state === 'notApplicable') return enabled.value ? t('statsNotApplicable') : t('statsProxyOff');
+  // pending（首次采样在途）与 unavailable（退避 / API 抛错）在这一格里没法分开表达，
+  // 但都不能沉默：画了「—」却不给理由，用户只能猜
+  if (state === 'unavailable' || state === 'pending') return t('statsUnavailable');
   return '';
 });
 
@@ -759,7 +765,7 @@ async function openOptionsPage(hash = '') {
   max-width: 100px;
   font-size: 10px;
   line-height: 1.3;
-  color: var(--cop-text-color-placeholder);
+  color: var(--cop-text-color-secondary);
 }
 
 .metric.is-unknown .metric-value {
@@ -824,13 +830,10 @@ async function openOptionsPage(hash = '') {
   font-family: inherit;
   font-size: 12px;
   color: var(--cop-primary);
+  text-decoration: underline;
   cursor: pointer;
   background: none;
   border: none;
-}
-
-.page-hit-link:hover {
-  text-decoration: underline;
 }
 
 .page-hit-link:focus-visible {
@@ -846,6 +849,7 @@ async function openOptionsPage(hash = '') {
 
 .page-hit-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   font-size: 12px;
