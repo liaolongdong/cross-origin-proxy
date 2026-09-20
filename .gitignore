@@ -68,6 +68,12 @@ marketing/
 # 会话临时产物
 *.canvas.tsx
 
+# 内部设计文档（spec / 实现计划）只留本地：本仓库是公开仓库，而 spec 里点名了尚未修复的
+# 开放代理面（任意网站可借扩展代理内网接口）。SECURITY.md 的口径是隐私上报优先，
+# 把它写进公开历史等于公开利用方式。
+.qoder/plans/
+.qoder/specs/
+
 # 仅本地留证的 QA 截图（已从仓库解除跟踪，防止 git add -A 重新带回）
 screenshots/dark-mode-issues.png
 
