@@ -91,6 +91,14 @@ export interface EnvironmentProfile {
 }
 
 /**
+ * 凭据变量表（变量名 → 真值）
+ *
+ * 规则里的凭据位点写成 `{{名称}}`，真值只存在这一份（`storage.local` 的 `variables` 键），
+ * 展开只发生在后台服务线程组装出站请求之前——见 `utils/variables.ts` 的使用约束。
+ */
+export type VariableStore = Record<string, string>;
+
+/**
  * 全局代理配置
  */
 export interface ProxyConfig {
@@ -144,6 +152,10 @@ export enum MessageType {
   SAVE_PROFILE = 'SAVE_PROFILE',
   LOAD_PROFILE = 'LOAD_PROFILE',
   DELETE_PROFILE = 'DELETE_PROFILE',
+
+  // 凭据变量（仅扩展页面可用：GET 回的是真值表，内容脚本一旦能读就等于把密钥交给站点）
+  GET_VARIABLES = 'GET_VARIABLES',
+  SET_VARIABLES = 'SET_VARIABLES',
 }
 
 /**
@@ -337,6 +349,22 @@ export interface DeleteProfileMessage {
   data: { profileId: string };
 }
 
+/**
+ * 读取凭据变量表（响应是完整的 `VariableStore`）
+ *
+ * 只有扩展自己的页面会发它，且必须过 `isTrustedSender`：内容脚本的 `sender.url` 就是被注入
+ * 页面的 URL，让它读到这张表等于把用户所有环境的密钥交给站点。
+ */
+export interface GetVariablesMessage {
+  type: MessageType.GET_VARIABLES;
+}
+
+/** 整体写入凭据变量表（新增、改名、删除都走这一条，语义与 UPDATE_PROXY_CONFIG 一致） */
+export interface SetVariablesMessage {
+  type: MessageType.SET_VARIABLES;
+  data: { variables: VariableStore };
+}
+
 /** HAR 导入载荷 */
 export interface HarImportPayload {
   log: {
@@ -388,7 +416,9 @@ export type RuntimeMessage =
   | GetProfilesMessage
   | SaveProfileMessage
   | LoadProfileMessage
-  | DeleteProfileMessage;
+  | DeleteProfileMessage
+  | GetVariablesMessage
+  | SetVariablesMessage;
 
 /**
  * 请求日志条目

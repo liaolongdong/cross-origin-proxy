@@ -53,7 +53,20 @@ const MUTATING_TYPES: MessageType[] = [
   MessageType.SAVE_PROFILE,
   MessageType.LOAD_PROFILE,
   MessageType.DELETE_PROFILE,
+  MessageType.SET_VARIABLES,
 ];
+
+/**
+ * 只读、但响应体是凭据真值或整包历史快照的消息：与状态修改类共用同一道 gate。
+ *
+ * 这一组的存在正是「只读消息不加 gate」那条约束的边界——它挡的是内容脚本要用的消息，
+ * 而这两条桥接层从不转发。少了这道 gate，任意页面一次 sendMessage 就能读走
+ * 用户所有环境的密钥（或历次成套替换前的真实请求头），「真值只在 SW 展开」的整套设计当场作废。
+ *
+ * 判据是「页面从不读取 + 回的是凭据类数据」，两者缺一都不该加进来：给内容脚本要用的消息
+ * 加 gate 等于当场废掉代理。
+ */
+const CREDENTIAL_READING_TYPES: MessageType[] = [MessageType.GET_VARIABLES];
 
 /** 刻意不经 gate 的消息：内容脚本要靠它们拉配置与代理，被 gate 住代理当场失效 */
 const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
@@ -83,6 +96,7 @@ const PAYLOADS: Partial<Record<MessageType, unknown>> = {
   [MessageType.SAVE_PROFILE]: { name: 'p' },
   [MessageType.LOAD_PROFILE]: { profileId: 'p1' },
   [MessageType.DELETE_PROFILE]: { profileId: 'p1' },
+  [MessageType.SET_VARIABLES]: { variables: { UAT_TOKEN: 'x' } },
 };
 
 let isTrustedSender: RouterModule['isTrustedSender'];
@@ -223,8 +237,8 @@ describe('isTrustedSender — 只信任以本扩展 URL 根开头的 sender.url'
   });
 });
 
-describe('状态修改类消息 — 不可信 sender 必须同步拒绝且不触达存储', () => {
-  for (const type of MUTATING_TYPES) {
+describe('状态修改类与凭据读取类消息 — 不可信 sender 必须同步拒绝且不触达存储', () => {
+  for (const type of [...MUTATING_TYPES, ...CREDENTIAL_READING_TYPES]) {
     it(`${type} 由外部页面发出：回传 Unauthorized sender 且不写存储`, () => {
       const { sendResponse, keepChannelOpen } = dispatch(type, EXTERNAL_PAGE_URL);
 
@@ -244,13 +258,13 @@ describe('状态修改类消息 — 不可信 sender 必须同步拒绝且不触
     });
   }
 
-  it(`枚举里被 gate 拦住的类型恰好等于预期的 ${MUTATING_TYPES.length} 个`, () => {
+  it(`枚举里被 gate 拦住的类型恰好等于预期的 ${MUTATING_TYPES.length + CREDENTIAL_READING_TYPES.length} 个`, () => {
     const gated = new Set<MessageType>();
     for (const type of Object.values(MessageType)) {
       const { sendResponse } = dispatch(type, EXTERNAL_PAGE_URL, { enabled: false });
       if (lastResponse(sendResponse)?.error === 'Unauthorized sender') gated.add(type);
     }
-    expect([...gated].sort()).toEqual([...MUTATING_TYPES].sort());
+    expect([...gated].sort()).toEqual([...MUTATING_TYPES, ...CREDENTIAL_READING_TYPES].sort());
   });
 
   it('不可信 sender 的任何消息类型（含未来新增的）都不得写入存储', async () => {
@@ -329,5 +343,42 @@ describe('GET_DNR_STATS — 只读、可带 tabId、采样失败不拖垮消息'
     await flush();
     const sample = sendResponse.mock.calls.at(-1)?.[0] as { error?: string };
     expect(sample.error).toBeUndefined();
+  });
+});
+
+describe('凭据变量消息 — 只有扩展页面能读写，非法载荷不得清空整表', () => {
+  it('可信 sender 读回变量表原值', async () => {
+    store[STORAGE_KEYS.VARIABLES] = { UAT_TOKEN: 'secret-a' };
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.GET_VARIABLES, TRUSTED_PAGE_URL);
+    expect(keepChannelOpen).toBe(true);
+    await flush();
+    expect(sendResponse).toHaveBeenCalledWith({ UAT_TOKEN: 'secret-a' });
+  });
+
+  it('可信 sender 整表写入并回报丢弃数', async () => {
+    const { sendResponse } = dispatch(MessageType.SET_VARIABLES, TRUSTED_PAGE_URL, {
+      variables: { UAT_TOKEN: 'secret-a', '1BAD NAME': 'x' },
+    });
+    await flush();
+    expect(sendResponse).toHaveBeenCalledWith({ success: true, dropped: 1 });
+    expect(store[STORAGE_KEYS.VARIABLES]).toEqual({ UAT_TOKEN: 'secret-a' });
+  });
+
+  it('载荷不是键值对象时报错，绝不落成空表把用户凭据清空', async () => {
+    store[STORAGE_KEYS.VARIABLES] = { UAT_TOKEN: 'secret-a' };
+    const { sendResponse } = dispatch(MessageType.SET_VARIABLES, TRUSTED_PAGE_URL, { variables: null });
+    await flush();
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'INVALID_VARIABLES_PAYLOAD' });
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(store[STORAGE_KEYS.VARIABLES]).toEqual({ UAT_TOKEN: 'secret-a' });
+  });
+
+  it('外部页面即使带着合法载荷也读不到变量表', async () => {
+    store[STORAGE_KEYS.VARIABLES] = { UAT_TOKEN: 'secret-a' };
+    const { sendResponse } = dispatch(MessageType.GET_VARIABLES, EXTERNAL_PAGE_URL, undefined);
+    await flush();
+    expect(sendResponse).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(lastResponse(sendResponse))).not.toContain('secret-a');
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Unauthorized sender' });
   });
 });

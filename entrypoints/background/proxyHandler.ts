@@ -1,6 +1,7 @@
 import { findMatchingRule, matchRule, rewriteUrl, applyQueryOverrides, isRegexSafe } from '@/utils/urlMatcher';
 import { filterIncomingHeaders, isValidHeaderEntry, validateRuleHeaders } from '@/utils/headerValidation';
-import { getProxyConfig, addRequestLog, getRequestLogs } from '@/utils/storage';
+import { getProxyConfig, addRequestLog, getRequestLogs, getVariables } from '@/utils/storage';
+import { collectRuleVariableRefs, resolveVariableMap } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
 import { logger } from '@/utils/logger';
@@ -78,6 +79,22 @@ function logRejectedRequest(
     error: reason,
     proxyType: 'sw',
   });
+}
+
+/**
+ * 把「引用了不存在的变量」记到 SW 控制台
+ *
+ * 未定义的引用按 `{{名称}}` 字面量发出，上游多半回 401，用户在日志里看到的就是那次 401。
+ * 这里补的是**原因**：缺哪个变量、由哪条规则引用——名字可以进日志，值永远不行。
+ *
+ * 刻意不再另写一条请求日志：那次请求是真实发生的、并且会由本函数所在的分支正常记一条，
+ * 再补一条 `status: 0` 会让规则列表的失败数与命中数双双虚高。删除变量前的「被 N 条规则使用」
+ * 提示（设置页）才是把这个坑填在发生之前的那道闸。
+ */
+function warnMissingVariables(rule: ProxyRule, missing: string[]): void {
+  logger.warn(
+    `Undefined variable${missing.length > 1 ? 's' : ''}: ${missing.map(name => `{{${name}}}`).join(', ')} (rule: ${rule.name})`,
+  );
 }
 
 // ─── 重试判定 ─────────────────────────────────────────────────────────────────
@@ -366,9 +383,23 @@ export async function handleProxyRequest(data: {
     };
   }
 
-  // 先按匹配类型重写 URL，再对最终地址追加/覆盖查询参数（仅真实代理分支）
-  const targetUrl = applyQueryOverrides(rewriteUrl(data.url, rule), rule.queryOverrides);
-  logger.info(`Proxying: ${data.url} → ${targetUrl}`);
+  // ─── 凭据变量展开（仅真实代理分支）─────────────────────────────────────────
+  // 规则里的 `{{名称}}` 到这一步才换成真值：下发给页面世界的配置永远只带字面量
+  // （`entrypoints/content.ts` 的 `toInterceptorConfig`），DNR 侧则由 `isSimpleRule` 保证
+  // 引用只出现在 header/query 覆盖上，而这两项本身就强制走 SW。
+  // 只在规则自身配置的位点上展开，**绝不在整条 URL 上展开**：wildcard 捕获到的片段来自
+  // 页面，页面就能借一次重写把某个变量的值送进自己可读的响应里。
+  const variables = collectRuleVariableRefs(rule).length > 0 ? await getVariables() : {};
+
+  const rewrittenUrl = rewriteUrl(data.url, rule);
+  const resolvedQuery = resolveVariableMap(rule.queryOverrides, variables);
+  if (resolvedQuery?.missing.length) warnMissingVariables(rule, resolvedQuery.missing);
+
+  // 先算未展开形态再算出站形态：`{{名称}}` 字面量留在日志与回显里，真值只进 `fetch`。
+  // 查询参数位点上放的常常正是 token，落进 `request_logs` 就违背了「日志不含真实凭据」。
+  const loggedUrl = applyQueryOverrides(rewrittenUrl, rule.queryOverrides);
+  const targetUrl = resolvedQuery ? applyQueryOverrides(rewrittenUrl, resolvedQuery.resolved) : loggedUrl;
+  logger.info(`Proxying: ${data.url} → ${loggedUrl}`);
 
   // ─── 准备请求参数（重试循环外，避免重复计算）────────────────────────────────
   // 传入头宽容过滤（跳过个别非法条目）；规则头严格校验（非法则拒绝并提示修正）
@@ -390,7 +421,26 @@ export async function handleProxyRequest(data: {
     };
   }
 
-  const sanitizedOverrides = headerCheck?.headers ?? {};
+  // 展开后再严格复查一遍：`{{TOKEN}}` 字面量合法不代表它换出来的真值合法（手改存储、
+  // 旧导入数据都可能带换行），漏过去就是一次头注入；复查不过沿用同一套整体拒绝语义
+  const resolvedHeaders = resolveVariableMap(headerCheck?.headers, variables);
+  if (resolvedHeaders?.missing.length) warnMissingVariables(rule, resolvedHeaders.missing);
+  const expandedCheck = resolvedHeaders ? validateRuleHeaders(resolvedHeaders.resolved) : null;
+  if (expandedCheck?.invalidKey !== undefined) {
+    const reason = `Rule header override rejected after variable expansion: "${expandedCheck.invalidKey}"`;
+    logger.warn(`${reason} (rule: ${rule.name})`);
+    await logRejectedRequest(rule, data.url, data.method, startTime, reason);
+    return {
+      requestId: data.requestId,
+      status: 0,
+      statusText: 'Invalid Rule Headers',
+      headers: {},
+      body: 'Rule contains invalid header override',
+      isBase64: false,
+    };
+  }
+
+  const sanitizedOverrides = expandedCheck?.headers ?? {};
 
   const fetchOptions: RequestInit = {
     method: data.method,
@@ -521,7 +571,7 @@ export async function handleProxyRequest(data: {
         ruleId: rule.id,
         ruleName: rule.name,
         originalUrl: data.url,
-        proxiedUrl: targetUrl,
+        proxiedUrl: loggedUrl,
         method: data.method,
         status: finalStatus,
         duration: Date.now() - startTime,
@@ -564,7 +614,7 @@ export async function handleProxyRequest(data: {
     ruleId: rule.id,
     ruleName: rule.name,
     originalUrl: data.url,
-    proxiedUrl: targetUrl,
+    proxiedUrl: loggedUrl,
     method: data.method,
     duration: Date.now() - startTime,
     error: lastError,

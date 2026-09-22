@@ -5,7 +5,7 @@
     direction="rtl"
     size="720px"
     class="log-drawer"
-    @close="$emit('update:visible', false)"
+    @close="handleDrawerClose"
   >
     <div class="log-drawer-body">
       <!-- 工具栏 -->
@@ -32,21 +32,13 @@
               :label="t('allMethods')"
               value=""
             />
+            <!-- 与规则表单的方法下拉同源（HTTP_METHODS）：写死四项会让 PATCH / OPTIONS / HEAD
+                 的请求在列表里看得见却筛不出来，而这三类恰是预检与探活的高频方法 -->
             <el-option
-              label="GET"
-              value="GET"
-            />
-            <el-option
-              label="POST"
-              value="POST"
-            />
-            <el-option
-              label="PUT"
-              value="PUT"
-            />
-            <el-option
-              label="DELETE"
-              value="DELETE"
+              v-for="method in HTTP_METHODS"
+              :key="method"
+              :label="method"
+              :value="method"
             />
           </el-select>
           <el-select
@@ -358,6 +350,13 @@
           <div class="log-detail-header">
             <span class="log-detail-title">{{ t('logDetail') }}</span>
             <div class="log-detail-actions">
+              <!-- 只在真有凭据头时出现，且关掉抽屉就回到打码态 -->
+              <el-switch
+                v-if="hasSensitiveHeaders"
+                v-model="revealSensitive"
+                size="small"
+                :active-text="t('revealSensitive')"
+              />
               <el-button
                 size="small"
                 type="success"
@@ -456,7 +455,7 @@
                     class="detail-header-row"
                   >
                     <span class="detail-header-key">{{ key }}</span>
-                    <span class="detail-header-val">{{ value }}</span>
+                    <span class="detail-header-val">{{ displayHeaderValue(key, value) }}</span>
                   </div>
                 </div>
               </div>
@@ -491,7 +490,7 @@
                     class="detail-header-row"
                   >
                     <span class="detail-header-key">{{ key }}</span>
-                    <span class="detail-header-val">{{ value }}</span>
+                    <span class="detail-header-val">{{ displayHeaderValue(key, value) }}</span>
                   </div>
                 </div>
               </div>
@@ -527,9 +526,12 @@ import { computed, ref } from 'vue';
 import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
+import { HTTP_METHODS } from '@/utils/types';
 import type { DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
 import { computeLogStats } from '@/utils/ruleStats';
+import { isSensitiveHeaderName } from '@/utils/exportSanitize';
+import { resolveHeaderDisplayValue } from '@/utils/headerMask';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
 
 /**
@@ -679,6 +681,36 @@ async function handleClear() {
 const selectedLog = ref<RequestLogEntry | null>(null);
 const detailTab = ref('request');
 
+/**
+ * 「本次会话显示凭据原值」开关，默认关。
+ *
+ * 只活在组件实例上，不落 storage：详情面板画的是**真实站点的** Cookie / Authorization，
+ * 投屏、录屏、贴截图都会把它带出去，所以默认打码；而排障时确实要对一眼 token 尾号，
+ * 于是给一个显式、临时、关掉抽屉就失效的出口。刻意不提供「永久显示」——那种开关会被忘掉。
+ */
+const revealSensitive = ref(false);
+
+/** 当前这条日志里是否有需要打码的头；没有就不把开关画出来吓人 */
+const hasSensitiveHeaders = computed(() => {
+  const log = selectedLog.value;
+  if (!log) return false;
+  const names = [...Object.keys(log.requestHeaders ?? {}), ...Object.keys(log.responseHeaders ?? {})];
+  return names.some(name => isSensitiveHeaderName(name));
+});
+
+function displayHeaderValue(name: string, value: string): string {
+  return resolveHeaderDisplayValue(name, value, revealSensitive.value);
+}
+
+// 关抽屉即收回原值：下次打开是打码态，而不是「上次为了排障打开过」。
+// 挂在 el-drawer 的 `close`（Element Plus 在 `beforeLeave` 里 emit，父组件把 model-value
+// 置 false 那条路径同样会走）而不是 `props.visible` 的 watcher 上——本组件在
+// tests/full-verification.test.ts 的「无 visible watcher」清单里，那个契约不许它长出一个。
+function handleDrawerClose() {
+  revealSensitive.value = false;
+  emit('update:visible', false);
+}
+
 function handleRowClick(row: RequestLogEntry) {
   selectedLog.value = selectedLog.value?.id === row.id ? null : row;
   detailTab.value = 'request';
@@ -703,6 +735,13 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+/**
+ * 复制为可运行的 cURL
+ *
+ * 这里**刻意用原值**、不受面板打码影响：一条 `-H 'Authorization: ••••'` 的命令没有意义，
+ * 而这个动作是用户点了「复制为 cURL」才发生的本机剪贴板写入，与「屏幕上一打开就是明文」
+ * 不是同一件事。要跨人分享请走 HAR 的分享模式（那里才会整条摘掉凭据头）。
+ */
 function copyAsCurl() {
   if (!selectedLog.value) return;
   const log = selectedLog.value;

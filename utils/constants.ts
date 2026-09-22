@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   LOCALE: 'locale',
   PROFILES: 'env_profiles',
   AUTO_OFF_MINUTES: 'auto_off_minutes', // 代理自动关闭时长（分钟），0 表示不自动关闭
+  VARIABLES: 'variables', // 凭据变量表（规则里以 {{名称}} 引用，真值只存这一处）
 } as const;
 
 // Theme modes
@@ -114,3 +115,21 @@ export const DNR_TAB_TTL_MS = 15_000;
 
 /** 按标签页缓存的条数上限（超出按写入序丢弃最旧；不注册 tabs.onRemoved，交给上限收口） */
 export const DNR_TAB_CACHE_SIZE = 5;
+// ─── 凭据变量（utils/variables.ts + storage 的 `variables` 键） ────────────────
+
+/**
+ * 变量条数上限
+ *
+ * 一个人真需要超过几十把密钥时，该用的不是浏览器扩展。收上限是因为这份表会被
+ * 每次代理请求整表读进内存，且它和配置一样不申请 `unlimitedStorage`。
+ */
+export const MAX_VARIABLES = 50;
+/** 变量名长度上限，与 `VARIABLE_NAME_RE` 的 1+63 对齐 */
+export const MAX_VARIABLE_NAME_LENGTH = 64;
+/**
+ * 变量值长度上限
+ *
+ * 取 4096：JWT 与常见的长 bearer token 都在其内，同时钉死「一个变量塞下一整份
+ * 二进制」这种把密钥表当日志用的写法。
+ */
+export const MAX_VARIABLE_VALUE_LENGTH = 4096;

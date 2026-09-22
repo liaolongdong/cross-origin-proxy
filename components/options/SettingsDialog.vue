@@ -91,6 +91,71 @@
         </el-select>
       </div>
 
+      <!-- 凭据变量 -->
+      <div class="setting-section">
+        <div class="setting-label">{{ t('variablesLabel') }}</div>
+        <p class="setting-hint">{{ t('variablesHint') }}</p>
+
+        <p
+          v-if="variablesLoadFailed"
+          class="variable-load-failed"
+        >
+          {{ t('variablesLoadFailed') }}
+        </p>
+
+        <div
+          v-for="(row, index) in variableRows"
+          :key="row.uid"
+          class="variable-item"
+        >
+          <div class="variable-line">
+            <el-input
+              v-model="row.name"
+              class="variable-name"
+              :placeholder="t('variableNamePlaceholder')"
+              :maxlength="MAX_VARIABLE_NAME_LENGTH"
+              :aria-label="t('variableNamePlaceholder')"
+              @change="commitVariables"
+            />
+            <span class="variable-usage">{{ t('variableUsedBy', usageCount(row.name)) }}</span>
+            <el-button
+              type="danger"
+              link
+              :aria-label="t('delete')"
+              @click="removeVariable(index)"
+            >
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+          <el-input
+            v-model="row.value"
+            type="password"
+            show-password
+            :placeholder="t('variableValuePlaceholder')"
+            :maxlength="MAX_VARIABLE_VALUE_LENGTH"
+            :aria-label="t('variableValuePlaceholder')"
+            @change="commitVariables"
+          />
+        </div>
+
+        <el-button
+          type="primary"
+          link
+          :disabled="variableRows.length >= MAX_VARIABLES"
+          @click="addVariable"
+        >
+          <el-icon><Plus /></el-icon>
+          {{ t('variableAdd') }}
+        </el-button>
+
+        <p
+          v-if="orphanVariableRefs.length > 0"
+          class="variable-orphan"
+        >
+          {{ t('variablesOrphanWarning', orphanVariableRefs.join(', ')) }}
+        </p>
+      </div>
+
       <!-- 键盘快捷键 -->
       <div class="setting-section">
         <div class="setting-label">{{ t('keyboardShortcuts') }}</div>
@@ -118,21 +183,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { Sunny, Moon, Monitor } from '@element-plus/icons-vue';
+import { computed, ref, watch } from 'vue';
+import { Sunny, Moon, Monitor, Delete, Plus } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { THEME_OPTIONS, THEME_MODE_OPTIONS, type ThemeName } from '@/utils/theme';
-import { type ThemeMode, STORAGE_KEYS } from '@/utils/constants';
+import {
+  type ThemeMode,
+  STORAGE_KEYS,
+  MAX_VARIABLES,
+  MAX_VARIABLE_NAME_LENGTH,
+  MAX_VARIABLE_VALUE_LENGTH,
+} from '@/utils/constants';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
+import type { ProxyRule, VariableStore } from '@/utils/types';
+import { collectRuleVariableRefs, isVariableName } from '@/utils/variables';
+import { useVariables } from '@/composables/useVariables';
 import { useI18n } from '@/composables/useI18n';
 
 defineOptions({
-  components: { Sunny, Moon, Monitor },
+  components: { Sunny, Moon, Monitor, Delete, Plus },
 });
 
 /**
  * 偏好设置弹窗（替代原设置 Tab）
  *
- * 显示模式切换 + 六色主题圆形色板 + 应用内中英文切换 + 代理自动关闭时长，
+ * 显示模式切换 + 六色主题圆形色板 + 应用内中英文切换 + 代理自动关闭时长 + 凭据变量表，
  * 均即时生效并跨扩展页同步。
  */
 const props = defineProps<{
@@ -141,6 +216,8 @@ const props = defineProps<{
   currentTheme: ThemeName;
   /** 当前显示模式 */
   themeMode: ThemeMode;
+  /** 当前规则集：只用来算「某个变量被几条规则引用」与列出失效引用 */
+  rules: ProxyRule[];
 }>();
 
 const emit = defineEmits<{
@@ -149,6 +226,7 @@ const emit = defineEmits<{
   changeTheme: [theme: ThemeName];
   /** 切换显示模式 */
   changeThemeMode: [mode: ThemeMode];
+  /** 回退到了某个恢复点：规则集已整体换掉，父组件必须重新拉取配置 */
 }>();
 
 const { t, locale, setLocale } = useI18n();
@@ -159,8 +237,53 @@ const isMac = ref(navigator.platform.includes('Mac'));
 /** 代理自动关闭时长（分钟，0 = 从不） */
 const autoOffMinutes = ref(0);
 
-// 打开弹窗时读取自动关闭配置。`immediate` 不可省：本组件是异步分片，可能直到 visible
-// 已为 true 才挂载（首次点击时分片尚未取回），那时 watcher 永不触发，倒计时会静默显示为「不自动关闭」。
+// ─── 凭据变量 ────────────────────────────────────────────────────────────────
+
+/**
+ * 变量行。`uid` 只做列表 key——名字本身就是可编辑的，拿它当 key 会在编辑过程中重建输入框、
+ * 让焦点从用户手里跑掉。
+ */
+interface VariableRow {
+  uid: number;
+  name: string;
+  value: string;
+}
+
+let rowUidSeed = 0;
+const variableRows = ref<VariableRow[]>([]);
+const { variables, loadVariables, saveVariables } = useVariables();
+/** 变量表没读出来就不能整表覆盖写：空列表一旦被当成现状，用户新填一把凭据就会抹掉已有的全部 */
+const variablesLoadFailed = ref(false);
+
+/** 每个变量被多少条规则引用（一次遍历，行内与孤儿引用共用） */
+const variableUsage = computed(() => {
+  const counts: Record<string, number> = {};
+  for (const rule of props.rules ?? []) {
+    for (const name of collectRuleVariableRefs(rule)) {
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+  }
+  return counts;
+});
+
+/** 规则里引用了、但表里已经没有的变量：删掉一把密钥后坏在哪，这里直接说出来 */
+const orphanVariableRefs = computed(() => {
+  const saved = variables.value;
+  const names = new Set<string>();
+  for (const rule of props.rules ?? []) {
+    for (const name of collectRuleVariableRefs(rule)) {
+      if (saved[name] === undefined) names.add(name);
+    }
+  }
+  return [...names];
+});
+
+function usageCount(name: string): number {
+  return variableUsage.value[name.trim()] ?? 0;
+}
+
+// ─── 配置恢复点 ──────────────────────────────────────────────────────────────
+
 watch(
   () => props.visible,
   async val => {
@@ -172,9 +295,80 @@ watch(
     } catch {
       autoOffMinutes.value = 0;
     }
+    variablesLoadFailed.value = !(await loadVariables());
+    if (!variablesLoadFailed.value) {
+      refillRows(variables.value);
+    }
   },
   { immediate: true },
 );
+
+/**
+ * 把界面上的行整表写回
+ *
+ * 每次改动都整表提交（与规则配置的写入形态一致），因此没有「忘了保存」这个状态。
+ * 校验不过就**一个都不写**：只存下一半凭据比全都没存更难发现。
+ * 两端空白由后台再裁一次，两侧判据同源（`utils/variables.ts`）。
+ */
+async function commitVariables() {
+  if (variablesLoadFailed.value) {
+    ElMessage.error(t('variablesWriteBlocked'));
+    return;
+  }
+  const next: VariableStore = {};
+  for (const row of variableRows.value) {
+    const name = row.name.trim();
+    const value = row.value.trim();
+    if (!name && !value) continue;
+    if (!isVariableName(name)) {
+      ElMessage.warning(t('variableNameInvalid'));
+      return;
+    }
+    if (!value) {
+      ElMessage.warning(t('variableValueRequired', name));
+      return;
+    }
+    if (next[name] !== undefined) {
+      ElMessage.warning(t('variableNameDuplicate', name));
+      return;
+    }
+    next[name] = value;
+  }
+
+  const result = await saveVariables(next);
+  if (!result.success) {
+    ElMessage.error(t('variablesSaveFailed'));
+    return;
+  }
+  if (result.dropped > 0) {
+    ElMessage.warning(t('variablesDropped', result.dropped));
+  }
+  // 回填一次：把「两端空白被裁掉」「未填完的行不算存进去」如实反映到界面（判据在后台，
+  // 界面只负责说真话），已有行的 key 不变，见 refillRows 的注释
+  refillRows(variables.value);
+}
+
+function addVariable() {
+  variableRows.value.push({ uid: ++rowUidSeed, name: '', value: '' });
+}
+
+async function removeVariable(index: number) {
+  const row = variableRows.value[index];
+  const used = usageCount(row?.name ?? '');
+  if (used > 0) {
+    try {
+      await ElMessageBox.confirm(t('confirmDeleteVariable', used), t('confirmDeleteVariableTitle'), {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning',
+      });
+    } catch {
+      return; // 用户取消
+    }
+  }
+  variableRows.value.splice(index, 1);
+  await commitVariables();
+}
 
 async function handleAutoOffChange(val: string | number) {
   const minutes = Number(val) || 0;
@@ -219,6 +413,42 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   font-size: 12px;
   line-height: 1.5;
   color: var(--cop-text-color-secondary);
+}
+
+.variable-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: 8px;
+}
+
+.variable-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.variable-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.variable-usage {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+}
+
+.variable-orphan,
+.variable-load-failed {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-color-danger, #f56c6c);
 }
 
 .mode-icon {

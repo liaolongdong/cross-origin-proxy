@@ -1,4 +1,4 @@
-import type { ProxyConfig, ProxyRule, RequestLogEntry, EnvironmentProfile, ImportMode } from '@/utils/types';
+import type { ProxyConfig, ProxyRule, RequestLogEntry, EnvironmentProfile, VariableStore } from '@/utils/types';
 import {
   STORAGE_KEYS,
   DEFAULT_PROXY_CONFIG,
@@ -12,6 +12,7 @@ import {
 import { truncateForLog } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
+import { sanitizeVariables } from '@/utils/variables';
 
 // ─── Storage Mutex Lock ─────────────────────────────────────────────────────
 
@@ -30,11 +31,14 @@ function withStorageLock<T>(fn: () => Promise<T>): Promise<T> {
 
 let cachedConfig: ProxyConfig | null = null;
 
+/** 凭据变量表缓存（真值只在后台侧落地，见 `utils/variables.ts` 的世界边界说明） */
+let cachedVariables: VariableStore | null = null;
+
 // 监听 storage 变化，跨上下文时使缓存失效
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && STORAGE_KEYS.PROXY_CONFIG in changes) {
-    cachedConfig = null;
-  }
+  if (areaName !== 'local') return;
+  if (STORAGE_KEYS.PROXY_CONFIG in changes) cachedConfig = null;
+  if (STORAGE_KEYS.VARIABLES in changes) cachedVariables = null;
 });
 
 /**
@@ -559,5 +563,47 @@ export async function deleteProfile(profileId: string): Promise<void> {
     await chrome.storage.local.set({
       [STORAGE_KEYS.PROFILES]: profiles.filter(p => p.id !== profileId),
     });
+  });
+}
+// ─── Credential Variables ────────────────────────────────────────────────────
+
+/**
+ * 读取凭据变量表
+ *
+ * 只允许后台侧调用：规则里的 `{{名称}}` 在出站请求组装前才展开，真值永远不下发到页面世界。
+ * 与配置表同理由 `storage.onChanged` 失效，SW 被回收后从 `storage.local` 重建。
+ */
+export async function getVariables(): Promise<VariableStore> {
+  if (cachedVariables !== null) return cachedVariables;
+  const result = await chrome.storage.local.get(STORAGE_KEYS.VARIABLES);
+  const sanitized = sanitizeVariables(result[STORAGE_KEYS.VARIABLES]);
+  // 存储被手改成非键值对象时按空表处理：规则里的引用会原样发出并表现为上游 401，
+  // 比让每次代理请求抛错可读
+  cachedVariables = sanitized?.store ?? {};
+  return cachedVariables;
+}
+
+/**
+ * 整表保存凭据变量
+ *
+ * 走锁与 `saveProxyConfig` 同形：写入成功的同一上下文里立刻换上新表，避免下一次读还拿旧缓存；
+ * 写入被拒（配额/异常）时置空缓存，不让内存里留下一份 storage 中不存在的凭据。
+ * `dropped` 回报被收口丢弃的条目数，界面据此提示用户，而不是静默少存几把密钥。
+ */
+export async function saveVariables(variables: unknown): Promise<{ dropped: number }> {
+  return withStorageLock(async () => {
+    const sanitized = sanitizeVariables(variables);
+    if (!sanitized) {
+      cachedVariables = null;
+      throw new Error('INVALID_VARIABLES_PAYLOAD');
+    }
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.VARIABLES]: sanitized.store });
+    } catch (error) {
+      cachedVariables = null;
+      throw error;
+    }
+    cachedVariables = sanitized.store;
+    return { dropped: sanitized.dropped };
   });
 }

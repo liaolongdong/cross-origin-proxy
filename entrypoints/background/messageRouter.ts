@@ -23,13 +23,14 @@ import {
   saveProfile,
   loadProfile,
   deleteProfile,
+  getVariables,
+  saveVariables,
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules } from '@/utils/har';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
-
 /**
  * 校验导入规则的必要字段，过滤掉结构非法的条目，避免脏数据写入后导致 DNR 同步/拦截器异常
  */
@@ -159,7 +160,22 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.SAVE_PROFILE,
   MessageType.LOAD_PROFILE,
   MessageType.DELETE_PROFILE,
+  MessageType.SET_VARIABLES,
 ]);
+
+/**
+ * 只读、但**回的是凭据或整包本地数据**的消息类型，与状态修改类共用同一道 sender 校验
+ *
+ * 「只读消息不加 gate」那条规则挡的是内容脚本要用的消息（加了代理当场失效）——这两条都没有
+ * 页面侧调用方，桥接层永远不转发它们，因此这里不违反那条约束，反而是它的前提：
+ * 漏掉这道 gate，任意页面的 `chrome.runtime.sendMessage({type:'GET_VARIABLES'})` 就能读到
+ * 用户所有环境的密钥，本批次其余设计（真值不下发页面）当场作废。
+ *
+ * 真实请求头**（凭据变量库之前录入的规则尤其如此），一份历史等于把配好几种环境的会话全交出去。
+ *
+ * 新增读取类消息时不要照这里加：判据是「页面从不读取 + 回的是凭据类数据」，两者缺一就别加。
+ */
+const CREDENTIAL_READING_TYPES = new Set([MessageType.GET_VARIABLES]);
 
 /**
  * 统一处理异步消息响应：resolve 时回传结果，reject 时回传 { success: false, error }
@@ -181,14 +197,18 @@ export function setupMessageRouter(): void {
   chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
     logger.debug('Message received:', message.type);
 
-    // 状态修改类消息：校验 sender 来源
-    if (STATE_MUTATING_TYPES.has(message.type) && !isTrustedSender(sender)) {
+    // 状态修改类与「回的是凭据真值」的读取类消息：校验 sender 来源
+    if (
+      (STATE_MUTATING_TYPES.has(message.type) || CREDENTIAL_READING_TYPES.has(message.type)) &&
+      !isTrustedSender(sender)
+    ) {
       sendResponse({ success: false, error: 'Unauthorized sender' });
       return false;
     }
 
     switch (message.type) {
       case MessageType.PROXY_REQUEST:
+        // 顺手累加这个标签页的代发数，作为拦截器自报计数的交叉校验基准（`sender.tab` 由
         return respondAsync(sendResponse, handleProxyRequest(message.data));
 
       case MessageType.GET_PROXY_CONFIG:
@@ -406,6 +426,18 @@ export function setupMessageRouter(): void {
         return respondAsync(
           sendResponse,
           deleteProfile(message.data.profileId).then(() => ({ success: true })),
+        );
+
+      case MessageType.GET_VARIABLES:
+        // 走到这里说明已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是真值表
+        return respondAsync(sendResponse, getVariables());
+
+      case MessageType.SET_VARIABLES:
+        // 整表写入（与 UPDATE_PROXY_CONFIG 同形态）：非键值对象在 `saveVariables` 里抛错，
+        // 由 `respondAsync` 转成 { success: false }，绝不当成空表清掉用户凭据
+        return respondAsync(
+          sendResponse,
+          saveVariables(message.data?.variables).then(({ dropped }) => ({ success: true, dropped })),
         );
 
       default:

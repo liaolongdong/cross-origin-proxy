@@ -163,6 +163,7 @@
               <el-icon><Plus /></el-icon>
               {{ t('addHeader') }}
             </el-button>
+            <div class="field-hint">{{ t('headerOverridesHint') }}</div>
           </div>
         </el-form-item>
 
@@ -645,7 +646,9 @@ import { HTTP_METHODS } from '@/utils/types';
 import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { findInvalidHeaderNames } from '@/utils/headerValidation';
-import { matchRule, rewriteUrl, applyQueryOverrides } from '@/utils/urlMatcher';
+import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule } from '@/utils/urlMatcher';
+import { collectRuleVariableRefs, findUndefinedVariableRefs } from '@/utils/variables';
+import { useVariables } from '@/composables/useVariables';
 
 const props = defineProps<{
   visible: boolean;
@@ -660,6 +663,11 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+// 变量表只用于保存前的引用校验；真值从不经界面写入规则，规则里存的一直是 `{{名称}}` 字面量
+const { variables, loadVariables } = useVariables();
+/** 变量表是否读到过：没读到就别拿它去否决用户的保存 */
+const variableNamesLoaded = ref(false);
 
 const formRef = ref<FormInstance>();
 
@@ -760,6 +768,11 @@ watch(
   () => props.visible,
   val => {
     if (val) {
+      // 每次打开重新拉一遍引用名：设置页可能刚改过表，拿旧表校验会误报「未定义」
+      variableNamesLoaded.value = false;
+      void loadVariables().then(ok => {
+        variableNamesLoaded.value = ok;
+      });
       if (props.rule) {
         Object.assign(form, {
           name: props.rule.name,
@@ -897,6 +910,32 @@ async function handleSave() {
     }
   });
 
+  const queryOverrides: Record<string, string> = {};
+  queryList.value.forEach(({ key, value }) => {
+    if (key.trim()) queryOverrides[key.trim()] = value;
+  });
+
+  // 变量引用拦在保存处：未定义的 `{{名称}}` 存下去会在请求时原样发出，用户看到的只是一次
+  // 看不懂的上游 401。拉取变量表失败时**不做这项校验**——宁可放过一个拼错的引用（运行时会
+  // 宽容原样发出，控制台点名），也不要在扩展暂时读不到表的时候把保存按钮变成死路。
+  if (variableNamesLoaded.value) {
+    const undefinedRefs = findUndefinedVariableRefs({ headerOverrides, queryOverrides }, variables.value);
+    if (undefinedRefs.length > 0) {
+      ElMessage.error(t('undefinedVariableError', undefinedRefs.join(', ')));
+      return;
+    }
+  }
+
+  // WebSocket 规则的查询参数由 MAIN world 拦截器拼接（`applyWsQuery`），那一侧永远读不到
+  // 变量表，引用只会被原样写进握手 URL —— 静默坏配置，不如当场拒绝保存
+  if (
+    isWebSocketRule({ matchPattern: form.matchPattern, targetUrl: form.targetUrl }) &&
+    collectRuleVariableRefs({ queryOverrides }).length > 0
+  ) {
+    ElMessage.error(t('variableWsQueryUnsupportedError'));
+    return;
+  }
+
   const result: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> = {
     name: form.name,
     matchType: form.matchType,
@@ -911,10 +950,6 @@ async function handleSave() {
     result.methods = [...methodsList.value];
   }
 
-  const queryOverrides: Record<string, string> = {};
-  queryList.value.forEach(({ key, value }) => {
-    if (key.trim()) queryOverrides[key.trim()] = value;
-  });
   if (Object.keys(queryOverrides).length > 0) {
     result.queryOverrides = queryOverrides;
   }
