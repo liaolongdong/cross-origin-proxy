@@ -18,9 +18,10 @@
  * 改名时两边一起红，而不是让这份夹具悄悄跟着改。
  *
  * 覆盖范围只有 fetch 通道。XHR 需要一份能派发 `readyState`/`load` 事件的假实例，
- * WebSocket 需要握手与帧语义——两者的假实现本身会成为被测物的主要风险源，
- * 所以那两条仍由各自的源码契约测试（`syncXhrFallback` / `xhrReadonlyProps` / `wsCapabilitySurface`）守着；
- * 挂载时给 `XMLHttpRequest` 与 `window.WebSocket` 放的空桩，只为让 `main()` 跑到末尾不抛。
+ * WebSocket 需要握手与帧语义——假握手会成为被测物的主要风险源，所以这里的空桩只为让
+ * `main()` 跑到末尾不抛；两条通道各自的运行时用例在 `interceptorXhr`（结局）与
+ * `interceptorWebSocket`（选址：交给原生构造器的是哪个地址、带不带 protocols）。
+ * 握手与帧语义本身仍然只有源码契约（`wsCapabilitySurface`），刻意没补。
  *
  * 同为 fetch 通道、这里刻意没碰的分支（要加先想清楚该不该由运行时用例守）：
  * `input` 是 `Request` 对象的那一半（`request?.method/signal/headers` 回退、`request.clone().text()`

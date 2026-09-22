@@ -12,6 +12,11 @@ import { readFileSync } from 'node:fs';
  *
  * 文案与实现分处两地，正是它分叉的原因，所以两端一起钉住：先证明能力面（源码契约），
  * 再要求文案点名「生效项」与「无效项」。拦截器自包含、无法 import，只能读源码。
+ *
+ * 「先阻断后重写」这类**顺序**与「哪几个字段根本不经过这条路径」的缺席断言留在这里；
+ * 「交给原生构造器的到底是哪个地址、带不带 protocols、阻断连到哪个端口」这些结局，
+ * 已由 `tests/interceptorWebSocket.test.ts` 按运行时接手（批次 L）。本文件继续守的是
+ * 文案那一侧——它没有任何运行时对应物。
  */
 
 const source = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');

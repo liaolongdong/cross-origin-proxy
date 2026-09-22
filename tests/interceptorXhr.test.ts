@@ -36,8 +36,9 @@
  * 拦截器自包含、不 import 枚举，所以测试同样按字面量说话——改这些字面量就是改线上协议。
  * `CONTENT_SCRIPT_CHANNEL` 例外：它经 `utils/constants.ts` 取值，桥接层用的是同一个常量。
  *
- * 刻意不在这里测的：fetch 通道（批次 I）、WebSocket 握手（假实现会成为被测物的主要风险源，
- * 仍由 `wsCapabilitySurface` 守）、`proxyFetch` 内部的回包整形与超时公式（`proxyResponseGuard` /
+ * 刻意不在这里测的：fetch 通道（批次 I）、WebSocket（批次 L 补的是**选址**那半——交给原生构造器的
+ * 地址与 protocols，见 `interceptorWebSocket`；握手与帧语义仍只有 `wsCapabilitySurface` 守着）、
+ * `proxyFetch` 内部的回包整形与超时公式（`proxyResponseGuard` /
  * `interceptorResponseGuard` / `round3-bugfixes`）、以及规则匹配与优先级本身（`proxyRuleSelection`）。
  * 假 `postMessage` 按引用记录载荷、不做结构化克隆；`xhr.upload` 与 `withCredentials` 拦截器根本不读。
  */
