@@ -1,9 +1,11 @@
 /**
  * MAIN world 拦截器的响应构造安全契约（回归：中文响应头让页面永久 pending）
  *
- * `entrypoints/main-interceptor.content.ts` 自包含、跑在页面同源，无法 import `utils/*`，
- * 也无法在 node 里实例化（没有 `window`/`XMLHttpRequest` 原型可换），因此这里按**源码契约**
- * 守三件事：
+ * `entrypoints/main-interceptor.content.ts` 自包含、跑在页面同源，无法 import `utils/*`；
+ * 「不能在 node 里跑」已经不成立（`tests/interceptorFetch.test.ts` 与 `tests/interceptorXhr.test.ts`
+ * 各挂了假 `window` 与假 XHR/fetch 把两条通道跑起来了），但这一支守的是**构造调用的位置关系**
+ * ——过滤器在 `new Headers()` 之前、整段在 try 内、catch 里 reject——按结局测只能看出
+ * 「有没有 pending」，看不出这几行的相对位置，因此仍按**源码契约**守三件事：
  *
  * 1. 交给 `new Headers()` 的实参必须来自本文件内的 ByteString 过滤器——用户在规则里
  *    手写的中文响应头（`utils/headerValidation.ts` 只挡 CR/LF 与头名字符集）码点 > 255，

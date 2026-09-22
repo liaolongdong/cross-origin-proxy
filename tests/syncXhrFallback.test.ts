@@ -10,7 +10,9 @@ import { readFileSync } from 'node:fs';
  * 与「非字符串 body」同类：这类请求回退原生（等价于未装本扩展），只有阻断规则例外，
  * 因为回退等于把用户明确要求挡掉的请求真的发出去。
  *
- * 拦截器跑在 MAIN world、自包含且无法 import，只能用源码契约守住（同 `xhrReadonlyProps`）。
+ * 拦截器跑在 MAIN world、自包含且无法 import，这一支因此按源码契约守住判据写法与分支顺序；
+ * 「回退有没有真的把请求发出去、告警是不是只打一次」这类结局由 `tests/interceptorXhr.test.ts`
+ * 按运行时接手（同 `xhrReadonlyProps` 的分工）。
  */
 
 const source = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');

@@ -6,12 +6,21 @@ import { readFileSync } from 'node:fs';
  *
  * 页面完全可以对同一个 `XMLHttpRequest` 实例再次 `open()` + `send()`（轮询库、
  * 手写重试都这么干），此时拦截器会第二遍回填 `readyState` / `status` / `response` 等
- * 只读属性。`Object.defineProperty` 的 `configurable` 默认是 `false`，第二次定义直接抛
+ * 只读属性。`Object.defineProperty` 只有在这两个属性**都**缺省时才会得到一份
+ * `{ writable: false, configurable: false }` 的 own data 属性，第二次定义直接抛
  * `TypeError: Cannot redefine property`；抛出点落在 `.then` 里 → 进 `.catch`，
  * 而 `.catch` 又做同样的定义 → 再抛一次，于是 `error` / `loadend` 事件都派发不出来，
  * 页面那次请求永久 pending。
  *
- * 拦截器跑在 MAIN world、自包含且无法 import，只能用源码契约守住（同 `channel-consistency`）。
+ * 两个旗标并不对称，这一点由变异实测而非推断：只漏 `configurable: true` 就会让复用实例的
+ * 第二遍回填抛错（新建的那份 own 属性不可重定义），只漏 `writable: true` 则不会——
+ * `configurable: true` 还在时整份重定义本就允许改值。所以承重的是 `configurable`，
+ * `writable` 是防御性的第二道（页面自己给 `xhr.status` 赋值时不至于在严格模式抛）。
+ * 这个不对称由 `tests/interceptorXhr.test.ts` 按运行时分别摘掉两侧验证过。本用例只钉
+ * `configurable: true` 那一侧（承重的就是它），别把它当冗余删掉。
+ *
+ * 拦截器跑在 MAIN world、自包含且无法 import，只能用源码契约守住（同 `channel-consistency`）；
+ * 「回填到什么值、按什么顺序派发哪些事件」这类结局由 `tests/interceptorXhr.test.ts` 接手。
  */
 
 const source = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
