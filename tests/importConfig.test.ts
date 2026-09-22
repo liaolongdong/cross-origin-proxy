@@ -271,9 +271,23 @@ describe('useImportExport.fetchImportPlan — 预览这一路自己的判据', (
   });
 
   it('预览不占用 importing：算个预览不该把「导入」按钮锁住', async () => {
-    sendMessageSpy.mockResolvedValue({ success: true, plan });
-    const { importing, fetchImportPlan } = useImportExport();
-    await fetchImportPlan(validJson, 'merge');
+    let settle: (result: unknown) => void = () => {};
+    sendMessageSpy.mockImplementation(() => new Promise(resolve => (settle = resolve)));
+    const { importing, importConfig, fetchImportPlan } = useImportExport();
+
+    // 正向对照：同一份在途 Promise 下，写入路径确实会把旗标立起来。
+    // 少了这一格，下面那句 `false` 只说明「没人碰过旗标」——它初值就是 false。
+    const write = importConfig(validJson, 'replace');
+    expect(importing.value).toBe(true);
+    settle({ success: true });
+    await write;
+    expect(importing.value).toBe(false);
+
+    // 在途读数，而不是落定之后的读数：预览若去碰这把锁，红在这里
+    const preview = fetchImportPlan(validJson, 'merge');
+    expect(importing.value).toBe(false);
+    settle({ success: true, plan });
+    await preview;
     expect(importing.value).toBe(false);
   });
 
