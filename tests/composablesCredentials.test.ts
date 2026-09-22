@@ -396,3 +396,32 @@ describe('这两个布尔被界面怎么用（组件层没有 DOM，只能按源
     expect(sites).toHaveLength(2);
   });
 });
+
+/**
+ * `constructor` / `toString` 都过 `isVariableName`（首字符是字母、字符合法），所以「按名字查这张
+ * 凭据表」的三个位点一旦写成裸下标，就会顺原型链读到 `Object.prototype` 上的函数：孤儿引用不报警、
+ * 使用次数画成一段函数源码、而这个名字在第一行就被判成「重复」存不进去。
+ * 组件层没有 DOM 等价物，只能按源码契约钉住「走的是哪一个出口」。
+ */
+describe('凭据表按名字取值：三处位点都不许顺原型链（源码契约）', () => {
+  const dialogSrc = readFileSync('components/options/SettingsDialog.vue', 'utf-8');
+
+  it('「表里有没有」只问 `findUndefinedVariableRefs` 那一个出口，界面不再自己写下标判据', () => {
+    expect(dialogSrc).toContain(
+      'for (const name of findUndefinedVariableRefs(rule, variables.value)) names.add(name);',
+    );
+  });
+
+  it('使用次数用 Map 存、用 get 取', () => {
+    expect(dialogSrc).toContain('const counts = new Map<string, number>();');
+    expect(dialogSrc).toContain('return variableUsage.value.get(name.trim()) ?? 0;');
+    // 回到对象下标就是上面那条缺陷的回潮：`variableUsage.value['constructor']` 不是 undefined
+    expect(dialogSrc).not.toContain('variableUsage.value[');
+  });
+
+  it('重名判据只认自有键', () => {
+    expect(dialogSrc).toContain('Object.prototype.hasOwnProperty.call(next, name)');
+    // 只钉「读」这一侧：`next[name] = value` 是建表时的写，本来就只能落在下标上
+    expect(dialogSrc).not.toContain('next[name] !== undefined');
+  });
+});

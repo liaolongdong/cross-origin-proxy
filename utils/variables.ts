@@ -85,6 +85,18 @@ export function extractVariableRefs(value: string | undefined): string[] {
 }
 
 /**
+ * 按名字取变量真值：只认变量表**自己**的键
+ *
+ * `constructor` / `toString` / `hasOwnProperty` 都是合法变量名（`VARIABLE_NAME_RE` 只约束
+ * 首字符与字符集），而裸下标会顺着原型链拿到 `Object.prototype` 上的函数。于是「表里没配
+ * 这把密钥」被读成「配了，值是那段函数源码」：请求头原样发出一个看不懂的字符串，而保存侧
+ * 专门拦拼错的引用（`findUndefinedVariableRefs`）恰好在这一格放行。
+ */
+function ownVariableValue(store: VariableStore, name: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(store, name) ? store[name] : undefined;
+}
+
+/**
  * 展开一段文本里的所有引用
  *
  * 未定义的引用保留 `{{名称}}` 字面量并回报，调用方据此决定是否告警。
@@ -94,7 +106,7 @@ export function resolveVariableRefs(value: string, store: VariableStore): Resolv
 
   const missing: string[] = [];
   const resolved = value.replace(VARIABLE_REF_RE, (whole, name: string) => {
-    const hit = store[name];
+    const hit = ownVariableValue(store, name);
     if (hit === undefined) {
       if (!missing.includes(name)) missing.push(name);
       return whole;
@@ -164,5 +176,5 @@ export function findUndefinedVariableRefs(
   rule: { headerOverrides?: Record<string, string>; queryOverrides?: Record<string, string> },
   store: VariableStore,
 ): string[] {
-  return collectRuleVariableRefs(rule).filter(name => store[name] === undefined);
+  return collectRuleVariableRefs(rule).filter(name => ownVariableValue(store, name) === undefined);
 }

@@ -102,6 +102,21 @@ describe('resolveVariableRefs / resolveVariableMap — 展开', () => {
     expect(resolveVariableRefs('{{BRACE}}', store)).toEqual({ value: '{{TOKEN}}', missing: [] });
   });
 
+  it('只认表里自己的键：{{constructor}} / {{toString}} 是「没配」，不是「配了一段函数源码」', () => {
+    // 这两个名字都过 `isVariableName`，裸下标却会顺原型链命中 Object.prototype 上的函数，
+    // 于是未展开的引用被换成 `function Object() { [native code] }` 发出去
+    expect(resolveVariableRefs('Bearer {{constructor}}', {})).toEqual({
+      value: 'Bearer {{constructor}}',
+      missing: ['constructor'],
+    });
+    expect(resolveVariableRefs('{{toString}}', {})).toEqual({ value: '{{toString}}', missing: ['toString'] });
+    // 真的把变量取名叫 constructor 时照样展开（自有属性优先，这条修法不误伤）
+    expect(resolveVariableRefs('{{constructor}}', { constructor: 'real-token' })).toEqual({
+      value: 'real-token',
+      missing: [],
+    });
+  });
+
   it('空表与未配置返回 undefined，保持「本规则没有这一项」的形态', () => {
     expect(resolveVariableMap(undefined, store)).toBeUndefined();
     expect(resolveVariableMap({}, store)).toBeUndefined();
@@ -132,6 +147,17 @@ describe('collectRuleVariableRefs / findUndefinedVariableRefs — 表单侧口�
     expect(findUndefinedVariableRefs({ headerOverrides: { Authorization: '{{A}} {{MISSING}}' } }, { A: 'x' })).toEqual([
       'MISSING',
     ]);
+  });
+
+  it('原型链上的名字要点名，而不是让保存侧的拼写检查放行', () => {
+    // 这一格漏了，表单就会放过 `Bearer {{constructor}}`：存下去表现为一次看不懂的上游 401，
+    // 而这句话正是本函数存在的理由
+    expect(
+      findUndefinedVariableRefs(
+        { headerOverrides: { Authorization: 'Bearer {{constructor}}' }, queryOverrides: { t: '{{toString}}' } },
+        {},
+      ),
+    ).toEqual(['constructor', 'toString']);
   });
 });
 

@@ -237,7 +237,7 @@ import {
 } from '@/utils/constants';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
 import type { ConfigHistoryEntry, ConfigHistoryReason, ProxyRule, VariableStore } from '@/utils/types';
-import { collectRuleVariableRefs, isVariableName } from '@/utils/variables';
+import { collectRuleVariableRefs, findUndefinedVariableRefs, isVariableName } from '@/utils/variables';
 import { formatLocaleDateTime } from '@/utils/formatters';
 import { useVariables } from '@/composables/useVariables';
 import { useConfigHistory } from '@/composables/useConfigHistory';
@@ -299,31 +299,38 @@ const { variables, loadVariables, saveVariables } = useVariables();
 /** 变量表没读出来就不能整表覆盖写：空列表一旦被当成现状，用户新填一把凭据就会抹掉已有的全部 */
 const variablesLoadFailed = ref(false);
 
-/** 每个变量被多少条规则引用（一次遍历，行内与孤儿引用共用） */
+/**
+ * 变量名 → 被多少条规则引用（行内「被 N 条规则使用」与删除确认里的次数都读它）
+ *
+ * 用 `Map` 而不是对象：`constructor` / `toString` 都是合法变量名（`isVariableName` 只约束字法），
+ * 对象下标会顺原型链摸到函数，那一格就把函数源码当次数画出来。
+ */
 const variableUsage = computed(() => {
-  const counts: Record<string, number> = {};
+  const counts = new Map<string, number>();
   for (const rule of props.rules ?? []) {
     for (const name of collectRuleVariableRefs(rule)) {
-      counts[name] = (counts[name] ?? 0) + 1;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
     }
   }
   return counts;
 });
 
-/** 规则里引用了、但表里已经没有的变量：删掉一把密钥后坏在哪，这里直接说出来 */
+/**
+ * 规则里引用了、但表里已经没有的变量：删掉一把密钥后坏在哪，这里直接说出来
+ *
+ * 「表里有没有」这句话只由 `findUndefinedVariableRefs` 说一次（表单保存侧用的是同一个出口）——
+ * 在这里再写一遍按名字取值的判据，就是两处口径分叉的开始。
+ */
 const orphanVariableRefs = computed(() => {
-  const saved = variables.value;
   const names = new Set<string>();
   for (const rule of props.rules ?? []) {
-    for (const name of collectRuleVariableRefs(rule)) {
-      if (saved[name] === undefined) names.add(name);
-    }
+    for (const name of findUndefinedVariableRefs(rule, variables.value)) names.add(name);
   }
   return [...names];
 });
 
 function usageCount(name: string): number {
-  return variableUsage.value[name.trim()] ?? 0;
+  return variableUsage.value.get(name.trim()) ?? 0;
 }
 
 // ─── 配置恢复点 ──────────────────────────────────────────────────────────────
@@ -440,7 +447,9 @@ async function commitVariables() {
       ElMessage.warning(t('variableValueRequired', name));
       return;
     }
-    if (next[name] !== undefined) {
+    // 「重名」只问这张表自己的键：`constructor` 是合法变量名，裸下标会顺原型链在**第一行**
+    // 就判成重复，于是这个名字永远存不进去
+    if (Object.prototype.hasOwnProperty.call(next, name)) {
       ElMessage.warning(t('variableNameDuplicate', name));
       return;
     }
