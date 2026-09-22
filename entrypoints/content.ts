@@ -120,6 +120,18 @@ export default defineContentScript({
         return;
       }
 
+      // 页面取消了自己那笔代发（fetch 的 signal / xhr.abort()）：只把 requestId 转给后台，
+      // 让它掐断上游连接与后续重试。
+      // 载荷刻意收窄成一个键——转发整包 `event.data.data` 会把 URL 等页面数据顺带递给
+      // 一个只需要 id 的处理器；回执（有没有掐到）在页面侧没有读者，因此不等、不重试，
+      // SW 回收期本来也送不出去。
+      if (event.data?.type === MessageType.CANCEL_REQUEST) {
+        const requestId = (event.data.data as { requestId?: unknown } | undefined)?.requestId;
+        if (typeof requestId !== 'string' || !requestId) return;
+        void chrome.runtime.sendMessage({ type: MessageType.CANCEL_REQUEST, data: { requestId } }).catch(() => {});
+        return;
+      }
+
       if (event.data?.type !== MessageType.PROXY_REQUEST) return;
 
       const { data } = event.data;

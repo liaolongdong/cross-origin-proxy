@@ -8,6 +8,8 @@ import { logger } from '@/utils/logger';
 import type {
   ProxyStatus,
   ProxyRule,
+  ProxyRequestMessage,
+  ProxyResponseMessage,
   RequestLogEntry,
   ResponseOverrides,
   MockCondition,
@@ -15,6 +17,29 @@ import type {
 } from '@/utils/types';
 
 export const MAX_BODY_SIZE = 10 * 1024 * 1024;
+
+/** 页面取消时写进日志与失败信封的文案（与 `'Request timeout (30s)'` 同档的自由文本） */
+const CANCELLED_BY_PAGE = 'Cancelled by page';
+
+/**
+ * 可被取消打断的等待：`signal` 一到就提前结束，之后由调用处的 `signal.aborted` 判定收尾。
+ *
+ * 没有它，配置了 `delayMs` 的请求在延迟期间收到取消仍然会睡满再出发——上游连接是省下来了，
+ * 但 SW 还要多等几十秒才知道这件事。
+ */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return new Promise(resolve => setTimeout(resolve, ms));
+  if (signal.aborted) return Promise.resolve();
+  return new Promise(resolve => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+  });
+}
 
 /**
  * 判断字符串按 UTF-8 编码后是否超出请求体上限。
@@ -257,21 +282,63 @@ function resolveSelectedRule(
   return matchRule(url, chosen, method) ? chosen : null;
 }
 
-export async function handleProxyRequest(data: {
-  requestId: string;
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  body?: string | null;
-  ruleId?: string;
-}): Promise<{
-  requestId: string;
-  status: number;
-  statusText: string;
-  headers: Record<string, string>;
-  body: string;
-  isBase64: boolean;
-}> {
+/** `PROXY_REQUEST` 的载荷；返回形状与 `PROXY_RESPONSE` 的 data 同形（桥接层再兜一次整形） */
+type ProxyRequestPayload = ProxyRequestMessage['data'];
+type ProxyResponsePayload = ProxyResponseMessage['data'];
+
+/**
+ * 在途代发请求的登记表：登记键 → 这一笔的取消控制器。
+ *
+ * 键必须带 tabId：`requestId` 是每个页面各自的计数器，两个标签页同时发请求就是同一个字符串，
+ * 不带 tabId 等于让一个页面掐断另一个页面的代发。只存内存、请求一落定就摘除——SW 被回收时
+ * 这些上游连接本来也一起没了。
+ */
+const inFlightRequests = new Map<string, AbortController>();
+
+/**
+ * 拼在途请求的登记键。`PROXY_REQUEST` 的登记侧与 `CANCEL_REQUEST` 的取消侧共用这一处，
+ * 免得两边各拼一遍、拼歪成「取消永远打不中」。
+ */
+export function proxyRequestKey(tabId: number | undefined, requestId: string): string {
+  return `${tabId ?? 'no-tab'}::${requestId}`;
+}
+
+/**
+ * 取消一笔正在代发的请求：掐断上游连接，并让重试循环不再追加尝试。
+ *
+ * @param key - `proxyRequestKey` 拼出的登记键
+ * @returns 这个键当前有没有在途请求（没有就是已落定或从未登记，两种情形都不用处理）
+ */
+export function cancelProxiedRequest(key: string): boolean {
+  const controller = inFlightRequests.get(key);
+  if (!controller) return false;
+  controller.abort();
+  return true;
+}
+
+/**
+ * 代发一笔页面请求。
+ *
+ * @param data - `PROXY_REQUEST` 载荷
+ * @param requestKey - 在途登记键（`proxyRequestKey` 拼出）；不传则这笔请求无法被页面取消，
+ *   留给不经内容脚本的调用方
+ */
+export async function handleProxyRequest(
+  data: ProxyRequestPayload,
+  requestKey?: string,
+): Promise<ProxyResponsePayload> {
+  if (!requestKey) return runProxyRequest(data);
+
+  const controller = new AbortController();
+  inFlightRequests.set(requestKey, controller);
+  try {
+    return await runProxyRequest(data, controller.signal);
+  } finally {
+    inFlightRequests.delete(requestKey);
+  }
+}
+
+async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal): Promise<ProxyResponsePayload> {
   const startTime = Date.now();
   const config = await getProxyConfig();
 
@@ -489,7 +556,7 @@ export async function handleProxyRequest(data: {
   }
 
   if (rule.delayMs) {
-    await new Promise(resolve => setTimeout(resolve, rule.delayMs));
+    await sleep(rule.delayMs, signal);
   }
 
   // ─── 重试循环 ─────────────────────────────────────────────────────────────
@@ -498,9 +565,14 @@ export async function handleProxyRequest(data: {
   let lastError: string | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // 页面已经取消（含在 delayMs 期间取消）：不再追加尝试，也不在最后一刻打开新连接
+    if (signal?.aborted) {
+      lastError = CANCELLED_BY_PAGE;
+      break;
+    }
     if (attempt > 0) {
       logger.info(`Retry ${attempt}/${maxRetries}: ${data.url} (rule: ${rule.name})`);
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
+      await sleep(retryDelay, signal);
     }
 
     const controller = new AbortController();
@@ -508,6 +580,9 @@ export async function handleProxyRequest(data: {
     // 一旦在拿到响应头之后就撤掉，`text/event-stream` 这类不结束的流就再没有超时——
     // 上游连接一直握到 SW 被回收，而日志是在 body 读满之后才落的，这条请求连一笔账都不留。
     const timeoutId = setTimeout(() => controller.abort(), 30000);
+    // 页面取消走同一个 abort 入口：连接阶段掐 fetch，读取阶段掐 body
+    const abortForPage = () => controller.abort();
+    signal?.addEventListener('abort', abortForPage, { once: true });
 
     try {
       const response = await fetch(targetUrl, {
@@ -599,17 +674,29 @@ export async function handleProxyRequest(data: {
       const isTimeout = error instanceof Error && error.name === 'AbortError';
       lastError = isTimeout ? 'Request timeout (30s)' : errorMessage;
 
+      // 取消与超时同为 AbortError，但只有前者该立刻收口：页面已经不想要这份响应，
+      // 按可重试失败处理等于替它把凭据再往外发几次。
+      if (signal?.aborted) {
+        lastError = CANCELLED_BY_PAGE;
+        break;
+      }
+
       if (isRetryableError(error) && attempt < maxRetries) {
         continue;
       }
       break;
     } finally {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abortForPage);
     }
   }
 
   // 所有重试耗尽
-  logger.error('Proxy request failed after retries:', lastError);
+  if (lastError === CANCELLED_BY_PAGE) {
+    logger.info(`Proxy request cancelled by page: ${data.url} (rule: ${rule.name})`);
+  } else {
+    logger.error('Proxy request failed after retries:', lastError);
+  }
 
   const logEntry: RequestLogEntry = {
     id: generateId(),

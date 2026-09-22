@@ -18,6 +18,7 @@ export default defineContentScript({
     const CHANNEL = 'cross-origin-proxy';
     const PROXY_REQUEST = 'PROXY_REQUEST';
     const PROXY_RESPONSE = 'PROXY_RESPONSE';
+    const CANCEL_REQUEST = 'CANCEL_REQUEST';
     const SYNC_RULES = 'SYNC_RULES';
     const REQUEST_CONFIG = 'REQUEST_CONFIG';
     const INTERCEPTOR_STATS = 'INTERCEPTOR_STATS';
@@ -329,9 +330,22 @@ export default defineContentScript({
       return safe;
     }
 
-    function proxyFetch(url: string, rule: ProxyRule, options: RequestInit = {}): Promise<Response> {
+    /**
+     * 代发一笔请求并等桥接层写回结果。
+     *
+     * @param onRequestId - 把本笔的 requestId 交给调用方：XHR 的 `abort()` 与 `xhr.timeout`
+     *   到期都发生在 promise 之外，拿不到这个 id 就不知道该取消哪一笔。
+     */
+    function proxyFetch(
+      url: string,
+      rule: ProxyRule,
+      options: RequestInit = {},
+      onRequestId?: (requestId: string) => void,
+    ): Promise<Response> {
       return new Promise((resolve, reject) => {
         const requestId = `req-${++requestCounter}-${Date.now()}`;
+        onRequestId?.(requestId);
+        const pageSignal = options.signal ?? null;
 
         // 超时上限按规则配置动态计算（延迟/重试会拉长 SW 侧总耗时）
         const timeout = setTimeout(() => {
@@ -339,6 +353,13 @@ export default defineContentScript({
           pendingRequests.delete(requestId);
           reject(new Error('Proxy request timeout'));
         }, computeProxyTimeout(rule));
+
+        // 一进来看见已取消：请求根本不该发出，也就不必再发一条取消
+        if (pageSignal?.aborted) {
+          clearTimeout(timeout);
+          reject(pageSignal.reason);
+          return;
+        }
 
         pendingRequests.set(requestId, {
           resolve: (data: any) => {
@@ -443,6 +464,21 @@ export default defineContentScript({
           window.location.origin,
         );
         bump('proxied');
+
+        // 页面取消（`controller.abort()`）：本地按 `signal.reason` 落定，同时让后台掐掉那笔上游。
+        // 不掐的后果是——连接继续握、凭据继续外发、retryCount 继续追加，而结果已经没人读了。
+        pageSignal?.addEventListener(
+          'abort',
+          () => {
+            // 已落定（正常回包或代发超时）时登记项已摘除，这时不该补发一条无主的取消
+            if (!pendingRequests.has(requestId)) return;
+            pendingRequests.delete(requestId);
+            clearTimeout(timeout);
+            window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);
+            reject(pageSignal.reason);
+          },
+          { once: true },
+        );
       });
     }
 
@@ -465,6 +501,8 @@ export default defineContentScript({
       // 合并 Request 对象与 init：init 优先，缺失时回退到 Request 自身的 method/headers/body
       // 需先算出 method 再匹配，以便按规则的方法白名单收窄拦截范围
       const method = init?.method || request?.method || 'GET';
+      // 页面的取消信号同样 init 优先、再回退 Request 自带的
+      const signal = init?.signal ?? request?.signal ?? null;
 
       const rule = findMatchingRule(url, method);
       if (!rule) {
@@ -491,8 +529,12 @@ export default defineContentScript({
           return originalFetch.call(window, input, init);
         }
 
-        return await proxyFetch(url, rule, { method, headers, body: (body ?? null) as BodyInit | null });
+        return await proxyFetch(url, rule, { method, headers, body: (body ?? null) as BodyInit | null, signal });
       } catch (error) {
+        // 页面已取消：原样抛出（原生 fetch 在 signal 触发时 reject 的就是 `signal.reason`，
+        // 页面普遍按 `err.name === 'AbortError'` 分支），更**不得**回退原生——
+        // 那等于把页面刚刚放弃的请求再发一遍，还会把「取消」说成「代理失败」。
+        if (signal?.aborted) throw error;
         // 阻断规则一律不得回退（否则被阻断的请求会实际发出）：除了 SW 明确回传的
         // Blocked 标记，还要看本地 rule.blocked —— 读配置抛错、桥接超时或收到
         // 无 status 的失败信封时，SW 根本来不及给出阻断判定。
@@ -522,15 +564,31 @@ export default defineContentScript({
       (this as any).__proxyHeaders = {};
       (this as any).__proxyCancel = false;
       (this as any).__proxySettled = false;
+      // 实例会被复用（open → send → open → send）：不清掉上一笔的 id，
+      // 下一次 send 之前的 abort() 就会去取消一个根本不存在的请求
+      (this as any).__proxyRequestId = '';
       // open(method, url, false) 是同步 XHR。代理要经 postMessage 往返，响应只能在
       // 调用栈返回之后到达，因此异步写回等于让调用方读到空响应——记下来，send() 回退原生
       (this as any).__proxySync = rest.length > 0 && rest[0] === false;
       return originalXHROpen.apply(this, [method, url, ...rest] as any);
     };
 
+    /**
+     * 页面不再读这笔代理结果时（`abort()` 或 `xhr.timeout` 到期），让后台掐掉那笔上游
+     *
+     * XHR 的取消不像 fetch 那样有 `signal` 可挂，只能由这两处显式发；
+     * requestId 是 `proxyFetch` 回填到实例上的，没走过代理路径（回退原生）时它是空的。
+     */
+    function cancelProxiedXhr(xhr: XMLHttpRequest): void {
+      const requestId: string = (xhr as any).__proxyRequestId;
+      if (!requestId) return;
+      window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);
+    }
+
     XMLHttpRequest.prototype.abort = function (...args: any[]) {
       // 标记取消：迟到的代理响应不再写回该实例（否则会在 abort 后错误派发 load 事件）
       (this as any).__proxyCancel = true;
+      cancelProxiedXhr(this);
       return originalXHRAbort.apply(this, args as any);
     };
 
@@ -601,6 +659,7 @@ export default defineContentScript({
           setTimeout(() => {
             if ((xhr as any).__proxyCancel || (xhr as any).__proxySettled) return;
             (xhr as any).__proxyCancel = true;
+            cancelProxiedXhr(xhr);
             Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
             Object.defineProperty(xhr, 'status', { value: 0, writable: true, configurable: true });
             Object.defineProperty(xhr, 'statusText', { value: '', writable: true, configurable: true });
@@ -610,10 +669,9 @@ export default defineContentScript({
           }, xhr.timeout);
         }
 
-        proxyFetch(url, rule, {
-          method: method || 'GET',
-          headers,
-          body: body ?? null,
+        proxyFetch(url, rule, { method: method || 'GET', headers, body: body ?? null }, requestId => {
+          // 记下这笔的 requestId：页面 abort() 或 timeout 到期时要知道取消哪一条代发
+          (xhr as any).__proxyRequestId = requestId;
         })
           .then(async response => {
             // 已被 abort/timeout 的实例：迟到的响应一律丢弃

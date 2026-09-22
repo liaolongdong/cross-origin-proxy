@@ -128,7 +128,7 @@
 
 - 只使用 Manifest V3 API；不引入 MV2 API、远程执行代码、内联事件处理器或违反扩展 CSP 的实现。
 - 调用 `chrome.*` 前确认当前上下文可用；Background、content script（MAIN/ISOLATED world）、popup、options 能力边界不可混用。
-- 修改消息处理时校验消息结构与 sender；状态修改类消息必须经 `isTrustedSender` 校验；读取类消息**只有** `messageRouter.ts` 的 `CREDENTIAL_READING_TYPES` 那两个例外（`GET_VARIABLES`、`GET_CONFIG_HISTORY`）同样过门禁，判据是「页面永远不会问它、而回包是凭据或整包本地数据」，不是「它属于读取」；除此之外只读消息（含 `GET_IMPORT_PLAN`：纯计算，回包是条数统计加同名同模式条目的「规则名 / 匹配模式 / 新旧目标地址」——它确实会把现网规则的目标地址带回界面，留在门禁外的理由是页面根本没有通往它的路径：桥接层只转发 `REQUEST_CONFIG`、`INTERCEPTOR_STATS` 与 `PROXY_REQUEST`）与 `PROXY_REQUEST` 不得加 gate——内容脚本的 `sender.url` 就是页面 URL，加上去代理当场失效。异步 `sendResponse` 路径必须 `return true` 保持通道，并保证每条路径都有响应或明确终止。
+- 修改消息处理时校验消息结构与 sender；状态修改类消息必须经 `isTrustedSender` 校验；读取类消息**只有** `messageRouter.ts` 的 `CREDENTIAL_READING_TYPES` 那两个例外（`GET_VARIABLES`、`GET_CONFIG_HISTORY`）同样过门禁，判据是「页面永远不会问它、而回包是凭据或整包本地数据」，不是「它属于读取」；除此之外只读消息（含 `GET_IMPORT_PLAN`：纯计算，回包是条数统计加同名同模式条目的「规则名 / 匹配模式 / 新旧目标地址」——它确实会把现网规则的目标地址带回界面，留在门禁外的理由是页面根本没有通往它的路径：桥接层只转发 `REQUEST_CONFIG`、`INTERCEPTOR_STATS`、`PROXY_REQUEST` 与 `CANCEL_REQUEST`）与 `PROXY_REQUEST` 不得加 gate——内容脚本的 `sender.url` 就是页面 URL，加上去代理当场失效。异步 `sendResponse` 路径必须 `return true` 保持通道，并保证每条路径都有响应或明确终止。
 - Background SW 随时可能被回收：不得把全局内存当持久事实来源，短期缓存必须可重建、可失效，以 `chrome.storage.local` 为准；长期任务用 `chrome.alarms`（最小周期 1 分钟，不期望秒级精度）。
 - DNR 同步前必须过滤非法规则：regex 需经 `isRegexSupported`（RE2）校验、替换串捕获引用不得越界（`isSubstitutionValid`），否则 `updateDynamicRules` 会整批拒绝。
 - 向内容脚本广播配置用 `tabs.sendMessage`（`runtime.sendMessage` 不到达内容脚本）；未注入页面会报错，静默忽略。

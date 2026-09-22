@@ -113,6 +113,7 @@ export enum MessageType {
   // 代理相关
   PROXY_REQUEST = 'PROXY_REQUEST', // 注入脚本 → SW：代理请求
   PROXY_RESPONSE = 'PROXY_RESPONSE', // SW → 注入脚本：代理响应
+  CANCEL_REQUEST = 'CANCEL_REQUEST', // 注入脚本 → SW：放弃在途的代发请求（页面 AbortSignal 触发）
 
   // 配置相关
   GET_PROXY_CONFIG = 'GET_PROXY_CONFIG', // Popup/Options → SW：获取配置
@@ -203,6 +204,19 @@ export interface ProxyResponseMessage {
     body: string | null;
     isBase64: boolean;
   };
+}
+
+/**
+ * 取消在途代发请求的消息体
+ *
+ * `requestId` 与 `PROXY_REQUEST` 用的是同一个值，但它只是登记键的一半：另一半是
+ * `sender.tab.id`，由 SW 侧拼（见 `proxyHandler` 的 `proxyRequestKey`）。页面各自从 1
+ * 开始数自己的 requestId，因此绝不能只按 requestId 找请求——那样一个标签页能掐断
+ * 另一个标签页正在跑的那笔代发。
+ */
+export interface CancelRequestMessage {
+  type: MessageType.CANCEL_REQUEST;
+  data: { requestId: string };
 }
 
 /** 获取代理配置 */
@@ -531,6 +545,7 @@ export interface HarEntry {
 export type RuntimeMessage =
   | ProxyRequestMessage
   | ProxyResponseMessage
+  | CancelRequestMessage
   | GetProxyConfigMessage
   | UpdateProxyConfigMessage
   | ToggleProxyMessage

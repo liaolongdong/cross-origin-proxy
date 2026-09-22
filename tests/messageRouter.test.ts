@@ -12,8 +12,8 @@
  *    「新加写 handler 却忘了进 `STATE_MUTATING_TYPES`」的盲区（类型清单是手抄的，
  *    清单漏一项时第 2 条抓不到，第 3 条抓得到）。
  *
- * 只读消息与 `PROXY_REQUEST` 不经 gate 是当前实现的既有事实：内容脚本的 `sender.url`
- * 就是页面 URL。来源约束的正解在桥接层（见 `entrypoints/content.ts`），不在这里。
+ * 只读消息、`PROXY_REQUEST` 与 `CANCEL_REQUEST` 不经 gate 是当前实现的既有事实：内容脚本的
+ * `sender.url` 就是页面 URL。来源约束的正解在桥接层（见 `entrypoints/content.ts`），不在这里。
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -82,6 +82,8 @@ const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
   [MessageType.INTERCEPTOR_STATS, { intercepted: 1, proxied: 1, fellBack: 0, timedOut: 0 }],
   [MessageType.GET_INTERCEPTOR_STATS, { tabId: 7 }],
   [MessageType.PROXY_REQUEST, { requestId: 'r1', url: EXTERNAL_PAGE_URL, method: 'GET' }],
+  // 取消的正是页面自己发出去的那笔代发：给它加 gate 等于把「取消」这条通道焊死在页面之外
+  [MessageType.CANCEL_REQUEST, { requestId: 'r1' }],
 ];
 
 /** 各状态修改类型的最小可用载荷：证明「被拒」是因为 sender，不是因为数据 */

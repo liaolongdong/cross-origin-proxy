@@ -31,7 +31,8 @@ const SSE_RULE: ProxyRule = {
 interface ProxiedResponse {
   status: number;
   statusText: string;
-  body: string;
+  /** 与真实现同形：204/205/304 的回包只能是 null 正文 */
+  body: string | null;
 }
 
 describe('handleProxyRequest — 截止时间覆盖 body 读取', () => {

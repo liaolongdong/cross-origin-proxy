@@ -1,6 +1,12 @@
 import { MessageType } from '@/utils/types';
 import type { RuntimeMessage, ExportData, ImportMode, ProxyRule, ImportPlan } from '@/utils/types';
-import { handleProxyRequest, getProxyStatus, getSwHitStats } from './proxyHandler';
+import {
+  cancelProxiedRequest,
+  getProxyStatus,
+  getSwHitStats,
+  handleProxyRequest,
+  proxyRequestKey,
+} from './proxyHandler';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
 import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
@@ -177,7 +183,8 @@ async function handleImportPlan(
  *
  * 只看 `sender.url`，而它由 Chrome 写入、页面伪造不了——这道 gate 挡的不是「伪造来源」，
  * 而是来自非扩展上下文的状态修改请求：内容脚本的 `sender.url` 就是被注入页面的 URL，
- * 与外部页面同列，所以桥接层（`entrypoints/content.ts`）只转发只读配置与 `PROXY_REQUEST`。
+ * 与外部页面同列，所以桥接层（`entrypoints/content.ts`）只转发只读配置、`PROXY_REQUEST`、
+ * `CANCEL_REQUEST` 与 `INTERCEPTOR_STATS`。
  * 页面侧能让扩展代发哪些请求，判据要在桥接层与规则匹配处收紧，不靠往这些类型上加 gate。
  *
  * @param sender - 消息发送者的上下文信息
@@ -261,7 +268,25 @@ export function setupMessageRouter(): void {
         // 顺手累加这个标签页的代发数，作为拦截器自报计数的交叉校验基准（`sender.tab` 由
         // Chrome 写入，页面伪造不了；四个自报数字本身可以，见 `interceptorStats`）
         countProxyRequestForTab(sender.tab?.id);
-        return respondAsync(sendResponse, handleProxyRequest(message.data));
+        return respondAsync(
+          sendResponse,
+          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, message.data.requestId)),
+        );
+
+      case MessageType.CANCEL_REQUEST:
+        // 刻意**不加** sender gate：这条消息存在的意义就是让页面取消自己那笔代发请求，
+        // 而内容脚本的 `sender.url` 就是页面 URL（与 `PROXY_REQUEST` 同档）。
+        // 越权面也被键本身挡住——取消要命中 `tabId + requestId` 拼出的登记键，
+        // 最坏结果是掐断同一标签页里另一个 frame 的在飞请求（见 `proxyRequestKey`）。
+        if (!message.data || typeof message.data.requestId !== 'string' || !message.data.requestId) {
+          sendResponse({ success: false, error: 'Invalid requestId' });
+          return false;
+        }
+        sendResponse({
+          success: true,
+          cancelled: cancelProxiedRequest(proxyRequestKey(sender.tab?.id, message.data.requestId)),
+        });
+        return false;
 
       case MessageType.GET_PROXY_CONFIG:
         return respondAsync(sendResponse, getProxyConfig());

@@ -79,7 +79,7 @@ describe('handleProxyRequest — requestBodyOverride 与 GET/HEAD（回归）', 
       headers: {},
     });
     expect(resp.status).toBe(200);
-    expect(JSON.parse(resp.body)).toEqual({ ok: true });
+    expect(JSON.parse(resp.body ?? '')).toEqual({ ok: true });
     expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined();
   });
 
