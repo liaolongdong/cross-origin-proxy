@@ -7,6 +7,16 @@ import type { ProxyRule, RequestLogEntry } from '@/utils/types';
 // 回归测试（第二轮）：多 * 通配符重写、日志计数、刷写串行化
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * 让桩与真实 `chrome.storage.local.get` 同形：每次给的是反序列化副本，而不是存储里那个对象。
+ *
+ * 按引用返回时，读到的数组就是存储里的那一份，调用方就地改它等于**没写就改成了**——
+ * 「写入是否发生了」这类断言会自己变绿。
+ */
+function clone<T>(value: T): T {
+  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
+}
+
 function makeRule(overrides: Partial<ProxyRule>): ProxyRule {
   return {
     id: 'r1',
@@ -108,7 +118,7 @@ describe('getProxyStatus — swRequestCount（原 todayRequestCount：只覆盖 
     vi.stubGlobal('chrome', {
       storage: {
         local: {
-          get: vi.fn(async (key: string) => ({ [key]: store[key] })),
+          get: vi.fn(async (key: string) => ({ [key]: clone(store[key]) })),
           set: vi.fn(async (obj: Record<string, unknown>) => {
             Object.assign(store, obj);
           }),
@@ -209,7 +219,7 @@ describe('flushLogs — 并发刷写不丢日志', () => {
     vi.stubGlobal('chrome', {
       storage: {
         local: {
-          get: vi.fn(async (key: string) => ({ [key]: store[key] })),
+          get: vi.fn(async (key: string) => ({ [key]: clone(store[key]) })),
           set: vi.fn(async (obj: Record<string, unknown>) => {
             Object.assign(store, obj);
           }),
@@ -225,6 +235,10 @@ describe('flushLogs — 并发刷写不丢日志', () => {
     vi.useRealTimers();
   });
 
+  // 实测过的一件事：这一条**钉不住**「刷写串行队列被摘掉」那个变异点（把队列改成直接并发执行后，
+  // 本条在按引用与按副本两份桩下都仍然绿——桩的 `get`/`set` 立即落定，`await addRequestLog` 的每个
+  // 微任务间隙足够第一批刷完，真正的重叠没有被制造出来）。那个变异点由下面「连续三次刷写」那条，
+  // 以及 `tests/round4-regression.test.ts` 里「清空落在 flush 读取之后、写入之前」那条咬住（后者复用同一条队列）。
   it('两批缓冲并发刷写后全部保留', async () => {
     store['request_logs'] = [];
     const { addRequestLog, flushLogs, getRequestLogs } = await import('@/utils/storage');
@@ -410,7 +424,7 @@ describe('handleProxyRequest — 阻断与状态码钳制', () => {
     vi.stubGlobal('chrome', {
       storage: {
         local: {
-          get: vi.fn(async (key: string) => ({ [key]: store[key] })),
+          get: vi.fn(async (key: string) => ({ [key]: clone(store[key]) })),
           set: vi.fn(async (obj: Record<string, unknown>) => {
             Object.assign(store, obj);
           }),
