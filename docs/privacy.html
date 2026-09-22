@@ -97,7 +97,7 @@
         "name": "隐私政策 / Privacy Policy",
         "inLanguage": ["zh-CN", "en"],
         "datePublished": "2026-09-06",
-        "dateModified": "2026-09-20",
+        "dateModified": "2026-09-21",
         "isPartOf": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#website" },
         "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" }
       }
@@ -151,7 +151,7 @@
       <section aria-labelledby="pp-zh">
         <div class="wrap">
           <h2 id="pp-zh">隐私政策（中文）</h2>
-          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-20</p>
+          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-21</p>
 
           <h3>1. 我们收集什么</h3>
           <p>
@@ -161,7 +161,7 @@
 
           <h3>2. 数据存放在哪里</h3>
           <p>
-            代理规则、环境配置快照、请求日志、界面偏好（语言、主题、自动关闭时长）全部保存在你浏览器的
+            代理规则、凭据变量、环境配置快照、配置恢复点、请求日志、界面偏好（语言、主题、自动关闭时长）全部保存在你浏览器的
             <code>chrome.storage.local</code> 中，仅存在于你的设备。卸载扩展即随之清除。导出功能（JSON 配置、HAR
             抓包文件、cURL 命令）只会在你主动点击时把文件写到你本地的下载目录。
           </p>
@@ -214,6 +214,12 @@
             代发这条请求，让目标环境认得你在它那里的会话；开关状态只存在本地，也不会被上传。
           </p>
           <p>
+            两处为「凭据不跟着文件走」而设计的行为：规则里的 token 等凭据可以写成 <code>{{名称}}</code>
+            引用，真值单独存在本机的凭据变量表里，于是规则本身、导出的配置、环境快照与配置恢复点从头到尾不含它；日志详情里
+            <code>Authorization</code>、<code>Cookie</code> 这类头的值默认以打码形态显示（长值保留尾 4
+            位），需要对着原值排障时再手动展开，那个开关不写入任何存储、关掉抽屉即收回——日志落盘的仍是真实内容，打码只发生在显示这一步。
+          </p>
+          <p>
             需要如实告知的一点：日志本身会原样保存这些内容，其中可能包含 <code>Authorization</code>、<code>Cookie</code>
             等鉴权头以及请求体里的私密字段，从日志面板复制的 cURL 命令同样是原样的。配置导出与由日志生成的 HAR
             导出默认处于「分享模式」，两者都会剔除鉴权头；查询参数里的凭据只有配置导出会剔（它剔除规则里的 token
@@ -239,7 +245,7 @@
       >
         <div class="wrap">
           <h2 id="pp-en">Privacy Policy (English)</h2>
-          <p class="section-lede"><strong>Effective date / Last updated:</strong> 2026-09-20</p>
+          <p class="section-lede"><strong>Effective date / Last updated:</strong> 2026-09-21</p>
 
           <h3>1. What we collect</h3>
           <p>
@@ -250,10 +256,10 @@
 
           <h3>2. Where your data lives</h3>
           <p>
-            Proxy rules, environment profiles, request logs and interface preferences (language, theme, auto-off
-            duration) are stored in <code>chrome.storage.local</code> on your own device, and are removed when you
-            uninstall the extension. Export actions (JSON configuration, HAR 1.2 capture, cURL command) write files to
-            your local downloads folder only when you trigger them.
+            Proxy rules, credential variables, environment profiles, config restore points, request logs and interface
+            preferences (language, theme, auto-off duration) are stored in <code>chrome.storage.local</code> on your own
+            device, and are removed when you uninstall the extension. Export actions (JSON configuration, HAR 1.2
+            capture, cURL command) write files to your local downloads folder only when you trigger them.
           </p>
 
           <h3>3. Why each permission is requested</h3>
@@ -306,6 +312,15 @@
             <strong>Send cookies</strong> switch: only when you turn it on does the extension send that request with
             <code>credentials: &#39;include&#39;</code>, so the target environment sees the session you already have
             there. The switch itself lives locally and is never uploaded.
+          </p>
+          <p>
+            Two behaviours exist so credentials stop travelling with files: a token or similar secret can be written in
+            a rule as a <code>{{NAME}}</code> reference whose value lives only in the local credential variable table,
+            so the rule, the exported config, an environment profile and a config restore point never contain it; and
+            the log detail view shows the values of <code>Authorization</code>, <code>Cookie</code> and similar headers
+            masked (a long value keeps its last 4 characters) until you turn on a reveal switch that is written to no
+            storage and resets when the drawer closes. What the log stores remains verbatim — the masking happens only
+            when it is displayed.
           </p>
           <p>
             One thing stated plainly rather than glossed over: the log stores this content verbatim, which can include

@@ -4,6 +4,7 @@ import { setupKeepalive } from './background/keepalive';
 import { setupAutoOff } from './background/autoOff';
 import { initDnrManager, syncDnrRules } from './background/dnrManager';
 import { invalidateDnrSample } from './background/dnrSampler';
+import { setupInterceptorStats } from './background/interceptorStats';
 import { initBadge, updateBadge } from './background/badgeManager';
 import { resetSwHitStats } from './background/proxyHandler';
 import type { ProxyConfig } from '@/utils/types';
@@ -39,6 +40,9 @@ export default defineBackground(() => {
 
   // Setup message routing
   setupMessageRouter();
+
+  // 拦截器自报计数的生命周期（关标签页与导航时清掉读数）
+  setupInterceptorStats();
 
   // Setup keepalive
   setupKeepalive();

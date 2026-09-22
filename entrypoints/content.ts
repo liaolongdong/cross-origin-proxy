@@ -98,6 +98,28 @@ export default defineContentScript({
         return;
       }
 
+      // 拦截器自报的本页活动计数：只转发，不写 storage、不改任何状态。
+      // 这里只把载荷收窄成四个键（页面给的可能是任意对象），数值合法性留给 SW 判；
+      // 伪造防护也不在这一层——同页脚本本来就能发这条消息，所以收端把它当展示数据。
+      if (event.data?.type === MessageType.INTERCEPTOR_STATS) {
+        const raw = event.data.data as Record<string, unknown> | undefined;
+        if (!raw || typeof raw !== 'object') return;
+        void chrome.runtime
+          .sendMessage({
+            type: MessageType.INTERCEPTOR_STATS,
+            data: {
+              intercepted: raw.intercepted,
+              proxied: raw.proxied,
+              fellBack: raw.fellBack,
+              timedOut: raw.timedOut,
+            },
+          })
+          // SW 回收期本来就送不出去。计数是旁路观测，下一次节流上报会带上累计值，因此不重试、
+          // 也不降级成 error——那只会给控制台添一条与用户无关的噪音。
+          .catch(() => {});
+        return;
+      }
+
       if (event.data?.type !== MessageType.PROXY_REQUEST) return;
 
       const { data } = event.data;

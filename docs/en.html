@@ -139,7 +139,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-20"
+            "dateModified": "2026-09-21"
           },
           {
             "@type": "SoftwareApplication",
@@ -167,7 +167,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-20",
+            "dateModified": "2026-09-21",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -180,6 +180,7 @@
               "Retry switch that adds 1 to 5 extra attempts at a 100–30000 ms interval",
               "HTTP method filtering per rule",
               "Query parameter injection on the proxied URL",
+              "Header and query values written as {{NAME}} references into the local credential variable table, so the real value never travels with a rule, an export or the page config",
               "Per-rule cookie sending, off by default and forwarded with credentials: include when enabled",
               "WebSocket (ws and wss) forwarding by URL rewrite — on a socket the rewrite, query injection and blocking apply",
               "declarativeNetRequest network-layer fast path for rules that only rewrite the URL",
@@ -192,10 +193,11 @@
               "Hit statistics for both channels (DNR last 5 minutes, service worker since last config change — an in-memory count that restarts when the worker is recycled), plus a per-tab network-layer count in the popup",
               "HAR 1.2 export that honours the same share mode as config export (credential-like request and response headers dropped, bodies and URLs kept), and HAR import that creates rules from captured traffic (those rules arrive disabled until you enable them)",
               "cURL import from DevTools Copy as cURL output",
-              "JSON config export with share mode on by default, stripping credentials, and replace or merge modes on import",
+              "JSON config export with share mode on by default, stripping credentials, and replace or merge modes on import, with a preview of what would be added and which same-name, same-pattern rules are kept before anything is written",
               "Named environment profiles for one-click FAT / UAT / PROD switching",
+              "Config restore points: the rule set a replace-import, profile load or batch delete is about to overwrite is snapshotted first, and the last 5 are listed in Settings for one-click rollback",
               "Auto-off countdown that disables the proxy after 30 minutes to 4 hours",
-              "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's address match preview and create-rule-for-this-page",
+              "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's self-reported interception activity, this page's address match preview and create-rule-for-this-page",
               "English and Chinese UI, six themes, light / dark / system modes, keyboard shortcuts"
             ]
           },
@@ -382,7 +384,7 @@
             "name": "Can I share rules with my team?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. Export the full configuration as JSON — share mode is on by default, stripping Authorization, Cookie and similar request/response headers plus token-like query parameters, untick it for a verbatim local backup — and teammates import it either as a replacement or merged into what they already have. Export captured traffic as a HAR 1.2 file, or import a HAR recorded elsewhere to create rules automatically. Anyone can paste a cURL command — DevTools “Copy as cURL” output — to prefill a rule. Environment profiles store a named snapshot of the whole rule set."
+              "text": "Yes. Export the full configuration as JSON — share mode is on by default, stripping Authorization, Cookie and similar request/response headers plus token-like query parameters, untick it for a verbatim local backup — and teammates import it either as a replacement or merged into what they already have. Export captured traffic as a HAR 1.2 file, or import a HAR recorded elsewhere to create rules automatically. Anyone can paste a cURL command — DevTools “Copy as cURL” output — to prefill a rule. Environment profiles store a named snapshot of the whole rule set. Once the credential slots in a rule are written as a reference such as {{UAT_TOKEN}} with the real value kept under Settings → Credential Variables, neither the exported config nor a profile contains it at any point, so unticking share mode carries nothing out either."
             }
           },
           {
@@ -621,7 +623,7 @@
             </figure>
             <div class="stat-strip">
               <div class="stat"><b>2</b><span>forwarding channels</span></div>
-              <div class="stat"><b>13</b><span>per-rule capabilities</span></div>
+              <div class="stat"><b>14</b><span>per-rule capabilities</span></div>
               <div class="stat"><b>200</b><span>rules max</span></div>
               <div class="stat"><b>0</b><span>bytes uploaded</span></div>
             </div>
@@ -1005,7 +1007,9 @@
                 last 500 calls with method, status, duration and the rule that served them, filters by method, status
                 class, rule name or URL keyword, opens a detail view with the request and response headers and text
                 bodies (a binary response body is not stored), copies any entry as cURL using its original URL, and
-                reports hit counts for both channels.
+                reports hit counts for both channels. In the detail view, headers that carry a session — Authorization,
+                Cookie and the like — have their values masked by default (long values keep their last 4 characters),
+                and the reveal switch is taken back as soon as the drawer closes.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1028,11 +1032,19 @@
               <h3>Import, export and environment profiles</h3>
               <p>
                 JSON config export — share mode is on by default, stripping Authorization, Cookie and similar headers
-                plus token-like query parameters — with replace or merge modes on import; HAR 1.2 export of captured
-                traffic and HAR import that turns recorded requests into rules (those rules arrive disabled until you
-                enable them); cURL paste that prefills the form; copy-as-cURL on every log entry, using its original
-                URL. Named profiles snapshot the whole rule set so FAT, UAT and PROD are one click apart, and batch
-                migration rewrites target domains across selected rules with a change preview.
+                plus token-like query parameters — with replace or merge modes on import, and a preview before anything
+                is written that says how many rules the file adds and which same-name, same-pattern rules stay; HAR 1.2
+                export of captured traffic and HAR import that turns recorded requests into rules (those rules arrive
+                disabled until you enable them); cURL paste that prefills the form; copy-as-cURL on every log entry,
+                using its original URL. Named profiles snapshot the whole rule set so FAT, UAT and PROD are one click
+                apart, and batch migration rewrites target domains across selected rules with a change preview. Before a
+                replace-import, a profile load or a batch delete overwrites the rule set, what it replaces is kept as a
+                restore point under Settings → Config restore points (the last 5), ready to roll back. Header and
+                query-parameter values can also be written as a reference such as <code>{{UAT_TOKEN}}</code>, with the
+                real value kept in the credential variable table under Settings → Credential Variables — the rule
+                itself, the exported config, the profiles and the configuration sent down to the page all carry nothing
+                but that reference, and the substitution happens at the last moment inside the extension-proxied
+                request.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1068,7 +1080,17 @@
                 The popup holds the global switch, the active-rule count, the request count via the extension
                 (background channel only), this tab's network-layer hit count for the last 5 minutes, the recent-request
                 list, quick rule toggles, the auto-off countdown, this page's address match preview and “create a rule
-                for this page”. A toolbar badge shows the proxy state, and auto-off (30 minutes to 4 hours, on
+                for this page”. Under that data row a line appears when it has something to say, reading
+                “page-reported”: one sentence showing two of the four counters — how many requests this page's JS layer
+                intercepted and how many it handed to the extension (a fallback swaps the second number for how many
+                went native, and with no fallback but a timeout it is how many never got a response) — while a reading
+                lets hovering expand all four with the moment the report was accepted, noting that one request can count
+                in more than one of them so they never add up; the counters accumulate for the current document and
+                reset on navigation. A fallback or a timeout used to leave nothing but a console line, and “nothing was
+                intercepted” looked exactly like “this page makes no such requests”. Those four numbers are reported by
+                the page itself and a script on it could forge them, so they stay a diagnostic clue that feeds no
+                decision, and the wording always says “page-reported”. A toolbar badge shows the proxy state, and
+                auto-off (30 minutes to 4 hours, on
                 <code>chrome.alarms</code>) closes the switch so a forgotten proxy never outlives the debugging session.
               </p>
             </article>
@@ -1986,7 +2008,10 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <tbody>
                 <tr>
                   <td><code>storage</code></td>
-                  <td>Persist rules, request logs, environment profiles and preferences.</td>
+                  <td>
+                    Persist rules, credential variables, request logs, environment profiles, restore points and
+                    preferences.
+                  </td>
                 </tr>
                 <tr>
                   <td><code>declarativeNetRequest</code></td>
@@ -2293,7 +2318,10 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 local backup — and teammates import it either as a replacement or merged into what they already have.
                 Export captured traffic as a HAR 1.2 file, or import a HAR recorded elsewhere to create rules
                 automatically. Anyone can paste a cURL command — DevTools “Copy as cURL” output — to prefill a rule.
-                Environment profiles store a named snapshot of the whole rule set.
+                Environment profiles store a named snapshot of the whole rule set. Once the credential slots in a rule
+                are written as a reference such as {{UAT_TOKEN}} with the real value kept under Settings → Credential
+                Variables, neither the exported config nor a profile contains it at any point, so unticking share mode
+                carries nothing out either.
               </p>
             </details>
             <details>
@@ -2476,7 +2504,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-20</span>
+            <span>Last updated 2026-09-21</span>
             <span
               ><a
                 href="./"

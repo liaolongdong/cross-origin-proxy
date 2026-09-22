@@ -34,5 +34,12 @@
   "statsNotApplicable": "无生效的网络层规则",
   "statsProxyOff": "代理未开启",
   "statsUnavailable": "统计暂不可用",
+  "interceptorTag": "页面自报",
+  "interceptorNoData": "这个标签页还没回报任何被拦截的请求",
+  "interceptorNoReport": "本页已向扩展发出 $1 个代发请求，还没有可采信的自报读数",
+  "interceptorFellBack": "拦到 $1 个请求，其中 $2 个回退为原生请求（没有走代理）",
+  "interceptorTimedOut": "拦到 $1 个请求，其中 $2 个交给扩展代发后没等到响应",
+  "interceptorActive": "拦到 $1 个请求，其中 $2 个已交给扩展代发",
+  "interceptorDetail": "自报于 $1：拦到 $2 · 交给后台 $3 · 回退原生 $4 · 代发超时 $5（同一请求可同时计入多项，不能相加）",
   "requestFailed": "失败"
 }

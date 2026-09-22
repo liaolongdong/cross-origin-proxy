@@ -34,5 +34,12 @@
   "statsNotApplicable": "No network-layer rules",
   "statsProxyOff": "Proxy is off",
   "statsUnavailable": "Stats unavailable",
+  "interceptorTag": "Page-reported",
+  "interceptorNoData": "This tab has not reported any intercepted request yet",
+  "interceptorNoReport": "This page sent $1 proxy request(s) to the extension, but no accepted report from it yet",
+  "interceptorFellBack": "Intercepted $1 request(s), $2 of them fell back to native (not proxied)",
+  "interceptorTimedOut": "Intercepted $1 request(s), $2 of them got no response after being proxied",
+  "interceptorActive": "Intercepted $1 request(s), $2 handed to the extension",
+  "interceptorDetail": "Reported at $1: intercepted $2 · handed over $3 · fell back $4 · timed out $5 (one request can count in more than one — don't add them up)",
   "requestFailed": "Failed"
 }

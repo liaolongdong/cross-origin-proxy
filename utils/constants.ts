@@ -116,6 +116,18 @@ export const DNR_TAB_TTL_MS = 15_000;
 
 /** 按标签页缓存的条数上限（超出按写入序丢弃最旧；不注册 tabs.onRemoved，交给上限收口） */
 export const DNR_TAB_CACHE_SIZE = 5;
+
+// ─── 拦截器活动计数（entrypoints/background/interceptorStats） ────────────────
+
+/**
+ * 按标签页存下的自报计数条数上限
+ *
+ * 一份就是四个数加一个时刻，成本可以忽略，所以这里比 `DNR_TAB_CACHE_SIZE` 宽松：
+ * 收得太紧会把还开着的标签页挤掉，popup 于是把「有活动」显示成「还没回报」——
+ * 那正是本功能要消灭的误读。`tabs.onRemoved` 负责正常回收，这个上限只是漏事件的兜底。
+ */
+export const INTERCEPTOR_TAB_CACHE_SIZE = 10;
+
 // ─── 凭据变量（utils/variables.ts + storage 的 `variables` 键） ────────────────
 
 /**

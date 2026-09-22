@@ -20,6 +20,15 @@ export default defineContentScript({
     const PROXY_RESPONSE = 'PROXY_RESPONSE';
     const SYNC_RULES = 'SYNC_RULES';
     const REQUEST_CONFIG = 'REQUEST_CONFIG';
+    const INTERCEPTOR_STATS = 'INTERCEPTOR_STATS';
+
+    /**
+     * 自报节流：首次立即报，之后「累计每满 10 笔」或「距上次 ≥1s」各触发一次，
+     * 尾差由一次性定时器补报——否则最后一批请求会永远停在上一帧计数上，
+     * popup 于是把「拦到 12 笔」显示成「拦到 1 笔」。
+     */
+    const STATS_REPORT_MIN_INTERVAL_MS = 1000;
+    const STATS_REPORT_EVERY = 10;
 
     // 与 utils/constants.ts 的 DEFAULT_RULE_PRIORITY、utils/urlMatcher.ts 的
     // normalizePriority 同源（MAIN world 自包含，无法 import）。
@@ -74,6 +83,59 @@ export default defineContentScript({
 
     let proxyEnabled = false;
     let requestCounter = 0;
+
+    /**
+     * 本页活动计数（在当前文档内累计，导航即归零；口径见 utils/types.ts 的 `InterceptorStats` 注释）。
+     *
+     * 为什么要有它：回退原生是刻意的兜底，但对用户来说「请求成功」和「代理生效」长得一模一样。
+     * 这四个数是唯一能回答「这一页到底有没有被拦」的信号，其余通道（日志、DNR 命中）都看不见
+     * 拦截器自己的成败。
+     *
+     * 上报走既有 channel 到 ISOLATED world 再转 SW；数字**页面可伪造**，所以收端只做展示、
+     * 并与 SW 侧自己数到的代发数交叉校验，本 world 不做任何可信性声明。
+     *
+     * `timedOut` 的口径是**扩展侧代发等待回包到期**（`sendProxyRequest` 的那一个定时器），
+     * 页面自己设的 `xhr.timeout` 到期不算在内——那一支只是把已经交给后台的响应丢掉，
+     * 请求本身没失败，记成超时会把「代理慢了」说成「代理断了」。
+     *
+     * 四个数**不是互斥分类**：fetch 路径上代发超时既进 `timedOut` 又进 `fellBack`
+     * （回包没等到，请求确实回退成了原生），所以界面不能把它们相加或当作互补。
+     */
+    const stats = { intercepted: 0, proxied: 0, fellBack: 0, timedOut: 0 };
+    let statsLastReportAt = 0;
+    let statsReportedTotal = 0;
+    let statsTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function reportStats(): void {
+      if (statsTimer !== null) {
+        clearTimeout(statsTimer);
+        statsTimer = null;
+      }
+      statsLastReportAt = Date.now();
+      statsReportedTotal = stats.intercepted + stats.proxied + stats.fellBack + stats.timedOut;
+      window.postMessage({ channel: CHANNEL, type: INTERCEPTOR_STATS, data: { ...stats } }, window.location.origin);
+    }
+
+    /**
+     * 记一笔并按需上报。刻意不加 try/catch、也不参与任何判断分支：
+     * 计数是旁路观测，绝不能反过来影响用户的请求路径（这是本文件既有的 fallback 铁律）。
+     */
+    function bump(kind: keyof typeof stats): void {
+      stats[kind]++;
+      const total = stats.intercepted + stats.proxied + stats.fellBack + stats.timedOut;
+      const sinceLast = Date.now() - statsLastReportAt;
+      if (
+        statsLastReportAt === 0 ||
+        total - statsReportedTotal >= STATS_REPORT_EVERY ||
+        sinceLast >= STATS_REPORT_MIN_INTERVAL_MS
+      ) {
+        reportStats();
+        return;
+      }
+      if (statsTimer === null) {
+        statsTimer = setTimeout(reportStats, STATS_REPORT_MIN_INTERVAL_MS - sinceLast);
+      }
+    }
 
     // Pending requests waiting for response from content script
     const pendingRequests = new Map<
@@ -273,6 +335,7 @@ export default defineContentScript({
 
         // 超时上限按规则配置动态计算（延迟/重试会拉长 SW 侧总耗时）
         const timeout = setTimeout(() => {
+          bump('timedOut');
           pendingRequests.delete(requestId);
           reject(new Error('Proxy request timeout'));
         }, computeProxyTimeout(rule));
@@ -379,6 +442,7 @@ export default defineContentScript({
           },
           window.location.origin,
         );
+        bump('proxied');
       });
     }
 
@@ -406,6 +470,7 @@ export default defineContentScript({
       if (!rule) {
         return originalFetch.call(window, input, init);
       }
+      bump('intercepted');
 
       try {
         const headers = init?.headers ?? request?.headers;
@@ -422,6 +487,7 @@ export default defineContentScript({
           if (rule.blocked) {
             throw new TypeError('Failed to fetch', { cause: new Error('Request blocked by proxy rule') });
           }
+          bump('fellBack');
           return originalFetch.call(window, input, init);
         }
 
@@ -434,6 +500,7 @@ export default defineContentScript({
         if (rule?.blocked || (error as { __proxyBlocked?: boolean })?.__proxyBlocked) {
           throw new TypeError('Failed to fetch', { cause: error });
         }
+        bump('fellBack');
         console.warn('[CrossOriginProxy] Proxy failed, falling back to original fetch:', error);
         return originalFetch.call(window, input, init);
       }
@@ -489,6 +556,7 @@ export default defineContentScript({
       const rule = url ? findMatchingRule(url, method) : null;
 
       if (rule) {
+        bump('intercepted');
         // 同步 XHR 不能代理：调用方在 send() 返回后立刻读 status/response，而代理响应只会
         // 异步到达，页面拿到的是空响应而不是被改写后的结果。与「非字符串 body」同一类，
         // 回退原生请求（等价于未装本扩展）。阻断规则例外——回退等于把请求真的发出去。
@@ -497,6 +565,7 @@ export default defineContentScript({
             warnedSyncXhr = true;
             console.warn('[CrossOriginProxy] Synchronous XHR cannot be proxied, sending it natively:', url);
           }
+          bump('fellBack');
           originalXHRSend.call(this, body);
           return;
         }
@@ -518,6 +587,7 @@ export default defineContentScript({
             }, 0);
             return;
           }
+          bump('fellBack');
           originalXHRSend.call(this, body);
           return;
         }

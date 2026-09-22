@@ -79,6 +79,8 @@ const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
   // 导入预览是只读纯计算，回的是条数与规则名/模式，不含任何凭据真值
   [MessageType.GET_IMPORT_PLAN, { config: { enabled: false, rules: [] } }],
   // 拦截器自报（页面发来）与它的读端（popup 用）：一个最坏后果是显示假数字，一个回的是四个计数
+  [MessageType.INTERCEPTOR_STATS, { intercepted: 1, proxied: 1, fellBack: 0, timedOut: 0 }],
+  [MessageType.GET_INTERCEPTOR_STATS, { tabId: 7 }],
   [MessageType.PROXY_REQUEST, { requestId: 'r1', url: EXTERNAL_PAGE_URL, method: 'GET' }],
 ];
 
@@ -604,5 +606,84 @@ describe('配置恢复点消息 — 读取与凭据同档，回退属状态修�
     expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Unauthorized sender' });
     expect(store[STORAGE_KEYS.PROXY_CONFIG]).toEqual({ enabled: false, rules: [importableRule('current')] });
     expect(setSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交叉校验', () => {
+  /**
+   * 带 `sender.tab` 的派发：`recordInterceptorStats` 认的是 Chrome 写入的 tabId，
+   * 而 `dispatch()` 造的 sender 只有 url（那条路径要守的是「没有 tab 就不记录」）。
+   */
+  function dispatchFromTab(type: MessageType, data: unknown, tabId: number) {
+    const sendResponse = vi.fn();
+    const keepChannelOpen = listener!({ type, data }, { url: EXTERNAL_PAGE_URL, tab: { id: tabId } }, sendResponse);
+    return { sendResponse, keepChannelOpen };
+  }
+
+  /** 与真实现同一份模块实例（router 已把它拉进注册表），因此读到的是 router 写进去的状态 */
+  async function statsMod() {
+    return import('@/entrypoints/background/interceptorStats');
+  }
+
+  it('页面来源的合法自报被记下，并且能原样读回', async () => {
+    const stats = await statsMod();
+    const { sendResponse, keepChannelOpen } = dispatchFromTab(
+      MessageType.INTERCEPTOR_STATS,
+      { intercepted: 3, proxied: 1, fellBack: 1, timedOut: 0 },
+      7,
+    );
+    // 同步应答：这条消息不触发任何异步工作，不该把通道留着
+    expect(keepChannelOpen).toBe(false);
+    expect(lastResponse(sendResponse)).toEqual({ success: true });
+    expect(await stats.getInterceptorStats(7)).toMatchObject({ intercepted: 3, fellBack: 1 });
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it('非法自报回 { success:false }，且不留下半成品读数', async () => {
+    const stats = await statsMod();
+    const { sendResponse } = dispatchFromTab(MessageType.INTERCEPTOR_STATS, { intercepted: '9' }, 8);
+    expect(lastResponse(sendResponse)).toEqual({ success: false });
+    expect(await stats.getInterceptorStats(8)).toBeNull();
+  });
+
+  it('同一标签页经 PROXY_REQUEST 建立基准后，低于基准的自报一律不采信', async () => {
+    const stats = await statsMod();
+    dispatch(MessageType.PROXY_REQUEST, EXTERNAL_PAGE_URL, { requestId: 'r1', url: EXTERNAL_PAGE_URL, method: 'GET' });
+    await flush();
+    expect(await stats.getInterceptorStats(7)).toBeNull(); // 上面那条 sender 没有 tab，不该建基准
+
+    dispatchFromTab(MessageType.PROXY_REQUEST, { requestId: 'r2', url: EXTERNAL_PAGE_URL, method: 'GET' }, 9);
+    await flush();
+    const baseline = await stats.getInterceptorStats(9);
+    expect(baseline).toMatchObject({ swProxied: 1, updatedAt: 0 }); // 只有基准，还没有可信自报
+
+    const tooSmall = dispatchFromTab(
+      MessageType.INTERCEPTOR_STATS,
+      { intercepted: 5, proxied: 0, fellBack: 0, timedOut: 0 },
+      9,
+    );
+    expect(lastResponse(tooSmall.sendResponse)).toEqual({ success: false });
+    expect(await stats.getInterceptorStats(9)).toMatchObject({ swProxied: 1, updatedAt: 0 });
+
+    const honest = dispatchFromTab(
+      MessageType.INTERCEPTOR_STATS,
+      { intercepted: 5, proxied: 1, fellBack: 4, timedOut: 0 },
+      9,
+    );
+    expect(lastResponse(honest.sendResponse)).toEqual({ success: true });
+    expect(await stats.getInterceptorStats(9)).toMatchObject({ proxied: 1, fellBack: 4, swProxied: 1 });
+  });
+
+  it('popup 读的是内存态，读不到时回 null 而不是 0 命中', async () => {
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.GET_INTERCEPTOR_STATS, TRUSTED_PAGE_URL, {
+      tabId: 424242,
+    });
+    expect(keepChannelOpen).toBe(false);
+    expect(sendResponse).toHaveBeenCalledWith(null);
+  });
+
+  it('不带 tabId 的读取回 null（不给某个标签页编一个数）', async () => {
+    const { sendResponse } = dispatch(MessageType.GET_INTERCEPTOR_STATS, TRUSTED_PAGE_URL, undefined);
+    expect(sendResponse).toHaveBeenCalledWith(null);
   });
 });

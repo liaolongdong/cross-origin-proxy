@@ -2,6 +2,7 @@ import { MessageType } from '@/utils/types';
 import type { RuntimeMessage, ExportData, ImportMode, ProxyRule, ImportPlan } from '@/utils/types';
 import { handleProxyRequest, getProxyStatus, getSwHitStats } from './proxyHandler';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
+import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
 import {
   getProxyConfig,
@@ -258,6 +259,8 @@ export function setupMessageRouter(): void {
     switch (message.type) {
       case MessageType.PROXY_REQUEST:
         // 顺手累加这个标签页的代发数，作为拦截器自报计数的交叉校验基准（`sender.tab` 由
+        // Chrome 写入，页面伪造不了；四个自报数字本身可以，见 `interceptorStats`）
+        countProxyRequestForTab(sender.tab?.id);
         return respondAsync(sendResponse, handleProxyRequest(message.data));
 
       case MessageType.GET_PROXY_CONFIG:
@@ -399,6 +402,21 @@ export function setupMessageRouter(): void {
       case MessageType.GET_SW_STATS:
         sendResponse(getSwHitStats());
         return false;
+
+      case MessageType.INTERCEPTOR_STATS: {
+        // 页面自报的展示数据：刻意不进 `STATE_MUTATING_TYPES`，也刻意**不写 storage**——
+        // 它改不了配置、参与不了匹配，最坏后果是 popup 上一行难看的假数字（判据见 `interceptorStats`）
+        const accepted = recordInterceptorStats(sender.tab?.id, message.data);
+        sendResponse({ success: accepted });
+        return false;
+      }
+
+      case MessageType.GET_INTERCEPTOR_STATS: {
+        // 只读消息：与 `GET_DNR_STATS` 同档，刻意不加 isTrustedSender（见 .qoder/rules/wxt-rules.md 第 12 条）
+        const tabId = typeof message.data?.tabId === 'number' ? message.data.tabId : undefined;
+        sendResponse(tabId === undefined ? null : getInterceptorStats(tabId));
+        return false;
+      }
 
       case MessageType.GET_REQUEST_LOG:
         return respondAsync(sendResponse, getRequestLogs());

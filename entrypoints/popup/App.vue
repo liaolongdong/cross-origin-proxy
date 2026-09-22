@@ -100,25 +100,38 @@
       </Transition>
     </div>
 
-    <!-- 数据点：活跃规则 / 经扩展请求 / 本页网络层命中 -->
-    <div class="metrics-row">
-      <div class="metric">
-        <span class="metric-value">{{ activeRuleCount }}</span>
-        <span class="metric-label">{{ t('activeRules') }}</span>
+    <!-- 数据点：活跃规则 / 经扩展请求 / 本页网络层命中 + 拦截器自报活动 -->
+    <div class="metrics-block">
+      <div class="metrics-row">
+        <div class="metric">
+          <span class="metric-value">{{ activeRuleCount }}</span>
+          <span class="metric-label">{{ t('activeRules') }}</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div class="metric">
+          <span class="metric-value">{{ swRequestCount }}</span>
+          <span class="metric-label">{{ t('todayRequests') }}</span>
+        </div>
+        <div class="metric-divider"></div>
+        <div
+          class="metric"
+          :class="{ 'is-unknown': dnrTabDimmed }"
+        >
+          <span class="metric-value">{{ dnrTabHitsText }}</span>
+          <span class="metric-label">{{ t('metricDnrTab') }}</span>
+          <span class="metric-note">{{ dnrTabNoteText }}</span>
+        </div>
       </div>
-      <div class="metric-divider"></div>
-      <div class="metric">
-        <span class="metric-value">{{ swRequestCount }}</span>
-        <span class="metric-label">{{ t('todayRequests') }}</span>
-      </div>
-      <div class="metric-divider"></div>
+
+      <!-- 拦截器活动（页面自报）：这一页的 JS 层有没有被拦，只有它自己知道 -->
       <div
-        class="metric"
-        :class="{ 'is-unknown': dnrTabDimmed }"
+        v-if="interceptorStripVisible"
+        class="interceptor-strip"
+        :class="`interceptor-strip--${interceptorView.state}`"
+        :title="interceptorDetailText"
       >
-        <span class="metric-value">{{ dnrTabHitsText }}</span>
-        <span class="metric-label">{{ t('metricDnrTab') }}</span>
-        <span class="metric-note">{{ dnrTabNoteText }}</span>
+        <span class="interceptor-chip">{{ t('interceptorTag') }}</span>
+        <span class="interceptor-text">{{ interceptorText }}</span>
       </div>
     </div>
 
@@ -355,12 +368,13 @@ import {
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 import { MessageType } from '@/utils/types';
-import type { DnrSample, ProxyConfig, ProxyRule } from '@/utils/types';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
+import { describeInterceptorStats, isInterceptorStatsEntry } from '@/utils/interceptorStats';
 import { formatClock } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
+import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@/utils/types';
 
 /**
  * Popup 弹窗（动作卡片风格，参照 account-password-helper）
@@ -462,6 +476,7 @@ const pageHitChannelLabel = computed(() => {
  *
  * 三条证据各自独立：页面地址命中（本函数）、本页网络层命中数（`fetchTabDnrStats`）、
  * 哪些规则其实没被应用（`findDnrSkippedRules`）。任一失败都不连带另两条。
+ * 第四条（拦截器自报活动，`fetchTabInterceptorStats`）在同一处发出，同样互不连带。
  */
 async function computePageHit() {
   try {
@@ -473,7 +488,10 @@ async function computePageHit() {
 
     // 三条证据各自独立：网络层命中先发出。它不依赖配置，也不得排在可用性诊断之后——
     // regex 型规则每条要一次 isRegexSupported 往返，那样会把数字一起拖慢。
-    if (proxiable) void fetchTabDnrStats(tab?.id);
+    if (proxiable) {
+      void fetchTabDnrStats(tab?.id);
+      void fetchTabInterceptorStats(tab?.id);
+    }
 
     // 配置先行：「最近请求为什么是空的」那条解释与本页能不能被代理无关，非 http 页也要给
     const config: ProxyConfig | undefined = await chrome.runtime.sendMessage({
@@ -503,6 +521,75 @@ async function computePageHit() {
     }
   } catch (error) {
     logger.debug('Compute page hit failed:', error);
+  }
+}
+
+// ─── 拦截器自报活动（页面 JS 层） ─────────────────────────────────────────
+
+/** 最近一次读到的自报读数；null = 还没拿到过结构完整的响应 */
+const interceptorRaw = ref<InterceptorStatsEntry | null>(null);
+/** 首次读取是否已回：没回之前整条不渲染，否则「还没回报」会在挂载瞬间闪一下 */
+const interceptorFetched = ref(false);
+
+const interceptorView = computed(() => describeInterceptorStats(interceptorRaw.value));
+
+/**
+ * 什么时候占一行：有读数就占；没有读数时，只有「本页地址确实命中了一条走后台通道的规则」
+ * 才值得说一句「还没回报」——那正是用户在问「为什么代理没生效」的位置。
+ *
+ * 三个刻意不显示的情况：非 http 页（JS 层根本不存在）、一条规则都没命中的普通网站
+ * （这一句在这里等于噪声），以及命中网络层规则且无读数的页面（那条证据由
+ * 「本页 · 近 5 分钟」那一格负责，这里再补一句会与同屏的命中数正面打架）。
+ * 有读数时照旧一律显示，包括网络层页面：那说明页面上另有一条后台通道规则在工作。
+ * 判据取 `pageHitRuleId` 而不是「配置里有复杂规则」——后者几乎恒真，会把这一行变成常驻噪声。
+ */
+const interceptorStripVisible = computed(() => {
+  if (!enabled.value || !pageHitProxiable.value || !interceptorFetched.value) return false;
+  if (interceptorView.value.state !== 'noData') return true;
+  return !!pageHitRuleId.value && !pageHitChannelDnr.value;
+});
+
+/**
+ * 一句话状态。措辞红线：「没有读数」只能说成「还没回报」，不能说成「代理未生效」——
+ * iframe 场景下父页面本来就可能一个请求都没有，五种状态各有各的成因。
+ * 优先级是回退 > 超时 > 正常：一句话只放得下最该先知道的那件事，其余三个数在悬停里。
+ */
+const interceptorText = computed(() => {
+  const { state, stats } = interceptorView.value;
+  if (state === 'fellBack' && stats)
+    return t('interceptorFellBack', [String(stats.intercepted), String(stats.fellBack)]);
+  if (state === 'timedOut' && stats)
+    return t('interceptorTimedOut', [String(stats.intercepted), String(stats.timedOut)]);
+  if (state === 'active' && stats) return t('interceptorActive', [String(stats.intercepted), String(stats.proxied)]);
+  if (state === 'noReport' && stats) return t('interceptorNoReport', String(stats.swProxied));
+  return t('interceptorNoData');
+});
+
+/** 悬停给完整四个计数与采信时刻（原生 title，纯文本，并点名四个数不可相加）；只有真读数值得展开，「没有数据」没有可展开的东西 */
+const interceptorDetailText = computed(() => {
+  const { state, stats } = interceptorView.value;
+  if (!stats || state === 'noData' || state === 'noReport') return '';
+  return t('interceptorDetail', [
+    formatClock(stats.updatedAt),
+    String(stats.intercepted),
+    String(stats.proxied),
+    String(stats.fellBack),
+    String(stats.timedOut),
+  ]);
+});
+
+async function fetchTabInterceptorStats(tabId: number | undefined) {
+  if (typeof tabId !== 'number') return;
+  try {
+    const entry: unknown = await chrome.runtime.sendMessage({
+      type: MessageType.GET_INTERCEPTOR_STATS,
+      data: { tabId },
+    });
+    interceptorFetched.value = true;
+    // 只接受结构完整的读数：SW 异常时的 `{ success:false }` 不得覆盖已有数字
+    if (isInterceptorStatsEntry(entry)) interceptorRaw.value = entry;
+  } catch (error) {
+    logger.debug('Fetch tab interceptor stats failed:', error);
   }
 }
 
@@ -726,16 +813,20 @@ async function openOptionsPage(hash = '') {
   color: var(--el-color-success);
 }
 
-/* 数据点 */
+/* 数据点 + 拦截器活动（两者共用同一条分隔线，间距与拆分前一致） */
+.metrics-block {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--cop-border-color-light);
+}
+
 .metrics-row {
   display: flex;
 
   /* 三格顶部对齐：只有第三格带注释行，居中会让前两格的数字下沉半行 */
   align-items: flex-start;
   justify-content: space-around;
-  padding: 8px 0 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--cop-border-color-light);
+  padding-top: 8px;
 }
 
 .metric {
@@ -777,6 +868,50 @@ async function openOptionsPage(hash = '') {
   width: 1px;
   height: 28px;
   background: var(--cop-border-color);
+}
+
+/* 拦截器自报活动：一整行的话术，塞进 320px 的第三格只会截断 */
+.interceptor-strip {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cop-text-color-secondary);
+  cursor: default;
+}
+
+.interceptor-chip {
+  flex: none;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--cop-text-color-secondary);
+  background: var(--cop-bg-color-tertiary);
+  border-radius: 4px;
+}
+
+.interceptor-text {
+  min-width: 0;
+}
+
+/* 状态同时靠文字与颜色说话（颜色只是强化，不是唯一载体） */
+.interceptor-strip--fellBack .interceptor-text {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+/* 代发超时与「没有可采信读数」共用告警色：都是「有事，但还没到没走代理那一步」 */
+.interceptor-strip--timedOut .interceptor-text {
+  color: var(--el-color-warning, #e6a23c);
+}
+
+.interceptor-strip--noReport .interceptor-text {
+  color: var(--el-color-warning, #e6a23c);
+}
+
+.interceptor-strip--active .interceptor-text {
+  color: var(--el-color-success, #67c23a);
 }
 
 /* 当前页命中预览 */

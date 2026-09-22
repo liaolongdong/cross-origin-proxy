@@ -136,6 +136,12 @@ export enum MessageType {
   GET_DNR_STATS = 'GET_DNR_STATS', // Popup/Options → SW：DNR 命中采样（可选按标签页）
   GET_SW_STATS = 'GET_SW_STATS', // Options → SW：SW 通道规则级命中统计
 
+  // 拦截器活动（MAIN world 自报，只用于展示）
+  /** 注入脚本 → SW：本页四个计数（页面可伪造，故纯展示、不改任何状态，见 `InterceptorStats`） */
+  INTERCEPTOR_STATS = 'INTERCEPTOR_STATS',
+  /** Popup → SW：读某个标签页最近一次被采信的自报计数（只读，刻意**不加** sender gate，与 `GET_DNR_STATS` 同档） */
+  GET_INTERCEPTOR_STATS = 'GET_INTERCEPTOR_STATS',
+
   // 状态
   GET_PROXY_STATUS = 'GET_PROXY_STATUS',
 
@@ -278,6 +284,52 @@ export interface ReorderRulesMessage {
  */
 export interface GetDnrStatsMessage {
   type: MessageType.GET_DNR_STATS;
+  data?: { tabId?: number };
+}
+
+/**
+ * MAIN world 拦截器自报的本页计数（累计到该文档本次加载，页面刷新即归零）
+ *
+ * 四个数的口径各不相同，界面不得混着说：
+ * - `intercepted`：命中了复杂规则、被拦截器接手的 HTTP 请求数（含随后回退原生的那些）
+ * - `proxied`：真正交给后台代发的数量
+ * - `fellBack`：因同步 XHR、非字符串请求体或代理失败而**回退原生**的数量——请求成功但没走代理
+ * - `timedOut`：等后台响应超时的数量（fetch 路径上它随后也会计入 `fellBack`）
+ *
+ * WebSocket 不在这四个数里：它的地址重写与查询注入全在页面侧完成，从不交给后台代发，
+ * 记进 `proxied` 会是谎报，不记又会让这一格数字对不上，因此本计数只覆盖 HTTP。
+ *
+ * 这些数字**页面可以伪造**（桥接层入站只校验 `event.source === window` 与 channel），
+ * 所以它只能是展示数据：不写 storage、不参与匹配、不改任何状态，最坏后果是一行难看的假数字。
+ */
+export interface InterceptorStats {
+  intercepted: number;
+  proxied: number;
+  fellBack: number;
+  timedOut: number;
+}
+
+/**
+ * SW 采信的自报计数（popup 读端返回的形态）
+ *
+ * - `updatedAt === 0`：这个文档还没有被采信过任何自报包（`stats` 全 0）。与「没有数据」是两件事，
+ *   界面得能分开说：`swProxied > 0` 时后台**确实代发过**，多半只是 SW 回收把上一条读数带走了。
+ * - `swProxied`：SW 自己数到的该标签页代发请求数，交叉校验的基准，也是上面那句话的证据。
+ */
+export interface InterceptorStatsEntry extends InterceptorStats {
+  updatedAt: number;
+  swProxied: number;
+}
+
+/** 拦截器上报本页计数（内容脚本 → SW） */
+export interface InterceptorStatsMessage {
+  type: MessageType.INTERCEPTOR_STATS;
+  data?: Partial<InterceptorStats>;
+}
+
+/** 读取某个标签页最近一次被采信的拦截器计数 */
+export interface GetInterceptorStatsMessage {
+  type: MessageType.GET_INTERCEPTOR_STATS;
   data?: { tabId?: number };
 }
 
@@ -493,6 +545,8 @@ export type RuntimeMessage =
   | ReorderRulesMessage
   | GetDnrStatsMessage
   | GetSwStatsMessage
+  | InterceptorStatsMessage
+  | GetInterceptorStatsMessage
   | GetRequestLogMessage
   | ClearRequestLogMessage
   | GetProxyStatusMessage
