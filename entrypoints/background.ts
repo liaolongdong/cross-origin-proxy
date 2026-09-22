@@ -11,7 +11,7 @@ import { resetSwHitStats } from './background/proxyHandler';
 import type { ProxyConfig } from '@/utils/types';
 import { logger } from '@/utils/logger';
 import { STORAGE_KEYS, DEFAULT_PROXY_CONFIG } from '@/utils/constants';
-import { flushLogs, toggleProxy } from '@/utils/storage';
+import { configRules, flushLogs, toggleProxy } from '@/utils/storage';
 
 export default defineBackground(() => {
   logger.info('Background Service Worker started');
@@ -68,7 +68,7 @@ export default defineBackground(() => {
       resetSwHitStats();
       invalidateDnrSample('config-changed');
       if (newConfig?.rules) {
-        const activeCount = newConfig.rules.filter(r => r.enabled).length;
+        const activeCount = configRules(newConfig).filter(r => r.enabled).length;
         updateBadge(newConfig.enabled, activeCount);
       }
     }

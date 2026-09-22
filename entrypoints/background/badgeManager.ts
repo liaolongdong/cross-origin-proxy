@@ -1,4 +1,4 @@
-import { getProxyConfig } from '@/utils/storage';
+import { configRules, getProxyConfig } from '@/utils/storage';
 import { logger } from '@/utils/logger';
 
 /** 徽章颜色：开启时主题蓝，关闭时中性灰（一眼区分代理状态） */
@@ -30,7 +30,7 @@ export async function updateBadge(enabled: boolean, ruleCount: number): Promise<
 export async function initBadge(): Promise<void> {
   try {
     const config = await getProxyConfig();
-    const activeCount = config.rules.filter(r => r.enabled).length;
+    const activeCount = configRules(config).filter(r => r.enabled).length;
     await updateBadge(config.enabled, activeCount);
     logger.debug('Badge initialized:', config.enabled, 'active rules:', activeCount);
   } catch (error) {

@@ -75,6 +75,18 @@ export async function getProxyConfig(): Promise<ProxyConfig> {
 }
 
 /**
+ * 取配置里的规则数组，**非数组一律当空**
+ *
+ * `storage.local` 按不可信输入对待：手改或旧版本残留都能让 `rules` 变成一个对象、一个字符串，
+ * 或者干脆没有这个键。直接 `config.rules.filter(...)` 就在那一刻抛 TypeError，而三个调用点
+ * 没有一个接得住：徽章监听器没有 catch（数字从此停在改动前那个值），`getProxyStatus` 整条读取
+ * 失败（弹窗什么都读不出来）。取值口径只留这一个出口，别在调用点各写一份 `Array.isArray`。
+ */
+export function configRules(config: ProxyConfig | undefined): ProxyRule[] {
+  return Array.isArray(config?.rules) ? config.rules : [];
+}
+
+/**
  * 保存完整代理配置
  */
 export async function saveProxyConfig(config: ProxyConfig): Promise<void> {

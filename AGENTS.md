@@ -35,7 +35,7 @@
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 公共类型与消息判别联合    | `utils/types.ts`（`ProxyRule`/`MessageType`/`RuntimeMessage` 等）                                                                                                                                                                                                                             |
 | 常量与 Storage 键         | `utils/constants.ts`（`STORAGE_KEYS`、`MAX_RULES=200`、`MAX_VARIABLES=50`、`MAX_CONFIG_HISTORY=5`、`MAX_LOG_ENTRIES=500`、`MAX_LOG_BODY_SIZE`/`MAX_LOG_FIELD_SIZE`/`MAX_LOG_HEADER_COUNT`/`MAX_LOG_TOTAL_SIZE`、`DNR_MAX_PRIORITY`、alarm 名）                                                |
-| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入）                                                                                                                                                                                                                      |
+| 存储门面                  | `utils/storage.ts`（`storage.local` + 互斥锁 + 内存缓存 + 日志缓冲写入 + `configRules()` 取规则数组）                                                                                                                                                                                         |
 | DNR 规则构建（纯函数）    | `utils/dnrRules.ts`                                                                                                                                                                                                                                                                           |
 | URL 匹配/重写与分流判定   | `utils/urlMatcher.ts`（`findMatchingRule`/`rewriteUrl`/`isSimpleRule`/`isRegexSafe`）                                                                                                                                                                                                         |
 | 边界校验与导出脱敏        | `utils/headerValidation.ts`（表单与导入共用的头判据）、`utils/exportSanitize.ts`（分享模式剔除凭据，`sanitizeExportData` 管配置、`sanitizeExportedLogs` 管 HAR）、`utils/dnrSupport.ts`（RE2/替换引用可用性判定，供「未生效」标记）                                                           |
@@ -249,6 +249,7 @@
 ### Storage
 
 - 统一使用 `storage.local`（无 `storage.session`、无加密）；read-modify-write 必须走 `withStorageLock` 避免竞态。
+- **从 storage 读出的配置对象不能直接 `.rules.filter(...)`**：手改或被截断的旧数据能让那个键变成对象/字符串/缺失，`.filter` 当场抛 `TypeError`，而 `storage.onChanged` 监听器没有接手人——徽章从此停在改动前那个数字。取规则数组只走 `utils/storage.ts` 的 `configRules()`（非数组一律当空），`badgeManager` / `background.ts` 的徽章监听 / `proxyHandler.getProxyStatus` 三处共用它。
 
 ### 仓库体积
 

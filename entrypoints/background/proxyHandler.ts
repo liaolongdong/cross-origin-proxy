@@ -1,6 +1,6 @@
 import { findMatchingRule, matchRule, rewriteUrl, applyQueryOverrides, isRegexSafe } from '@/utils/urlMatcher';
 import { filterIncomingHeaders, isValidHeaderEntry, validateRuleHeaders } from '@/utils/headerValidation';
-import { getProxyConfig, addRequestLog, getRequestLogs, getVariables } from '@/utils/storage';
+import { configRules, getProxyConfig, addRequestLog, getRequestLogs, getVariables } from '@/utils/storage';
 import { collectRuleVariableRefs, resolveVariableMap } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
@@ -731,6 +731,7 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
 
 export async function getProxyStatus(): Promise<ProxyStatus> {
   const config = await getProxyConfig();
+  const rules = configRules(config);
   const logs = await getRequestLogs();
 
   const todayTimestamp = new Date();
@@ -752,10 +753,10 @@ export async function getProxyStatus(): Promise<ProxyStatus> {
 
   return {
     enabled: config.enabled,
-    activeRuleCount: config.rules.filter(r => r.enabled).length,
+    activeRuleCount: rules.filter(r => r.enabled).length,
     swRequestCount,
     recentLogs: logs.slice(0, 10),
-    rules: config.rules.map(r => ({ id: r.id, name: r.name, enabled: r.enabled })),
+    rules: rules.map(r => ({ id: r.id, name: r.name, enabled: r.enabled })),
     autoOffAt,
   };
 }
