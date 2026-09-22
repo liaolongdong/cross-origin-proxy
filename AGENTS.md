@@ -239,6 +239,7 @@
 
 - `runtime.sendMessage` 不到达内容脚本，广播配置需 `tabs.sendMessage`（未注入页面报错；这类失败现在按标签页记账，见「项目特有约定」的送达账一条）。
 - **桥接层对 `UPDATE_PROXY_CONFIG` 的回执是后台唯一的送达信号**：那句 `sendResponse({ received: true })` 删掉之后页面功能一点不受影响，但 `tabs.sendMessage` 的 Promise 在「有监听器却不作答」与「压根没有内容脚本」两种情况下同样 reject，送达账于是把每个页面都记成没收到，弹窗对整站警告一句「刷新即可」——一个只在渲染上看不出的改动，却把诊断变成了噪声。新增任何「靠回执判断送达」的广播都照这条办，由 `tests/configSyncState.test.ts` 的源码契约钉住。
+- **桥接层的 `PROXY_REQUEST` 解构排在 `try` 之外**：`entrypoints/content.ts` 里 `const { data } = event.data` 与紧接着那句 `logger.debug(..., data.requestId)` 都在 `try` 之前，所以一条缺 `data` 的同频道消息会在监听器里抛 TypeError——不走 catch 那份 `status: 0` 信封、也不落 `logger.error`，只是这一 frame 多一个未处理拒绝（真实拦截器永远带 `data`；同页脚本伪造它也误代理不了任何请求，越权面在规则匹配那侧）。挪进 `try` 会让页面收到一份 `requestId` 为空串的回包，那是改行为，已列为待确认点；现状由 `tests/contentBridge.test.ts` 末尾「现状记录」那条钉住，**别当成断言空转删掉**。
 - MAIN-world 必须自包含：重复类型定义、无 `chrome.*`、不能 import logger（直接用 `console.warn`）。
 - **注入到全部 frame 之后，「这一页」的账是跨 frame 合起来的**：拦截器的四个计数是**每个 frame 各自**从 1 数起的，所以 SW 侧的交叉校验基线也必须按 `(tabId, frameId)` 各记一本（见 `entrypoints/background/interceptorStats.ts`），否则顶层已代发的数会把 iframe 那份诚实的自报整包判成谎话、弹窗那一行从此冻结；`swProxied` 与四个数在**读端**才求和，`updatedAt` 取最近一次被采信的时刻。取消登记的 `requestId` 同样只在 frame 内唯一，键必须是 `tabId + frameId + requestId`（`proxyRequestKey`）。已知边界：`tabs.onUpdated` 只跟主框架导航，iframe 单独换文档时它那本账不会复位，表现是界面维持上一次的旧读数（陈旧，不是假数），刻意不为此加 `webNavigation` 权限。
 - 阻断规则不得回退原生 `fetch`/`XHR`/`WebSocket`，否则被阻断的请求会实际发出；非字符串 body（FormData/Blob/ArrayBuffer）不能跨 `postMessage`，除阻断外回退原生。
