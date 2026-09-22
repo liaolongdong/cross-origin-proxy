@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
 import fs from 'fs';
+import { execFileSync } from 'child_process';
 
 const ROOT = path.resolve(__dirname, '..');
 /** GitHub Pages 站点根 = 仓库 `docs/` 目录；路径基 = 仓库名，不可与品牌名混淆。 */
@@ -68,6 +69,7 @@ const BILINGUAL_PAIRS: Array<[string, string]> = [
   ['docs/en.html', 'docs/index.html'],
   ['docs/en-alternatives.html', 'docs/alternatives.html'],
 ];
+
 
 describe('[Docs] 仓库自动化与文档一致性', () => {
   // ═══════════════════════════════════════════════════════════════════════════
@@ -127,6 +129,26 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       return fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() ? path.join(target, 'index.html') : target;
     };
 
+    /**
+     * `git` 索引里的路径集合（NUL 分隔，避免文件名转义歧义），整轮只读一次
+     *
+     * 「磁盘上有」与「站点上有」不是一回事：Pages 部署的是**仓库**，所以一张只在开发机磁盘上、
+     * 忘了 `git add` 的图，本地 `fs.existsSync` 永远为真，线上却是 404。
+     * 2026-09 落地页新增的两张图（`config-import.jpg` / `credential-variables.jpg`）正是这样漏掉的。
+     */
+    let trackedCache: Set<string> | undefined;
+    const trackedFiles = (): Set<string> => {
+      if (!trackedCache) {
+        const out = execFileSync('git', ['ls-files', '-z'], {
+          cwd: ROOT,
+          encoding: 'utf-8',
+          maxBuffer: 32 * 1024 * 1024,
+        });
+        trackedCache = new Set(out.split('\0').filter(Boolean));
+      }
+      return trackedCache;
+    };
+
     it.each(['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'])(
       '%s 的本地资源全部存在',
       file => {
@@ -138,6 +160,19 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
           .filter(ref => !exists(ref))
           .sort();
         expect(missing, `${file} 引用了 docs/ 下不存在的文件`).toEqual([]);
+      },
+    );
+
+    it.each(['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'])(
+      '%s 引用的本地资源都已入库（Pages 部署的是仓库，不是工作区）',
+      file => {
+        const tracked = trackedFiles();
+        expect(tracked.size, 'git 索引不应为空').toBeGreaterThan(0);
+
+        const untracked = [...new Set(localRefs(file).map(resolveLocal))]
+          .filter(ref => exists(ref) && !tracked.has(ref.split(path.sep).join('/')))
+          .sort();
+        expect(untracked, `${file} 引用了磁盘上有、但没提交进 git 的文件`).toEqual([]);
       },
     );
   });
@@ -839,6 +874,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
   describe('Chrome 商店提审素材', () => {
     const doc = read('CHROMEWEBSTORE.md');
+
 
     /** 取某个小节区间内的全部 ``` 代码块（商店表单的可粘贴值就放在这里）。 */
     const blocksIn = (from: string, to: string): string[] => {
