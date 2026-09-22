@@ -84,9 +84,13 @@ export async function getProxyConfig(): Promise<ProxyConfig> {
  * 而 `background.ts` 的 `storage.onChanged` 监听器没有接手人——徽章从此**停在改动前那个数字**，
  * 界面说「还在代理，N 条规则」，那个数却早已作废。
  *
- * 出口只有这一个，**能引到本模块的调用点都别另写 `Array.isArray`**。两个内容脚本 world 是刻意
- * 的例外：MAIN world 自包含、桥接层引它会连带存储门面和一个它用不到的 `chrome.storage.onChanged`
- * 监听进每个 frame，所以那两处各自判一次，由 `tests/channel-consistency.test.ts` 成对钉住。
+ * 出口只有这一个，**要把规则数组拿来用的调用点都别另写 `Array.isArray`**。两类例外：
+ * ① 两个内容脚本 world——MAIN world 自包含、桥接层引它会连带存储门面和一个它用不到的
+ * `chrome.storage.onChanged` 监听进每个 frame，所以那两处各自判一次，
+ * 由 `tests/channel-consistency.test.ts` 成对钉住。
+ * ② 把形状当**闸门**的地方（不是数组就整条早退）——那不是取值，选的是「输入坏了以后保留旧状态
+ * 还是重建空集」，本模块不替它决定。`dnrManager` 里三处 `Array.isArray` 属于这一类，
+ * 三者选的方向并不一致，现状与代价见 `tests/dnrManagerSync.test.ts` 头部。
  * 存储**写入**路径同样不用它——那些地方读出的 `rules` 不是数组就该失败得响亮，
  * 当成空数组再写回去等于把用户已有的规则抹掉。
  */
