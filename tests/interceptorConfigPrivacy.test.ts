@@ -115,4 +115,14 @@ describe('toInterceptorConfig — 页面侧凭据面收窄', () => {
     expect(out.rules.map(r => r.id)).toEqual(['cred']);
     expect(out.rules[0]).not.toHaveProperty('sendCredentials');
   });
+
+  // 收窄这一步同时是「配置进页面 world 前的最后一道形状判据」：`storage.local` 里的 `rules`
+  // 可以是手改出来的对象，而这里抛出去的位置在桥接层的同步路径上——没有 catch，
+  // 于是这个页面的复杂规则全部静默不生效，界面上连一笔日志都没有。
+  it('规则不是数组时下发空列表（不能让整段页面侧同步在桥接层抛掉）', () => {
+    const malformed = { enabled: true, rules: { 0: httpComplexRule(), length: 1 } } as unknown as ProxyConfig;
+
+    expect(() => toInterceptorConfig(malformed)).not.toThrow();
+    expect(toInterceptorConfig(malformed)).toEqual({ enabled: true, rules: [] });
+  });
 });

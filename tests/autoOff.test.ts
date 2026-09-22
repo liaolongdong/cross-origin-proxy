@@ -163,6 +163,47 @@ describe('setupAutoOff — 到期与存储变化', () => {
     expect(toggleProxy).toHaveBeenCalledWith(false);
   });
 
+  // 监听器里那条 `PROXY_CONFIG in changes` 是本功能唯一的触发口：用户在设置页打开总开关
+  // 走的是「写 storage → 这里的监听器挂倒计时」，不是直接调 alarm。漏了这一支，表现是
+  // 「界面上倒计时在走、alarm 压根不存在」——正是本文件开头说的那类读不出来的失效。
+  it('只改总开关（时长没变）：倒计时按现有时长挂上，且不重置已有的那份', async () => {
+    getProxyConfig.mockResolvedValue({ enabled: true, rules: [] });
+    storageGet.mockResolvedValue({ [AUTO_OFF_MINUTES]: 30 });
+    const { setupAutoOff } = await import('@/entrypoints/background/autoOff');
+    setupAutoOff();
+    await settle();
+    create.mockClear();
+    clear.mockClear();
+
+    storageListeners.at(-1)!(
+      { [PROXY_CONFIG]: { oldValue: { enabled: false }, newValue: { enabled: true } } },
+      'local',
+    );
+    await settle();
+
+    expect(create).toHaveBeenCalledWith(AUTO_OFF_ALARM, { delayInMinutes: 30 });
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 上一条钉「这条触发存在」，这一条钉它传的是 `force=false`：把监听器里的
+  // `reevaluateAutoOff(durationChanged)` 写成 `reevaluateAutoOff(true)`，函数层的四条测试
+  // 全绿（它们各自直接调函数、绕过了接线），而用户的真实体验是每次改规则都续一次命。
+  it('已有倒计时时改配置：这条触发不重置它（force 只跟着时长变化走）', async () => {
+    getProxyConfig.mockResolvedValue({ enabled: true, rules: [] });
+    withExistingAlarm();
+    const { setupAutoOff } = await import('@/entrypoints/background/autoOff');
+    setupAutoOff();
+    await settle();
+    create.mockClear();
+    clear.mockClear();
+
+    storageListeners.at(-1)!({ [PROXY_CONFIG]: { oldValue: { enabled: true }, newValue: { enabled: true } } }, 'local');
+    await settle();
+
+    expect(create).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+  });
+
   it('与这两个键无关的存储变化不动倒计时', async () => {
     getProxyConfig.mockResolvedValue({ enabled: true, rules: [] });
     const { setupAutoOff } = await import('@/entrypoints/background/autoOff');

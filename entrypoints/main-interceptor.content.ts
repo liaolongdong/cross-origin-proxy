@@ -237,7 +237,12 @@ export default defineContentScript({
       if (event.data.type === SYNC_RULES) {
         const config: ProxyConfig = event.data.data || { enabled: false, rules: [] };
         proxyEnabled = config.enabled || false;
-        rebuildRuleCache(config.rules || []);
+        // 入站形状判据：这条消息跨 world 进来，而发送方不只有桥接层——同页脚本拿着
+        // `CHANNEL` 字面量就能自己 postMessage 一条 SYNC_RULES（`event.source === window` 挡不住它）。
+        // 少了这一道，`rebuildRuleCache` 抛在 `[...rules]` 上，规则缓存停在上一份好配置（首包就非法
+        // 时一直是空的），而这一页看起来仍在被代理。桥接层侧成对的一处由
+        // `tests/channel-consistency.test.ts` 钉住。
+        rebuildRuleCache(Array.isArray(config.rules) ? config.rules : []);
       }
     });
 

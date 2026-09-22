@@ -78,9 +78,17 @@ export async function getProxyConfig(): Promise<ProxyConfig> {
  * 取配置里的规则数组，**非数组一律当空**
  *
  * `storage.local` 按不可信输入对待：手改或旧版本残留都能让 `rules` 变成一个对象、一个字符串，
- * 或者干脆没有这个键。直接 `config.rules.filter(...)` 就在那一刻抛 TypeError，而三个调用点
- * 没有一个接得住：徽章监听器没有 catch（数字从此停在改动前那个值），`getProxyStatus` 整条读取
- * 失败（弹窗什么都读不出来）。取值口径只留这一个出口，别在调用点各写一份 `Array.isArray`。
+ * 或者干脆没有这个键。直接 `config.rules.filter(...)` 就在那一刻抛 TypeError，而三个读取点都
+ * 不会把这次抛错当回事，各自留下一种看不出来源的读数：`initBadge` 自己接住它只留一行 error 日志
+ * （徽章一个字符都不画），`getProxyStatus` 经 `respondAsync` 回成错误信封（弹窗沿用上一次读数），
+ * 而 `background.ts` 的 `storage.onChanged` 监听器没有接手人——徽章从此**停在改动前那个数字**，
+ * 界面说「还在代理，N 条规则」，那个数却早已作废。
+ *
+ * 出口只有这一个，**能引到本模块的调用点都别另写 `Array.isArray`**。两个内容脚本 world 是刻意
+ * 的例外：MAIN world 自包含、桥接层引它会连带存储门面和一个它用不到的 `chrome.storage.onChanged`
+ * 监听进每个 frame，所以那两处各自判一次，由 `tests/channel-consistency.test.ts` 成对钉住。
+ * 存储**写入**路径同样不用它——那些地方读出的 `rules` 不是数组就该失败得响亮，
+ * 当成空数组再写回去等于把用户已有的规则抹掉。
  */
 export function configRules(config: ProxyConfig | undefined): ProxyRule[] {
   return Array.isArray(config?.rules) ? config.rules : [];

@@ -43,7 +43,14 @@ const PAGE_IRRELEVANT_FIELDS = [
 export function toInterceptorConfig(config: ProxyConfig): ProxyConfig {
   return {
     enabled: config.enabled,
-    rules: (config.rules ?? [])
+    // 数组判据而不是 `?? []`：手改过的 storage 能把 `rules` 变成一个对象，而 `?? ` 只挡空值。
+    // 抛出位置有两处，症状不一样：广播路径（`UPDATE_PROXY_CONFIG`）抛在 `sendResponse` 之前，
+    // 送达账因此这一页记成未同步，弹窗那句「尚未收到最新配置」说得出；主动拉取路径抛在
+    // `.catch(logger.debug)` 里，咽成一行 debug，于是这一页的复杂规则静默按原生路径发出。
+    // 后台侧同一判据收在 `utils/storage.ts` 的 `configRules()`，本 world 不能引它（会把存储门面
+    // 连带一个用不到的 `chrome.storage.onChanged` 监听拖进每个 frame），故本地写一份，
+    // 由 `tests/channel-consistency.test.ts` 与拦截器那侧成对钉住。
+    rules: (Array.isArray(config.rules) ? config.rules : [])
       .filter(rule => !isSimpleRule(rule))
       .map(rule => {
         const pageRule = { ...rule };

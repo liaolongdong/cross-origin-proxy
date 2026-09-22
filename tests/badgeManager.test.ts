@@ -97,7 +97,7 @@ describe('initBadge — 从配置数出启用条数', () => {
     expect(lastBadge()).toEqual({ text: '', color: '#409EFF' });
   });
 
-  it('配置整个读不到：按关闭画，异常不外溢', async () => {
+  it('配置整个读不到：一律不画（沿用现状），异常不外溢', async () => {
     getProxyConfig.mockRejectedValue(new Error('storage unavailable'));
     const { initBadge } = await import('@/entrypoints/background/badgeManager');
 

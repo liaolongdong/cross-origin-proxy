@@ -289,3 +289,25 @@ describe('内容脚本注入范围成对声明', () => {
     expect(interceptor).toMatch(/runAt:\s*'document_start'/);
   });
 });
+
+/**
+ * 下发给页面的配置读自 `storage.local`，那里的 `rules` 可能是手改出来的对象或字符串。
+ * 两个 world 都拿不到 `utils/storage` 的 `configRules()`（MAIN world 自包含；桥接层一旦引入存储
+ * 门面，就在每个 frame 注册一个它用不到的 `chrome.storage.onChanged` 监听），所以这道判据只能
+ * 各自成立。只补一边就是半边同步照旧抛：桥接层抛在 `postSyncRules` 里、拦截器抛在
+ * `rebuildRuleCache` 的 `[...rules]` 上，两处都没有 catch，症状同为「这一页的复杂规则静默走原生请求」。
+ */
+describe('页面侧规则数组的形状判据成对声明', () => {
+  const bridgeSrc = readFileSync('entrypoints/content.ts', 'utf-8');
+  const interceptorSrc = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
+
+  it('桥接层按数组取值，`?? []` 挡不住非数组对象', () => {
+    expect(bridgeSrc).toMatch(/Array\.isArray\(\s*config\.rules\s*\)/);
+    expect(bridgeSrc).not.toMatch(/config\.rules\s*\?\?\s*\[\]/);
+  });
+
+  it('拦截器喂给 rebuildRuleCache 的值经过同一道数组判据', () => {
+    expect(interceptorSrc).toMatch(/rebuildRuleCache\(\s*Array\.isArray\(\s*config\.rules\s*\)/);
+    expect(interceptorSrc).not.toMatch(/rebuildRuleCache\(\s*config\.rules\s*\|\|/);
+  });
+});
