@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
 import { t, currentLocale } from '@/utils/i18n';
 
@@ -48,5 +50,60 @@ describe('i18n t()', () => {
   it('传参少于占位符时，未提供的占位符原样保留', () => {
     currentLocale.value = 'zh_CN';
     expect(t('importPreviewConflictItem', '只有名字')).toBe('「只有名字」已存在：保留 $2，文件里的 $3 不会生效');
+  });
+});
+
+/**
+ * 源码里 `t('key')` 用到的键必须真实存在于中英两侧字典。
+ *
+ * `t()` 未命中时**返回键名本身**，所以少一个键不会报错、不会红任何静态检查，
+ * 只会把 `restorePointsTitle` 这样的英文标识直接画到界面上。这里只认字面量参数，
+ * 动态拼出来的键（`t(prefix + name)`）扫不到，那一类仍只能靠界面自查。
+ */
+describe('i18n 用到的 key 必须存在', () => {
+  const SOURCE_DIRS = ['components', 'composables', 'entrypoints', 'utils'];
+
+  function listSourceFiles(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return listSourceFiles(full);
+      return /\.(vue|ts)$/.test(entry.name) ? [full] : [];
+    });
+  }
+
+  const dictionaries = (['zh_CN', 'en'] as const).map(locale => ({
+    locale,
+    keys: new Set(
+      ['common', 'options', 'popup'].flatMap(ns => {
+        const raw = JSON.parse(fs.readFileSync(`locales/${locale}/${ns}.json`, 'utf-8')) as Record<string, string>;
+        return Object.keys(raw);
+      }),
+    ),
+  }));
+
+  const isCommentLine = (line: string): boolean => /^\s*(\/\/|\/?\*|<!--)/.test(line);
+
+  const usedKeys = new Set<string>();
+  const unresolved: string[] = [];
+  for (const file of SOURCE_DIRS.flatMap(listSourceFiles)) {
+    fs.readFileSync(file, 'utf-8')
+      .split('\n')
+      .forEach((line, index) => {
+        if (isCommentLine(line)) return;
+        for (const [, key] of line.matchAll(/\bt\(\s*['"]([A-Za-z][\w.]*)['"]/g)) {
+          usedKeys.add(key);
+          for (const { locale, keys } of dictionaries) {
+            if (!keys.has(key)) unresolved.push(`${file}:${index + 1} 的 '${key}' 在 ${locale} 侧不存在`);
+          }
+        }
+      });
+  }
+
+  it('扫描本身不是空转（正则一旦失配，下面的断言会假绿）', () => {
+    expect(usedKeys.size).toBeGreaterThan(300);
+  });
+
+  it('每个字面量 key 都能在中英字典里找到（缺一个就会画出裸键名）', () => {
+    expect(unresolved).toEqual([]);
   });
 });
