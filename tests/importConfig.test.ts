@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import type { ProxyRule } from '@/utils/types';
+import type { ImportPlan, ProxyRule } from '@/utils/types';
 import { MAX_RULES, STORAGE_KEYS } from '@/utils/constants';
 
 // 内存版 chrome.storage.local mock（在导入被测模块前安装）
@@ -25,6 +25,7 @@ vi.stubGlobal('chrome', {
 
 const { importProxyConfig, getProxyConfig, invalidateConfigCache } = await import('@/utils/storage');
 const { useImportExport } = await import('@/composables/useImportExport');
+const { logger } = await import('@/utils/logger');
 
 function makeRule(id: string, overrides: Partial<ProxyRule> = {}): ProxyRule {
   return {
@@ -186,6 +187,120 @@ describe('useImportExport.importConfig — 回传稳定错误码', () => {
     const [msg] = sendMessageSpy.mock.calls[0] as [{ type: string; data: { mode?: string } }];
     expect(msg.type).toBe('IMPORT_CONFIG');
     expect(msg.data.mode).toBe('merge');
+  });
+});
+
+/**
+ * 预览这一路自己的判据（弹窗侧的契约钉在本文件末尾那两组里）
+ *
+ * `fetchImportPlan` 是纯计算、不落库，但它有三条失败面必须与「预览显示无变化」分得开：
+ * 本地格式判据（一条消息都不该发）、后台空回包、sendMessage 抛错。界面拿不到 `plan`
+ * 才能说「这次没法预告」，拿到 `{plan: undefined}` 就会画成「这次没有变化」——
+ * 后者是谎报，也是这个 composable 唯一能钉住的那一格。`importing` 那把锁同理：
+ * 它锁的是写入，预览不该占用它。
+ */
+describe('useImportExport.fetchImportPlan — 预览这一路自己的判据', () => {
+  const validJson = JSON.stringify({ config: { enabled: true, rules: [] } });
+
+  beforeEach(() => {
+    sendMessageSpy.mockReset();
+  });
+
+  const plan: ImportPlan = {
+    mode: 'merge',
+    added: 2,
+    skipped: 1,
+    conflicts: [
+      {
+        name: 'rule-r1',
+        matchPattern: 'https://api-rule-r1.example.com/*',
+        currentTargetUrl: 'https://old.example.com',
+        incomingTargetUrl: 'https://new.example.com',
+      },
+    ],
+    duplicatesWithinFile: 0,
+    replaces: 0,
+    exceedsLimit: false,
+  };
+
+  it('模式与载荷一起发给后台，plan 原样带回（预览只在后台算）', async () => {
+    sendMessageSpy.mockResolvedValue({ success: true, plan });
+    const { fetchImportPlan } = useImportExport();
+
+    await expect(fetchImportPlan(validJson, 'merge')).resolves.toEqual({ success: true, plan });
+    const [msg] = sendMessageSpy.mock.calls[0] as [{ type: string; data: { mode?: string; config?: unknown } }];
+    expect(msg.type).toBe('GET_IMPORT_PLAN');
+    expect(msg.data.mode).toBe('merge');
+    expect(msg.data.config).toEqual({ enabled: true, rules: [] });
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['JSON 解析失败', '{ not json'],
+    ['结构缺少 config.rules', JSON.stringify({ config: {} })],
+  ])('%s：本地就报 INVALID_CONFIG，一条消息都不发（预览是增强，不该把垃圾打到后台）', async (_label, input) => {
+    const { fetchImportPlan } = useImportExport();
+    await expect(fetchImportPlan(input, 'replace')).resolves.toEqual({ success: false, error: 'INVALID_CONFIG' });
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+  });
+
+  it('后台无响应：回的是「没法预告」而不是一块空预览', async () => {
+    sendMessageSpy.mockResolvedValue(undefined);
+    const { fetchImportPlan } = useImportExport();
+    await expect(fetchImportPlan(validJson, 'replace')).resolves.toEqual({
+      success: false,
+      error: 'IMPORT_NO_RESPONSE',
+    });
+  });
+
+  it('sendMessage 抛错：稳定码 + 说一句 error，异常原文只进日志', async () => {
+    const seen: unknown[][] = [];
+    const spy = vi.spyOn(logger, 'error').mockImplementation((...args: unknown[]) => {
+      seen.push(args);
+    });
+    sendMessageSpy.mockRejectedValue(new TypeError('Extension context invalidated.'));
+    const { fetchImportPlan } = useImportExport();
+
+    await expect(fetchImportPlan(validJson, 'replace')).resolves.toEqual({
+      success: false,
+      error: 'IMPORT_PLAN_ERROR',
+    });
+    expect(seen).toHaveLength(1);
+    expect(String(seen[0][1])).toContain('Extension context invalidated.');
+    spy.mockRestore();
+  });
+
+  it('预览不占用 importing：算个预览不该把「导入」按钮锁住', async () => {
+    sendMessageSpy.mockResolvedValue({ success: true, plan });
+    const { importing, fetchImportPlan } = useImportExport();
+    await fetchImportPlan(validJson, 'merge');
+    expect(importing.value).toBe(false);
+  });
+
+  it('importing 在途为 true，三条落定路径都回 false', async () => {
+    let settle: (result: unknown) => void = () => {};
+    sendMessageSpy.mockImplementation(() => new Promise(resolve => (settle = resolve)));
+    const { importing, importConfig } = useImportExport();
+
+    const first = importConfig(validJson, 'replace');
+    expect(importing.value).toBe(true);
+    settle({ success: true });
+    await first;
+    expect(importing.value).toBe(false);
+
+    const second = importConfig(validJson, 'replace');
+    expect(importing.value).toBe(true);
+    settle(undefined);
+    await second;
+    expect(importing.value).toBe(false);
+
+    let fail: (error: unknown) => void = () => {};
+    sendMessageSpy.mockImplementation(() => new Promise((_resolve, reject) => (fail = reject)));
+    const third = importConfig(validJson, 'replace');
+    expect(importing.value).toBe(true);
+    fail(new Error('boom'));
+    await third;
+    expect(importing.value).toBe(false);
   });
 });
 
