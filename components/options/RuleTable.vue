@@ -396,6 +396,10 @@ const hitCells = computed(() => {
     const onNet = channelById.get(ruleId) ?? false;
     const netUnknown = !onNet || !readable;
     const extUnknown = onNet;
+    // 三条 `continue` 问的不是同一件事：这条问「这一行说得出话吗」，下面两条问「有没有一个
+    // 非零的数可看」。少了这条，网络层规则在采样读不到、后台计数又非零时画出 `— —`——
+    // 两个破折号并排，比折叠成的「-」更像故障。
+    if (netUnknown && extUnknown) continue;
     if (!readable && stat.ext === 0) continue;
     if (readable && stat.net === 0 && stat.ext === 0) continue;
     cells[ruleId] = {

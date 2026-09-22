@@ -121,6 +121,12 @@ describe('规则列表命中列：分通道显示，不相加（源码契约）'
     expect(tableSrc).toContain("ext: extUnknown ? '—' : String(stat.ext)");
   });
 
+  it('两格都是「—」时整列折叠成「-」，而不是并排画两个破折号', () => {
+    // 判据是「这一行说得出话吗」（两格各自 unknown），不是「后台计数为零」——
+    // 网络层规则在采样读不到、而后台那一格恰好非零时，旧判据会放行出 `— —`
+    expect(tableSrc).toContain('if (netUnknown && extUnknown) continue;');
+  });
+
   it('读不到时画「—」，并且提示语区分「没有这类规则」与「统计暂不可用」', () => {
     expect(tableSrc).toContain("t('statsNotApplicable')");
     expect(tableSrc).toContain("t('statsUnavailable')");
