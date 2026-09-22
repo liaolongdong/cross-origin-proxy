@@ -24,6 +24,7 @@
  * 「桥接层确实用了它们，且用在了正确的出口上」。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { CONTENT_SCRIPT_CHANNEL } from '@/utils/constants';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig, ProxyRule } from '@/utils/types';
@@ -462,5 +463,37 @@ describe('现状记录：载荷缺失的 PROXY_REQUEST 抛在 try 之外', () =>
     expect(toSwOf(MessageType.PROXY_REQUEST)).toEqual([]);
     expect(sentOf(MessageType.PROXY_RESPONSE)).toEqual([]);
     expect(logger.error).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 桥接层通往 SW 的**出口清单**——门禁分档的前提，所以按源码枚举而不是逐型举例
+ *
+ * 上面各组只能证明「这四个出口各自行为正确」，证不出「没有第五个」。而 SW 侧有一批消息
+ * 正是拿「页面没有通往它的路径」当不加 `isTrustedSender` 的理由（最典型是 `GET_IMPORT_PLAN`，
+ * 见 `entrypoints/background/messageRouter.ts` 的 `handleImportPlan`）。这里多转发一型，
+ * 那条理由当场失效，而所有既有用例照样全绿——所以把它钉成一张清单。
+ * 新增出口时这里红是预期：先回来判一次「这一型该不该在门禁内」，再把名字加进清单。
+ */
+describe('[源码契约] 通往 SW 的出口只有这四种', () => {
+  const bridgeSrc = readFileSync('entrypoints/content.ts', 'utf-8');
+  const callSites = [...bridgeSrc.matchAll(/\.sendMessage\(/g)].length;
+
+  /** 只认 `.sendMessage(` 后面紧跟的对象字面量里那一个 `type:`，页面的 `postMessage` 不算出口 */
+  const forwardedTypes = [
+    ...new Set(
+      [...bridgeSrc.matchAll(/\.sendMessage\(\s*\{[^}]*?type:\s*(?:MessageType\.)?([A-Z_]+)/g)].map(m => m[1]),
+    ),
+  ].sort();
+
+  it('出口调用点恰有 5 处（`GET_PROXY_CONFIG` 两处、其余各一处），第 6 处一进来就红', () => {
+    // 这一条是上面那条正则的盲区兜底：新增一处不带 `type: MessageType.X` 字面量的转发
+    // （换行写法、常量表驱动、变量拼装），枚举可能看不见，调用点计数一定看得见。
+    expect(callSites).toBe(5);
+    expect(forwardedTypes).toHaveLength(4);
+  });
+
+  it('枚举结果恰是 GET_PROXY_CONFIG / INTERCEPTOR_STATS / CANCEL_REQUEST / PROXY_REQUEST', () => {
+    expect(forwardedTypes).toEqual(['CANCEL_REQUEST', 'GET_PROXY_CONFIG', 'INTERCEPTOR_STATS', 'PROXY_REQUEST']);
   });
 });
