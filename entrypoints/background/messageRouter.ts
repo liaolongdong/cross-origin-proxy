@@ -191,8 +191,9 @@ async function handleImportPlan(
  *
  * 只看 `sender.url`，而它由 Chrome 写入、页面伪造不了——这道 gate 挡的不是「伪造来源」，
  * 而是来自非扩展上下文的状态修改请求：内容脚本的 `sender.url` 就是被注入页面的 URL，
- * 与外部页面同列，所以桥接层（`entrypoints/content.ts`）只转发只读配置、`PROXY_REQUEST`、
- * `CANCEL_REQUEST` 与 `INTERCEPTOR_STATS`。
+ * 与外部页面同列，所以桥接层（`entrypoints/content.ts`）通往 SW 的只有 `GET_PROXY_CONFIG`（只读配置）、
+ * `PROXY_REQUEST`、`CANCEL_REQUEST` 与 `INTERCEPTOR_STATS` 四型（清单由
+ * `tests/contentBridge.test.ts` 末尾按源码枚举，本函数与 `handleImportPlan` 的注释都在它守护之下）。
  * 页面侧能让扩展代发哪些请求，判据要在桥接层与规则匹配处收紧，不靠往这些类型上加 gate。
  *
  * @param sender - 消息发送者的上下文信息

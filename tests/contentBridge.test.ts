@@ -508,13 +508,32 @@ describe('[源码契约] 通往 SW 的出口只有这四种', () => {
     expect(bridgeSrc).not.toMatch(/\bruntime\.connect\s*\(/);
   });
 
-  it('SW 侧引用这份清单的那句判据，四个名字一个都没抄漏', () => {
-    // `handleImportPlan` 的 JSDoc 把「不加 gate」的理由外包给这份清单，两处各写一份就会漂；
-    // 这一条只保证「漂不动」，不重新判据——判据本身在那边读。
+  it('SW 侧引用这份清单的那两句判据，四个名字一个都没抄漏', () => {
+    // `handleImportPlan` 与 `isTrustedSender` 的注释都把「不加 gate」的理由外包给这份清单，
+    // 三处各写一份就会各说各话（实测只把其中一处一个类型名改短，只有这条红）。
     const routerSrc = readFileSync('entrypoints/background/messageRouter.ts', 'utf-8');
-    const at = routerSrc.indexOf('async function handleImportPlan(');
-    const jsdoc = routerSrc.slice(routerSrc.lastIndexOf('/**', at), at);
-    expect(jsdoc.length).toBeGreaterThan(0);
-    for (const type of forwardedTypes) expect(jsdoc).toContain(type);
+    const jsdocBefore = (anchor: string): string => {
+      const at = routerSrc.indexOf(anchor);
+      expect(at).toBeGreaterThan(-1);
+      return routerSrc.slice(routerSrc.lastIndexOf('/**', at), at);
+    };
+    for (const anchor of ['async function handleImportPlan(', 'export function isTrustedSender(']) {
+      const jsdoc = jsdocBefore(anchor);
+      expect(jsdoc.length).toBeGreaterThan(0);
+      for (const type of forwardedTypes) expect(jsdoc).toContain(type);
+    }
+  });
+
+  it('AGENTS.md 里那份给下游读的清单与代码枚举一致', () => {
+    // 内部文档是第三份手抄，而且是别人最不会去翻测试的那一份；它一漂，判据就又只剩口头承诺。
+    const agents = readFileSync('AGENTS.md', 'utf-8');
+    const at = agents.indexOf('桥接层通往 SW 只有');
+    expect(at).toBeGreaterThan(-1);
+    const clauseEnd = agents.indexOf('四个出口', at);
+    expect(clauseEnd).toBeGreaterThan(at);
+    const clause = agents.slice(at, clauseEnd);
+    for (const type of forwardedTypes) expect(clause).toContain(type);
+    // `REQUEST_CONFIG` 只能以「页面那侧写作 …」的身份出现——它是页面发给桥接层的名字，不是 SW 出口
+    expect(clause).toContain('页面那侧写作 `REQUEST_CONFIG`');
   });
 });
