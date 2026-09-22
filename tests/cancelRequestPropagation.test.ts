@@ -7,13 +7,25 @@ import { readFileSync } from 'node:fs';
  * 页面把 `AbortController` 交给 fetch/XHR 之后，拦截器只是把**迟到**的代理响应丢掉：
  * 上游连接继续握着、凭据继续外发、`retryCount` 继续追加尝试，SW 那边完全不知道页面已经不要了。
  * 现在取消要跨三个世界走完：MAIN world 监听 signal → `CANCEL_REQUEST` → 桥接层转发 →
- * SW 按 `tabId + requestId` 掐断 `AbortController`（路由与后台侧的行为由
+ * SW 按 `(tabId, frameId, requestId)` 掐断 `AbortController`（拼法见
+ * `entrypoints/background/proxyHandler.ts` 的 `proxyRequestKey`；路由与后台侧的行为由
  * `tests/cancelProxiedRequest.test.ts` 用真实现守住）。
  *
- * 拦截器跑在 MAIN world、桥接层跑在内容脚本上下文，两者都无法在 node 环境实例化，
- * 因此这里只能用源码契约（同 `syncXhrFallback` / `interceptorStats` 的做法）。
- * 契约刻意分成「取消要发」和「取消不得回退原生」两组——后者漏掉的话，
- * 页面刚刚放弃的请求会被拦截器再原样发一遍，那比不取消更糟。
+ * 这条通路的**结局**大多已有运行时用例按外部可观察面钉住：fetch 中途 abort「掐掉后台那一笔、
+ * 按 `signal.reason` 落定、不回退原生」在 `tests/interceptorFetch.test.ts` 的「取消」一组，
+ * XHR 的 `abort()` 与 `xhr.timeout`、requestId 交回调用方与 `open()` 清旧账在
+ * `tests/interceptorXhr.test.ts`，桥接层转发只带 `requestId`（URL 与头不跟着进 SW）在
+ * `tests/contentBridge.test.ts`。下面与它们重叠的用例是刻意留的：按源码钉的那几处一旦改名或
+ * 挪走就红，运行时用例却只会安静地继续绿。
+ *
+ * 只有这一支守得住的，实测过两处（变异方向各自跑过）：
+ * ① 桥接层「发完即止」——`sendMessage` 在 SW 回收期被拒时既不等回执也不在控制台留噪音；
+ *    运行时那几组只观察转发的载荷，观察不到这条 promise 怎么落定。
+ * ② `catch` 里三条判据的**先后**：把「先判取消」挪到「再判阻断」之后，`tests/interceptorFetch.test.ts`
+ *    25 条全绿，变的只有一种组合——被取消那一笔恰好命中阻断规则，页面拿到的就成了模拟网络错误的
+ *    `TypeError` 而不是 `AbortError`（页面普遍按 `err.name === 'AbortError'` 分支）。
+ *    作为对照，整句摘掉「先判取消」则是那两组运行时用例红：取消走到回退分支，页面刚放弃的请求
+ *    被原样再发一遍（真实浏览器里是网络行为，桩里表现为一次成功落定）。
  */
 
 const interceptor = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
@@ -60,7 +72,8 @@ describe('[fetch 路径] 取消必须原样抛给页面，绝不回退原生请�
     );
   });
 
-  it('catch 里先判取消，再判阻断与回退（顺序错了等于把取消的请求再发一遍）', () => {
+  it('catch 里取消判定排在阻断与回退之前（颠倒的代价只在命中阻断规则那一格）', () => {
+    // 顺序与「这一句在不在」是两种症状，各自实测过变异方向，详见文件头第 ② 条
     const catchAt = interceptor.indexOf('      } catch (error) {\n        // 页面已取消');
     const src = interceptor.slice(catchAt, interceptor.indexOf('    };', catchAt));
     const cancelAt = src.indexOf('if (signal?.aborted) throw error;');

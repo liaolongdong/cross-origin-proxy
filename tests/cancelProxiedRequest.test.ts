@@ -7,9 +7,10 @@ import type { ProxyRule } from '@/utils/types';
 //
 // 页面把 `AbortController` 交给 fetch/XHR 之后，后台却照旧把整笔请求跑完：
 // 上游连接继续占用、凭据继续外发、重试继续追加，页面只是把迟到的响应丢掉。
-// 现在 `proxyRequestKey(tabId, requestId)` 是这笔在途请求的登记键，
-// `cancelProxiedRequest(key)` 掐断它 —— 键里必须带 tabId，因为 requestId 是
-// 每个页面各自从 1 开始数的计数器。
+// 现在 `proxyRequestKey(tabId, frameId, requestId)` 是这笔在途请求的登记键，
+// `cancelProxiedRequest(key)` 掐断它 —— 键里必须带 tabId 与 frameId，因为 requestId 是
+// 每个 frame 的拦截器各自从 1 开始数的计数器（内容脚本注入全部 frame，只带 tabId 会让
+// 顶层与某个 iframe 的同名 id 互相取消掉对方的请求）。
 //
 // 下面第二组用例走的是**真路由**：登记与取消两侧的键必须由同一个 `sender.tab.id`
 // 拼出，否则这条通道在单测里成立、在浏览器里永远取消不掉任何东西。
