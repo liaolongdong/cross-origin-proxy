@@ -257,3 +257,35 @@ describe('MAIN world 镜像与 utils 侧同源', () => {
     expect(source).toMatch(/function applyWsQuery[\s\S]*?beforeHash\s*\.slice\(\s*queryAt\s*\+\s*1\s*\)/);
   });
 });
+
+/**
+ * 内容脚本的**注入范围**也是双通道一致性的一部分：MAIN world 拦截器与 ISOLATED world 桥接
+ * 必须出现在同一批 document 里。只给桥接加 `allFrames`，iframe 的 `postMessage` 无人接；
+ * 只给拦截器加，iframe 的消息出不了页面——两种半份注入都比「iframe 不生效」更难排查，
+ * 因为桥接层会在自己的 world 里正常收发消息，只是对端不存在。
+ */
+describe('内容脚本注入范围成对声明', () => {
+  const bridgeSrc = readFileSync('entrypoints/content.ts', 'utf-8');
+  const interceptorSrc = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
+
+  /** 取出 `defineContentScript({ … })` 的声明块 */
+  function declarationOf(source: string): string {
+    const at = source.indexOf('defineContentScript({');
+    expect(at, '入口缺少 defineContentScript 声明').toBeGreaterThan(-1);
+    return source.slice(at, source.indexOf('main(', at));
+  }
+
+  it('两个 world 都注入全部 frame（缺一即半份注入）', () => {
+    expect(declarationOf(bridgeSrc)).toMatch(/allFrames:\s*true/);
+    expect(declarationOf(interceptorSrc)).toMatch(/allFrames:\s*true/);
+  });
+
+  it('matches 与 runAt 同样成对，避免时序或范围上的一方独占', () => {
+    const bridge = declarationOf(bridgeSrc);
+    const interceptor = declarationOf(interceptorSrc);
+    expect(bridge).toMatch(/matches:\s*\['<all_urls>'\]/);
+    expect(interceptor).toMatch(/matches:\s*\['<all_urls>'\]/);
+    expect(bridge).toMatch(/runAt:\s*'document_start'/);
+    expect(interceptor).toMatch(/runAt:\s*'document_start'/);
+  });
+});

@@ -6,6 +6,7 @@
  *    生命周期清理与缓存上限。这里的关键是「自相矛盾的假包盖不掉真读数」：四个数页面可伪造，
  *    唯一不受页面影响的基准是 SW 自己数到的 `PROXY_REQUEST`，所以校验只有两道：包内必须自洽
  *    （`intercepted` 是另外三个数的父集、全 0 没有信息量），且不得低于那条基线。
+ *    基线**按 frame 各记一本**（内容脚本注入到子 frame 之后的前提），读端才跨 frame 求和。
  * 2. **界面判据**（`utils/interceptorStats.ts` 与 popup 那一行）——五种状态必须各有各的说法。
  *    把它们合并成一句「无数据」就是本批次要消灭的那类谎报（与 `describeDnrSample` 同一教训）。
  * 3. **MAIN world 计数点**——那个 world 自包含、无法 import，只能用源码契约守住：
@@ -59,7 +60,7 @@ afterEach(() => {
 
 describe('采信与丢弃', () => {
   it('合法读数被采信，并记下 SW 收到它的时刻', () => {
-    expect(mod.recordInterceptorStats(1, reported())).toBe(true);
+    expect(mod.recordInterceptorStats(1, 0, reported())).toBe(true);
     expect(mod.getInterceptorStats(1)).toEqual({ ...reported(), updatedAt: START, swProxied: 0 });
   });
 
@@ -68,7 +69,7 @@ describe('采信与丢弃', () => {
   });
 
   it('没有 tabId（非内容脚本来源）时不记录', () => {
-    expect(mod.recordInterceptorStats(undefined, reported())).toBe(false);
+    expect(mod.recordInterceptorStats(undefined, 0, reported())).toBe(false);
     expect(mod.getInterceptorStats(1)).toBeNull();
   });
 
@@ -85,28 +86,28 @@ describe('采信与丢弃', () => {
 
   for (const [label, payload] of badPayloads) {
     it(`载荷${label}：整包丢弃，不写出半成品`, () => {
-      expect(mod.recordInterceptorStats(1, payload)).toBe(false);
+      expect(mod.recordInterceptorStats(1, 0, payload)).toBe(false);
       expect(mod.getInterceptorStats(1)).toBeNull();
     });
   }
 
   it('非法包不得盖掉已有的真读数', () => {
-    mod.recordInterceptorStats(1, reported());
-    expect(mod.recordInterceptorStats(1, reported({ proxied: -9 }))).toBe(false);
+    mod.recordInterceptorStats(1, 0, reported());
+    expect(mod.recordInterceptorStats(1, 0, reported({ proxied: -9 }))).toBe(false);
     expect(mod.getInterceptorStats(1)?.proxied).toBe(3);
   });
 
   it('小数向下取整（页面写 2.7 就记 2，不因此整包作废）', () => {
-    mod.recordInterceptorStats(1, reported({ intercepted: 5.7 }));
+    mod.recordInterceptorStats(1, 0, reported({ intercepted: 5.7 }));
     expect(mod.getInterceptorStats(1)?.intercepted).toBe(5);
   });
 });
 
 describe('与 SW 侧代发数交叉校验', () => {
   it('自报的代发数小于 SW 数到的基准 → 丢弃整包', () => {
-    mod.countProxyRequestForTab(1);
-    mod.countProxyRequestForTab(1);
-    expect(mod.recordInterceptorStats(1, reported({ proxied: 1, intercepted: 5 }))).toBe(false);
+    mod.countProxyRequestForTab(1, 0);
+    mod.countProxyRequestForTab(1, 0);
+    expect(mod.recordInterceptorStats(1, 0, reported({ proxied: 1, intercepted: 5 }))).toBe(false);
     expect(mod.getInterceptorStats(1)).toEqual({
       intercepted: 0,
       proxied: 0,
@@ -118,30 +119,30 @@ describe('与 SW 侧代发数交叉校验', () => {
   });
 
   it('等于基准即采信（页面可以先代发、后上报）', () => {
-    mod.countProxyRequestForTab(1);
-    mod.countProxyRequestForTab(1);
-    expect(mod.recordInterceptorStats(1, reported({ proxied: 2, intercepted: 2 }))).toBe(true);
+    mod.countProxyRequestForTab(1, 0);
+    mod.countProxyRequestForTab(1, 0);
+    expect(mod.recordInterceptorStats(1, 0, reported({ proxied: 2, intercepted: 2 }))).toBe(true);
     expect(mod.getInterceptorStats(1)?.swProxied).toBe(2);
   });
 
   it('拦到数小于基准也丢（只违反基线、包内自洽的包）', () => {
-    mod.countProxyRequestForTab(1);
-    mod.countProxyRequestForTab(1);
-    expect(mod.recordInterceptorStats(1, reported({ intercepted: 1, proxied: 1 }))).toBe(false);
+    mod.countProxyRequestForTab(1, 0);
+    mod.countProxyRequestForTab(1, 0);
+    expect(mod.recordInterceptorStats(1, 0, reported({ intercepted: 1, proxied: 1 }))).toBe(false);
   });
 
   it('包内自相矛盾的包整包拒收，基线为 0 也拒', () => {
     // 诚实路径发不出这些包（`bump('intercepted')` 在命中处，另外三个数都在其后），
     // 所以能发出来的只有同页脚本——而画出的句子本身就是一句谎话。
-    expect(mod.recordInterceptorStats(1, reported({ intercepted: 0, proxied: 9, fellBack: 0 }))).toBe(false);
-    expect(mod.recordInterceptorStats(1, reported({ intercepted: 2, proxied: 2, fellBack: 5 }))).toBe(false);
-    expect(mod.recordInterceptorStats(1, reported({ intercepted: 3, proxied: 1, timedOut: 4 }))).toBe(false);
+    expect(mod.recordInterceptorStats(1, 0, reported({ intercepted: 0, proxied: 9, fellBack: 0 }))).toBe(false);
+    expect(mod.recordInterceptorStats(1, 0, reported({ intercepted: 2, proxied: 2, fellBack: 5 }))).toBe(false);
+    expect(mod.recordInterceptorStats(1, 0, reported({ intercepted: 3, proxied: 1, timedOut: 4 }))).toBe(false);
     expect(mod.getInterceptorStats(1)).toBeNull();
   });
 
   it('四个数全 0 的包不采信，也盖不掉上一条真读数', () => {
-    mod.recordInterceptorStats(1, reported({ intercepted: 3, proxied: 2, fellBack: 1 }));
-    expect(mod.recordInterceptorStats(1, { intercepted: 0, proxied: 0, fellBack: 0, timedOut: 0 })).toBe(false);
+    mod.recordInterceptorStats(1, 0, reported({ intercepted: 3, proxied: 2, fellBack: 1 }));
+    expect(mod.recordInterceptorStats(1, 0, { intercepted: 0, proxied: 0, fellBack: 0, timedOut: 0 })).toBe(false);
     const kept = mod.getInterceptorStats(1);
     expect(kept?.fellBack).toBe(1);
     // 全 0 包若被采信，界面会画成绿色的「拦到 0 个请求」——那正是「把不知道当没有」的谎报
@@ -149,70 +150,147 @@ describe('与 SW 侧代发数交叉校验', () => {
   });
 
   it('采信之后基准数继续累加，供下一次校验', () => {
-    mod.countProxyRequestForTab(1);
-    mod.recordInterceptorStats(1, reported({ proxied: 1, intercepted: 1 }));
-    mod.countProxyRequestForTab(1);
-    expect(mod.recordInterceptorStats(1, reported({ proxied: 1, intercepted: 9 }))).toBe(false);
-    expect(mod.recordInterceptorStats(1, reported({ proxied: 2, intercepted: 9 }))).toBe(true);
+    mod.countProxyRequestForTab(1, 0);
+    mod.recordInterceptorStats(1, 0, reported({ proxied: 1, intercepted: 1 }));
+    mod.countProxyRequestForTab(1, 0);
+    expect(mod.recordInterceptorStats(1, 0, reported({ proxied: 1, intercepted: 9 }))).toBe(false);
+    expect(mod.recordInterceptorStats(1, 0, reported({ proxied: 2, intercepted: 9 }))).toBe(true);
     expect(mod.getInterceptorStats(1)?.swProxied).toBe(2);
   });
 
   it('没有 tabId 的代发请求不建状态（popup 自己发的消息不该变成基准）', () => {
-    mod.countProxyRequestForTab(undefined);
+    mod.countProxyRequestForTab(undefined, 0);
     expect(mod.getInterceptorStats(1)).toBeNull();
+  });
+});
+
+describe('按 frame 分账，跨 frame 合账', () => {
+  /**
+   * 子 frame 的拦截器只数得到自己那本账，而顶层与 iframe 的 `PROXY_REQUEST` 过去会汇成
+   * 一个标签页级基准 —— 于是 iframe 那份诚实的 `proxied: 1` 会被顶层的 3 笔判成谎话丢掉，
+   * popup 那一行从此冻结在顶层的旧读数上。基线按 frame 各记一本是 `allFrames` 的前提。
+   */
+  it('顶层的代发数不得误杀 iframe 的诚实自报', () => {
+    mod.countProxyRequestForTab(1, 0);
+    mod.countProxyRequestForTab(1, 0);
+    mod.countProxyRequestForTab(1, 0);
+    mod.countProxyRequestForTab(1, 1);
+    expect(mod.recordInterceptorStats(1, 1, reported({ intercepted: 1, proxied: 1 }))).toBe(true);
+    expect(mod.recordInterceptorStats(1, 0, reported({ intercepted: 3, proxied: 3 }))).toBe(true);
+    expect(mod.getInterceptorStats(1)).toEqual({
+      intercepted: 4,
+      proxied: 4,
+      fellBack: 0,
+      timedOut: 0,
+      updatedAt: START,
+      swProxied: 4,
+    });
+  });
+
+  it('读端把各 frame 的数合起来，时刻取最近一次被采信的那份', () => {
+    mod.recordInterceptorStats(1, 0, reported({ intercepted: 3, proxied: 2, fellBack: 1 }));
+    vi.setSystemTime(START + 1000);
+    expect(mod.recordInterceptorStats(1, 1, { intercepted: 2, proxied: 2, fellBack: 0, timedOut: 0 })).toBe(true);
+    expect(mod.getInterceptorStats(1)).toEqual({
+      intercepted: 5,
+      proxied: 4,
+      fellBack: 1,
+      timedOut: 0,
+      updatedAt: START + 1000,
+      swProxied: 0,
+    });
+  });
+
+  it('交叉校验只看本 frame 的基准，被丢的那一包也盖不掉别的 frame', () => {
+    mod.countProxyRequestForTab(1, 1);
+    mod.countProxyRequestForTab(1, 1);
+    expect(mod.recordInterceptorStats(1, 0, reported({ intercepted: 9, proxied: 9 }))).toBe(true);
+    expect(mod.recordInterceptorStats(1, 1, reported({ intercepted: 9, proxied: 1 }))).toBe(false);
+    expect(mod.getInterceptorStats(1)?.proxied).toBe(9);
+  });
+
+  it('没有 frameId 的调用按顶层 frame 记账，不另起一本账', () => {
+    mod.countProxyRequestForTab(1, undefined);
+    expect(mod.recordInterceptorStats(1, 0, reported({ intercepted: 1, proxied: 1 }))).toBe(true);
+    expect(mod.getInterceptorStats(1)?.swProxied).toBe(1);
+  });
+
+  it('清理与导航都是整页生效：该标签页全部 frame 一起丢', () => {
+    mod.countProxyRequestForTab(1, 1);
+    mod.countProxyRequestForTab(1, 1);
+    mod.recordInterceptorStats(1, 0, reported());
+    mod.recordInterceptorStats(1, 1, reported({ intercepted: 2, proxied: 1 }));
+    updatedHandlers.forEach(fn => fn(1, { status: 'loading' }));
+    expect(mod.getInterceptorStats(1)).toBeNull();
+    // 各 frame 的基准一并复位，否则子 frame 第一次上报全被判成矛盾
+    expect(mod.recordInterceptorStats(1, 1, reported({ intercepted: 2, proxied: 1 }))).toBe(true);
+
+    mod.recordInterceptorStats(1, 0, reported());
+    removedHandlers.forEach(fn => fn(1));
+    expect(mod.getInterceptorStats(1)).toBeNull();
+  });
+
+  it(`缓存上限按标签页计：一个页面开三个 frame 也只占一个位置（${INTERCEPTOR_TAB_CACHE_SIZE}）`, () => {
+    for (let frameId = 0; frameId < 3; frameId++) mod.recordInterceptorStats(1, frameId, reported());
+    for (let tabId = 2; tabId <= INTERCEPTOR_TAB_CACHE_SIZE; tabId++) mod.recordInterceptorStats(tabId, 0, reported());
+    expect(mod.getInterceptorStats(1)?.intercepted).toBe(15); // 三个 frame 合账，但仍只占一个位置
+
+    mod.recordInterceptorStats(INTERCEPTOR_TAB_CACHE_SIZE + 1, 0, reported());
+    expect(mod.getInterceptorStats(1)).toBeNull();
+    expect(mod.getInterceptorStats(2)?.intercepted).toBe(5);
   });
 });
 
 describe('生命周期与容量', () => {
   it('标签页关闭即丢读数', () => {
-    mod.recordInterceptorStats(1, reported());
+    mod.recordInterceptorStats(1, 0, reported());
     removedHandlers.forEach(fn => fn(1));
     expect(mod.getInterceptorStats(1)).toBeNull();
   });
 
   it('导航中的标签页读数清零（新文档的计数从 0 起，基准也必须跟着起）', () => {
-    mod.countProxyRequestForTab(1);
-    mod.recordInterceptorStats(1, reported({ proxied: 1, intercepted: 1 }));
+    mod.countProxyRequestForTab(1, 0);
+    mod.recordInterceptorStats(1, 0, reported({ proxied: 1, intercepted: 1 }));
     updatedHandlers.forEach(fn => fn(1, { status: 'loading' }));
     expect(mod.getInterceptorStats(1)).toBeNull();
     // 基准一并复位：不清就会把新文档第一次上报全部判成矛盾
-    expect(mod.recordInterceptorStats(1, reported({ proxied: 1, intercepted: 1 }))).toBe(true);
+    expect(mod.recordInterceptorStats(1, 0, reported({ proxied: 1, intercepted: 1 }))).toBe(true);
   });
 
   it('非 loading 的变更不得清读数（favIconUrl / title 之类同样会回调）', () => {
-    mod.recordInterceptorStats(1, reported());
+    mod.recordInterceptorStats(1, 0, reported());
     updatedHandlers.forEach(fn => fn(1, { status: 'complete' }));
     updatedHandlers.forEach(fn => fn(1, {}));
     expect(mod.getInterceptorStats(1)?.intercepted).toBe(5);
   });
 
   it(`超过 ${INTERCEPTOR_TAB_CACHE_SIZE} 个标签页时丢弃最旧`, () => {
-    for (let tabId = 1; tabId <= INTERCEPTOR_TAB_CACHE_SIZE; tabId++) mod.recordInterceptorStats(tabId, reported());
+    for (let tabId = 1; tabId <= INTERCEPTOR_TAB_CACHE_SIZE; tabId++) mod.recordInterceptorStats(tabId, 0, reported());
     expect(mod.getInterceptorStats(1)?.intercepted).toBe(5);
 
-    mod.recordInterceptorStats(INTERCEPTOR_TAB_CACHE_SIZE + 1, reported());
+    mod.recordInterceptorStats(INTERCEPTOR_TAB_CACHE_SIZE + 1, 0, reported());
     expect(mod.getInterceptorStats(1)).toBeNull();
     expect(mod.getInterceptorStats(2)?.intercepted).toBe(5);
   });
 
   it('再次写入即刷新位置（逐出的是最久没动静的那个，不是最早建的那个）', () => {
-    for (let tabId = 1; tabId <= INTERCEPTOR_TAB_CACHE_SIZE; tabId++) mod.recordInterceptorStats(tabId, reported());
-    mod.recordInterceptorStats(1, reported({ intercepted: 6 }));
-    mod.recordInterceptorStats(INTERCEPTOR_TAB_CACHE_SIZE + 1, reported());
+    for (let tabId = 1; tabId <= INTERCEPTOR_TAB_CACHE_SIZE; tabId++) mod.recordInterceptorStats(tabId, 0, reported());
+    mod.recordInterceptorStats(1, 0, reported({ intercepted: 6 }));
+    mod.recordInterceptorStats(INTERCEPTOR_TAB_CACHE_SIZE + 1, 0, reported());
     expect(mod.getInterceptorStats(1)?.intercepted).toBe(6);
     expect(mod.getInterceptorStats(2)).toBeNull();
   });
 
   it('clearInterceptorStats 只清指定标签页', () => {
-    mod.recordInterceptorStats(1, reported());
-    mod.recordInterceptorStats(2, reported());
+    mod.recordInterceptorStats(1, 0, reported());
+    mod.recordInterceptorStats(2, 0, reported());
     mod.clearInterceptorStats(1);
     expect(mod.getInterceptorStats(1)).toBeNull();
     expect(mod.getInterceptorStats(2)?.intercepted).toBe(5);
   });
 
   it('SW 回收后的干净状态可以被显式重建（模块级 Map，不藏持久化）', () => {
-    mod.recordInterceptorStats(1, reported());
+    mod.recordInterceptorStats(1, 0, reported());
     mod.clearAllInterceptorStats();
     expect(mod.getInterceptorStats(1)).toBeNull();
   });

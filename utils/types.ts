@@ -209,10 +209,10 @@ export interface ProxyResponseMessage {
 /**
  * 取消在途代发请求的消息体
  *
- * `requestId` 与 `PROXY_REQUEST` 用的是同一个值，但它只是登记键的一半：另一半是
- * `sender.tab.id`，由 SW 侧拼（见 `proxyHandler` 的 `proxyRequestKey`）。页面各自从 1
- * 开始数自己的 requestId，因此绝不能只按 requestId 找请求——那样一个标签页能掐断
- * 另一个标签页正在跑的那笔代发。
+ * `requestId` 与 `PROXY_REQUEST` 用的是同一个值，但它只是登记键的一部分：其余坐标
+ * （`sender.tab.id` 与 `sender.frameId`）由 SW 侧拼（见 `proxyHandler` 的 `proxyRequestKey`）。
+ * requestId 是**每个 frame 自己的**拦截器从 1 开始数的计数器，因此绝不能只按它找请求——
+ * 那样一个标签页能掐断另一个标签页正在跑的那笔代发，同页两个 frame 还会共用同一个键。
  */
 export interface CancelRequestMessage {
   type: MessageType.CANCEL_REQUEST;
@@ -328,7 +328,8 @@ export interface InterceptorStats {
  *
  * - `updatedAt === 0`：这个文档还没有被采信过任何自报包（`stats` 全 0）。与「没有数据」是两件事，
  *   界面得能分开说：`swProxied > 0` 时后台**确实代发过**，多半只是 SW 回收把上一条读数带走了。
- * - `swProxied`：SW 自己数到的该标签页代发请求数，交叉校验的基准，也是上面那句话的证据。
+ * - `swProxied`：SW 自己数到的该标签页（含全部 frame）代发请求数，也是上面那句话的证据。
+ *   交叉校验不按这个合计做——四个自报数与基准都按 `(tabId, frameId)` 各记一本，读端才合起来。
  */
 export interface InterceptorStatsEntry extends InterceptorStats {
   updatedAt: number;

@@ -4,6 +4,9 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_start',
   world: 'MAIN',
+  // 与 content.ts 成对声明（两处必须一起改）：拦截器只进顶层时，iframe 的 `postMessage` 无人发送，
+  // 子 frame 里的复杂规则等于没生效。`allFrames` 因此同时决定「这一页有几个拦截器在数自己的账」。
+  allFrames: true,
   main() {
     // ============================================================
     // MAIN World Request Interceptor

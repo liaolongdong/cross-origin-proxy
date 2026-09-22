@@ -57,6 +57,9 @@ export function toInterceptorConfig(config: ProxyConfig): ProxyConfig {
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_start',
+  // 与 main-interceptor.content.ts 成对声明（两处必须一起改）：少一边就是半份注入——
+  // 桥接在 iframe 里收发正常，但对端拦截器不存在，复杂规则静默走原生请求，比「整页不生效」更难查。
+  allFrames: true,
   main(ctx) {
     // ISOLATED world: bridge between MAIN world (postMessage) and Background SW (chrome.runtime)
     // NOTE: All postMessage calls use window.location.origin as targetOrigin (not '*')

@@ -189,6 +189,8 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 **CORS, precisely.** Rules on the background channel are issued by the extension, which holds host permissions, and the page receives a response the extension constructed — page CORS checks do not apply. A pure network-layer redirect still gets `Access-Control-Allow-Origin` validated. If a target environment does not allow your origin, add any capability to the rule (a response header override is the cheapest) and it switches channels.
 
+**Top frame and iframes alike.** Content scripts are injected into every frame of the page, so complex rules apply inside an iframe too — a request is not downgraded to a native one just because a subframe issued it. The "self-reported by page" line in the popup sums the frames into a single statement, while cross-checking keeps a separate account per frame: one frame under-reporting never suppresses another frame's reading.
+
 **Fallback.** If interception fails, the page falls back to native `fetch` / `XMLHttpRequest` / `WebSocket`, so requests still go out normally. Synchronous XHR (`open()` with `false` as its third argument) falls back the same way, as do non-string bodies such as `FormData` / `Blob` / `ArrayBuffer`: proxying means a round trip through other contexts, which cannot deliver the "the result is ready when `send()` returns" contract — making it async would only hand the page an empty response. Block rules are the deliberate exception: a blocked request is never replayed.
 
 ## 📋 Features

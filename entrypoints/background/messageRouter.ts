@@ -265,26 +265,29 @@ export function setupMessageRouter(): void {
 
     switch (message.type) {
       case MessageType.PROXY_REQUEST:
-        // 顺手累加这个标签页的代发数，作为拦截器自报计数的交叉校验基准（`sender.tab` 由
-        // Chrome 写入，页面伪造不了；四个自报数字本身可以，见 `interceptorStats`）
-        countProxyRequestForTab(sender.tab?.id);
+        // 顺手累加这个 frame 的代发数，作为拦截器自报计数的交叉校验基准（`sender.tab` 与
+        // `sender.frameId` 都由 Chrome 写入，页面伪造不了；四个自报数字本身可以，见 `interceptorStats`）
+        countProxyRequestForTab(sender.tab?.id, sender.frameId);
         return respondAsync(
           sendResponse,
-          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, message.data.requestId)),
+          handleProxyRequest(
+            message.data,
+            proxyRequestKey(sender.tab?.id, sender.frameId, message.data.requestId),
+          ),
         );
 
       case MessageType.CANCEL_REQUEST:
         // 刻意**不加** sender gate：这条消息存在的意义就是让页面取消自己那笔代发请求，
         // 而内容脚本的 `sender.url` 就是页面 URL（与 `PROXY_REQUEST` 同档）。
-        // 越权面也被键本身挡住——取消要命中 `tabId + requestId` 拼出的登记键，
-        // 最坏结果是掐断同一标签页里另一个 frame 的在飞请求（见 `proxyRequestKey`）。
+        // 越权面也被键本身挡住——取消要命中 `tabId + frameId + requestId` 拼出的登记键，
+        // 而这三段都由 Chrome 写入的 sender 与前一笔 `PROXY_REQUEST` 同源（见 `proxyRequestKey`）。
         if (!message.data || typeof message.data.requestId !== 'string' || !message.data.requestId) {
           sendResponse({ success: false, error: 'Invalid requestId' });
           return false;
         }
         sendResponse({
           success: true,
-          cancelled: cancelProxiedRequest(proxyRequestKey(sender.tab?.id, message.data.requestId)),
+          cancelled: cancelProxiedRequest(proxyRequestKey(sender.tab?.id, sender.frameId, message.data.requestId)),
         });
         return false;
 
@@ -431,7 +434,7 @@ export function setupMessageRouter(): void {
       case MessageType.INTERCEPTOR_STATS: {
         // 页面自报的展示数据：刻意不进 `STATE_MUTATING_TYPES`，也刻意**不写 storage**——
         // 它改不了配置、参与不了匹配，最坏后果是 popup 上一行难看的假数字（判据见 `interceptorStats`）
-        const accepted = recordInterceptorStats(sender.tab?.id, message.data);
+        const accepted = recordInterceptorStats(sender.tab?.id, sender.frameId, message.data);
         sendResponse({ success: accepted });
         return false;
       }

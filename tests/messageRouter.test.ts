@@ -615,10 +615,15 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
   /**
    * 带 `sender.tab` 的派发：`recordInterceptorStats` 认的是 Chrome 写入的 tabId，
    * 而 `dispatch()` 造的 sender 只有 url（那条路径要守的是「没有 tab 就不记录」）。
+   * `frameId` 同样由 Chrome 写入，默认 0 = 顶层 frame。
    */
-  function dispatchFromTab(type: MessageType, data: unknown, tabId: number) {
+  function dispatchFromTab(type: MessageType, data: unknown, tabId: number, frameId = 0) {
     const sendResponse = vi.fn();
-    const keepChannelOpen = listener!({ type, data }, { url: EXTERNAL_PAGE_URL, tab: { id: tabId } }, sendResponse);
+    const keepChannelOpen = listener!(
+      { type, data },
+      { url: EXTERNAL_PAGE_URL, tab: { id: tabId }, frameId },
+      sendResponse,
+    );
     return { sendResponse, keepChannelOpen };
   }
 
@@ -674,6 +679,33 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
     );
     expect(lastResponse(honest.sendResponse)).toEqual({ success: true });
     expect(await stats.getInterceptorStats(9)).toMatchObject({ proxied: 1, fellBack: 4, swProxied: 1 });
+  });
+
+  it('基准与自报两侧都带着 frameId：iframe 的诚实自报不被顶层的代发数误杀', async () => {
+    const stats = await statsMod();
+    // 顶层代发 3 笔、iframe 代发 1 笔（requestId 各自从 1 数起，跨 frame 会重名）
+    for (let i = 0; i < 3; i++) {
+      dispatchFromTab(MessageType.PROXY_REQUEST, { requestId: `r${i}`, url: EXTERNAL_PAGE_URL, method: 'GET' }, 12, 0);
+    }
+    dispatchFromTab(MessageType.PROXY_REQUEST, { requestId: 'r0', url: EXTERNAL_PAGE_URL, method: 'GET' }, 12, 1);
+    await flush();
+
+    const sub = dispatchFromTab(
+      MessageType.INTERCEPTOR_STATS,
+      { intercepted: 1, proxied: 1, fellBack: 0, timedOut: 0 },
+      12,
+      1,
+    );
+    expect(lastResponse(sub.sendResponse)).toEqual({ success: true });
+    const top = dispatchFromTab(
+      MessageType.INTERCEPTOR_STATS,
+      { intercepted: 3, proxied: 3, fellBack: 0, timedOut: 0 },
+      12,
+      0,
+    );
+    expect(lastResponse(top.sendResponse)).toEqual({ success: true });
+    // popup 读的是整页合账：那一行说的仍是「这一页」，不是某一个 frame
+    expect(await stats.getInterceptorStats(12)).toMatchObject({ intercepted: 4, proxied: 4, swProxied: 4 });
   });
 
   it('popup 读的是内存态，读不到时回 null 而不是 0 命中', async () => {

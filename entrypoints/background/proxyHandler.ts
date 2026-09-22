@@ -298,9 +298,18 @@ const inFlightRequests = new Map<string, AbortController>();
 /**
  * 拼在途请求的登记键。`PROXY_REQUEST` 的登记侧与 `CANCEL_REQUEST` 的取消侧共用这一处，
  * 免得两边各拼一遍、拼歪成「取消永远打不中」。
+ *
+ * 两段坐标都不能省：`requestId` 是**每个 frame 自己的**拦截器从 1 数起来的计数器，
+ * 只带 requestId 时一个标签页能掐断另一个标签页的代发；内容脚本注入到所有 frame 之后，
+ * 同一标签页里两个 frame 的同名 requestId 会直接共用一个键——后登记的那笔把前一笔挤出
+ * 登记表，于是「取消顶层这一笔」实际掐断的是子 frame 那笔。
  */
-export function proxyRequestKey(tabId: number | undefined, requestId: string): string {
-  return `${tabId ?? 'no-tab'}::${requestId}`;
+export function proxyRequestKey(
+  tabId: number | undefined,
+  frameId: number | undefined,
+  requestId: string,
+): string {
+  return `${tabId ?? 'no-tab'}::${frameId ?? 'no-frame'}::${requestId}`;
 }
 
 /**

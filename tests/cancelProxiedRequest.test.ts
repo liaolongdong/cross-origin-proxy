@@ -113,11 +113,11 @@ describe('后台代发的取消通道', () => {
     const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
     const pending = handleProxyRequest(
       { requestId: 'req-1', url: 'https://api.example.com/x', method: 'GET', headers: {} },
-      proxyRequestKey(7, 'req-1'),
+      proxyRequestKey(7, 0, 'req-1'),
     );
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(cancelProxiedRequest(proxyRequestKey(7, 'req-1'))).toBe(true);
+    expect(cancelProxiedRequest(proxyRequestKey(7, 0, 'req-1'))).toBe(true);
     const resp = await pending;
 
     expect(aborted).toEqual([0]);
@@ -137,7 +137,7 @@ describe('后台代发的取消通道', () => {
     }));
 
     const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
-    const key = proxyRequestKey(3, 'req-ok');
+    const key = proxyRequestKey(3, 0, 'req-ok');
     await handleProxyRequest(
       { requestId: 'req-ok', url: 'https://api.example.com/x', method: 'GET', headers: {} },
       key,
@@ -155,21 +155,21 @@ describe('后台代发的取消通道', () => {
     // 两个标签页各自从 req-1 开始数：requestId 完全相同
     const tabA = handleProxyRequest(
       { requestId: 'req-1', url: 'https://api.example.com/x', method: 'GET', headers: {} },
-      proxyRequestKey(11, 'req-1'),
+      proxyRequestKey(11, 0, 'req-1'),
     );
     const tabB = handleProxyRequest(
       { requestId: 'req-1', url: 'https://api.example.com/x', method: 'GET', headers: {} },
-      proxyRequestKey(12, 'req-1'),
+      proxyRequestKey(12, 0, 'req-1'),
     );
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(cancelProxiedRequest(proxyRequestKey(11, 'req-1'))).toBe(true);
+    expect(cancelProxiedRequest(proxyRequestKey(11, 0, 'req-1'))).toBe(true);
     const respA = await tabA;
 
     expect(respA.statusText).toBe('Proxy Error');
     // 只掐该当那一笔：另一个标签页同名请求不能被动到
     expect(aborted).toEqual([0]);
-    expect(cancelProxiedRequest(proxyRequestKey(12, 'req-1'))).toBe(true);
+    expect(cancelProxiedRequest(proxyRequestKey(12, 0, 'req-1'))).toBe(true);
     expect(aborted).toEqual([0, 1]);
     expect((await tabB).statusText).toBe('Proxy Error');
   });
@@ -182,11 +182,11 @@ describe('后台代发的取消通道', () => {
     const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
     const pending = handleProxyRequest(
       { requestId: 'req-d', url: 'https://api.example.com/x', method: 'GET', headers: {} },
-      proxyRequestKey(5, 'req-d'),
+      proxyRequestKey(5, 0, 'req-d'),
     );
     await vi.advanceTimersByTimeAsync(1_000);
 
-    expect(cancelProxiedRequest(proxyRequestKey(5, 'req-d'))).toBe(true);
+    expect(cancelProxiedRequest(proxyRequestKey(5, 0, 'req-d'))).toBe(true);
     await vi.advanceTimersByTimeAsync(20_000);
     const resp = await pending;
 
@@ -212,31 +212,38 @@ describe('后台代发的取消通道', () => {
     });
 
     expect(resp.status).toBe(200);
-    expect(cancelProxiedRequest(proxyRequestKey(1, 'req-legacy'))).toBe(false);
+    expect(cancelProxiedRequest(proxyRequestKey(1, 0, 'req-legacy'))).toBe(false);
   });
 
-  describe('经真路由的取消 — 登记与取消两侧的键必须由同一个 tabId 拼出', () => {
+  describe('经真路由的取消 — 登记与取消两侧的键必须由同一个 tabId 与 frameId 拼出', () => {
     /** 把一条消息打进 router 注册的真实监听器，返回同步的通道标记与 sendResponse 桩 */
-    async function dispatch(type: MessageType, data: unknown, tabId: number) {
+    async function dispatch(type: MessageType, data: unknown, tabId: number, frameId = 0) {
       const router = await import('@/entrypoints/background/messageRouter');
       if (!routerListener) router.setupMessageRouter();
       const sendResponse = vi.fn();
-      const keepChannelOpen = routerListener!({ type, data }, { url: PAGE_URL, tab: { id: tabId } }, sendResponse);
+      const keepChannelOpen = routerListener!(
+        { type, data },
+        { url: PAGE_URL, tab: { id: tabId }, frameId },
+        sendResponse,
+      );
       return { sendResponse, keepChannelOpen };
     }
 
     /** 起一笔会被路由登记的代发（总开关开着、规则命中、上游挂起） */
-    async function startProxiedRequest(tabId: number, requestId: string) {
+    async function startProxiedRequest(tabId: number, requestId: string, frameId = 0) {
       store['proxy_config'] = { enabled: true, rules: [BASE_RULE] };
       const aborted: number[] = [];
       stubHangUntilAbort(index => aborted.push(index));
+      // 前一笔还挂在途上时 fetch 的总调用数已经在涨了，只能盯「这一次多了一次」
+      const callsBefore = fetchMock.mock.calls.length;
       const proxy = await dispatch(
         MessageType.PROXY_REQUEST,
         { requestId, url: 'https://api.example.com/x', method: 'GET', headers: {} },
         tabId,
+        frameId,
       );
       await vi.advanceTimersByTimeAsync(10);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls.length).toBe(callsBefore + 1);
       return { ...proxy, aborted };
     }
 
@@ -263,6 +270,23 @@ describe('后台代发的取消通道', () => {
 
       expect(aborted).toEqual([]);
       expect(request.sendResponse).not.toHaveBeenCalled();
+    });
+
+    it('同一标签页里两个 frame 各自从 req-1 数起：只能取消自己那一笔', async () => {
+      // 注入到所有 frame 之后，每个 frame 有自己的拦截器与自己的 requestId 计数器，
+      // 只按 tabId + requestId 登记会让两笔共用一个键——后登记的那笔把前一笔挤出登记表
+      const top = await startProxiedRequest(7, 'req-1', 0);
+      const sub = await startProxiedRequest(7, 'req-1', 1);
+
+      const cancel = await dispatch(MessageType.CANCEL_REQUEST, { requestId: 'req-1' }, 7, 0);
+      expect(lastResponse(cancel)).toEqual({ success: true, cancelled: true });
+      await vi.advanceTimersByTimeAsync(1);
+
+      // 顶层那一笔落定，子 frame 的在飞请求没人替它掐
+      expect(lastResponse(top)).toMatchObject({ statusText: 'Proxy Error' });
+      expect(sub.sendResponse).not.toHaveBeenCalled();
+      expect(top.aborted).toEqual([0]);
+      expect(sub.aborted).toEqual([]);
     });
 
     it('非法 requestId 被拒且不误伤在飞请求', async () => {
