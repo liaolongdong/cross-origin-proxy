@@ -767,8 +767,9 @@ describe('GET_CONFIG_SYNC — 只读一笔送达账，不 gate、不写任何状
 /**
  * 页面自己来拉配置 = 它接下来用的就是这份最新配置，所以「没送达」的账当场作废。
  *
- * 这一步是那句警告不误报的最后一道：内容脚本注入时必拉一次配置，而老文档销毁带来的
- * 失败回执可能比它更晚被处理完（见 `dnrManager.broadcastConfigToTabs` 的逐标签页记账）。
+ * 它作废的是**先前**记下的账：上一次广播留下的失败标记，在新文档注入并取到配置的这一刻该翻篇。
+ * 比这次拉取**更晚**落下的失败回执它管不到，那一格连它的代价一起写在
+ * `dnrManager.broadcastConfigToTabs` 的注释里，别把下面两条当成它也有覆盖。
  */
 describe('GET_PROXY_CONFIG — 拉取即视为已同步，只清自己那个标签页', () => {
   async function syncMod() {
@@ -787,7 +788,7 @@ describe('GET_PROXY_CONFIG — 拉取即视为已同步，只清自己那个标�
     expect(sendResponse).toHaveBeenCalled();
   });
 
-  it('popup / options 的拉取不动任何标签页的账（它们的 sender 没有 tab）', async () => {
+  it('sender 不带 tab 时不动任何标签页的账（清账只认这一页自己的 tab）', async () => {
     const sync = await syncMod();
     sync.markConfigUnsynced(26);
 

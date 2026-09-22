@@ -11,8 +11,9 @@ import { CONFIG_SYNC_TAB_CACHE_SIZE } from '@/utils/constants';
  * 记账方向刻意是「只记已知的问题」：没有这笔账就是「已同步」。启动时、导航后、新开的标签页
  * 都会由内容脚本自己拉一次配置（`entrypoints/content.ts` 的初始同步），那本来就是同步路径，
  * 不需要额外记账——反过来记就会把「不知道」画成「有问题」。也正因为它一拉就说明「我拿到新配置了」，
- * 那次拉取会把这一页已有的账清掉（见 `messageRouter` 的 `GET_PROXY_CONFIG`）：
- * 一笔失败的广播完全可能晚于这次拉取才被结算，不清就成了假警告。
+ * 那次拉取会把这一页**已经记下**的账清掉（见 `messageRouter` 的 `GET_PROXY_CONFIG`）：上一次广播
+ * 留下的失败标记，在页面自己取到配置的这一刻就作废。它管不到**晚于**这次拉取才落下的回绝，
+ * 那一格的成因与代价写在 `dnrManager.broadcastConfigToTabs` 的注释里。
  *
  * 与 `interceptorStats.ts` 一样，全部状态都是模块级的，**SW 回收即清零**：
  * 这笔账的有效期只有「本次配置变更到该页下一次导航」之间，持久化它毫无意义

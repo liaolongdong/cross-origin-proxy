@@ -218,6 +218,8 @@ describe('广播逐标签页记账', () => {
     // 真实时序是这样的：老文档被销毁 → 它的推送回执 reject → 新文档开始加载并清账 →
     // 最后才是「最慢的那个标签页」结算。如果记账等到 allSettled 全部落定才统一做，
     // 中间那步清账就会被后面的标记盖掉，于一句凭空多出来的假警告。
+    // 钉住的是「先标记、后清账」这一支；reject 晚于清账的另一支没有兜底，
+    // 已作为待确认点写在 dnrManager.broadcastConfigToTabs 的注释里，别把这条当成它也有覆盖。
     queryImpl = async () => [httpTab(1), httpTab(7)];
     rejectTabs = new Set([1]);
     pendingTabs = new Set([7]);
