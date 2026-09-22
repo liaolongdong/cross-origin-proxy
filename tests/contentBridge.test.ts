@@ -476,7 +476,11 @@ describe('现状记录：载荷缺失的 PROXY_REQUEST 抛在 try 之外', () =>
  * 新增出口时这里红是预期：先回来判一次「这一型该不该在门禁内」，再把名字加进清单。
  */
 describe('[源码契约] 通往 SW 的出口只有这四种', () => {
-  const bridgeSrc = readFileSync('entrypoints/content.ts', 'utf-8');
+  /** 先摘掉注释行：否则一句写着 `.sendMessage(` 的注释就能把计数抬到 6，报出的还是「第 6 处出口」那句误导话 */
+  const bridgeSrc = readFileSync('entrypoints/content.ts', 'utf-8')
+    .split('\n')
+    .filter(line => !/^\s*(\/\/|\/?\*)/.test(line))
+    .join('\n');
   const callSites = [...bridgeSrc.matchAll(/\.sendMessage\(/g)].length;
 
   /** 只认 `.sendMessage(` 后面紧跟的对象字面量里那一个 `type:`，页面的 `postMessage` 不算出口 */
@@ -495,5 +499,22 @@ describe('[源码契约] 通往 SW 的出口只有这四种', () => {
 
   it('枚举结果恰是 GET_PROXY_CONFIG / INTERCEPTOR_STATS / CANCEL_REQUEST / PROXY_REQUEST', () => {
     expect(forwardedTypes).toEqual(['CANCEL_REQUEST', 'GET_PROXY_CONFIG', 'INTERCEPTOR_STATS', 'PROXY_REQUEST']);
+  });
+
+  it('没有绕过这两个正则的通道：解构出的 `sendMessage`、`runtime.connect` 长连接', () => {
+    // `const { sendMessage } = chrome.runtime` 之后的调用点不带前导点号，上面两条同时失声，
+    // 而它对页面而言就是一个新出口；端口通道更是一条正则根本覆盖不到的通路（今天为零）。
+    expect(bridgeSrc).not.toMatch(/const\s*\{[^}]*\bsendMessage\b/);
+    expect(bridgeSrc).not.toMatch(/\bruntime\.connect\s*\(/);
+  });
+
+  it('SW 侧引用这份清单的那句判据，四个名字一个都没抄漏', () => {
+    // `handleImportPlan` 的 JSDoc 把「不加 gate」的理由外包给这份清单，两处各写一份就会漂；
+    // 这一条只保证「漂不动」，不重新判据——判据本身在那边读。
+    const routerSrc = readFileSync('entrypoints/background/messageRouter.ts', 'utf-8');
+    const at = routerSrc.indexOf('async function handleImportPlan(');
+    const jsdoc = routerSrc.slice(routerSrc.lastIndexOf('/**', at), at);
+    expect(jsdoc.length).toBeGreaterThan(0);
+    for (const type of forwardedTypes) expect(jsdoc).toContain(type);
   });
 });

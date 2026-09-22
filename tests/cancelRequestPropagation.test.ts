@@ -24,8 +24,9 @@ import { readFileSync } from 'node:fs';
  * ② `catch` 里三条判据的**先后**：把「先判取消」挪到「再判阻断」之后，`tests/interceptorFetch.test.ts`
  *    25 条全绿，变的只有一种组合——被取消那一笔恰好命中阻断规则，页面拿到的就成了模拟网络错误的
  *    `TypeError` 而不是 `AbortError`（页面普遍按 `err.name === 'AbortError'` 分支）。
- *    作为对照，整句摘掉「先判取消」则是那两组运行时用例红：取消走到回退分支，页面刚放弃的请求
- *    被原样再发一遍（真实浏览器里是网络行为，桩里表现为一次成功落定）。
+ *    作为对照，整句摘掉「先判取消」则是 `tests/interceptorFetch.test.ts`「取消」那一组里的两条红
+ *    （用例本身用的都是非阻断规则，所以颠倒顺序时它们毫无反应）：取消走到回退分支，
+ *    页面刚放弃的请求被原样再发一遍（真实浏览器里是网络行为，桩里表现为一次成功落定）。
  */
 
 const interceptor = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
