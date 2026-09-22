@@ -125,6 +125,11 @@ function isBroadcastTarget(tab: chrome.tabs.Tab): boolean {
  * 「有没有人接住」，不区分是哪一个 frame。所以这一笔账说的是「这个页面有没有在跑最新配置」，
  * 不是「每个 frame 都拿到了」——后者需要 `webNavigation` 级别的定位，收益不匹配代价。
  *
+ * 记账刻意落在**每一页自己的回执**上，而不是等 `allSettled` 全部落定再统一做：一次广播里
+ * 最慢的那一页可以把时间拖到秒级，而这期间别的页完全可能已经刷新——新文档的导航清账如果
+ * 排在失败的标记之前，就会被盖成一句凭空多出来的假警告。逐页结算让失败紧贴在老文档销毁
+ * 的那一刻，新文档随后自己拉配置（`GET_PROXY_CONFIG` 也清账）必然在它之后。
+ *
  * 导出仅为可测性（同 `messageRouter` 的 `isTrustedSender`）：这条「静默丢失败」的路径
  * 是本次要修的东西，行为必须在 SW 之外钉住。
  */
@@ -137,19 +142,21 @@ export async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> 
       rules: config.rules.filter(rule => !isSimpleRule(rule)),
     };
     const targets = tabs.filter(tab => tab.id !== undefined && isBroadcastTarget(tab));
-    const results = await Promise.allSettled(
-      targets.map(tab =>
-        chrome.tabs.sendMessage(tab.id!, {
-          type: MessageType.UPDATE_PROXY_CONFIG,
-          data: interceptorConfig,
-        }),
-      ),
+    await Promise.allSettled(
+      targets.map(async tab => {
+        try {
+          await chrome.tabs.sendMessage(tab.id!, {
+            type: MessageType.UPDATE_PROXY_CONFIG,
+            data: interceptorConfig,
+          });
+          clearConfigUnsynced(tab.id!);
+        } catch {
+          // 刻意不记这条拒绝的原因：它只有「没有接收方」与「接收方没回执」两种，
+          // 对用户是同一件事，而弹窗那句话就是它的出口。
+          markConfigUnsynced(tab.id!);
+        }
+      }),
     );
-    results.forEach((result, index) => {
-      const tabId = targets[index].id!;
-      if (result.status === 'fulfilled') clearConfigUnsynced(tabId);
-      else markConfigUnsynced(tabId);
-    });
   } catch (error) {
     logger.debug('Broadcast config to tabs failed:', error);
   }

@@ -10,7 +10,9 @@ import { CONFIG_SYNC_TAB_CACHE_SIZE } from '@/utils/constants';
  *
  * 记账方向刻意是「只记已知的问题」：没有这笔账就是「已同步」。启动时、导航后、新开的标签页
  * 都会由内容脚本自己拉一次配置（`entrypoints/content.ts` 的初始同步），那本来就是同步路径，
- * 不需要额外记账——反过来记就会把「不知道」画成「有问题」。
+ * 不需要额外记账——反过来记就会把「不知道」画成「有问题」。也正因为它一拉就说明「我拿到新配置了」，
+ * 那次拉取会把这一页已有的账清掉（见 `messageRouter` 的 `GET_PROXY_CONFIG`）：
+ * 一笔失败的广播完全可能晚于这次拉取才被结算，不清就成了假警告。
  *
  * 与 `interceptorStats.ts` 一样，全部状态都是模块级的，**SW 回收即清零**：
  * 这笔账的有效期只有「本次配置变更到该页下一次导航」之间，持久化它毫无意义
@@ -48,21 +50,18 @@ export function isConfigUnsynced(tabId: number): boolean {
   return unsyncedTabs.has(tabId);
 }
 
-/** 单测用：清掉全部状态 */
-export function clearAllConfigUnsynced(): void {
-  unsyncedTabs.clear();
-}
-
 /**
  * 注册生命周期钩子：关标签页与整页导航都清账
  *
  * `onUpdated` 只认 `loading`——那是「新文档开始、它自己会去拉配置」的信号。刻意不认 `complete`：
  * 它每次加载完都会触发，把「本次会话里一直没同步」的事实抹掉，而真正需要这句提醒的场景
  * （扩展重载后用户改配置、页面却还开着旧规则）恰恰是页面早已 `complete` 的那些。
+ * 除了这里，内容脚本主动拉配置（`GET_PROXY_CONFIG`）也会清账：它下一秒用的就是这份配置。
  *
- * 已知边界：`tabs.onUpdated` 的 `loading` 跟的是主框架导航，iframe 单独换文档不复位这笔账；
- * 但这一层是标签页粒度（推送本身也是全 frame 一次、回执只证明「至少一个 frame 收到了」），
- * 所以 iframe 换文档不影响这句话的正确性。
+ * 已知边界是标签页粒度，两个方向都要如实说：任意一个 frame 回执就抹掉整页的账，所以这句话
+ * 说的是「这一页有没有在跑最新配置的 frame」，不是「每个 frame 都在跑」；而 iframe 单独换文档
+ * 不会触发主框架的 `loading`，那一页的旧账因此留着。分开两个方向需要 `webNavigation`
+ * 级别的定位，刻意不为它加权限。
  */
 export function setupConfigSyncState(): void {
   chrome.tabs.onRemoved.addListener(tabId => clearConfigUnsynced(tabId));

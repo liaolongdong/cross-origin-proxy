@@ -763,3 +763,37 @@ describe('GET_CONFIG_SYNC — 只读一笔送达账，不 gate、不写任何状
     expect(sendResponse).toHaveBeenCalledWith(null);
   });
 });
+
+/**
+ * 页面自己来拉配置 = 它接下来用的就是这份最新配置，所以「没送达」的账当场作废。
+ *
+ * 这一步是那句警告不误报的最后一道：内容脚本注入时必拉一次配置，而老文档销毁带来的
+ * 失败回执可能比它更晚被处理完（见 `dnrManager.broadcastConfigToTabs` 的逐标签页记账）。
+ */
+describe('GET_PROXY_CONFIG — 拉取即视为已同步，只清自己那个标签页', () => {
+  async function syncMod() {
+    return import('@/entrypoints/background/configSyncState');
+  }
+
+  it('内容脚本拉完配置，它的「没送达」标记消失', async () => {
+    const sync = await syncMod();
+    sync.markConfigUnsynced(25);
+
+    const sendResponse = vi.fn();
+    listener!({ type: MessageType.GET_PROXY_CONFIG }, { url: EXTERNAL_PAGE_URL, tab: { id: 25 } }, sendResponse);
+    await flush();
+
+    expect(sync.isConfigUnsynced(25)).toBe(false);
+    expect(sendResponse).toHaveBeenCalled();
+  });
+
+  it('popup / options 的拉取不动任何标签页的账（它们的 sender 没有 tab）', async () => {
+    const sync = await syncMod();
+    sync.markConfigUnsynced(26);
+
+    dispatch(MessageType.GET_PROXY_CONFIG, TRUSTED_PAGE_URL);
+    await flush();
+
+    expect(sync.isConfigUnsynced(26)).toBe(true);
+  });
+});

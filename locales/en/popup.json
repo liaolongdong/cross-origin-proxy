@@ -41,7 +41,7 @@
   "interceptorTimedOut": "Intercepted $1 request(s), $2 of them got no response after being proxied",
   "interceptorActive": "Intercepted $1 request(s), $2 handed to the extension",
   "interceptorDetail": "Reported at $1: intercepted $2 · handed over $3 · fell back $4 · timed out $5 (one request can count in more than one — don't add them up)",
-  "configNotSynced": "This page has not received the latest rules — reload it to apply them",
+  "configNotSynced": "This page has not received the latest rules — reloading it usually fixes it",
   "configNotSyncedHint": "The rules changed after this page loaded, and that push never arrived: the page may predate an install, update or reload of the extension, or the extension is disabled for this site. Reloading the page usually fixes it; if the site is blocked, re-enable the extension for it from Chrome's extension menu.",
   "requestFailed": "Failed"
 }

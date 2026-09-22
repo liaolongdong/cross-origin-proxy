@@ -9,7 +9,7 @@ import {
 } from './proxyHandler';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
 import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
-import { isConfigUnsynced } from './configSyncState';
+import { clearConfigUnsynced, isConfigUnsynced } from './configSyncState';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
 import {
   getProxyConfig,
@@ -289,8 +289,14 @@ export function setupMessageRouter(): void {
         });
         return false;
 
-      case MessageType.GET_PROXY_CONFIG:
+      case MessageType.GET_PROXY_CONFIG: {
+        // 来拉配置的页面下一秒就在用这份配置，所以它那条「广播没送达」的账当场作废。
+        // 这一笔是那句警告不误报的兜底：老文档销毁带来的失败回执可能很晚才被处理完
+        // （见 `configSyncState` 与 `broadcastConfigToTabs` 的时序说明）。
+        const requesterTabId = sender.tab?.id;
+        if (typeof requesterTabId === 'number') clearConfigUnsynced(requesterTabId);
         return respondAsync(sendResponse, getProxyConfig());
+      }
 
       case MessageType.UPDATE_PROXY_CONFIG:
         return respondAsync(

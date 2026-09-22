@@ -140,6 +140,8 @@ interface FakeTab {
 let queryImpl: () => Promise<FakeTab[]>;
 let sendMessageCalls: number[];
 let rejectTabs: Set<number>;
+let pendingTabs: Set<number>;
+let releasePending: Array<() => void>;
 let broadcastConfigToTabs: (config: ProxyConfig) => Promise<void>;
 let broadcastSync: SyncMod;
 
@@ -147,6 +149,8 @@ beforeEach(async () => {
   queryImpl = async () => [];
   sendMessageCalls = [];
   rejectTabs = new Set();
+  pendingTabs = new Set();
+  releasePending = [];
   vi.resetModules();
   // 这一节只测记账，不测生命周期，因此 `setupConfigSyncState()` 刻意不调用
   broadcastSync = await import('@/entrypoints/background/configSyncState');
@@ -156,6 +160,9 @@ beforeEach(async () => {
       sendMessage: vi.fn(async (tabId: number) => {
         sendMessageCalls.push(tabId);
         if (rejectTabs.has(tabId)) throw new Error('Could not establish connection. Receiving end does not exist.');
+        // 挂住的标签页模拟「别的页面还没回执」：allSettled 要等它，这段时间里
+        // 已失败的那一页完全可能已经刷新完并自己拉过配置。
+        if (pendingTabs.has(tabId)) await new Promise<void>(resolve => releasePending.push(resolve));
         return { received: true };
       }),
       onRemoved: { addListener: vi.fn() },
@@ -205,6 +212,23 @@ describe('广播逐标签页记账', () => {
     expect(broadcastSync.isConfigUnsynced(1)).toBe(false);
     expect(broadcastSync.isConfigUnsynced(5)).toBe(true);
     expect(broadcastSync.isConfigUnsynced(6)).toBe(false);
+  });
+
+  it('广播期间那一页刷新了：别把已经复位的新文档又记成「没送达」', async () => {
+    // 真实时序是这样的：老文档被销毁 → 它的推送回执 reject → 新文档开始加载并清账 →
+    // 最后才是「最慢的那个标签页」结算。如果记账等到 allSettled 全部落定才统一做，
+    // 中间那步清账就会被后面的标记盖掉，于一句凭空多出来的假警告。
+    queryImpl = async () => [httpTab(1), httpTab(7)];
+    rejectTabs = new Set([1]);
+    pendingTabs = new Set([7]);
+
+    const running = broadcastConfigToTabs(CONFIG);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    broadcastSync.clearConfigUnsynced(1); // 新文档：导航复位 + 自己拉到了配置
+    releasePending.forEach(release => release());
+    await running;
+
+    expect(broadcastSync.isConfigUnsynced(1)).toBe(false);
   });
 
   it('广播整体不抛：这条路径在 storage.onChanged 里没有接手的人', async () => {
@@ -258,7 +282,9 @@ describe('源码契约：回执、门禁与那一行的闸门', () => {
     expect(start).toBeGreaterThan(-1);
     const body = popupSrc.slice(start, popupSrc.indexOf('\n}', start));
     expect(body).toContain('isConfigSyncStatus(');
-    expect(body).toContain('configSyncFetched.value = true');
+    // 闸门要的是「读到过一回有效的账」，不是「收到过任意一个回包」：
+    // 判据排在闸门之前，形状不完整的回包连门都推不开。
+    expect(body.indexOf('configSyncFetched.value = true')).toBeGreaterThan(body.indexOf('isConfigSyncStatus('));
     expect(body).not.toContain('configUnsynced.value = false');
   });
 });

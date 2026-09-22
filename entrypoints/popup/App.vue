@@ -613,7 +613,7 @@ const configUnsynced = ref(false);
  * 是否真的读到过一回账。
  *
  * 这句话的前提是「一次真实读取说它没送达」，而不是「某个布尔恰好停在初始值」——
- * 把前提写成显式闸门，读不到账（SW 未起、消息失败）就永远不会出现这句警告。
+ * 把前提写成显式闸门，读不到账（SW 未起、消息失败、回包形状不完整）就永远不会出现这句警告。
  */
 const configSyncFetched = ref(false);
 
@@ -634,9 +634,10 @@ async function fetchTabConfigSync(tabId: number | undefined) {
       type: MessageType.GET_CONFIG_SYNC,
       data: { tabId },
     });
+    // 只接受带布尔 `synced` 的回执：形状不对就当没读到过，宁可不说话，也不把「不知道」说成「有问题」
+    if (!isConfigSyncStatus(status)) return;
     configSyncFetched.value = true;
-    // 只接受带布尔 `synced` 的回执：读不到时维持上一次的判断，绝不把「不知道」说成「有问题」
-    if (isConfigSyncStatus(status)) configUnsynced.value = !status.synced;
+    configUnsynced.value = !status.synced;
   } catch (error) {
     logger.debug('Fetch tab config sync state failed:', error);
   }
