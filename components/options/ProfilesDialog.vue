@@ -103,6 +103,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { MessageType } from '@/utils/types';
 import type { EnvironmentProfile, ProxyConfig } from '@/utils/types';
 import { generateId } from '@/utils/generateId';
+import { formatLocaleDateTime } from '@/utils/formatters';
 import { useI18n } from '@/composables/useI18n';
 
 /**
@@ -130,7 +131,7 @@ const newProfileName = ref('');
 const rulesCount = ref(0);
 
 function formatTime(ts: number): string {
-  return new Date(ts).toLocaleString(locale.value === 'en' ? 'en-US' : 'zh-CN');
+  return formatLocaleDateTime(ts, locale.value);
 }
 
 async function fetchProfiles() {

@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   PROFILES: 'env_profiles',
   AUTO_OFF_MINUTES: 'auto_off_minutes', // 代理自动关闭时长（分钟），0 表示不自动关闭
   VARIABLES: 'variables', // 凭据变量表（规则里以 {{名称}} 引用，真值只存这一处）
+  CONFIG_HISTORY: 'config_history', // 配置恢复点（成套替换类写入前的整包快照，见 utils/storage.ts）
 } as const;
 
 // Theme modes
@@ -133,3 +134,31 @@ export const MAX_VARIABLE_NAME_LENGTH = 64;
  * 二进制」这种把密钥表当日志用的写法。
  */
 export const MAX_VARIABLE_VALUE_LENGTH = 4096;
+
+// ─── 配置恢复点（storage 的 `config_history` 键） ─────────────────────────────
+
+/**
+ * 恢复点份数上限
+ *
+ * 只在「成套换掉规则集」的写入前记录（替换式导入、加载快照、批量删除、回退前自查），
+ * 单条编辑不进历史——否则 200 条规则改 5 次就把真正的事故现场挤出去了。
+ */
+export const MAX_CONFIG_HISTORY = 5;
+/**
+ * 恢复点整包的字符预算（从最新一份往旧累加，放不下即丢弃其后）
+ *
+ * 与日志的 {@link MAX_LOG_TOTAL_SIZE} 分开定，因为这份数据的单位体积大得多：一条带 Mock 正文的
+ * 规则就能有几 MB，5 份快照等于 5 份。本扩展未申请 `unlimitedStorage`，配额是共享的——
+ * 恢复点吃掉配额会让用户**下一次正常的规则保存**一起失败，那比丢一个旧快照严重得多。
+ * 取 1M 字符：正常 200 条规则的整包远小于它，因此五份基本都能留住。
+ */
+export const MAX_CONFIG_HISTORY_TOTAL_SIZE = 1024 * 1024;
+
+/**
+ * 导出格式的 schema 版本（与 `package.json` 的扩展版本号无关）
+ *
+ * 导出时写入 `ExportData.schemaVersion`，导入时「读并拒绝过新」：比本机认识的版本更新的文件
+ * 会被明确拒掉，而不是被半解析半丢字段地写进存储。缺省按 v1 处理（历史文件没有这个字段）。
+ * 每次让导出格式发生不兼容变化时才 +1，纯新增字段不必。
+ */
+export const SCHEMA_VERSION = 2;

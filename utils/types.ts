@@ -142,6 +142,12 @@ export enum MessageType {
   // 导入导出
   IMPORT_CONFIG = 'IMPORT_CONFIG',
   EXPORT_CONFIG = 'EXPORT_CONFIG',
+  /** 导入前预览：纯算不落库，只读且不含凭据真值，因此与其余读取消息一样**不加** sender gate */
+  GET_IMPORT_PLAN = 'GET_IMPORT_PLAN',
+
+  // 配置恢复点（成套替换类写入前的整包快照）
+  GET_CONFIG_HISTORY = 'GET_CONFIG_HISTORY',
+  RESTORE_CONFIG_HISTORY = 'RESTORE_CONFIG_HISTORY',
 
   // HAR 报文导入导出
   EXPORT_HAR = 'EXPORT_HAR',
@@ -298,10 +304,91 @@ export interface GetProxyStatusMessage {
 /** 导入模式：整体替换当前规则集，或按 name + matchPattern 去重后合并 */
 export type ImportMode = 'replace' | 'merge';
 
+/**
+ * 导入预览中「同 name + matchPattern 但内容不同」的一条
+ *
+ * 合并模式下它会被静默跳过（既有语义），也就是**文件里改的目标地址不会生效**。
+ * 把新旧两个 targetUrl 都带回去，用户才看得懂「为什么导入了却没变」。
+ */
+export interface ImportPlanConflict {
+  name: string;
+  matchPattern: string;
+  /** 现网那条的目标地址，导入后仍然是它 */
+  currentTargetUrl: string;
+  /** 文件里这条的目标地址，合并模式下不会生效 */
+  incomingTargetUrl: string;
+}
+
+/** `planImport` 的结果，同时是 `GET_IMPORT_PLAN` 的响应体 */
+export interface ImportPlan {
+  mode: ImportMode;
+  /** 预计新增条数（合并模式已去过重） */
+  added: number;
+  /** 因与现网规则同键而被跳过的条数 */
+  skipped: number;
+  conflicts: ImportPlanConflict[];
+  /** 文件内部自重复、将被一并写入的条数（去重只比对现网，不比对文件内） */
+  duplicatesWithinFile: number;
+  /** 替换模式下会被整包换掉的现有规则数；合并模式恒为 0 */
+  replaces: number;
+  exceedsLimit: boolean;
+}
+
+/**
+ * 一次导入**实际**写入了多少条
+ *
+ * 与 `ImportPlan` 的「预计」相对：这份是存储层在锁内算完的那份，界面按它说实话。
+ * `invalid` 是结构非法、在规范化阶段就被丢掉的条数——它不属于 skipped，两件事必须分开报。
+ */
+export interface ImportResultStats {
+  added: number;
+  skipped: number;
+  invalid: number;
+}
+
+/**
+ * 恢复点的成因：只有「成套换掉规则集」的写入会记录，单条编辑不进历史
+ *
+ * `unknown` 只出现在读取阶段——存储里的这条不是本版本写的（手改过的数据、或更新版本写下的新成因），
+ * 宁可标成「未知来源」也不丢快照，也不把它硬塞进某个已知成因里说谎。
+ */
+export type ConfigHistoryReason = 'replace-import' | 'load-profile' | 'batch-delete' | 'before-restore' | 'unknown';
+
+/**
+ * 一份配置恢复点
+ *
+ * `config` 是写入前的整包快照（含规则原样的 `headerOverrides`，因此这份数据的读取权限与
+ * 凭据变量表同档）。只在后台侧流动，从不下发到页面世界。
+ */
+export interface ConfigHistoryEntry {
+  id: string;
+  savedAt: number;
+  reason: ConfigHistoryReason;
+  ruleCount: number;
+  config: ProxyConfig;
+}
+
 /** 导入配置 */
 export interface ImportConfigMessage {
   type: MessageType.IMPORT_CONFIG;
   data: ExportData & { mode?: ImportMode };
+}
+
+/** 导入前预览（响应为 `ImportPlan`） */
+export interface GetImportPlanMessage {
+  type: MessageType.GET_IMPORT_PLAN;
+  data: ExportData & { mode?: ImportMode };
+}
+
+/** 读取恢复点列表（响应为 `ConfigHistoryEntry[]`，与凭据表共用 sender 校验） */
+export interface GetConfigHistoryMessage {
+  type: MessageType.GET_CONFIG_HISTORY;
+}
+
+/** 回退到某个恢复点 */
+export interface RestoreConfigHistoryMessage {
+  type: MessageType.RESTORE_CONFIG_HISTORY;
+  data: { id: string };
 }
 
 /** 导出配置 */
@@ -410,6 +497,9 @@ export type RuntimeMessage =
   | ClearRequestLogMessage
   | GetProxyStatusMessage
   | ImportConfigMessage
+  | GetImportPlanMessage
+  | GetConfigHistoryMessage
+  | RestoreConfigHistoryMessage
   | ExportConfigMessage
   | ExportHarMessage
   | ImportHarMessage
@@ -494,6 +584,13 @@ export interface ProxyStatus {
  */
 export interface ExportData {
   version: string;
+  /**
+   * 导出格式的 schema 版本，与 `version`（扩展版本号）是两件事
+   *
+   * 导入侧「读并拒绝过新」：比本机认识的版本更新的文件会被拒，而不是半解析半丢字段。
+   * 缺省即历史文件——按 v1 处理，走既有的宽松兜底，不做破坏性迁移。
+   */
+  schemaVersion?: number;
   exportTime: number;
   config: ProxyConfig;
 }

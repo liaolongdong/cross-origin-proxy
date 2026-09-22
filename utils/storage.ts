@@ -1,4 +1,13 @@
-import type { ProxyConfig, ProxyRule, RequestLogEntry, EnvironmentProfile, VariableStore } from '@/utils/types';
+import type {
+  ProxyConfig,
+  ProxyRule,
+  RequestLogEntry,
+  EnvironmentProfile,
+  ImportMode,
+  VariableStore,
+  ConfigHistoryEntry,
+  ConfigHistoryReason,
+} from '@/utils/types';
 import {
   STORAGE_KEYS,
   DEFAULT_PROXY_CONFIG,
@@ -8,11 +17,15 @@ import {
   MAX_LOG_HEADER_COUNT,
   MAX_LOG_TOTAL_SIZE,
   MAX_RULES,
+  MAX_CONFIG_HISTORY,
+  MAX_CONFIG_HISTORY_TOTAL_SIZE,
 } from '@/utils/constants';
 import { truncateForLog } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
+import { isValidRuleShape } from '@/utils/ruleValidation';
 import { sanitizeVariables } from '@/utils/variables';
+import { generateId } from '@/utils/generateId';
 
 // ─── Storage Mutex Lock ─────────────────────────────────────────────────────
 
@@ -167,12 +180,20 @@ export async function deleteRule(ruleId: string): Promise<void> {
 }
 
 /**
- * 批量删除规则
+ * 批量删除规则（一次写入）
+ *
+ * 这一步是成套换掉规则集，所以先记一份恢复点；一个都没删掉时不记，
+ * 否则「选中 3 条、它们早已被删」这种空操作会挤掉真正的事故现场。
  */
 export async function batchDeleteRules(ruleIds: string[]): Promise<ProxyConfig> {
   return withStorageLock(async () => {
     const config = await getProxyConfig();
-    config.rules = config.rules.filter(r => !ruleIds.includes(r.id));
+    const idSet = new Set(ruleIds);
+    const remaining = config.rules.filter(r => !idSet.has(r.id));
+    if (remaining.length !== config.rules.length) {
+      await pushConfigHistory('batch-delete', config);
+    }
+    config.rules = remaining;
     await saveProxyConfig(config);
     return config;
   });
@@ -282,6 +303,8 @@ export async function importProxyConfig(
     if (incoming.length > MAX_RULES) {
       return { success: false, error: 'MAX_RULES_EXCEEDED' };
     }
+    // 成套替换前先把现状记进恢复点：这一步在写之前，回退要的正是「被换掉的那一份」
+    await pushConfigHistory('replace-import', config);
     await saveProxyConfig({ enabled: options.enabled ?? false, rules: incoming });
     return { success: true, added: incoming.length, skipped: 0 };
   });
@@ -541,6 +564,8 @@ export async function saveProfile(profile: EnvironmentProfile): Promise<void> {
 
 /**
  * 加载环境配置：将指定 profile 的规则集替换当前配置
+ *
+ * 与替换式导入同属成套替换，写之前记一份恢复点。「加载快照必然打开总开关」是既有语义，本轮不动。
  */
 export async function loadProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
   return withStorageLock(async () => {
@@ -549,6 +574,7 @@ export async function loadProfile(profileId: string): Promise<{ success: boolean
     if (!profile) {
       return { success: false, error: 'Profile not found' };
     }
+    await pushConfigHistory('load-profile', await getProxyConfig());
     await saveProxyConfig({ enabled: true, rules: profile.rules });
     return { success: true };
   });
@@ -565,6 +591,7 @@ export async function deleteProfile(profileId: string): Promise<void> {
     });
   });
 }
+
 // ─── Credential Variables ────────────────────────────────────────────────────
 
 /**
@@ -605,5 +632,146 @@ export async function saveVariables(variables: unknown): Promise<{ dropped: numb
     }
     cachedVariables = sanitized.store;
     return { dropped: sanitized.dropped };
+  });
+}
+
+// ─── Config Restore Points（配置恢复点） ──────────────────────────────────────
+
+/** 读侧认识的成因；不在表里的按 `unknown` 展示，不硬塞成某个已知成因 */
+const HISTORY_REASONS: readonly ConfigHistoryReason[] = [
+  'replace-import',
+  'load-profile',
+  'batch-delete',
+  'before-restore',
+  'unknown',
+];
+
+function historyEntrySize(entry: ConfigHistoryEntry): number {
+  return JSON.stringify(entry).length;
+}
+
+/**
+ * 收口恢复点列表：先按份数、再按字符预算，两个方向都是「从最新一份往旧留」
+ *
+ * 与 {@link trimLogsToBudget} 同方向（数组头 = 最新）。这里刻意**不**保证「至少留一份」：
+ * 单份就超预算，说明这份配置大到存它反而会挤掉用户下一次正常的规则保存，
+ * 那种情况下宁可不给恢复点。
+ */
+export function capConfigHistory(
+  entries: ConfigHistoryEntry[],
+  maxEntries: number = MAX_CONFIG_HISTORY,
+  budget: number = MAX_CONFIG_HISTORY_TOTAL_SIZE,
+): ConfigHistoryEntry[] {
+  let total = 0;
+  const kept: ConfigHistoryEntry[] = [];
+  for (const entry of entries.slice(0, maxEntries)) {
+    total += historyEntrySize(entry);
+    if (total > budget) break;
+    kept.push(entry);
+  }
+  return kept;
+}
+
+/**
+ * 读出侧的收口：`config_history` 是可以被手改的 storage 数据，而回退会把它重新变成生效配置
+ *
+ * 整份不是数组就当作没有恢复点（宁可空列表也不半解析）；单条缺 id 的直接丢弃，
+ * 否则界面上没有可回退的句柄。规则逐条过与导入侧同一份结构判据，
+ * `ruleCount` 因此就是「点回退能拿回几条」的真实数字。
+ */
+export function sanitizeConfigHistory(raw: unknown): ConfigHistoryEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const entries: ConfigHistoryEntry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const e = item as Record<string, unknown>;
+    if (typeof e.id !== 'string' || !e.id) continue;
+    const rawConfig = e.config as Record<string, unknown> | undefined;
+    if (!rawConfig || typeof rawConfig !== 'object' || !Array.isArray(rawConfig.rules)) continue;
+    const rules = rawConfig.rules.filter(isValidRuleShape).map(r => ({ ...r }));
+    entries.push({
+      id: e.id,
+      savedAt: typeof e.savedAt === 'number' && Number.isFinite(e.savedAt) ? e.savedAt : 0,
+      reason: HISTORY_REASONS.includes(e.reason as ConfigHistoryReason) ? (e.reason as ConfigHistoryReason) : 'unknown',
+      ruleCount: rules.length,
+      config: { enabled: rawConfig.enabled === true, rules },
+    });
+  }
+  return entries;
+}
+
+async function readConfigHistory(): Promise<ConfigHistoryEntry[]> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.CONFIG_HISTORY);
+  // 写侧已按预算收口，这里只兜住"手改进 storage"这一种来路：列表不无界增长，界面不无界渲染
+  return sanitizeConfigHistory(result[STORAGE_KEYS.CONFIG_HISTORY]).slice(0, MAX_CONFIG_HISTORY);
+}
+
+/** 恢复点列表（最新在前），只经消息层给扩展自己的页面读 */
+export function getConfigHistory(): Promise<ConfigHistoryEntry[]> {
+  return readConfigHistory();
+}
+
+/**
+ * 记下写入前的整包快照
+ *
+ * **只能在已持锁的调用里用**（替换式导入、加载快照、批量删除、回退前自查）：快照必须与它所对应的
+ * 那次写入取自同一份锁内配置，锁外再读一次就可能记成「别的时刻的配置」；`withStorageLock` 也不可
+ * 重入。刻意不缓存这份数据：读它的是设置页一次列表渲染，写在成套操作那一刻，缓存只会带来陈旧。
+ *
+ * 恢复点是安全网而不是主流程，所以下面三种情形都只 warn 后**跳过这一份**，绝不把用户请求的那次
+ * 替换带失败：读旧账抛错、新快照单份就越过预算（此时旧账原样留着）、写配额失败。吞掉异常不等于
+ * 静默——配额真满时紧随其后的配置写入会带着自己的错误浮出水面，那才是用户需要知道的那一句。
+ */
+async function pushConfigHistory(reason: ConfigHistoryReason, snapshot: ProxyConfig): Promise<void> {
+  let history: ConfigHistoryEntry[];
+  try {
+    history = await readConfigHistory();
+  } catch (error) {
+    // 连旧账都读不出来，就更不能往上写：跳过这一份，主写入照常
+    logger.warn('Failed to read restore points, skipping this one:', error);
+    return;
+  }
+  const entry: ConfigHistoryEntry = {
+    id: generateId(),
+    savedAt: Date.now(),
+    reason,
+    ruleCount: snapshot.rules.length,
+    config: { enabled: snapshot.enabled, rules: snapshot.rules },
+  };
+  const next = capConfigHistory([entry, ...history]);
+  if (!next.length && history.length) {
+    // 单份新快照自己就越过预算：那就不记这一份，但**绝不能把已在预算内的旧恢复点一起抹掉**——
+    // 用户刚做的正是整套替换，此刻那几份旧账是他唯一的退路
+    logger.warn('Restore point skipped: this snapshot alone exceeds the config history budget');
+    return;
+  }
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.CONFIG_HISTORY]: next });
+  } catch (error) {
+    logger.warn('Failed to record a config restore point:', error);
+  }
+}
+
+/**
+ * 回退到一个恢复点
+ *
+ * 先把当前配置也记一份再写：回退自己不能是那个不可逆的动作（回退错了还能再回退回来）。
+ * 只回退规则集，**总开关维持现状**——点「回退」要的是找回规则，而不是让代理被顺手打开或关掉；
+ * 快照里那份 `enabled` 因此只是记录，不参与回退结果。
+ */
+export async function restoreConfigHistory(
+  id: string,
+): Promise<{ success: boolean; error?: string; restored?: number }> {
+  return withStorageLock(async () => {
+    const entry = (await readConfigHistory()).find(h => h.id === id);
+    if (!entry) return { success: false, error: 'HISTORY_ENTRY_NOT_FOUND' };
+    if (entry.ruleCount > MAX_RULES) {
+      // 手改过的存储能塞进超限快照；照写会让 DNR 整批被拒，等于回退完代理直接不工作
+      return { success: false, error: 'MAX_RULES_EXCEEDED' };
+    }
+    const current = await getProxyConfig();
+    await pushConfigHistory('before-restore', current);
+    await saveProxyConfig({ enabled: current.enabled, rules: entry.config.rules });
+    return { success: true, restored: entry.ruleCount };
   });
 }

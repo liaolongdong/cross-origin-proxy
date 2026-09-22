@@ -97,8 +97,10 @@
       v-model:visible="showSettings"
       :current-theme="currentTheme"
       :theme-mode="themeMode"
+      :rules="rules"
       @change-theme="switchTheme"
       @change-theme-mode="switchThemeMode"
+      @restored="handleConfigRestored"
     />
     <LogDrawer
       v-model:visible="showLogs"
@@ -123,7 +125,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, h, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import type { ProxyRule } from '@/utils/types';
+import type { ImportResultStats, ProxyRule } from '@/utils/types';
 import { MessageType } from '@/utils/types';
 import { MAX_RULES } from '@/utils/constants';
 import { useRuleManagement } from '@/composables/useRuleManagement';
@@ -705,11 +707,17 @@ async function handleExport(sanitize: boolean) {
 }
 
 /** 导入成功由弹窗确认后才发出通知：这里只需刷新列表并收窗（失败时输入保留、弹窗不关） */
-async function handleImported() {
+async function handleImported(stats: ImportResultStats) {
   // 导入由后台整体替换/合并规则，重新拉取配置保持 UI 与存储一致
   await fetchConfig();
   clearRuleSelection();
-  ElMessage.success(t('importSuccess'));
+  // 有跳过或丢弃时必须把数字说出来：「导入成功」会让用户以为文件里的规则全都生效了，
+  // 而合并模式下同键规则压根没被写入（见 utils/importPlan.ts 的键定义）
+  ElMessage.success(
+    stats.skipped > 0 || stats.invalid > 0
+      ? t('importSuccessDetail', [stats.added, stats.skipped, stats.invalid])
+      : t('importSuccess'),
+  );
   showImportExport.value = false;
 }
 
@@ -750,6 +758,12 @@ function handleImportCurl(parsed: import('@/utils/curlParser').ParsedCurl) {
 
 /** 环境配置加载成功后：后台已整体替换规则集，刷新本地列表保持一致 */
 async function handleProfilesLoaded() {
+  await fetchConfig();
+  clearRuleSelection();
+}
+
+/** 回退恢复点等价于整包换掉规则集：列表与选中态都要跟着重置（设置弹窗保持打开，可继续回退别的份） */
+async function handleConfigRestored() {
   await fetchConfig();
   clearRuleSelection();
 }

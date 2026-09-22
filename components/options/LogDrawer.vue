@@ -533,6 +533,7 @@ import { computeLogStats } from '@/utils/ruleStats';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
+import { formatLocaleDateTime } from '@/utils/formatters';
 
 /**
  * 请求日志抽屉（由原 RequestLogPanel 标签页改造）
@@ -630,9 +631,9 @@ const copyUrl = async (url: string) => {
   }
 };
 
-/** 时间格式随界面语言切换（修复原实现硬编码 zh-CN） */
+/** 时间格式随界面语言切换（判据收在 `utils/formatters`，与快照列表、恢复点同一路） */
 function formatTime(ts: number): string {
-  return new Date(ts).toLocaleString(locale.value === 'en' ? 'en-US' : 'zh-CN');
+  return formatLocaleDateTime(ts, locale.value);
 }
 
 function truncateUrl(url: string, maxLen = 50): string {

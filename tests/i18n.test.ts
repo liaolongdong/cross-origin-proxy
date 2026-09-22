@@ -37,4 +37,16 @@ describe('i18n t()', () => {
     expect(zh).toBe('添加规则');
     expect(en).toBe('Add Rule');
   });
+
+  it('插入值里的 $ 序列按字面量呈现，不被特殊模式或后续占位符吃掉', () => {
+    currentLocale.value = 'zh_CN';
+    expect(t('importPreviewConflictItem', ['a$&b', 'https://$1.old', 'x$2y'])).toBe(
+      '「a$&b」已存在：保留 https://$1.old，文件里的 x$2y 不会生效',
+    );
+  });
+
+  it('传参少于占位符时，未提供的占位符原样保留', () => {
+    currentLocale.value = 'zh_CN';
+    expect(t('importPreviewConflictItem', '只有名字')).toBe('「只有名字」已存在：保留 $2，文件里的 $3 不会生效');
+  });
 });

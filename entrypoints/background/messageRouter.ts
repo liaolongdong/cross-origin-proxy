@@ -1,8 +1,8 @@
 import { MessageType } from '@/utils/types';
-import type { RuntimeMessage, ExportData, ImportMode, ProxyRule } from '@/utils/types';
+import type { RuntimeMessage, ExportData, ImportMode, ProxyRule, ImportPlan } from '@/utils/types';
 import { handleProxyRequest, getProxyStatus, getSwHitStats } from './proxyHandler';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
-import { IMPORTED_RULE_PRIORITY } from '@/utils/constants';
+import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
 import {
   getProxyConfig,
   saveProxyConfig,
@@ -25,26 +25,16 @@ import {
   deleteProfile,
   getVariables,
   saveVariables,
+  getConfigHistory,
+  restoreConfigHistory,
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules } from '@/utils/har';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
+import { isValidRuleShape } from '@/utils/ruleValidation';
+import { planImport } from '@/utils/importPlan';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
-/**
- * 校验导入规则的必要字段，过滤掉结构非法的条目，避免脏数据写入后导致 DNR 同步/拦截器异常
- */
-function isValidRule(rule: unknown): rule is ProxyRule {
-  if (!rule || typeof rule !== 'object') return false;
-  const r = rule as Record<string, unknown>;
-  return (
-    typeof r.id === 'string' &&
-    typeof r.name === 'string' &&
-    typeof r.matchPattern === 'string' &&
-    typeof r.targetUrl === 'string' &&
-    ['wildcard', 'prefix', 'regex'].includes(r.matchType as string)
-  );
-}
 
 /**
  * 导入文件是不可信输入：`typeof x === 'number'` 会放行 `NaN` 与 `Infinity`。
@@ -70,9 +60,11 @@ function integerPriority(value: unknown): number {
  *
  * 请求头必须在导入侧清洗：带非法头名的规则落库后，运行时 `validateRuleHeaders`
  * 会整条拒绝（页面拿到 status 0），而导入文件不会回到表单让用户修正，等于静默坏规则。
+ *
+ * 结构判据与配置恢复点的读取侧共用 `utils/ruleValidation`：两处都是「把未知数据变成生效配置」的入口。
  */
 export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
-  return rawRules.filter(isValidRule).map(rule => {
+  return rawRules.filter(isValidRuleShape).map(rule => {
     const normalized: ProxyRule = {
       ...rule,
       id: generateId(),
@@ -89,24 +81,54 @@ export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
 }
 
 /**
+ * 文件比本机认识的导出格式更新：拒掉，而不是半解析半丢字段地写进存储
+ *
+ * 缺省（历史文件没有 `schemaVersion`）按 v1 处理，走既有的宽松兜底。
+ */
+function isSchemaTooNew(data: ExportData | undefined): boolean {
+  const raw = data?.schemaVersion;
+  return typeof raw === 'number' && Number.isFinite(raw) && raw > SCHEMA_VERSION;
+}
+
+/** 导入载荷的共同校验：结构可用 + 格式版本不超本机认知 */
+function readImportPayload(data: (ExportData & { mode?: ImportMode }) | undefined):
+  | {
+      rules: unknown[];
+      mode: ImportMode;
+      error?: undefined;
+    }
+  | { error: string } {
+  if (!data?.config || !Array.isArray(data.config.rules)) return { error: 'INVALID_CONFIG' };
+  if (isSchemaTooNew(data)) return { error: 'SCHEMA_TOO_NEW' };
+  return { rules: data.config.rules, mode: data.mode === 'merge' ? 'merge' : 'replace' };
+}
+
+/**
  * 处理导入配置
  *
  * 回传给 UI 的 `error` 是稳定错误码而非英文句子：界面按码映射本地化文案，
  * 直接透传英文会让中文界面夹一句机器话。
  * 写入统一交给 `importProxyConfig`（存储锁内完成读-去重-上限校验-落盘）。
+ *
+ * 成功时也把**实际**写入结果带回界面：`added` / `skipped` 是存储层在锁内算完的那份，
+ * `invalid` 是被结构校验丢弃的条数。此前这三个数只进控制台，用户看到的永远是一句「导入成功」，
+ * 于是「改了目标地址的合并导入其实没改任何东西」这类事完全没有被告知（见 `GET_IMPORT_PLAN` 的预览）。
  */
 async function handleImportConfig(
   data: ExportData & { mode?: ImportMode },
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; added?: number; skipped?: number; invalid?: number }> {
+  const payload = readImportPayload(data);
+  if ('error' in payload) {
+    logger.warn(`Config import rejected (${payload.error})`);
+    return { success: false, error: payload.error };
+  }
   try {
-    if (!data?.config || !Array.isArray(data.config.rules)) {
-      return { success: false, error: 'INVALID_CONFIG' };
-    }
-    const validRules = normalizeImportedRules(data.config.rules);
-    const isMerge = data.mode === 'merge';
+    const validRules = normalizeImportedRules(payload.rules);
+    const invalid = payload.rules.length - validRules.length;
+    const isMerge = payload.mode === 'merge';
     // 开关键语义与既有一致：文件显式开启才置真；合并模式下缺省沿用当前开关，替换模式下缺省关闭
     const enabled = data.config.enabled === true ? true : isMerge ? undefined : false;
-    const result = await importProxyConfig(validRules, { mode: isMerge ? 'merge' : 'replace', enabled });
+    const result = await importProxyConfig(validRules, { mode: payload.mode, enabled });
 
     if (!result.success) {
       logger.warn(`Config import rejected (${result.error})`);
@@ -114,12 +136,37 @@ async function handleImportConfig(
     }
     logger.info(
       isMerge
-        ? `Config merged: ${result.added} new, ${result.skipped} duplicates skipped`
-        : `Config imported: ${validRules.length}/${data.config.rules.length} rules valid`,
+        ? `Config merged: ${result.added} new, ${result.skipped} duplicates skipped, ${invalid} invalid dropped`
+        : `Config imported: ${validRules.length}/${payload.rules.length} rules valid`,
     );
-    return { success: true };
+    return { success: true, added: result.added, skipped: result.skipped, invalid };
   } catch (error) {
     logger.error('Failed to import config:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * 导入前预览：把「这次会发生什么」算给界面，纯函数、不落库、不写任何存储
+ *
+ * 与写入侧共用 `normalizeImportedRules` + `deduplicateRules`（经 `planImport`），所以数字不会和
+ * 实际结果对不上；但真实合并仍在存储锁内重算，界面措辞必须是「预计」。
+ * 刻意不加 `isTrustedSender`：它是只读、不含凭据真值的纯计算，且与其余读取消息同档。
+ */
+async function handleImportPlan(
+  data: ExportData & { mode?: ImportMode },
+): Promise<{ success: boolean; error?: string; plan?: ImportPlan }> {
+  const payload = readImportPayload(data);
+  if ('error' in payload) return { success: false, error: payload.error };
+  try {
+    const config = await getProxyConfig();
+    const validRules = normalizeImportedRules(payload.rules);
+    return {
+      success: true,
+      plan: planImport(config.rules, validRules, payload.mode),
+    };
+  } catch (error) {
+    logger.error('Failed to build import plan:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
@@ -157,6 +204,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.CLEAR_REQUEST_LOG,
   MessageType.IMPORT_CONFIG,
   MessageType.IMPORT_HAR,
+  MessageType.RESTORE_CONFIG_HISTORY,
   MessageType.SAVE_PROFILE,
   MessageType.LOAD_PROFILE,
   MessageType.DELETE_PROFILE,
@@ -171,11 +219,12 @@ const STATE_MUTATING_TYPES = new Set([
  * 漏掉这道 gate，任意页面的 `chrome.runtime.sendMessage({type:'GET_VARIABLES'})` 就能读到
  * 用户所有环境的密钥，本批次其余设计（真值不下发页面）当场作废。
  *
+ * `GET_CONFIG_HISTORY` 同档：恢复点是写入前的整包快照，里面的 `headerOverrides` 是**原样落盘的
  * 真实请求头**（凭据变量库之前录入的规则尤其如此），一份历史等于把配好几种环境的会话全交出去。
  *
  * 新增读取类消息时不要照这里加：判据是「页面从不读取 + 回的是凭据类数据」，两者缺一就别加。
  */
-const CREDENTIAL_READING_TYPES = new Set([MessageType.GET_VARIABLES]);
+const CREDENTIAL_READING_TYPES = new Set([MessageType.GET_VARIABLES, MessageType.GET_CONFIG_HISTORY]);
 
 /**
  * 统一处理异步消息响应：resolve 时回传结果，reject 时回传 { success: false, error }
@@ -368,6 +417,8 @@ export function setupMessageRouter(): void {
           sendResponse,
           getProxyConfig().then(config => ({
             version: chrome.runtime.getManifest().version,
+            // 导出格式的 schema 版本：导入侧「读并拒绝过新」（见 SCHEMA_VERSION）
+            schemaVersion: SCHEMA_VERSION,
             exportTime: Date.now(),
             config,
           })),
@@ -375,6 +426,21 @@ export function setupMessageRouter(): void {
 
       case MessageType.IMPORT_CONFIG:
         return respondAsync(sendResponse, handleImportConfig(message.data));
+
+      case MessageType.GET_IMPORT_PLAN:
+        // 只读、纯计算、不落库，因此与其余读取消息一样刻意不加 sender gate
+        return respondAsync(sendResponse, handleImportPlan(message.data));
+
+      case MessageType.GET_CONFIG_HISTORY:
+        // 走到这里说明已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是整包历史快照
+        return respondAsync(sendResponse, getConfigHistory());
+
+      case MessageType.RESTORE_CONFIG_HISTORY:
+        if (!message.data || typeof message.data.id !== 'string') {
+          sendResponse({ success: false, error: 'Invalid history id' });
+          return false;
+        }
+        return respondAsync(sendResponse, restoreConfigHistory(message.data.id));
 
       case MessageType.EXPORT_HAR: {
         // 「分享模式」同样管住 HAR：日志里的 Cookie / Authorization 是用户当时那个会话的凭据，

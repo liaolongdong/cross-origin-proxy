@@ -70,15 +70,39 @@
           </el-radio-group>
         </div>
 
-        <el-button
-          type="success"
-          :loading="importing"
-          :disabled="!canImport"
-          style="margin-top: 16px"
-          @click="handleImport"
+        <!-- 导入前预览：条数变化由后台用「写入那同一套判据」算出来，预览不做二次实现 -->
+        <ul
+          v-if="previewLines.length > 0"
+          class="import-preview"
         >
-          {{ t('importButton') }}
-        </el-button>
+          <li
+            v-for="(line, index) in previewLines"
+            :key="index"
+            :class="`preview-${line.tone}`"
+          >
+            {{ line.text }}
+          </li>
+        </ul>
+
+        <div class="preview-actions">
+          <el-button
+            type="primary"
+            link
+            :loading="previewing"
+            :disabled="!canImport"
+            @click="handlePreview"
+          >
+            {{ t('importPreviewButton') }}
+          </el-button>
+          <el-button
+            type="success"
+            :loading="importing"
+            :disabled="!canImport"
+            @click="handleImport"
+          >
+            {{ t('importButton') }}
+          </el-button>
+        </div>
       </div>
 
       <el-divider />
@@ -161,11 +185,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Download, Upload } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadFile } from 'element-plus';
-import type { HarImportPayload, ImportMode, ProxyRule } from '@/utils/types';
+import type { HarImportPayload, ImportMode, ImportPlan, ImportResultStats, ProxyRule } from '@/utils/types';
 import { MessageType } from '@/utils/types';
 import { MAX_RULES } from '@/utils/constants';
 import { parseCurlCommand } from '@/utils/curlParser';
@@ -179,8 +203,13 @@ defineProps<{
 
 const emit = defineEmits<{
   'update:visible': [value: boolean];
-  /** 导入成功后通知父组件刷新列表并关闭弹窗（失败时不发，输入原样保留） */
-  imported: [];
+  /**
+   * 导入成功后通知父组件刷新列表并关闭弹窗（失败时不发，输入原样保留）
+   *
+   * 带回后台**实际**写入的条数：只报一句「导入成功」会把「合并没改任何东西」这种结果
+   * 说成成功，而它恰恰是用户最需要知道的那件事。
+   */
+  imported: [stats: ImportResultStats];
   /** 请求导出：`sanitize` 为弹窗里的「分享模式」勾选值，由父组件执行下载与提示 */
   export: [sanitize: boolean];
   importHarRules: [rules: ProxyRule[]];
@@ -191,7 +220,7 @@ const { t } = useI18n();
 
 // 导入由弹窗自己发起并等待结果：只有拿到成败才知道要不要清空输入、要不要关窗。
 // 以前是「emit 给父组件 → 立刻清空并关窗」，父组件的异步失败到达时输入早已没了。
-const { importing, importConfig } = useImportExport();
+const { importing, importConfig, fetchImportPlan } = useImportExport();
 
 const uploadRef = ref();
 const harUploadRef = ref();
@@ -208,6 +237,86 @@ const sanitizeExport = ref(true);
 const canImport = computed(() => {
   return fileContent.value || jsonInput.value.trim();
 });
+
+// ─── 导入前预览 ──────────────────────────────────────────────────────────────
+
+const previewing = ref(false);
+const plan = ref<ImportPlan | null>(null);
+/** 预览失败与「没有预览」必须分开说：前者要提示这次没法预告，后者只是还没点 */
+const planUnavailable = ref(false);
+
+/** 冲突明细最多摊开几行：一份大文件能有上百条同键规则，全列出来等于把弹窗变成日志 */
+const CONFLICT_ROWS_SHOWN = 5;
+
+/** 预览结果摊平成行：模板里只留一次 v-for，语气（正常/提醒/危险）由判据侧决定 */
+const previewLines = computed<Array<{ text: string; tone: 'info' | 'warn' | 'error' }>>(() => {
+  if (planUnavailable.value) return [{ text: t('importPreviewFailed'), tone: 'warn' }];
+  const current = plan.value;
+  if (!current) return [];
+
+  const lines: Array<{ text: string; tone: 'info' | 'warn' | 'error' }> = [
+    { text: t('importPreviewAdded', [current.added, MAX_RULES]), tone: 'info' },
+  ];
+  if (current.skipped > 0) lines.push({ text: t('importPreviewSkipped', current.skipped), tone: 'warn' });
+  if (current.replaces > 0) lines.push({ text: t('importPreviewReplaces', current.replaces), tone: 'warn' });
+  // 文件内自重复会被一并写入（去重只比对现网），这是既有语义，但用户几乎一定会以为被去重了
+  if (current.duplicatesWithinFile > 0) {
+    lines.push({ text: t('importPreviewDuplicates', current.duplicatesWithinFile), tone: 'warn' });
+  }
+  let shownConflicts = 0;
+  let hiddenConflicts = 0;
+  for (const conflict of current.conflicts) {
+    if (conflict.currentTargetUrl === conflict.incomingTargetUrl) continue;
+    if (shownConflicts >= CONFLICT_ROWS_SHOWN) {
+      hiddenConflicts++;
+      continue;
+    }
+    shownConflicts++;
+    lines.push({
+      text: t('importPreviewConflictItem', [conflict.name, conflict.currentTargetUrl, conflict.incomingTargetUrl]),
+      tone: 'warn',
+    });
+  }
+  if (hiddenConflicts > 0) lines.push({ text: t('importPreviewConflictMore', hiddenConflicts), tone: 'info' });
+  if (shownConflicts > 0) lines.push({ text: t('importPreviewConflictHint'), tone: 'info' });
+  if (current.exceedsLimit) lines.push({ text: t('importPreviewExceedsLimit', MAX_RULES), tone: 'error' });
+  return lines;
+});
+
+/** 输入或模式一变，旧预览就作废：留着会比没有更容易误导（用户会按上一个模式的数字点确认） */
+let previewSeq = 0;
+watch([jsonInput, fileContent, importMode], () => {
+  previewSeq++;
+  plan.value = null;
+  planUnavailable.value = false;
+});
+
+async function handlePreview() {
+  const jsonString = fileContent.value || jsonInput.value.trim();
+  if (!jsonString) {
+    ElMessage.warning(t('selectFileOrPaste'));
+    return;
+  }
+  // 这一次预览的编号：await 期间用户改了输入或切了模式，回包再填回界面就是拿旧算式配新数据
+  const seq = ++previewSeq;
+  previewing.value = true;
+  try {
+    const result = await fetchImportPlan(jsonString, importMode.value);
+    if (seq !== previewSeq) return;
+    if (!result.success || !result.plan) {
+      plan.value = null;
+      planUnavailable.value = true;
+      // 格式/版本问题点不出来，必须点名，否则用户以为「预览显示无变化」
+      if (result.error === 'INVALID_CONFIG') ElMessage.error(t('importFailed'));
+      else if (result.error === 'SCHEMA_TOO_NEW') ElMessage.error(t('importSchemaTooNew'));
+      return;
+    }
+    plan.value = result.plan;
+    planUnavailable.value = false;
+  } finally {
+    if (seq === previewSeq) previewing.value = false;
+  }
+}
 
 // 成功/失败反馈由父组件在异步导出完成后发出：emit 是同步调用，
 // 此处的 try/catch 拿不到父组件异步导出的结果，toast 会在导出实际完成前弹出
@@ -249,6 +358,8 @@ async function handleImport() {
         ElMessage.error(t('maxRulesReached', [MAX_RULES]));
       } else if (result.error === 'INVALID_CONFIG') {
         ElMessage.error(t('importFailed'));
+      } else if (result.error === 'SCHEMA_TOO_NEW') {
+        ElMessage.error(t('importSchemaTooNew'));
       } else {
         ElMessage.error(t('importConfigFailed'));
       }
@@ -258,7 +369,8 @@ async function handleImport() {
     jsonInput.value = '';
     fileContent.value = null;
     uploadRef.value?.clearFiles();
-    emit('imported');
+    // 计数由执行写入的一侧带回，成功提示才有资格说「新增几条、跳过几条」
+    emit('imported', { added: result.added ?? 0, skipped: result.skipped ?? 0, invalid: result.invalid ?? 0 });
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
       ElMessage.error(t('importConfigFailed'));
@@ -381,6 +493,35 @@ async function handleImportHar() {
 
 .paste-section {
   margin-top: 16px;
+}
+
+.import-preview {
+  padding: 8px 12px 8px 28px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: 6px;
+}
+
+.preview-info {
+  color: var(--cop-text-color-regular);
+}
+
+.preview-warn {
+  color: var(--el-color-warning, #e6a23c);
+}
+
+.preview-error {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
 }
 
 .curl-input :deep(textarea) {

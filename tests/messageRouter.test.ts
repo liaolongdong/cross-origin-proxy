@@ -18,7 +18,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MessageType } from '@/utils/types';
-import { STORAGE_KEYS } from '@/utils/constants';
+import { SCHEMA_VERSION, STORAGE_KEYS } from '@/utils/constants';
 
 type RouterModule = typeof import('@/entrypoints/background/messageRouter');
 type RouterListener = (
@@ -50,6 +50,7 @@ const MUTATING_TYPES: MessageType[] = [
   MessageType.CLEAR_REQUEST_LOG,
   MessageType.IMPORT_CONFIG,
   MessageType.IMPORT_HAR,
+  MessageType.RESTORE_CONFIG_HISTORY,
   MessageType.SAVE_PROFILE,
   MessageType.LOAD_PROFILE,
   MessageType.DELETE_PROFILE,
@@ -66,7 +67,7 @@ const MUTATING_TYPES: MessageType[] = [
  * 判据是「页面从不读取 + 回的是凭据类数据」，两者缺一都不该加进来：给内容脚本要用的消息
  * 加 gate 等于当场废掉代理。
  */
-const CREDENTIAL_READING_TYPES: MessageType[] = [MessageType.GET_VARIABLES];
+const CREDENTIAL_READING_TYPES: MessageType[] = [MessageType.GET_VARIABLES, MessageType.GET_CONFIG_HISTORY];
 
 /** 刻意不经 gate 的消息：内容脚本要靠它们拉配置与代理，被 gate 住代理当场失效 */
 const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
@@ -75,6 +76,9 @@ const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
   [MessageType.GET_PROXY_STATUS, undefined],
   [MessageType.GET_SW_STATS, undefined],
   [MessageType.GET_PROFILES, undefined],
+  // 导入预览是只读纯计算，回的是条数与规则名/模式，不含任何凭据真值
+  [MessageType.GET_IMPORT_PLAN, { config: { enabled: false, rules: [] } }],
+  // 拦截器自报（页面发来）与它的读端（popup 用）：一个最坏后果是显示假数字，一个回的是四个计数
   [MessageType.PROXY_REQUEST, { requestId: 'r1', url: EXTERNAL_PAGE_URL, method: 'GET' }],
 ];
 
@@ -93,6 +97,7 @@ const PAYLOADS: Partial<Record<MessageType, unknown>> = {
   [MessageType.REORDER_RULES]: { orderedIds: ['a'] },
   [MessageType.IMPORT_CONFIG]: { config: { enabled: false, rules: [] } },
   [MessageType.IMPORT_HAR]: { log: { entries: [] } },
+  [MessageType.RESTORE_CONFIG_HISTORY]: { id: 'h1' },
   [MessageType.SAVE_PROFILE]: { name: 'p' },
   [MessageType.LOAD_PROFILE]: { profileId: 'p1' },
   [MessageType.DELETE_PROFILE]: { profileId: 'p1' },
@@ -165,7 +170,7 @@ function dispatch(type: MessageType, senderUrl: unknown, data: unknown = PAYLOAD
 }
 
 function lastResponse(sendResponse: ReturnType<typeof vi.fn>) {
-  return sendResponse.mock.calls.at(-1)?.[0] as { error?: string } | undefined;
+  return sendResponse.mock.calls.at(-1)?.[0] as { success?: boolean; error?: string } | undefined;
 }
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -380,5 +385,224 @@ describe('凭据变量消息 — 只有扩展页面能读写，非法载荷不�
     expect(sendResponse).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(lastResponse(sendResponse))).not.toContain('secret-a');
     expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Unauthorized sender' });
+  });
+});
+
+/** 构造一条结构合法、可与现网同键的规则 */
+function importableRule(id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    name: `rule-${id}`,
+    enabled: true,
+    matchPattern: `https://api-${id}.example.com/*`,
+    targetUrl: 'https://target.example.com',
+    matchType: 'wildcard',
+    priority: 10,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
+describe('IMPORT_CONFIG — 实际写入结果带回界面', () => {
+  it('合并模式回报 added / skipped / invalid 三个数（不再只报一句「导入成功」）', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = {
+      enabled: false,
+      rules: [importableRule('c1')],
+    };
+    const { sendResponse } = dispatch(MessageType.IMPORT_CONFIG, TRUSTED_PAGE_URL, {
+      config: {
+        enabled: false,
+        rules: [
+          importableRule('i1', { name: 'rule-c1', matchPattern: 'https://api-c1.example.com/*' }),
+          importableRule('i2'),
+          { name: '缺字段的旧条目' },
+        ],
+      },
+      mode: 'merge',
+    });
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({ success: true, added: 1, skipped: 1, invalid: 1 });
+    const stored = store[STORAGE_KEYS.PROXY_CONFIG] as { rules: Array<{ name: string }> };
+    expect(stored.rules.map(r => r.name)).toEqual(['rule-c1', 'rule-i2']);
+  });
+
+  it('替换模式 skipped 恒为 0，invalid 仍然如实上报', async () => {
+    const { sendResponse } = dispatch(MessageType.IMPORT_CONFIG, TRUSTED_PAGE_URL, {
+      config: { enabled: true, rules: [importableRule('i1'), { name: 'x' }] },
+      mode: 'replace',
+    });
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({ success: true, added: 1, skipped: 0, invalid: 1 });
+  });
+});
+
+describe('schemaVersion — 读并拒绝过新，不拒绝旧', () => {
+  it('比本机认识的格式更新的导出被明确拒掉，且不触达存储', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = { enabled: false, rules: [importableRule('c1')] };
+    const { sendResponse } = dispatch(MessageType.IMPORT_CONFIG, TRUSTED_PAGE_URL, {
+      schemaVersion: SCHEMA_VERSION + 1,
+      config: { enabled: false, rules: [importableRule('i1')] },
+      mode: 'replace',
+    });
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'SCHEMA_TOO_NEW' });
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(store[STORAGE_KEYS.PROXY_CONFIG]).toEqual({ enabled: false, rules: [importableRule('c1')] });
+  });
+
+  it('没有 schemaVersion 的历史文件照旧可导入（缺省按 v1 处理）', async () => {
+    const { sendResponse } = dispatch(MessageType.IMPORT_CONFIG, TRUSTED_PAGE_URL, {
+      exportTime: Date.now(),
+      config: { enabled: false, rules: [importableRule('i1')] },
+      mode: 'replace',
+    });
+    await flush();
+    expect(lastResponse(sendResponse)?.success).toBe(true);
+  });
+
+  it('预览与写入用同一份版本判据（不能出现「预览能算、写入拒掉」）', async () => {
+    const { sendResponse } = dispatch(MessageType.GET_IMPORT_PLAN, TRUSTED_PAGE_URL, {
+      schemaVersion: SCHEMA_VERSION + 1,
+      config: { enabled: false, rules: [importableRule('i1')] },
+      mode: 'merge',
+    });
+    await flush();
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'SCHEMA_TOO_NEW' });
+  });
+
+  it('导出时写上当前版本', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = { enabled: false, rules: [] };
+    const { sendResponse } = dispatch(MessageType.EXPORT_CONFIG, TRUSTED_PAGE_URL, undefined);
+    await flush();
+    expect(lastResponse(sendResponse)).toMatchObject({ schemaVersion: SCHEMA_VERSION });
+  });
+});
+
+describe('GET_IMPORT_PLAN — 纯计算，不落库', () => {
+  it('回的是 plan，且一次写入都没有', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = { enabled: false, rules: [importableRule('c1')] };
+    const before = JSON.stringify(store[STORAGE_KEYS.PROXY_CONFIG]);
+
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.GET_IMPORT_PLAN, TRUSTED_PAGE_URL, {
+      config: {
+        enabled: false,
+        rules: [importableRule('i1', { name: 'rule-c1', matchPattern: 'https://api-c1.example.com/*' })],
+      },
+      mode: 'merge',
+    });
+    expect(keepChannelOpen).toBe(true);
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({
+      success: true,
+      plan: {
+        mode: 'merge',
+        added: 0,
+        skipped: 1,
+        conflicts: [
+          {
+            name: 'rule-c1',
+            matchPattern: 'https://api-c1.example.com/*',
+            currentTargetUrl: 'https://target.example.com',
+            incomingTargetUrl: 'https://target.example.com',
+          },
+        ],
+        duplicatesWithinFile: 0,
+        replaces: 0,
+        exceedsLimit: false,
+      },
+    });
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(JSON.stringify(store[STORAGE_KEYS.PROXY_CONFIG])).toBe(before);
+  });
+
+  it('内容脚本 / 页面来源的 sender 照样能读（只读消息不得加 gate）', async () => {
+    const { sendResponse } = dispatch(MessageType.GET_IMPORT_PLAN, EXTERNAL_PAGE_URL, {
+      config: { enabled: false, rules: [] },
+      mode: 'merge',
+    });
+    await flush();
+    expect(lastResponse(sendResponse)?.success).toBe(true);
+  });
+});
+
+describe('配置恢复点消息 — 读取与凭据同档，回退属状态修改', () => {
+  it('可信 sender 读到整包快照列表', async () => {
+    store[STORAGE_KEYS.CONFIG_HISTORY] = [
+      {
+        id: 'h1',
+        savedAt: 5,
+        reason: 'replace-import',
+        ruleCount: 1,
+        config: { enabled: true, rules: [importableRule('old')] },
+      },
+    ];
+    const { sendResponse } = dispatch(MessageType.GET_CONFIG_HISTORY, TRUSTED_PAGE_URL, undefined);
+    await flush();
+
+    const list = lastResponse(sendResponse) as unknown as Array<{ id: string; ruleCount: number }>;
+    expect(Array.isArray(list)).toBe(true);
+    expect(list.map(e => e.id)).toEqual(['h1']);
+  });
+
+  it('外部页面带着合法 id 也读不到快照（快照里的请求头是原样的真实值）', async () => {
+    store[STORAGE_KEYS.CONFIG_HISTORY] = [
+      {
+        id: 'h1',
+        savedAt: 5,
+        reason: 'replace-import',
+        ruleCount: 1,
+        config: {
+          enabled: true,
+          rules: [importableRule('old', { headerOverrides: { Cookie: 'session=leak-me' } })],
+        },
+      },
+    ];
+    const { sendResponse } = dispatch(MessageType.GET_CONFIG_HISTORY, EXTERNAL_PAGE_URL, undefined);
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Unauthorized sender' });
+    expect(JSON.stringify(sendResponse.mock.calls)).not.toContain('leak-me');
+  });
+
+  it('非字符串 id 同步拒绝，不开异步通道', () => {
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.RESTORE_CONFIG_HISTORY, TRUSTED_PAGE_URL, {
+      id: 42,
+    });
+    expect(keepChannelOpen).toBe(false);
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Invalid history id' });
+  });
+
+  it('可信 sender 回退不存在的 id 时明确失败，配置原样保留', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = { enabled: false, rules: [importableRule('current')] };
+    store[STORAGE_KEYS.CONFIG_HISTORY] = [];
+    const { sendResponse } = dispatch(MessageType.RESTORE_CONFIG_HISTORY, TRUSTED_PAGE_URL, { id: 'nope' });
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'HISTORY_ENTRY_NOT_FOUND' });
+    expect(store[STORAGE_KEYS.PROXY_CONFIG]).toEqual({ enabled: false, rules: [importableRule('current')] });
+  });
+
+  it('外部页面的回退请求在触达存储之前就被拒', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = { enabled: false, rules: [importableRule('current')] };
+    store[STORAGE_KEYS.CONFIG_HISTORY] = [
+      {
+        id: 'h1',
+        savedAt: 5,
+        reason: 'replace-import',
+        ruleCount: 1,
+        config: { enabled: true, rules: [importableRule('old')] },
+      },
+    ];
+    const { sendResponse } = dispatch(MessageType.RESTORE_CONFIG_HISTORY, EXTERNAL_PAGE_URL, { id: 'h1' });
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Unauthorized sender' });
+    expect(store[STORAGE_KEYS.PROXY_CONFIG]).toEqual({ enabled: false, rules: [importableRule('current')] });
+    expect(setSpy).not.toHaveBeenCalled();
   });
 });

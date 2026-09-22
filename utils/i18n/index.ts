@@ -90,8 +90,11 @@ export function t(key: string, substitutions?: string | number | (string | numbe
 
   if (substitutions !== undefined) {
     const subs = Array.isArray(substitutions) ? substitutions : [substitutions];
-    subs.forEach((value, index) => {
-      message = message.replace(new RegExp(`\\$${index + 1}`, 'g'), String(value));
+    // 单趟扫描 + 函数替换：字符串形式会把插入值里的 `$&` / `$1` 当成特殊模式，逐个占位符替换则会让
+    // 前一个值里恰好写着的 `$2` 被后一轮展开。插入的常是用户数据（规则名、URL），必须字面呈现。
+    message = message.replace(/\$(\d)/g, (placeholder, digit: string) => {
+      const value = subs[Number(digit) - 1];
+      return value === undefined ? placeholder : String(value);
     });
   }
   return message;

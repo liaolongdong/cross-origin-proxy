@@ -208,10 +208,18 @@ describe('[P2-6] 导入失败保留输入（弹窗与父组件的契约）', () 
     const earlyReturn = handle.indexOf('if (!result.success)');
     expect(earlyReturn).toBeGreaterThan(-1);
     expect(firstClear).toBeGreaterThan(earlyReturn);
-    expect(handle).toContain("emit('imported')");
+    // emit 必须带上后台的实际条数：成功提示要说得出「跳过几条」
+    expect(handle).toContain("emit('imported', {");
+    expect(handle).toContain('result.skipped ?? 0');
+    expect(handle).toContain('result.invalid ?? 0');
     // 超上限必须有专属提示，不能一律报「JSON 格式错误」
     expect(handle).toContain('MAX_RULES_EXCEEDED');
     expect(handle).toContain("t('maxRulesReached'");
+  });
+
+  it('版本过新的文件有专属提示（不能报成格式错误，用户改不出 JSON 版本）', () => {
+    expect(handle).toContain('SCHEMA_TOO_NEW');
+    expect(handle).toContain("t('importSchemaTooNew'");
   });
 
   it('HAR 选中的文件不跨次打开残留（弹窗分片不随关闭销毁，再点一次会导入两遍）', () => {
@@ -243,5 +251,76 @@ describe('[P2-6] 导入失败保留输入（弹窗与父组件的契约）', () 
     );
     expect(harHandler.indexOf('showImportExport.value = false')).toBeLessThan(harHandler.indexOf('catch'));
     expect(harHandler).toContain('showAddFailedMessage');
+  });
+});
+
+describe('导入预览与恢复点界面契约（批次 B）', () => {
+  const dialogSrc = fs.readFileSync('components/options/ImportExportDialog.vue', 'utf-8');
+  const appSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
+  const settingsSrc = fs.readFileSync('components/options/SettingsDialog.vue', 'utf-8');
+  const previewStart = dialogSrc.indexOf('async function handlePreview');
+  const previewEnd = dialogSrc.indexOf('function handleExport', previewStart);
+  const preview = dialogSrc.slice(previewStart, previewEnd);
+
+  it('预览由后台算，弹窗不自己写一份差集（否则数字迟早和写入侧分叉）', () => {
+    expect(preview).toContain('await fetchImportPlan(');
+    expect(dialogSrc).not.toContain('deduplicateRules');
+    expect(dialogSrc).not.toContain('planImport');
+  });
+
+  it('预览失败与「预览显示无变化」分开说：失败要显式点名，不能画成空预览', () => {
+    expect(preview).toContain('planUnavailable.value = true');
+    // 摊平文案的那个 computed 在 handlePreview 之前，整份文件里查
+    expect(dialogSrc).toContain('importPreviewFailed');
+    // 格式与版本问题各有专属文案，一律报「无法预览」会让人以为文件没问题
+    expect(preview).toContain("t('importFailed')");
+    expect(preview).toContain("t('importSchemaTooNew')");
+  });
+
+  it('输入或模式一变即作废旧预览', () => {
+    expect(dialogSrc).toContain('watch([jsonInput, fileContent, importMode]');
+    const reset = dialogSrc.slice(
+      dialogSrc.indexOf('watch([jsonInput, fileContent, importMode]'),
+      dialogSrc.indexOf('async function handlePreview'),
+    );
+    expect(reset).toContain('plan.value = null');
+  });
+
+  it('父组件按实际条数说实话：有跳过/丢弃时必须报出来', () => {
+    const handler = appSrc.slice(
+      appSrc.indexOf('async function handleImported'),
+      appSrc.indexOf('\n}\n', appSrc.indexOf('async function handleImported')),
+    );
+    expect(handler).toContain('stats.skipped > 0 || stats.invalid > 0');
+    expect(handler).toContain("t('importSuccessDetail'");
+    expect(handler).toContain("t('importSuccess')");
+  });
+
+  it('恢复点列表在设置弹窗里随打开即取（异步分片不能只靠 @open）', () => {
+    expect(settingsSrc).toContain('await loadHistory()');
+    const watcher = settingsSrc.slice(
+      settingsSrc.indexOf('watch(\n  () => props.visible'),
+      settingsSrc.indexOf('/**\n * 把界面上的行整表写回'),
+    );
+    expect(watcher).toContain('historyLoadFailed.value = !(await loadHistory())');
+    expect(watcher).toContain('{ immediate: true }');
+  });
+
+  it('回退走后台消息并通知父组件重取配置，绝不在界面侧直接写 storage', () => {
+    expect(settingsSrc).toContain('await restore(entry.id)');
+    expect(settingsSrc).toContain("emit('restored')");
+    expect(settingsSrc).not.toContain('STORAGE_KEYS.CONFIG_HISTORY');
+    expect(appSrc).toContain('@restored="handleConfigRestored"');
+    const handler = appSrc.slice(
+      appSrc.indexOf('async function handleConfigRestored'),
+      appSrc.indexOf('\n}\n', appSrc.indexOf('async function handleConfigRestored')),
+    );
+    expect(handler).toContain('await fetchConfig()');
+    expect(handler).toContain('clearRuleSelection()');
+  });
+
+  it('未知时间不渲染成 1970 年', () => {
+    expect(settingsSrc).toContain("t('restoreUnknownTime')");
+    expect(settingsSrc).toContain('savedAt ? formatLocaleDateTime(savedAt, locale.value)');
   });
 });

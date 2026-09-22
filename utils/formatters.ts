@@ -77,3 +77,14 @@ export function formatClock(timestamp: number): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
+
+/**
+ * 把 epoch ms 渲染成本地日期时间（环境快照、请求日志、配置恢复点共用）
+ *
+ * 入参是**应用语言**（`zh_CN` / `en`），不是 BCP47 标签：新增语言在这里补一次映射即可，
+ * 不该让每个调用方各写一遍 `locale === 'en' ? 'en-US' : 'zh-CN'`。
+ * 未知时间戳（0 或非法值）由调用方先判掉，这里不猜。
+ */
+export function formatLocaleDateTime(timestamp: number, appLocale: string): string {
+  return new Date(timestamp).toLocaleString(appLocale === 'en' ? 'en-US' : 'zh-CN');
+}

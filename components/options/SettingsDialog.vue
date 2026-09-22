@@ -156,6 +156,45 @@
         </p>
       </div>
 
+      <!-- 配置恢复点 -->
+      <div class="setting-section">
+        <div class="setting-label">{{ t('restorePointsLabel') }}</div>
+        <p class="setting-hint">{{ t('restorePointsHint', MAX_CONFIG_HISTORY) }}</p>
+
+        <p
+          v-if="historyLoadFailed"
+          class="restore-load-failed"
+        >
+          {{ t('restorePointsLoadFailed') }}
+        </p>
+        <p
+          v-else-if="history.length === 0"
+          class="restore-empty"
+        >
+          {{ t('restorePointsEmpty') }}
+        </p>
+
+        <div
+          v-for="entry in history"
+          :key="entry.id"
+          class="restore-item"
+        >
+          <span class="restore-time">{{ formatRestoreTime(entry.savedAt) }}</span>
+          <span class="restore-meta">
+            {{ t(REASON_LABEL_KEYS[entry.reason]) }} · {{ t('restoreRuleCount', entry.ruleCount) }}
+          </span>
+          <el-button
+            type="warning"
+            link
+            :loading="restoringId === entry.id"
+            :aria-label="t('restoreButton')"
+            @click="handleRestore(entry)"
+          >
+            {{ t('restoreButton') }}
+          </el-button>
+        </div>
+      </div>
+
       <!-- 键盘快捷键 -->
       <div class="setting-section">
         <div class="setting-label">{{ t('keyboardShortcuts') }}</div>
@@ -190,14 +229,18 @@ import { THEME_OPTIONS, THEME_MODE_OPTIONS, type ThemeName } from '@/utils/theme
 import {
   type ThemeMode,
   STORAGE_KEYS,
+  MAX_RULES,
   MAX_VARIABLES,
   MAX_VARIABLE_NAME_LENGTH,
   MAX_VARIABLE_VALUE_LENGTH,
+  MAX_CONFIG_HISTORY,
 } from '@/utils/constants';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
-import type { ProxyRule, VariableStore } from '@/utils/types';
+import type { ConfigHistoryEntry, ConfigHistoryReason, ProxyRule, VariableStore } from '@/utils/types';
 import { collectRuleVariableRefs, isVariableName } from '@/utils/variables';
+import { formatLocaleDateTime } from '@/utils/formatters';
 import { useVariables } from '@/composables/useVariables';
+import { useConfigHistory } from '@/composables/useConfigHistory';
 import { useI18n } from '@/composables/useI18n';
 
 defineOptions({
@@ -227,6 +270,7 @@ const emit = defineEmits<{
   /** 切换显示模式 */
   changeThemeMode: [mode: ThemeMode];
   /** 回退到了某个恢复点：规则集已整体换掉，父组件必须重新拉取配置 */
+  restored: [];
 }>();
 
 const { t, locale, setLocale } = useI18n();
@@ -284,6 +328,73 @@ function usageCount(name: string): number {
 
 // ─── 配置恢复点 ──────────────────────────────────────────────────────────────
 
+/** 成因 → 文案 key：`unknown` 是读侧兜底，不是本版本写下的成因，见 `utils/storage.ts` */
+const REASON_LABEL_KEYS: Record<ConfigHistoryReason, string> = {
+  'replace-import': 'restoreReasonReplaceImport',
+  'load-profile': 'restoreReasonLoadProfile',
+  'batch-delete': 'restoreReasonBatchDelete',
+  'before-restore': 'restoreReasonBeforeRestore',
+  unknown: 'restoreReasonUnknown',
+};
+
+const { history, loadHistory, restore } = useConfigHistory();
+/** 读失败与「真的没有恢复点」必须分开画：前者是 gate/SW 异常，后者是还没做过成套操作 */
+const historyLoadFailed = ref(false);
+const restoringId = ref('');
+
+/** `savedAt` 为 0 表示存储里这条没时间（手改或过新），不能渲染成 1970 年 */
+function formatRestoreTime(savedAt: number): string {
+  return savedAt ? formatLocaleDateTime(savedAt, locale.value) : t('restoreUnknownTime');
+}
+
+async function handleRestore(entry: ConfigHistoryEntry) {
+  try {
+    await ElMessageBox.confirm(t('restoreConfirm', entry.ruleCount), t('restoreConfirmTitle'), {
+      confirmButtonText: t('confirm'),
+      cancelButtonText: t('cancel'),
+      type: 'warning',
+    });
+  } catch {
+    return; // 用户取消
+  }
+
+  restoringId.value = entry.id;
+  try {
+    const result = await restore(entry.id);
+    if (!result.success) {
+      ElMessage.error(result.error === 'MAX_RULES_EXCEEDED' ? t('maxRulesReached', MAX_RULES) : t('restoreFailed'));
+      return;
+    }
+    ElMessage.success(t('restoreSuccess', result.restored ?? 0));
+    // 回退自己会留下一份 `before-restore`，列表当场跟上；规则集换了，父组件要重新拉配置
+    historyLoadFailed.value = !(await loadHistory());
+    emit('restored');
+  } finally {
+    restoringId.value = '';
+  }
+}
+
+/**
+ * 用表里的真值重建行，但保住已有行的 `uid`
+ *
+ * `uid` 是列表 key，换 key 等于重建输入框。每次提交都重建，用户从上一个框切过来时
+ * （blur 触发 change → 提交 → 重建）焦点会被抢走，而 change 正是本弹窗唯一的写入时机。
+ * 未填完的空行按对象原样留在尾部，不丢用户的进度。
+ */
+function refillRows(store: VariableStore): void {
+  const blanks = variableRows.value.filter(row => !row.name.trim() && !row.value.trim());
+  const uidByName = new Map(variableRows.value.map(row => [row.name.trim(), row.uid]));
+  const rows: VariableRow[] = Object.entries(store).map(([name, value]) => ({
+    uid: uidByName.get(name) ?? ++rowUidSeed,
+    name,
+    value,
+  }));
+  variableRows.value = [...rows, ...blanks];
+}
+
+/** 打开弹窗时读取自动关闭配置、变量表与恢复点列表。`immediate` 不可省：本组件是异步分片，可能直到
+ * visible 已为 true 才挂载（首次点击时分片尚未取回），那时 watcher 永不触发，倒计时会静默显示为
+ * 「不自动关闭」，恢复点列表同样是空的。 */
 watch(
   () => props.visible,
   async val => {
@@ -299,6 +410,7 @@ watch(
     if (!variablesLoadFailed.value) {
       refillRows(variables.value);
     }
+    historyLoadFailed.value = !(await loadHistory());
   },
   { immediate: true },
 );
@@ -448,6 +560,42 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   margin: 8px 0 0;
   font-size: 12px;
   line-height: 1.5;
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.restore-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: 8px;
+}
+
+.restore-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--cop-text-color-regular);
+}
+
+.restore-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+}
+
+.restore-empty,
+.restore-load-failed {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-text-color-secondary);
+}
+
+.restore-load-failed {
   color: var(--el-color-danger, #f56c6c);
 }
 
