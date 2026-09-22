@@ -526,7 +526,11 @@ describe('GET_IMPORT_PLAN — 纯计算，不落库', () => {
     expect(JSON.stringify(store[STORAGE_KEYS.PROXY_CONFIG])).toBe(before);
   });
 
-  it('内容脚本 / 页面来源的 sender 照样能读（只读消息不得加 gate）', async () => {
+  it('页面来源照样能读（不加 gate 的判据是「页面没有通往它的路径」，不是「它只读」）', async () => {
+    // 同为读取的 `GET_VARIABLES` / `GET_CONFIG_HISTORY` 恰恰在门禁内（见本文件那两组）：
+    // 这条的成立前提是桥接层通往 SW 只有 GET_PROXY_CONFIG / INTERCEPTOR_STATS / CANCEL_REQUEST /
+    // PROXY_REQUEST 四个出口，页面发不到这一型（清单由 contentBridge.test.ts 末尾按源码枚举）。
+    // 新增只读消息时不要照这条的措辞去推「只读就不加 gate」，判据见 messageRouter.ts 的 handleImportPlan。
     const { sendResponse } = dispatch(MessageType.GET_IMPORT_PLAN, EXTERNAL_PAGE_URL, {
       config: { enabled: false, rules: [] },
       mode: 'merge',

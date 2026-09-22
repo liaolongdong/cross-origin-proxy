@@ -159,7 +159,14 @@ async function handleImportConfig(
  *
  * 与写入侧共用 `normalizeImportedRules` + `deduplicateRules`（经 `planImport`），所以数字不会和
  * 实际结果对不上；但真实合并仍在存储锁内重算，界面措辞必须是「预计」。
- * 刻意不加 `isTrustedSender`：它是只读、不含凭据真值的纯计算，且与其余读取消息同档。
+ *
+ * 刻意不加 `isTrustedSender`，判据**不是**「它是只读的」，而是「页面根本没有通往它的路径」：
+ * 桥接层通往 SW 的出口只有 `GET_PROXY_CONFIG`（页面那侧写作 `REQUEST_CONFIG`）、`INTERCEPTOR_STATS`、
+ * `CANCEL_REQUEST` 与 `PROXY_REQUEST` 四种，这一型不在其中，同频道伪造消息也发不出它——
+ * 那份清单在 `tests/contentBridge.test.ts` 末尾按源码枚举，加一个出口就得回来重新判一次 gate。
+ * 合并模式的回包会把现网规则的目标地址带回界面（`planImport` 的 `currentTargetUrl`，预演要说清
+ * 「保留哪一条」就必须知道旧值），所以将来若给页面开这条路，这一条得重新评估——按下面
+ * `CREDENTIAL_READING_TYPES` 的判据，「整包本地数据」那一半它占得住。
  */
 async function handleImportPlan(
   data: ExportData & { mode?: ImportMode },
@@ -486,7 +493,7 @@ export function setupMessageRouter(): void {
         return respondAsync(sendResponse, handleImportConfig(message.data));
 
       case MessageType.GET_IMPORT_PLAN:
-        // 只读、纯计算、不落库，因此与其余读取消息一样刻意不加 sender gate
+        // 刻意不加 sender gate：判据是「页面没有通往它的路径」，不是「它只读」（见 handleImportPlan）
         return respondAsync(sendResponse, handleImportPlan(message.data));
 
       case MessageType.GET_CONFIG_HISTORY:
