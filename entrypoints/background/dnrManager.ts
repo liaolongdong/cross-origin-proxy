@@ -8,6 +8,7 @@ import { invalidateMatcherCache, isSimpleRule } from '@/utils/urlMatcher';
 import type { ProxyRule, ProxyConfig } from '@/utils/types';
 import { setDnrRuleIdMap } from './dnrStats';
 import { invalidateDnrSample } from './dnrSampler';
+import { clearConfigUnsynced, markConfigUnsynced } from './configSyncState';
 
 /**
  * DNR 管理器
@@ -106,13 +107,28 @@ async function doSyncDnrRules(config: ProxyConfig): Promise<void> {
   }
 }
 
+/** 能收到配置广播的标签页：http(s) 页面，且文档已经加载完 */
+function isBroadcastTarget(tab: chrome.tabs.Tab): boolean {
+  return tab.status === 'complete' && /^https?:/i.test(tab.url ?? '');
+}
+
 /**
- * 向所有标签页广播最新配置（content.ts 收到后转发给 MAIN world 拦截器）
+ * 向所有标签页广播最新配置（content.ts 收到后转发给 MAIN world 拦截器），并记下没送达的页面
  *
- * 说明：runtime.sendMessage 不会到达内容脚本，必须用 tabs.sendMessage 逐 tab 推送；
- * 未注入内容脚本的页面（chrome://、商店页等）会报错，静默忽略即可。
+ * 说明：runtime.sendMessage 不会到达内容脚本，必须用 tabs.sendMessage 逐 tab 推送。
+ * 只有 http(s) 且已加载完的页面参与：chrome://、商店页、扩展页**永远**收不到推送，
+ * 刷新也救不回来，给它们记一笔就是句假警告；正在加载的页面处在「新文档自己去拉配置」的
+ * 窗口期（`content.ts` 注入时主动 `GET_PROXY_CONFIG`），此时记同样是误报，
+ * 而它落到 `loading` 时账已被 `setupConfigSyncState` 清过，无需在这里补。
+ *
+ * 回执的粒度是标签页：`tabs.sendMessage` 不带 frameId 会发给全部 frame，Promise 只告诉我们
+ * 「有没有人接住」，不区分是哪一个 frame。所以这一笔账说的是「这个页面有没有在跑最新配置」，
+ * 不是「每个 frame 都拿到了」——后者需要 `webNavigation` 级别的定位，收益不匹配代价。
+ *
+ * 导出仅为可测性（同 `messageRouter` 的 `isTrustedSender`）：这条「静默丢失败」的路径
+ * 是本次要修的东西，行为必须在 SW 之外钉住。
  */
-async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> {
+export async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> {
   try {
     if (!Array.isArray(config.rules)) return;
     const tabs = await chrome.tabs.query({});
@@ -120,16 +136,20 @@ async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> {
       enabled: config.enabled,
       rules: config.rules.filter(rule => !isSimpleRule(rule)),
     };
-    await Promise.allSettled(
-      tabs
-        .filter(tab => tab.id !== undefined)
-        .map(tab =>
-          chrome.tabs.sendMessage(tab.id!, {
-            type: MessageType.UPDATE_PROXY_CONFIG,
-            data: interceptorConfig,
-          }),
-        ),
+    const targets = tabs.filter(tab => tab.id !== undefined && isBroadcastTarget(tab));
+    const results = await Promise.allSettled(
+      targets.map(tab =>
+        chrome.tabs.sendMessage(tab.id!, {
+          type: MessageType.UPDATE_PROXY_CONFIG,
+          data: interceptorConfig,
+        }),
+      ),
     );
+    results.forEach((result, index) => {
+      const tabId = targets[index].id!;
+      if (result.status === 'fulfilled') clearConfigUnsynced(tabId);
+      else markConfigUnsynced(tabId);
+    });
   } catch (error) {
     logger.debug('Broadcast config to tabs failed:', error);
   }

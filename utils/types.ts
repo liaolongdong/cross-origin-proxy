@@ -143,6 +143,13 @@ export enum MessageType {
   /** Popup → SW：读某个标签页最近一次被采信的自报计数（只读，刻意**不加** sender gate，与 `GET_DNR_STATS` 同档） */
   GET_INTERCEPTOR_STATS = 'GET_INTERCEPTOR_STATS',
 
+  // 配置广播的送达账（纯展示，不改任何状态）
+  /**
+   * Popup → SW：这个标签页最近一次配置广播有没有被页面接住（只读，与 `GET_DNR_STATS` 同档，
+   * 刻意**不加** sender gate）。回 `{ synced }`，判据见 `utils/configSync.ts`。
+   */
+  GET_CONFIG_SYNC = 'GET_CONFIG_SYNC',
+
   // 状态
   GET_PROXY_STATUS = 'GET_PROXY_STATUS',
 
@@ -345,6 +352,12 @@ export interface InterceptorStatsMessage {
 /** 读取某个标签页最近一次被采信的拦截器计数 */
 export interface GetInterceptorStatsMessage {
   type: MessageType.GET_INTERCEPTOR_STATS;
+  data?: { tabId?: number };
+}
+
+/** 读取某个标签页的配置广播送达状态（`{ synced }`，见 `utils/configSync.ts`） */
+export interface GetConfigSyncMessage {
+  type: MessageType.GET_CONFIG_SYNC;
   data?: { tabId?: number };
 }
 
@@ -563,6 +576,7 @@ export type RuntimeMessage =
   | GetSwStatsMessage
   | InterceptorStatsMessage
   | GetInterceptorStatsMessage
+  | GetConfigSyncMessage
   | GetRequestLogMessage
   | ClearRequestLogMessage
   | GetProxyStatusMessage

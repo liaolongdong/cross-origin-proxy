@@ -133,6 +133,15 @@
         <span class="interceptor-chip">{{ t('interceptorTag') }}</span>
         <span class="interceptor-text">{{ interceptorText }}</span>
       </div>
+
+      <!-- 配置广播没送达：这一页还在拿旧规则干活，是唯一一条「现在就刷新」能解决的话 -->
+      <p
+        v-if="configSyncVisible"
+        class="config-sync-warning"
+        :title="t('configNotSyncedHint')"
+      >
+        {{ t('configNotSynced') }}
+      </p>
     </div>
 
     <!-- 本页地址命中预览（只回答页面地址本身，边界写在卡内） -->
@@ -372,6 +381,7 @@ import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from 
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
 import { describeInterceptorStats, isInterceptorStatsEntry } from '@/utils/interceptorStats';
+import { isConfigSyncStatus } from '@/utils/configSync';
 import { formatClock } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@/utils/types';
@@ -476,7 +486,8 @@ const pageHitChannelLabel = computed(() => {
  *
  * 三条证据各自独立：页面地址命中（本函数）、本页网络层命中数（`fetchTabDnrStats`）、
  * 哪些规则其实没被应用（`findDnrSkippedRules`）。任一失败都不连带另两条。
- * 第四条（拦截器自报活动，`fetchTabInterceptorStats`）在同一处发出，同样互不连带。
+ * 另两条在同一处发出、同样互不连带：拦截器自报活动（`fetchTabInterceptorStats`）
+ * 与配置广播的送达账（`fetchTabConfigSync`）。
  */
 async function computePageHit() {
   try {
@@ -491,6 +502,7 @@ async function computePageHit() {
     if (proxiable) {
       void fetchTabDnrStats(tab?.id);
       void fetchTabInterceptorStats(tab?.id);
+      void fetchTabConfigSync(tab?.id);
     }
 
     // 配置先行：「最近请求为什么是空的」那条解释与本页能不能被代理无关，非 http 页也要给
@@ -590,6 +602,43 @@ async function fetchTabInterceptorStats(tabId: number | undefined) {
     if (isInterceptorStatsEntry(entry)) interceptorRaw.value = entry;
   } catch (error) {
     logger.debug('Fetch tab interceptor stats failed:', error);
+  }
+}
+
+// ─── 配置广播的送达状态（这一页有没有在用最新规则） ──────────────────────────
+
+/** 最近一次读到的结论；SW 只记已知的问题，没记过就是已同步 */
+const configUnsynced = ref(false);
+/**
+ * 是否真的读到过一回账。
+ *
+ * 这句话的前提是「一次真实读取说它没送达」，而不是「某个布尔恰好停在初始值」——
+ * 把前提写成显式闸门，读不到账（SW 未起、消息失败）就永远不会出现这句警告。
+ */
+const configSyncFetched = ref(false);
+
+/**
+ * 只在「确实读到过、且读到的就是没送达」时出现。
+ *
+ * 闸门与拦截器那一行同源：非 http(s) 页根本没有内容脚本，那句话对它既不适用也无从修复；
+ * 总开关关闭时旧配置与新配置同样都不生效，此时警告只是噪声。
+ */
+const configSyncVisible = computed(
+  () => enabled.value && pageHitProxiable.value && configSyncFetched.value && configUnsynced.value,
+);
+
+async function fetchTabConfigSync(tabId: number | undefined) {
+  if (typeof tabId !== 'number') return;
+  try {
+    const status: unknown = await chrome.runtime.sendMessage({
+      type: MessageType.GET_CONFIG_SYNC,
+      data: { tabId },
+    });
+    configSyncFetched.value = true;
+    // 只接受带布尔 `synced` 的回执：读不到时维持上一次的判断，绝不把「不知道」说成「有问题」
+    if (isConfigSyncStatus(status)) configUnsynced.value = !status.synced;
+  } catch (error) {
+    logger.debug('Fetch tab config sync state failed:', error);
   }
 }
 
@@ -912,6 +961,15 @@ async function openOptionsPage(hash = '') {
 
 .interceptor-strip--active .interceptor-text {
   color: var(--el-color-success, #67c23a);
+}
+
+/* 配置没送达：这一页仍在用旧规则干活，用户当下唯一能做的动作就是刷新，所以给告警色而非次要色 */
+.config-sync-warning {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--el-color-warning, #e6a23c);
+  cursor: default;
 }
 
 /* 当前页命中预览 */

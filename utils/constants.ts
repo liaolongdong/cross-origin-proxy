@@ -128,6 +128,18 @@ export const DNR_TAB_CACHE_SIZE = 5;
  */
 export const INTERCEPTOR_TAB_CACHE_SIZE = 10;
 
+// ─── 配置广播的送达账（entrypoints/background/configSyncState） ───────────────
+
+/**
+ * 记「这一页没收到最新配置」的标签页条数上限
+ *
+ * 比 `INTERCEPTOR_TAB_CACHE_SIZE` 宽松得多，因为一次扩展重载就能让**所有**已打开的
+ * http(s) 标签页同时处于未同步状态，收得太紧会把大部分页面挤成「不知道」——
+ * 那等于把这条提示改回它要消灭的静默。一份账只是一个 tabId，成本可以忽略；
+ * `tabs.onRemoved` 与导航才是正常清账路径，这里只是漏事件的兜底。
+ */
+export const CONFIG_SYNC_TAB_CACHE_SIZE = 200;
+
 // ─── 凭据变量（utils/variables.ts + storage 的 `variables` 键） ────────────────
 
 /**

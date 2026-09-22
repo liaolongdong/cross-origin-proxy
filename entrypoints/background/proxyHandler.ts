@@ -304,11 +304,7 @@ const inFlightRequests = new Map<string, AbortController>();
  * 同一标签页里两个 frame 的同名 requestId 会直接共用一个键——后登记的那笔把前一笔挤出
  * 登记表，于是「取消顶层这一笔」实际掐断的是子 frame 那笔。
  */
-export function proxyRequestKey(
-  tabId: number | undefined,
-  frameId: number | undefined,
-  requestId: string,
-): string {
+export function proxyRequestKey(tabId: number | undefined, frameId: number | undefined, requestId: string): string {
   return `${tabId ?? 'no-tab'}::${frameId ?? 'no-frame'}::${requestId}`;
 }
 

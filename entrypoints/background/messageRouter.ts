@@ -9,6 +9,7 @@ import {
 } from './proxyHandler';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
 import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
+import { isConfigUnsynced } from './configSyncState';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
 import {
   getProxyConfig,
@@ -270,10 +271,7 @@ export function setupMessageRouter(): void {
         countProxyRequestForTab(sender.tab?.id, sender.frameId);
         return respondAsync(
           sendResponse,
-          handleProxyRequest(
-            message.data,
-            proxyRequestKey(sender.tab?.id, sender.frameId, message.data.requestId),
-          ),
+          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, sender.frameId, message.data.requestId)),
         );
 
       case MessageType.CANCEL_REQUEST:
@@ -443,6 +441,14 @@ export function setupMessageRouter(): void {
         // 只读消息：与 `GET_DNR_STATS` 同档，刻意不加 isTrustedSender（见 .qoder/rules/wxt-rules.md 第 12 条）
         const tabId = typeof message.data?.tabId === 'number' ? message.data.tabId : undefined;
         sendResponse(tabId === undefined ? null : getInterceptorStats(tabId));
+        return false;
+      }
+
+      case MessageType.GET_CONFIG_SYNC: {
+        // 只读消息：与 `GET_INTERCEPTOR_STATS` 同档，刻意不加 isTrustedSender
+        // （它回的是一个布尔——「这一页上次没接到配置广播」，改不了任何状态）
+        const tabId = typeof message.data?.tabId === 'number' ? message.data.tabId : undefined;
+        sendResponse(tabId === undefined ? null : { synced: !isConfigUnsynced(tabId) });
         return false;
       }
 

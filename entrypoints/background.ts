@@ -5,6 +5,7 @@ import { setupAutoOff } from './background/autoOff';
 import { initDnrManager, syncDnrRules } from './background/dnrManager';
 import { invalidateDnrSample } from './background/dnrSampler';
 import { setupInterceptorStats } from './background/interceptorStats';
+import { setupConfigSyncState } from './background/configSyncState';
 import { initBadge, updateBadge } from './background/badgeManager';
 import { resetSwHitStats } from './background/proxyHandler';
 import type { ProxyConfig } from '@/utils/types';
@@ -43,6 +44,9 @@ export default defineBackground(() => {
 
   // 拦截器自报计数的生命周期（关标签页与导航时清掉读数）
   setupInterceptorStats();
+
+  // 配置广播送达账的生命周期（关标签页与整页导航时清掉「这一页没收到」）
+  setupConfigSyncState();
 
   // Setup keepalive
   setupKeepalive();

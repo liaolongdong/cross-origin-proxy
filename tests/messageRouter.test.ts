@@ -81,6 +81,8 @@ const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
   // 拦截器自报（页面发来）与它的读端（popup 用）：一个最坏后果是显示假数字，一个回的是四个计数
   [MessageType.INTERCEPTOR_STATS, { intercepted: 1, proxied: 1, fellBack: 0, timedOut: 0 }],
   [MessageType.GET_INTERCEPTOR_STATS, { tabId: 7 }],
+  // 配置广播的送达账：回的是一个布尔，改不了任何状态，加 gate 等于让那句话永远说不出口
+  [MessageType.GET_CONFIG_SYNC, { tabId: 7 }],
   [MessageType.PROXY_REQUEST, { requestId: 'r1', url: EXTERNAL_PAGE_URL, method: 'GET' }],
   // 取消的正是页面自己发出去的那笔代发：给它加 gate 等于把「取消」这条通道焊死在页面之外
   [MessageType.CANCEL_REQUEST, { requestId: 'r1' }],
@@ -718,6 +720,46 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
 
   it('不带 tabId 的读取回 null（不给某个标签页编一个数）', async () => {
     const { sendResponse } = dispatch(MessageType.GET_INTERCEPTOR_STATS, TRUSTED_PAGE_URL, undefined);
+    expect(sendResponse).toHaveBeenCalledWith(null);
+  });
+});
+
+describe('GET_CONFIG_SYNC — 只读一笔送达账，不 gate、不写任何状态', () => {
+  /** 与真实现同一份模块实例（router 已经把 `configSyncState` 拉进注册表） */
+  async function syncMod() {
+    return import('@/entrypoints/background/configSyncState');
+  }
+
+  it('记过「没送达」的标签页读回 false，没记过的读回 true', async () => {
+    const sync = await syncMod();
+    sync.markConfigUnsynced(21);
+
+    const flagged = dispatch(MessageType.GET_CONFIG_SYNC, TRUSTED_PAGE_URL, { tabId: 21 });
+    expect(flagged.keepChannelOpen).toBe(false);
+    expect(lastResponse(flagged.sendResponse)).toEqual({ synced: false });
+
+    const clean = dispatch(MessageType.GET_CONFIG_SYNC, TRUSTED_PAGE_URL, { tabId: 22 });
+    expect(lastResponse(clean.sendResponse)).toEqual({ synced: true });
+  });
+
+  it('页面来源的读取照常回答（它是 popup 的证据，不是状态修改）', async () => {
+    const sync = await syncMod();
+    sync.markConfigUnsynced(23);
+    const { sendResponse } = dispatch(MessageType.GET_CONFIG_SYNC, EXTERNAL_PAGE_URL, { tabId: 23 });
+    await flush();
+    expect(lastResponse(sendResponse)).toEqual({ synced: false });
+  });
+
+  it('读取本身不改账：问一百次，那一页仍是「没送达」', async () => {
+    const sync = await syncMod();
+    sync.markConfigUnsynced(24);
+    for (let i = 0; i < 3; i++) dispatch(MessageType.GET_CONFIG_SYNC, TRUSTED_PAGE_URL, { tabId: 24 });
+    await flush();
+    expect(sync.isConfigUnsynced(24)).toBe(true);
+  });
+
+  it('不带 tabId 的读取回 null（不给「当前页面」编一个结论）', async () => {
+    const { sendResponse } = dispatch(MessageType.GET_CONFIG_SYNC, TRUSTED_PAGE_URL, undefined);
     expect(sendResponse).toHaveBeenCalledWith(null);
   });
 });

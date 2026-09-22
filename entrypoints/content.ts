@@ -180,9 +180,13 @@ export default defineContentScript({
     });
 
     // Listen for config sync messages from background (rule updates pushed to content scripts)
-    chrome.runtime.onMessage.addListener(message => {
+    // 必须同步回执：后台靠这条 promise 的 resolve/reject 判断「这个页面接住了新配置」，
+    // 而「有监听器但不作答」在 Chrome 那边与「压根没有内容脚本」难以区分。回执只说「收到了」，
+    // 不回任何规则内容——页面侧本来就是配置的接收方，多回一份只是多一次外泄面。
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.type === MessageType.UPDATE_PROXY_CONFIG) {
         postSyncRules(message.data as ProxyConfig);
+        sendResponse({ received: true });
       }
     });
 
