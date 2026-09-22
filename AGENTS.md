@@ -183,6 +183,7 @@
 ## 测试与验证
 
 - 测试位于 `tests/*.test.ts`，Vitest node 环境；纯函数模块（`dnrRules`/`urlMatcher`/`curlParser`/`har`/`formatters`）可直接单测。
+- **已经跑起来测的层，与两类钉不住的层**：除纯函数单测外，存储门面（锁与两份缓存）、桥接层消息流、拦截器三条通道（`interceptorFetch` / `interceptorXhr` 测结局，`interceptorWebSocket` 测选址）、后台 `dnrManager` / `autoOff` / `badgeManager`，以及界面读数层 `composables/{useRequestLog,useProxyStatus}`（`tests/composablesReadouts.test.ts`）都是**假 `window` / 假 `chrome` ＋ 真实现**按外部可观察面测的。仍没有运行时对应物的两类：① Vue 组件的渲染与交互——node 环境无 DOM，`jsdom` / `@vue/test-utils` 未装（新增 devDependency 需先获批准），这些位置只能靠源码契约（`full-verification` / `docs-consistency`）；② `onMounted` / `onUnmounted` 在组件实例外永不触发，所以 composable 的「挂载即拉、卸载即停表」一律另按源码契约钉，并在文件头写明「本环境测不到的那半」。补这类用例时有两个反复踩到的坑：断言的值必须与「这一轮什么都没发生」**可区分**（初值就是 `false` 时，`toggleProxy(false)` 那一句是空话），而判据是否承重只由单点变异说了算（`.test-tmp/mutate-*.py`，不入库）。
 - 修改前先找现有测试；修 bug 优先加“修复前失败、修复后通过”的回归测试；新增逻辑覆盖成功、失败与关键边界。
 - 交付前按改动范围执行：
   - TypeScript/Vue/运行时代码：`pnpm typecheck`、`pnpm lint`、相关 `pnpm test`。
