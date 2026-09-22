@@ -24,7 +24,7 @@
  * 「桥接层确实用了它们，且用在了正确的出口上」。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { CONTENT_SCRIPT_CHANNEL } from '@/utils/constants';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig, ProxyRule } from '@/utils/types';
@@ -474,14 +474,26 @@ describe('现状记录：载荷缺失的 PROXY_REQUEST 抛在 try 之外', () =>
  * 见 `entrypoints/background/messageRouter.ts` 的 `handleImportPlan`）。这里多转发一型，
  * 那条理由当场失效，而所有既有用例照样全绿——所以把它钉成一张清单。
  * 新增出口时这里红是预期：先回来判一次「这一型该不该在门禁内」，再把名字加进清单。
+ * 清单之外还要钉一层「能通往 SW 的内容脚本就这两份」——上面那四条读的都是 `content.ts` 一个文件，
+ * 而 WXT 按文件名自动发现内容脚本，多一份 `*.content.ts` 就是多一条页面通往 SW 的路。
  */
 describe('[源码契约] 通往 SW 的出口只有这四种', () => {
-  /** 先摘掉注释行：否则一句写着 `.sendMessage(` 的注释就能把计数抬到 6，报出的还是「第 6 处出口」那句误导话 */
+  /** 清单本身写死：文档那两条要跟的是这份常量，不是下面算出来的枚举（枚举若缩小，文档检查会跟着悄悄缩小） */
+  const OUTLETS = ['CANCEL_REQUEST', 'GET_PROXY_CONFIG', 'INTERCEPTOR_STATS', 'PROXY_REQUEST'];
+
+  /**
+   * 先摘掉注释：整行注释按行首判，行尾注释按「空白 + `//`」判
+   *
+   * 不摘的话，一句写着 `.sendMessage(` 的注释就把计数抬起来，报出的却还是「多了第六处出口」那句误导话。
+   * 行尾那条刻意要求前面有空白：`https://` 里的 `//` 前面是冒号，不该被当注释切掉。
+   */
   const bridgeSrc = readFileSync('entrypoints/content.ts', 'utf-8')
     .split('\n')
-    .filter(line => !/^\s*(\/\/|\/?\*)/.test(line))
+    .map(line => line.replace(/^\s*(\/\/|\/?\*).*$/, '').replace(/\s\/\/.*$/, ''))
     .join('\n');
   const callSites = [...bridgeSrc.matchAll(/\.sendMessage\(/g)].length;
+  /** `sendMessage` 这个名字出现的总次数：与调用点数相等，才说明桥接层没有把它转手成别名 */
+  const mentions = [...bridgeSrc.matchAll(/\bsendMessage\b/g)].length;
 
   /** 只认 `.sendMessage(` 后面紧跟的对象字面量里那一个 `type:`，页面的 `postMessage` 不算出口 */
   const forwardedTypes = [
@@ -494,33 +506,46 @@ describe('[源码契约] 通往 SW 的出口只有这四种', () => {
     // 这一条是上面那条正则的盲区兜底：新增一处不带 `type: MessageType.X` 字面量的转发
     // （换行写法、常量表驱动、变量拼装），枚举可能看不见，调用点计数一定看得见。
     expect(callSites).toBe(5);
-    expect(forwardedTypes).toHaveLength(4);
+    expect(forwardedTypes).toEqual(OUTLETS);
   });
 
-  it('枚举结果恰是 GET_PROXY_CONFIG / INTERCEPTOR_STATS / CANCEL_REQUEST / PROXY_REQUEST', () => {
-    expect(forwardedTypes).toEqual(['CANCEL_REQUEST', 'GET_PROXY_CONFIG', 'INTERCEPTOR_STATS', 'PROXY_REQUEST']);
-  });
-
-  it('没有绕过这两个正则的通道：解构出的 `sendMessage`、`runtime.connect` 长连接', () => {
-    // `const { sendMessage } = chrome.runtime` 之后的调用点不带前导点号，上面两条同时失声，
-    // 而它对页面而言就是一个新出口；端口通道更是一条正则根本覆盖不到的通路（今天为零）。
-    expect(bridgeSrc).not.toMatch(/const\s*\{[^}]*\bsendMessage\b/);
+  it('每一次 `sendMessage` 提及都是一处直接调用：别名 / 解构 / `.bind` 都让这两个数不相等', () => {
+    // 前两条正则都要求 `.sendMessage(` 这个形状，于是 `const relay = chrome.runtime.sendMessage.bind(...)`
+    // 与 `const { sendMessage } = chrome.runtime` 都能凭空多出一个出口而三处断言齐齐不红（实测过）。
+    // 名字提及数与调用点数相等，就把这类「转手」堵上了；端口（`runtime.connect`）不带这个名字，另判。
+    // 红的时候先按新写法的方向读（把函数当值传、从别处 import 同名封装也会红），再判要不要放行。
+    expect(mentions).toBe(callSites);
     expect(bridgeSrc).not.toMatch(/\bruntime\.connect\s*\(/);
+  });
+
+  it('这份枚举就是全部：内容脚本只有 `content.ts` 能碰 `chrome.runtime`', () => {
+    // 上面四条读的都是 `entrypoints/content.ts` 这一个文件，于是前提被悄悄外包给了「页面通往 SW 的路只有它」。
+    // WXT 按文件名自动发现内容脚本——新增一份 `*.content.ts` 不需要改任何别的文件，
+    // 那条前提当场就不成立了，而这套断言一条都不会红（`tests/build-verification.test.ts` 只按名字
+    // `find` 已知那两份，从不断言集合封闭，而且没有构建产物时整个文件直接抛）。
+    const discovered = readdirSync('entrypoints')
+      .filter(name => name === 'content.ts' || /\.content\.[jt]s$/.test(name))
+      .sort();
+    expect(discovered).toEqual(['content.ts', 'main-interceptor.content.ts']);
+    // MAIN world 那份拿不到扩展的 `chrome.runtime`（自包含是它自己的铁律），所以出口只需要读桥接层这一份；
+    // 哪天它真接上了 messaging，上面那份清单就不再是「页面通往 SW 的全部」了。
+    const mainWorld = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
+    expect(mainWorld).not.toMatch(/\bsendMessage\b/);
   });
 
   it('SW 侧引用这份清单的那两句判据，四个名字一个都没抄漏', () => {
     // `handleImportPlan` 与 `isTrustedSender` 的注释都把「不加 gate」的理由外包给这份清单，
     // 三处各写一份就会各说各话（实测只把其中一处一个类型名改短，只有这条红）。
     const routerSrc = readFileSync('entrypoints/background/messageRouter.ts', 'utf-8');
-    const jsdocBefore = (anchor: string): string => {
-      const at = routerSrc.indexOf(anchor);
-      expect(at).toBeGreaterThan(-1);
-      return routerSrc.slice(routerSrc.lastIndexOf('/**', at), at);
-    };
     for (const anchor of ['async function handleImportPlan(', 'export function isTrustedSender(']) {
-      const jsdoc = jsdocBefore(anchor);
-      expect(jsdoc.length).toBeGreaterThan(0);
-      for (const type of forwardedTypes) expect(jsdoc).toContain(type);
+      const at = routerSrc.indexOf(anchor);
+      expect(at, `找不到 ${anchor}——签名改了就把这里的锚点一起改掉，别删这条断言`).toBeGreaterThan(-1);
+      const start = routerSrc.lastIndexOf('/**', at);
+      const jsdoc = routerSrc.slice(start, at);
+      // 必须紧贴锚点：整块 JSDoc 被删时 `lastIndexOf` 会往上抓到上一个函数的注释，
+      // 那时「含四个名字」照样成立，守的却是别人的注释。
+      expect(jsdoc.trimEnd(), `${anchor} 上面那份注释没贴着函数声明`).toMatch(/\*\/$/);
+      for (const type of OUTLETS) expect(jsdoc).toContain(type);
     }
   });
 
@@ -528,12 +553,13 @@ describe('[源码契约] 通往 SW 的出口只有这四种', () => {
     // 内部文档是第三份手抄，而且是别人最不会去翻测试的那一份；它一漂，判据就又只剩口头承诺。
     const agents = readFileSync('AGENTS.md', 'utf-8');
     const at = agents.indexOf('桥接层通往 SW 只有');
-    expect(at).toBeGreaterThan(-1);
+    expect(at, 'AGENTS.md 里「桥接层通往 SW 只有…」那句被改写了——判据出处断在这里').toBeGreaterThan(-1);
     const clauseEnd = agents.indexOf('四个出口', at);
-    expect(clauseEnd).toBeGreaterThan(at);
+    expect(clauseEnd, '同一句里的「四个出口」字样不见了').toBeGreaterThan(at);
     const clause = agents.slice(at, clauseEnd);
-    for (const type of forwardedTypes) expect(clause).toContain(type);
-    // `REQUEST_CONFIG` 只能以「页面那侧写作 …」的身份出现——它是页面发给桥接层的名字，不是 SW 出口
-    expect(clause).toContain('页面那侧写作 `REQUEST_CONFIG`');
+    for (const type of OUTLETS) expect(clause).toContain(type);
+    // `REQUEST_CONFIG` 只能以「页面那侧的名字」的身份出现（放在括号里作补充说明），不是 SW 出口。
+    // 这里按结构判而不是抄原文，免得同义改写把这条误红。
+    expect(clause).toMatch(/（[^（）]*REQUEST_CONFIG[^（）]*）/);
   });
 });
