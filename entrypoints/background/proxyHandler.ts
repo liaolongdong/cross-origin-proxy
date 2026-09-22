@@ -504,6 +504,9 @@ export async function handleProxyRequest(data: {
     }
 
     const controller = new AbortController();
+    // 截止时间要覆盖到 body 读满，所以 clearTimeout 只能放在 finally：
+    // 一旦在拿到响应头之后就撤掉，`text/event-stream` 这类不结束的流就再没有超时——
+    // 上游连接一直握到 SW 被回收，而日志是在 body 读满之后才落的，这条请求连一笔账都不留。
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
@@ -511,7 +514,6 @@ export async function handleProxyRequest(data: {
         ...fetchOptions,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
 
       // 5xx 且还有重试次数：重试
       if (response.status >= 500 && attempt < maxRetries) {
@@ -593,7 +595,6 @@ export async function handleProxyRequest(data: {
         isBase64: finalIsBase64,
       };
     } catch (error) {
-      clearTimeout(timeoutId);
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isTimeout = error instanceof Error && error.name === 'AbortError';
       lastError = isTimeout ? 'Request timeout (30s)' : errorMessage;
@@ -602,6 +603,8 @@ export async function handleProxyRequest(data: {
         continue;
       }
       break;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
