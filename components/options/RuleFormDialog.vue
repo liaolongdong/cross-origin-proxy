@@ -647,7 +647,7 @@ import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { findInvalidHeaderNames } from '@/utils/headerValidation';
 import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule } from '@/utils/urlMatcher';
-import { collectRuleVariableRefs, findUndefinedVariableRefs } from '@/utils/variables';
+import { collectRuleVariableRefs, findUndefinedVariableRefs, newlyIntroducedRefs } from '@/utils/variables';
 import { useVariables } from '@/composables/useVariables';
 
 const props = defineProps<{
@@ -668,6 +668,16 @@ const { t } = useI18n();
 const { variables, loadVariables } = useVariables();
 /** 变量表是否读到过：没读到就别拿它去否决用户的保存 */
 const variableNamesLoaded = ref(false);
+/**
+ * 打开时这条规则里已经写着的引用名，两道保存闸门各自按它过滤（见 `handleSave`）：
+ * 闸门拦的是这次新写进去的引用，不是存储里本来就有的那一句。
+ *
+ * WS 那道单独存查询参数一侧，且只认「存储里那条本身就是 WS」的引用：前者是因为把 `{{X}}` 从
+ * 请求头挪到查询参数对 WS 规则是**新**造出一份静默坏配置（那一侧读不到变量表），后者是因为把一条
+ * 非 WS 的存量规则改成 WS，那句引用同样是这次才够到那条路的。少任一条件都是漏掉设计好的拒绝。
+ */
+const baselineVarNames = ref<string[]>([]);
+const baselineQueryVarNames = ref<string[]>([]);
 
 const formRef = ref<FormInstance>();
 
@@ -846,6 +856,14 @@ watch(
         methodsList.value = [];
         queryList.value = [];
       }
+      // 基线取的是「存储里那条规则」而不是刚填进表单的数据：预填路径（initialData）带着
+      // 空基线，那些引用与用户新敲进去的一句没有区别
+      baselineVarNames.value = props.rule ? collectRuleVariableRefs(props.rule) : [];
+      // WS 那道多一道条件：非 WS 的存量规则改成 WS 时，查询参数里那句引用与新建时无异，照旧要拦
+      baselineQueryVarNames.value =
+        props.rule && isWebSocketRule(props.rule)
+          ? collectRuleVariableRefs({ queryOverrides: props.rule.queryOverrides })
+          : [];
       showTestPanel.value = false;
       testUrl.value = '';
       testResult.value = null;
@@ -918,8 +936,13 @@ async function handleSave() {
   // 变量引用拦在保存处：未定义的 `{{名称}}` 存下去会在请求时原样发出，用户看到的只是一次
   // 看不懂的上游 401。拉取变量表失败时**不做这项校验**——宁可放过一个拼错的引用（运行时会
   // 宽容原样发出，控制台点名），也不要在扩展暂时读不到表的时候把保存按钮变成死路。
+  // 同理，按基线过滤：存储里已经写着的那句引用不是这次带进来的，改优先级也该存得回去
+  // （导入侧不跑这道校验、手改 storage 也能造出这种规则，否则它们从此再也编不动）。
   if (variableNamesLoaded.value) {
-    const undefinedRefs = findUndefinedVariableRefs({ headerOverrides, queryOverrides }, variables.value);
+    const undefinedRefs = newlyIntroducedRefs(
+      findUndefinedVariableRefs({ headerOverrides, queryOverrides }, variables.value),
+      baselineVarNames.value,
+    );
     if (undefinedRefs.length > 0) {
       ElMessage.error(t('undefinedVariableError', undefinedRefs.join(', ')));
       return;
@@ -930,7 +953,7 @@ async function handleSave() {
   // 变量表，引用只会被原样写进握手 URL —— 静默坏配置，不如当场拒绝保存
   if (
     isWebSocketRule({ matchPattern: form.matchPattern, targetUrl: form.targetUrl }) &&
-    collectRuleVariableRefs({ queryOverrides }).length > 0
+    newlyIntroducedRefs(collectRuleVariableRefs({ queryOverrides }), baselineQueryVarNames.value).length > 0
   ) {
     ElMessage.error(t('variableWsQueryUnsupportedError'));
     return;

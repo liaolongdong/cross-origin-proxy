@@ -8,6 +8,7 @@ import {
   resolveVariableMap,
   collectRuleVariableRefs,
   findUndefinedVariableRefs,
+  newlyIntroducedRefs,
   sanitizeVariables,
 } from '@/utils/variables';
 import { isSimpleRule } from '@/utils/urlMatcher';
@@ -158,6 +159,31 @@ describe('collectRuleVariableRefs / findUndefinedVariableRefs — 表单侧口�
         {},
       ),
     ).toEqual(['constructor', 'toString']);
+  });
+});
+
+describe('newlyIntroducedRefs — 闸门只拦这次带进来的引用', () => {
+  it('基线里已有的名字全部让路，新写的照常点名', () => {
+    // 这就是「存量规则改不动」那一格的判据本体：一条导入进来的规则带着 `{{OLD}}`，
+    // 用户改的其实是优先级，闸门不该替他记住这句引用
+    expect(newlyIntroducedRefs(['OLD', 'NEW'], ['OLD'])).toEqual(['NEW']);
+  });
+
+  it('基线为空（新建与预填路径）时一个都不放过', () => {
+    expect(newlyIntroducedRefs(['A', 'B'], [])).toEqual(['A', 'B']);
+  });
+
+  it('引用全在基线里时返回空数组——保存侧据此放行', () => {
+    expect(newlyIntroducedRefs(['A'], ['A', 'B'])).toEqual([]);
+  });
+
+  it('按名字比，不看它出现在哪个位点', () => {
+    // 同一条规则里把 `{{X}}` 从请求头挪到查询参数，不算新增引用（表单两处共用一份名字判据）
+    expect(newlyIntroducedRefs(['X'], collectRuleVariableRefs({ headerOverrides: { A: '{{X}}' } }))).toEqual([]);
+  });
+
+  it('重复的名字只报一次', () => {
+    expect(newlyIntroducedRefs(['NEW', 'NEW', 'OLD'], ['OLD'])).toEqual(['NEW']);
   });
 });
 
@@ -426,11 +452,32 @@ describe('分流与世界边界（源码契约）', () => {
     expect(src).not.toContain('{{');
   });
 
-  it('表单两道拦截都在，且变量表拉不到时不把保存变成死路', () => {
+  it('表单两道拦截都在、都按基线过滤（WS 那道只认存量 WS 规则），且变量表拉不到时不把保存变成死路', () => {
     const src = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf-8');
-    expect(src).toContain('findUndefinedVariableRefs');
     expect(src).toContain('variableWsQueryUnsupportedError');
-    // WS 的查询参数由 MAIN world 拼接，那一侧永远读不到表 → 保存处直接拒
+    // 两道闸门都只拦「这次带进来的」引用：存储里已经写着 `{{X}}` 的规则（导入侧不跑这道校验、
+    // 手改 storage 也造得出）否则连优先级都改不动
+    expect(src).toMatch(
+      /newlyIntroducedRefs\(\s*findUndefinedVariableRefs\([\s\S]*?\),\s*baselineVarNames\.value,?\s*\)/,
+    );
+    // WS 那道刻意不共用基线：把 `{{X}}` 从请求头挪进 WS 查询参数是新造一份静默坏配置
+    expect(src).toMatch(
+      /newlyIntroducedRefs\(collectRuleVariableRefs\(\{ queryOverrides \}\),\s*baselineQueryVarNames\.value\)/,
+    );
+    // 只 toContain 看得见第一处，两处都得在才算收口
+    expect(src.match(/newlyIntroducedRefs\(/g)).toHaveLength(2);
+    // 基线取的是存储里那条规则；预填路径（initialData）留空基线，那些引用与新敲的一句没区别
+    expect(src).toMatch(
+      /baselineVarNames\.value =\s*props\.rule\s*\?\s*collectRuleVariableRefs\(props\.rule\)\s*:\s*\[\]/,
+    );
+    expect(src).toMatch(
+      // 断言按空白宽容写：prettier 会把这条三元拆成三行，钉死一行等于给格式化埋一颗雷。
+      // `&& isWebSocketRule(props.rule)` 是承重的那半：一条非 WS 的存量规则被改成 WS 时，
+      // queryOverrides 里的引用是这次才够到「页面侧拼接、读不到变量表」那条路的，与新建时无异，
+      // 摘掉它就是把设计好的拒绝漏掉（变异 B8）
+      /baselineQueryVarNames\.value =\s*props\.rule\s*&&\s*isWebSocketRule\(props\.rule\)\s*\?\s*collectRuleVariableRefs\(\{\s*queryOverrides: props\.rule\.queryOverrides,?\s*\}\)\s*:\s*\[\]/,
+    );
+    // 拉取失败时闸门整体让路，别让「暂时读不到表」变成存不回去
     expect(src).toContain('if (variableNamesLoaded.value)');
   });
 

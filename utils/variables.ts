@@ -146,8 +146,8 @@ export function resolveVariableMap(
 /**
  * 一条规则引用了哪些变量
  *
- * 表单校验（引用了未定义的就别让存）与变量管理页的「被 N 条规则使用」共用这一份口径——
- * 两处各写一遍正是漂移的开始。
+ * 表单校验（引用了未定义的就别让存，见 `newlyIntroducedRefs`）与变量管理页的「被 N 条规则使用」
+ * 共用这一份口径——两处各写一遍正是漂移的开始。
  */
 export function collectRuleVariableRefs(rule: {
   headerOverrides?: Record<string, string>;
@@ -177,4 +177,18 @@ export function findUndefinedVariableRefs(
   store: VariableStore,
 ): string[] {
   return collectRuleVariableRefs(rule).filter(name => ownVariableValue(store, name) === undefined);
+}
+
+/**
+ * 从一组引用名里挑出「这次才带进来的」
+ *
+ * 表单的两道保存闸门各拿一份基线用它过滤。闸门要拦的是**新写进去的**引用（拼错的名字存下去会在
+ * 请求时原样发出），而编辑一条存储里早已写着 `{{X}}` 的规则时，`X` 不是这次带进来的：导入侧不跑
+ * 这道校验、手改 storage 也能造出这种规则，此后这条规则连优先级都改不动。比较按**名字**，
+ * 不看它出现在哪个位点——但两份基线各自取哪个位点是承重的：未定义那道问「这个名字表里有没有值」，
+ * 头与查询可以合并；WS 那道问「这个位点读不读得到变量表」，只能按查询参数一侧算。
+ */
+export function newlyIntroducedRefs(refs: Iterable<string>, alreadyStored: Iterable<string>): string[] {
+  const stored = new Set(alreadyStored);
+  return [...new Set(refs)].filter(name => !stored.has(name));
 }
