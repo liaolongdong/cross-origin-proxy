@@ -178,6 +178,12 @@ async function handleImportPlan(
     const validRules = normalizeImportedRules(payload.rules);
     return {
       success: true,
+      // 这里刻意不走 `configRules()`（与 `runProxyRequest` 相反）：现网规则是这份预演的对照物，
+      // 「读不出」当不成「现网是空的」。现状两种表现：多数形状直接抛，由下面的 catch 回
+      // `success:false`，界面画「预览失败」；个别形状（`rules` 是字符串）替换模式不抛，把字符数
+      // 当成现网条数。过一遍 `configRules()` 是把前者一律改成后者那种体面的假数（合并报「全部新增」、
+      // 替换报 `replaces: 0`），而「预览说几条、实际进几条」正是这支功能存在的全部理由。
+      // 三种形状与「调用点本身」由 `tests/importPlan.test.ts` 末尾的现状记录钉住
       plan: planImport(config.rules, validRules, payload.mode),
     };
   } catch (error) {

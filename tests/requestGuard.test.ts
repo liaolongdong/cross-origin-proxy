@@ -19,11 +19,18 @@ vi.stubGlobal('chrome', {
 const addRequestLog = vi.fn(async (_entry: Record<string, unknown>) => {});
 let configToReturn: { enabled: boolean; rules: unknown[] } = { enabled: true, rules: [] };
 
-vi.mock('@/utils/storage', () => ({
-  getProxyConfig: vi.fn(async () => configToReturn),
-  addRequestLog: (entry: Record<string, unknown>) => addRequestLog(entry),
-  getRequestLogs: vi.fn(async () => []),
-}));
+// 部分 mock：只换掉「这一支要观察」的三个出口，其余（`configRules` / `getVariables` …）留真身。
+// 手写整份导出清单＝把「proxyHandler 用了存储层的哪些函数」抄在这里，被抄方一加新调用点就报
+// "No xxx export is defined on the mock"——红的是无关用例，且红的原因不在 diff 里。
+vi.mock('@/utils/storage', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/utils/storage')>();
+  return {
+    ...actual,
+    getProxyConfig: vi.fn(async () => configToReturn),
+    addRequestLog: (entry: Record<string, unknown>) => addRequestLog(entry),
+    getRequestLogs: vi.fn(async () => []),
+  };
+});
 
 const {
   isValidHeaderEntry,

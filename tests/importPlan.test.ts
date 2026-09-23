@@ -244,3 +244,36 @@ describe('键计算只有一个来源（防预览/写入分叉）', () => {
     expect(storageSrc).toContain('deduplicateRules(config.rules, incoming)');
   });
 });
+
+/**
+ * 现状记录：`current` 不是数组时 `planImport` 表现成什么，以及为什么调用点刻意不过 `configRules()`。
+ *
+ * `handleImportPlan` 是全仓唯一的读取侧例外（理由写在那段注释里），而这条例外只在下面①②成立时
+ * 才站得住：「读不出」当不成「现网是空的」。过一遍 `configRules()` 会把①那种体面的失败一律改成
+ * ②那种体面的假数——而「预览说几条、实际进几条」正是这支功能存在的全部理由。
+ * 要动这三条，先回去读 `entrypoints/background/messageRouter.ts` 的 `handleImportPlan`。
+ */
+describe('planImport — 现网规则读不出时的两种表现（现状记录）', () => {
+  const incoming = [makeRule('i1')];
+
+  it('① 键整个不见：两种模式都抛，回包是 success:false，界面画「预览失败」', () => {
+    expect(() => planImport(undefined as never, incoming, 'merge')).toThrow();
+    expect(() => planImport(undefined as never, incoming, 'replace')).toThrow();
+  });
+
+  it('② 键在但形状不对：替换模式不抛，现网条数那一格跟着坏数据一起坏', () => {
+    // 字符串比 `undefined` 更危险：`replaces: 3` 是个像样的结论，界面会照画。
+    expect(planImport('abc' as never, incoming, 'replace').replaces).toBe(3);
+    expect(planImport({} as never, incoming, 'replace').replaces).toBeUndefined();
+    // 收口成「当空」会怎样：两种模式各自报出一个好看的假数（0 / 全部新增），①那格抛错从此消失
+    expect(planImport([], incoming, 'replace').replaces).toBe(0);
+  });
+
+  it('唯一的调用点仍把 `config.rules` 原样交进去（①②被上面钉住的前提）', () => {
+    // 「四处都用 configRules()」这句要是把这里也包进去，②就从体面失败退化成体面谎报，
+    // 而全仓没有一条运行时用例会因为那种改动而红——所以按源码钉住调用点本身。
+    const routerSrc = fs.readFileSync('entrypoints/background/messageRouter.ts', 'utf-8');
+    expect(routerSrc.match(/planImport\(/g)).toHaveLength(1);
+    expect(routerSrc).toContain('planImport(config.rules, validRules, payload.mode)');
+  });
+});

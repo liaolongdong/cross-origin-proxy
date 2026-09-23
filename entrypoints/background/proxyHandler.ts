@@ -358,9 +358,13 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     };
   }
 
+  // 取规则数组只走 `configRules()`：`proxy_config` 是 storage 里的原文，手改或被截断的旧数据
+  // 能让 `rules` 变成对象 / 字符串 / 不见，那时 `.find` / `.filter` 当场抛 TypeError。
+  // 抛出去的结果与「没有规则命中」本是同一个结局（桥接层拿到失败信封 → 页面回退原生请求），
+  // 但日志里会留下一行看着像上游故障的 `rules.find is not a function`。
+  const rules = configRules(config);
   const rule =
-    resolveSelectedRule(data.ruleId, data.url, data.method, config.rules) ??
-    findMatchingRule(data.url, config.rules, data.method);
+    resolveSelectedRule(data.ruleId, data.url, data.method, rules) ?? findMatchingRule(data.url, rules, data.method);
   if (!rule) {
     return {
       requestId: data.requestId,

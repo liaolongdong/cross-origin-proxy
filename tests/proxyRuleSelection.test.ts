@@ -158,6 +158,19 @@ describe('handleProxyRequest — 拦截器已选规则优先于全量重匹配',
 
     expect(resp.status).toBe(200);
   });
+
+  it('`rules` 被手改成非数组：按「没有规则命中」落定，而不是抛一句 rules.find is not a function', async () => {
+    // 代发路径取规则数组只走 `configRules()`。结局本来一样（桥接层拿不到可代发的规则 → 页面回退原生），
+    // 差别在日志与回包上留下的是「无匹配规则」还是一行看着像上游故障的 TypeError。
+    store['proxy_config'] = { enabled: true, rules: { '0': { id: 'wide' } } };
+
+    const resp = await request({ url: ADMIN_URL, method: 'GET', ruleId: 'wide' });
+
+    expect(resp.status).toBe(0);
+    expect(resp.statusText).toBe('Proxy Bypass');
+    expect(resp.body).toBe('No matching rule');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('MAIN world 拦截器 — 必须把已选规则带给 SW（源码契约）', () => {
