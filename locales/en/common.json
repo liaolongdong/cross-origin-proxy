@@ -16,14 +16,7 @@
   "statusEnabled": "Enabled",
   "statusDisabled": "Disabled",
   "diagnosisNoRules": "No proxy rules yet — create one first.",
-  "diagnosisProxyDisabled": "The proxy master switch is off, so no rule takes effect. Turn it on.",
-  "diagnosisRuleNotApplied": "The matched rule “$1” uses the network-layer channel, but Chrome will not apply it: switch to wildcard or prefix matching.",
-  "diagnosisPageNotSynced": "Rule “$1” is fine, but this page is still running the rules from before your change — reload it.",
-  "diagnosisShadowedBy": "Rule “$1” does cover this address, but the higher-priority “$2” takes the match: separate their priorities.",
   "diagnosisDisabledMatch": "Rule “$1” matches this address, but it is currently off — enable it.",
   "diagnosisMethodFiltered": "Rule “$1” matches this address, but it only handles $2, and this request's method is not in that list.",
-  "diagnosisPatternRejected": "Rule “$1” has a pattern that was rejected (invalid regex syntax or catastrophic backtracking risk), so it never matches. Rewrite the pattern.",
-  "diagnosisNoMatch": "No rule's pattern covers this address.",
-  "diagnosisOkDnr": "This request matches rule “$1” and will be rewritten by the network-layer channel.",
-  "diagnosisOkSw": "This request matches rule “$1” and will be forwarded by the proxy channel."
+  "diagnosisPatternRejected": "Rule “$1” has a pattern that was rejected (invalid regex syntax or catastrophic backtracking risk), so it never matches. Rewrite the pattern."
 }

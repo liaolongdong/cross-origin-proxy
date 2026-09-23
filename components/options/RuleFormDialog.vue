@@ -741,7 +741,7 @@ const queryList = ref<{ key: string; value: string }[]>([]);
 // Test panel state
 const showTestPanel = ref(false);
 const testUrl = ref('');
-const testResult = ref<{ matched: boolean; rewrittenUrl: string } | null>(null);
+const testResult = ref<{ matched: boolean; rewrittenUrl: string; testedUrl: string } | null>(null);
 /** 第几次按下「测试」：只用来给高亮重新起头，让连点两次也能看见结果确实又算了一遍 */
 const testRunSeq = ref(0);
 
@@ -751,11 +751,13 @@ const testRunSeq = ref(0);
  * 通配符与正则的替换对新用户并不直观（`*` 捕获到的那截到底去了哪里），而让读者在两个长地址
  * 之间逐字找差异，基本等于没告诉任何人任何事。这里只高亮，不改写判定——`rewrittenUrl` 仍然
  * 是 `rewriteUrl` 的原样输出，三段拼回去必然等于它（`utils/rewriteDiff.ts` 有单测钉住这条）。
+ * 求差用的是**按下「测试」那一刻的那个地址**（`testedUrl`），不是输入框里当前的：结果是上一次
+ * 按出来的，拿新地址去对旧结果，高亮会指着几个谁也没测过的字符说「这就是被换掉的那一段」。
  */
 const rewriteSegments = computed(() => {
   const result = testResult.value;
   if (!result?.matched) return [];
-  const { before, changed, after } = diffRewrite(testUrl.value.trim(), result.rewrittenUrl);
+  const { before, changed, after } = diffRewrite(result.testedUrl, result.rewrittenUrl);
   return [
     { text: before, changed: false },
     { text: changed, changed: true },
@@ -1125,7 +1127,7 @@ function runTest() {
 
   const matched = matchRule(url, testRule);
   const rewrittenUrl = matched ? applyQueryOverrides(rewriteUrl(url, testRule), testRule.queryOverrides) : '';
-  testResult.value = { matched, rewrittenUrl };
+  testResult.value = { matched, rewrittenUrl, testedUrl: url };
   testRunSeq.value += 1;
 }
 </script>

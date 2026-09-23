@@ -256,6 +256,8 @@ const matchedDnrSkipReason = computed<DnrSkipReason | undefined>(() =>
  * 与 `matchedRule` 共用同一份判定（`diagnoseRequest` 内部就是 `findMatchingRule`），
  * 所以绝不会出现「上面说没命中、下面说会命中」。两种刻意不说话的情形：
  * 总开关关闭已由上方 `el-alert` 说清；单纯「没有规则覆盖」与「未命中任何规则」那个标签同义。
+ * 命中侧的三件事（浏览器不会应用这条网络层规则、排在获胜者后面的遮蔽清单、通道本身）
+ * 由这一屏别处那几格说，不归归因句——同一个事实不许有第二个出口。
  */
 const missDiagnosis = computed<Diagnosis | null>(() => {
   if (!props.proxyEnabled) return null;
@@ -264,7 +266,6 @@ const missDiagnosis = computed<Diagnosis | null>(() => {
     method: testMethod.value || undefined,
     rules: props.rules,
     proxyEnabled: props.proxyEnabled,
-    dnrSkipped: props.dnrSkippedRules,
   });
   return diagnosis.code === 'noMatch' ? null : diagnosis;
 });

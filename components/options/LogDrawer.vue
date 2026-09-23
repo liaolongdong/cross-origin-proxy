@@ -641,7 +641,15 @@ const freshLogIds = ref<Set<string>>(new Set());
 let knownIds = new Set<string>();
 /** 这一屏的第一份账只对齐、不点亮：初始加载会让整列「全都是新的」，那不是刚刚发生 */
 let primed = false;
-let freshTimer: ReturnType<typeof setTimeout> | null = null;
+/** 每一批各自的摘类名定时器：合成一个的话，后到那一批会把前一批的期限一起往后推 */
+const freshTimers = new Set<ReturnType<typeof setTimeout>>();
+
+/** 收摊：类名与定时器一起清。关着的那一屏没人看，留着的只会让下一次打开补闪旧行 */
+function clearFreshTints() {
+  freshTimers.forEach(timer => clearTimeout(timer));
+  freshTimers.clear();
+  freshLogIds.value = new Set();
+}
 
 watch(
   () => props.logs,
@@ -650,26 +658,28 @@ watch(
     if (!props.visible) {
       knownIds = current;
       primed = false;
+      clearFreshTints();
       return;
     }
     const arrived = primed ? [...current].filter(id => !knownIds.has(id)) : [];
     knownIds = current;
     primed = true;
     if (arrived.length === 0) return;
+    const batch = new Set(arrived);
     // 并集而不是覆盖：上一批还在闪的，不必被这一批提前掐掉
-    freshLogIds.value = new Set([...freshLogIds.value, ...arrived]);
-    if (freshTimer) clearTimeout(freshTimer);
-    // 到点摘掉类名：el-table 之后因排序/筛选重建行时，不该把旧行再点亮一遍
-    freshTimer = setTimeout(() => {
-      freshLogIds.value = new Set();
-      freshTimer = null;
+    freshLogIds.value = new Set([...freshLogIds.value, ...batch]);
+    // 到点摘掉这一批的类名：el-table 之后因排序/筛选重建行时，不该把旧行再点亮一遍
+    const timer = setTimeout(() => {
+      freshTimers.delete(timer);
+      const rest = new Set(freshLogIds.value);
+      batch.forEach(id => rest.delete(id));
+      freshLogIds.value = rest;
     }, 900);
+    freshTimers.add(timer);
   },
 );
 
-onUnmounted(() => {
-  if (freshTimer) clearTimeout(freshTimer);
-});
+onUnmounted(clearFreshTints);
 
 // URL 复制
 const copyUrl = async (url: string) => {
@@ -982,7 +992,8 @@ function copyAsCurl() {
 }
 
 /* 刚落进来的那一行闪一下：只动背景，不加边框也不改行高，表格布局纹丝不动。
-   900ms 后类名被摘掉，所以这一出只会播一次，滚动回看旧行时不会被重新点亮。 */
+   淡出本身 0.7s 走完，类名留到 900ms 才摘（多给的这一截是余量，不是让它在屏上多停一会儿），
+   所以这一出每笔只播一次，滚动回看旧行时不会被重新点亮。 */
 .log-table :deep(.log-row-new) {
   animation: log-row-arrive 0.7s ease-out;
 }

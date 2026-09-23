@@ -229,8 +229,9 @@
 
           <p>
             弹窗里的「为当前页创建规则」会先看一眼这一页正在调用哪些接口。它读的是<strong>这一页自己的</strong>资源计时记录，只取其中
-            fetch / XHR 请求的来源地址与请求次数——路径、查询参数、请求头与正文都不读，也不跨 world
-            传回弹窗；这份清单只在弹窗里当场渲染，
+            fetch / XHR 请求的来源与次数。每条记录的地址确实被读了一遍——只为把它折成来源（协议 + 主机 +
+            端口），路径与查询参数在本页就地丢弃，跨 world
+            传回弹窗的只有「来源」和「次数」这两个值；请求头与正文压根不在这一类记录里，也就无从读取。这份清单只在弹窗里当场渲染，
             不写入任何存储，更不会发往任何远端。这一页没有作答时（站点禁用了扩展、扩展刚重载、纯静态页没发过请求），那个按钮退回原本的按页面地址预填。
           </p>
 
@@ -342,11 +343,13 @@
 
           <p>
             "Create Rule for This Page" in the popup starts by looking at which APIs the page is actually calling. It
-            reads <strong>that page's own</strong> resource-timing entries and takes only the origin and request count
-            of its fetch / XHR calls — paths, query parameters, headers and bodies are neither read here nor carried
-            across the world boundary into the popup, and the resulting list is rendered on the spot: stored nowhere and
-            sent to no remote. When the page cannot answer (the extension is disabled for the site, it was reloaded, or
-            the page simply made no such request), the action falls back to prefilling from the page address as before.
+            reads <strong>that page's own</strong> resource-timing entries and keeps only the origin and request count
+            of its fetch / XHR calls. Each entry's address is read — but only to collapse it into its origin (scheme,
+            host and port): paths and query strings are dropped inside the page, and just two values, an origin and a
+            count, cross the world boundary into the popup. Headers and bodies are not part of resource-timing entries
+            at all, so there is nothing to read. The resulting list is rendered on the spot: stored nowhere and sent to
+            no remote. When the page cannot answer (the extension is disabled for the site, it was reloaded, or the page
+            simply made no such request), the action falls back to prefilling from the page address as before.
           </p>
 
           <h3>5. Children</h3>

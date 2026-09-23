@@ -601,8 +601,7 @@ async function computePageHit() {
     } else {
       // 没命中才归因。总开关取这一份 config，不读 `enabled.value`：popup 挂载时
       // `fetchStatus()` 与这里是并发的那两回事，取同一份读到的数据才不会把「还没读到」说成「关着」。
-      // 刻意不传 `dnrSkipped` / `pageSynced`：那两档说的是「命中了却不生效」，这一支用不到；
-      // 缺哪一档就跳过哪一档，绝不替没读到的事实说一句「正常」。
+      // 命中了却不生效的那几档不由这里说：这一支压根没有命中，而那三档各有界面出口。
       const diagnosis = diagnoseRequest({ url, method: 'GET', rules, proxyEnabled: config.enabled });
       if (PAGE_HIT_CAUSES.includes(diagnosis.code)) pageHitCause.value = diagnosis;
     }

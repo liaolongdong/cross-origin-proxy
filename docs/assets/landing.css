@@ -1066,7 +1066,8 @@ tbody tr:last-child td {
 
 /* 这张表最宽的一格要横向滚动，所以把「方案」那一列钉在左边：读到哪一行、
    比的是哪一列，不必来回拖。`border-collapse` 下 sticky 单元格不带边框，
-   分隔线改用内阴影。 */
+   分隔线改用内阴影。钉住的那一列是浮在其他列之上的，所以它必须有实心底：
+   留透明就是让横向滚过来的那些字从它底下透上来，看着像串行，而不是钉住了。 */
 .compare th:first-child {
   position: sticky;
   left: 0;
@@ -1094,14 +1095,17 @@ tbody tr:last-child td {
 }
 
 /* 整列同色：读者横向拖到第 4 列时，眼睛跟得住这一竖列的是哪一家。
-   「本扩展」那一列本就有底色，悬停时只做加深，不许把它洗成普通色。 */
+   「本扩展」那一列本就有底色，悬停时只做加深，不许把它洗成普通色。
+   底色必须是实心的：这一列可能正好是被钉住的那一列，横向滚过来的字从半透明底色底下
+   透上来，看着像串行，而不是「这一列被挑中了」。暗色主题下 `--lp-primary-faint`
+   自带 alpha，所以这里绕开它，用 `color-mix` 把主色掺进不透明的表面色。 */
 .compare[data-col='1'] :is(td, th):nth-child(1),
 .compare[data-col='2'] :is(td, th):nth-child(2),
 .compare[data-col='3'] :is(td, th):nth-child(3),
 .compare[data-col='4'] :is(td, th):nth-child(4),
 .compare[data-col='5'] :is(td, th):nth-child(5),
 .compare[data-col='6'] :is(td, th):nth-child(6) {
-  background: var(--lp-primary-faint);
+  background: color-mix(in srgb, var(--lp-primary) 8%, var(--lp-surface));
 }
 
 .compare[data-col='2'] td.col-us {
@@ -1539,6 +1543,13 @@ html[data-try-state='notapplied'] .try-verdict {
   margin-top: 4px;
   font-size: 13px;
   color: var(--lp-warn);
+}
+
+/* 这一格是「有话才出现」：脚本挑不到对应那句理由时会挂上 `hidden`，
+   而上面那句 `display: block` 正好压过 UA 的 `[hidden] { display: none }`——
+   不补这一条，空的一格仍占 4px 空隙，看起来像渲染坏了一个盒子。 */
+.try-alt[hidden] {
+  display: none;
 }
 
 .try-diverged {
