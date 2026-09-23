@@ -10,7 +10,7 @@ export const STORAGE_KEYS = {
   PROFILES: 'env_profiles',
   AUTO_OFF_MINUTES: 'auto_off_minutes', // 代理自动关闭时长（分钟），0 表示不自动关闭
   VARIABLES: 'variables', // 凭据变量表（规则里以 {{名称}} 引用，真值只存这一处）
-  CONFIG_HISTORY: 'config_history', // 配置恢复点（成套替换类写入前的整包快照，见 utils/storage.ts）
+  CONFIG_HISTORY: 'config_history', // 配置恢复点（成套替换所换掉的那份整包配置，见 utils/storage.ts）
 } as const;
 
 // Theme modes

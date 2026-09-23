@@ -159,7 +159,7 @@ export enum MessageType {
   /** 导入前预览：纯算不落库，只读且不含凭据真值，因此与其余读取消息一样**不加** sender gate */
   GET_IMPORT_PLAN = 'GET_IMPORT_PLAN',
 
-  // 配置恢复点（成套替换类写入前的整包快照）
+  // 配置恢复点（那次成套替换所换掉的整包配置，见 utils/storage.ts 的 pushConfigHistory）
   GET_CONFIG_HISTORY = 'GET_CONFIG_HISTORY',
   RESTORE_CONFIG_HISTORY = 'RESTORE_CONFIG_HISTORY',
 
@@ -437,8 +437,8 @@ export type ConfigHistoryReason = 'replace-import' | 'load-profile' | 'batch-del
 /**
  * 一份配置恢复点
  *
- * `config` 是写入前的整包快照（含规则原样的 `headerOverrides`，因此这份数据的读取权限与
- * 凭据变量表同档）。只在后台侧流动，从不下发到页面世界。
+ * `config` 是那次成套替换所换掉的整包配置（含规则原样的 `headerOverrides`，因此这份数据的读取
+ * 权限与凭据变量表同档）。只在后台侧流动，从不下发到页面世界。
  */
 export interface ConfigHistoryEntry {
   id: string;

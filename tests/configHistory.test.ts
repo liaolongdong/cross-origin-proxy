@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import type { ConfigHistoryEntry, ProxyRule } from '@/utils/types';
 import { MAX_CONFIG_HISTORY, MAX_CONFIG_HISTORY_TOTAL_SIZE, MAX_RULES, STORAGE_KEYS } from '@/utils/constants';
 
@@ -442,6 +443,44 @@ describe('restoreConfigHistory — 回退本身必须是可逆的', () => {
 
     expect(await restoreConfigHistory('empty')).toEqual({ success: true, restored: 0 });
     expect((await getProxyConfig()).rules).toHaveLength(0);
+  });
+});
+
+/**
+ * 界面措辞不得承诺恢复点的写入时机
+ *
+ * 四处写入点现在一律排在主写入之后，而这三句界面文案是扩展里唯一说这件事的地方——恢复点没有别的可
+ * 观察面，读者只能照句子理解成「我那次替换之前，旧配置已经先存好了」。改了代码不改文案，两边都会以为
+ * 自己在对齐事实，所以顺序契约与措辞落在同一支文件里（上面那组「落盘顺序」钉的是代码，这里钉的是话）。
+ *
+ * 判据是「同一句里出现顺序承诺」，实现却刻意做成禁字：`先`（中英 `first`）在这三句话里只承担一个
+ * 语义——「记」发生在被替换的那次写入之前。要写「请先…」之类的客套，请把这句话换成不含时序的说法，
+ * 而不是往守卫里加例外。反过来，`改动前的配置`、`被换掉的那份` 说的是快照的**内容**（那次写入换掉的
+ * 那一份配置），换序之后依然成立，所以不在禁列。
+ *
+ * 负向半边单独存在会空转（把整句删掉、或把 key 改名也算通过），所以每条同时钉正向：这句话仍然要说清
+ * 「被换掉的那一份会记成恢复点」，中英各一份。射程只到扩展内这三句：README、两份落地页与 `llms*.txt`
+ * 上还有同一类说法，它们不走这三个 key、也不进 bundle，另算一轮（要中英成对，还连带 `docs/` 的日期三件套）。
+ */
+const zhOptions = JSON.parse(readFileSync('locales/zh_CN/options.json', 'utf-8')) as Record<string, string>;
+const enOptions = JSON.parse(readFileSync('locales/en/options.json', 'utf-8')) as Record<string, string>;
+
+/** 会提到「整套替换会留一份恢复点」的三句界面文案 */
+const RECORDING_COPY_KEYS = ['restorePointsHint', 'restoreConfirm', 'importPreviewReplaces'] as const;
+
+describe('恢复点的界面措辞 — 不承诺写入时机', () => {
+  it.each(RECORDING_COPY_KEYS)('%s：中英两侧都没有「先记」这种顺序承诺', key => {
+    expect(zhOptions[key]).not.toContain('先');
+    expect(enOptions[key]).not.toMatch(/\bfirst\b/i);
+  });
+
+  it.each([
+    { key: 'restorePointsHint', zh: ['改动前的配置', '$1'], en: [/replace the whole rule set/i, /record/i, /\$1/] },
+    { key: 'restoreConfirm', zh: ['恢复点', '记为'], en: [/restore point/i, /recorded/i] },
+    { key: 'importPreviewReplaces', zh: ['恢复点', '记为'], en: [/restore point/i, /kept as/i] },
+  ] as const)('$key：仍然把「被换掉的那一份会记成恢复点」说给用户', ({ key, zh, en }) => {
+    for (const needle of zh) expect(zhOptions[key]).toContain(needle);
+    for (const pattern of en) expect(enOptions[key]).toMatch(pattern);
   });
 });
 

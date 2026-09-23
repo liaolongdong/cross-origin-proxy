@@ -242,8 +242,8 @@ const STATE_MUTATING_TYPES = new Set([
  * 漏掉这道 gate，任意页面的 `chrome.runtime.sendMessage({type:'GET_VARIABLES'})` 就能读到
  * 用户所有环境的密钥，本批次其余设计（真值不下发页面）当场作废。
  *
- * `GET_CONFIG_HISTORY` 同档：恢复点是写入前的整包快照，里面的 `headerOverrides` 是**原样落盘的
- * 真实请求头**（凭据变量库之前录入的规则尤其如此），一份历史等于把配好几种环境的会话全交出去。
+ * `GET_CONFIG_HISTORY` 同档：恢复点是那次成套替换所换掉的整包配置，里面的 `headerOverrides` 是
+ * **原样落盘的真实请求头**（凭据变量库之前录入的规则尤其如此），一份历史等于把配好几种环境的会话全交出去。
  *
  * 新增读取类消息时不要照这里加：判据是「页面从不读取 + 回的是凭据类数据」，两者缺一就别加。
  */
