@@ -644,7 +644,7 @@ let primed = false;
 /** 每一批各自的摘类名定时器：合成一个的话，后到那一批会把前一批的期限一起往后推 */
 const freshTimers = new Set<ReturnType<typeof setTimeout>>();
 
-/** 收摊：类名与定时器一起清。关着的那一屏没人看，留着的只会让下一次打开补闪旧行 */
+/** 收摊：类名与定时器一起清。钩在「关着的时候来了新账」这一处（本组件不许有 visible watcher，见上）；关闭而无新账时不催清，各定时器最迟 900ms 自己收 */
 function clearFreshTints() {
   freshTimers.forEach(timer => clearTimeout(timer));
   freshTimers.clear();

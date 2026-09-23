@@ -3,9 +3,9 @@
  *
  * 判据本来就有，但散在五个地方：弹窗的通道格、未生效徽章、送达账、拦截器自报、URL 预演。
  * 老用户会自己拼，新用户不会，而这个品类最集中的差评恰恰是「装了没生效」。本模块**不新增
- * 任何判定**：它只把已有的纯函数（`findMatchingRule` / `matchRule` / `isPatternUsable`）串成
- * **第一个阻断原因**，并且每一条原因都指向界面上一个已经存在的动作。结论永远不可能与判据
- * 分叉——分叉的唯一可能是它自己另算一份判据，那在这里是禁止的。
+ * 任何判定**：它只把已有的纯函数（`findMatchingRule` / `matchRule` / `methodAllowed` /
+ * `isPatternUsable`）串成**第一个阻断原因**，并且每一条原因都指向界面上一个已经存在的动作。
+ * 结论永远不可能与判据分叉——分叉的唯一可能是它自己另算一份判据，那在这里是禁止的。
  *
  * 射程只有一件事：**这一笔没命中任何规则，为什么**。命中了却不生效的那几档（浏览器不会应用
  * 这条网络层规则、这一页还在跑旧规则集、命中的不是用户心里那条）在两个界面上都已经各有一句
@@ -25,7 +25,7 @@
  */
 
 import type { ProxyRule } from '@/utils/types';
-import { findMatchingRule, isPatternUsable, matchRule } from '@/utils/urlMatcher';
+import { findMatchingRule, isPatternUsable, matchRule, methodAllowed } from '@/utils/urlMatcher';
 
 /** 归因结论的编码；文案住在界面侧，判据侧不关心措辞 */
 export type DiagnosisCode =
@@ -118,8 +118,9 @@ export function diagnoseRequest(input: DiagnosisInput): Diagnosis {
   if (findMatchingRule(address, rules, method)) return { code: 'noMatch' };
 
   // 禁用项要能被这一笔的方法白名单放过，才谈得上「打开它就生效」：一条只处理 POST 的
-  // 禁用规则，对这一笔 GET 来说打开也不生效，点名它就是给一半的修法。
-  const disabled = findCovering(rules, address, rule => !rule.enabled && admitsMethod(rule, method));
+  // 禁用规则，对这一笔 GET 来说打开也不生效，点名它就是给一半的修法。口径直接取匹配层的
+  // `methodAllowed`——这里另算一份，归因句与匹配结果就有朝一日各说各的。
+  const disabled = findCovering(rules, address, rule => !rule.enabled && methodAllowed(rule, method));
   if (disabled) return { code: 'disabledMatch', rule: disabled };
 
   // 模式覆盖却仍不命中，且给定过方法：只能是方法白名单挡下的（启用与覆盖都已确认）
@@ -130,15 +131,4 @@ export function diagnoseRequest(input: DiagnosisInput): Diagnosis {
   if (rejected) return { code: 'patternRejected', rule: rejected };
 
   return { code: 'noMatch' };
-}
-
-/**
- * 这一笔的方法在这条规则自己的白名单里吗
- *
- * 与匹配层同一口径：`methods` 为空 = 不限方法；省略 `method` 时不拿白名单收窄（匹配层也
- * 是这么处理的），此时「打开它就生效」这话依然成立。
- */
-function admitsMethod(rule: ProxyRule, method?: string): boolean {
-  if (!method || !rule.methods || rule.methods.length === 0) return true;
-  return rule.methods.some(item => item.toUpperCase() === method.toUpperCase());
 }

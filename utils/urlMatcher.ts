@@ -31,8 +31,11 @@ export function isWebSocketRule(rule: Pick<ProxyRule, 'matchPattern' | 'targetUr
  * 规则的 HTTP 方法白名单是否放行给定方法。
  * 未配置 methods（或为空）时放行任意方法；配置后仅放行列表内方法（大小写不敏感）。
  * 无方法信息（method 为 undefined，如命中测试）时不因方法维度收窄。
+ *
+ * 导出给 `utils/diagnosis.ts` 用：那句「把它打开就生效」必须与匹配层同一口径，
+ * 另写一份判据就是让归因话与匹配结果有朝一日各说各的。
  */
-function methodAllowed(rule: ProxyRule, method?: string): boolean {
+export function methodAllowed(rule: ProxyRule, method?: string): boolean {
   if (!rule.methods || rule.methods.length === 0) return true;
   if (!method) return true;
   const upper = method.toUpperCase();
