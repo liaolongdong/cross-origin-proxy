@@ -23,9 +23,9 @@
  * `normalizeProxyResponse` 的三处形状约束在 `proxyResponseGuard.test.ts`——这里只钉
  * 「桥接层确实用了它们，且用在了正确的出口上」。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CONTENT_SCRIPT_CHANNEL } from '@/utils/constants';
+import { CONTENT_SCRIPT_CHANNEL, PAGE_API_PROBE } from '@/utils/constants';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig, ProxyRule } from '@/utils/types';
 
@@ -308,16 +308,70 @@ describe('后台广播：回执就是送达账唯一的信号', () => {
     expect(synced.rules[0]).not.toHaveProperty('headerOverrides');
   });
 
-  it('别的类型不作答、也不回内容：全仓只有广播那一次在等回执', async () => {
+  it('别的类型不作答、也不回内容：等着回执的只有广播那一次', async () => {
     // 送达账只认 `tabs.sendMessage` 那一条 promise 自己的落定（`dnrManager.ts:153-161`），
     // 所以「顺手给别的消息回执」并不会把账抹平——它的问题是往一个没有等待者的信道里回数据。
-    // 这条钉的是形状：监听器只对 `UPDATE_PROXY_CONFIG` 有分支。
+    // 这条钉的是形状：监听器只有广播与接口探测两个分支（探测在下一个 describe 单独验）。
     await mount();
 
     for (const type of [MessageType.GET_PROXY_CONFIG, MessageType.PROXY_RESPONSE, 'SOMETHING_NEW']) {
       expect(fromBackground({ type, data: configOf([]) })).not.toHaveBeenCalled();
     }
     expect(sentOf(SYNC_RULES)).toEqual([]);
+  });
+});
+
+describe('popup 的接口探测：只读资源计时，只回 origin 与条数', () => {
+  /** 同源不同路径三条（其中一条带着 token）、同源 XHR 一条，外加两条不是接口的 */
+  const resourceEntries = () => [
+    { name: 'https://uat-api.example.com/api/list?page=2', initiatorType: 'fetch' },
+    { name: 'https://uat-api.example.com/api/user/token-secret', initiatorType: 'fetch' },
+    { name: 'https://uat-api.example.com/health', initiatorType: 'xmlhttprequest' },
+    { name: 'https://cdn.example.com/app.js', initiatorType: 'script' },
+    { name: 'https://fat.example.com/', initiatorType: 'navigation' },
+  ];
+  let getEntriesByType: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    getEntriesByType = vi.fn(resourceEntries);
+    vi.stubGlobal('performance', { getEntriesByType });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('回的是 origin 清单：路径、查询串与那个 token 一个字都不出去', async () => {
+    await mount();
+
+    // `fromBackground` 是同步调用的，这里不等一拍就断言，等于同时钉住「回执是同步给的」
+    const sendResponse = fromBackground({ type: PAGE_API_PROBE });
+
+    expect(sendResponse).toHaveBeenCalledWith({
+      origins: [{ origin: 'https://uat-api.example.com', count: 3 }],
+    });
+    expect(JSON.stringify(sendResponse.mock.calls)).not.toContain('token-secret');
+    expect(JSON.stringify(sendResponse.mock.calls)).not.toContain('page=2');
+  });
+
+  it('只读 resource 一类条目，且一整个来回都不惊动 SW', async () => {
+    await mount();
+
+    fromBackground({ type: PAGE_API_PROBE });
+
+    // 换成 `getEntries()` 就把 navigation / script 一起给了；换 API 面是另一回事，它根本不该出这一页
+    expect(getEntriesByType).toHaveBeenCalledWith('resource');
+    expect(toSw.filter(message => message.type !== MessageType.GET_PROXY_CONFIG)).toEqual([]);
+  });
+
+  it('这一支不回任何规则内容：回包里除了 origin 与 count 没有第三个字段', async () => {
+    await mount();
+
+    const sendResponse = fromBackground({ type: PAGE_API_PROBE });
+    const [reply] = sendResponse.mock.calls[0] as [{ origins: Record<string, unknown>[] }];
+
+    expect(Object.keys(reply)).toEqual(['origins']);
+    for (const item of reply.origins) expect(Object.keys(item).sort()).toEqual(['count', 'origin']);
   });
 });
 

@@ -597,7 +597,20 @@
                 </el-tag>
                 <div class="test-result-rewrite">
                   <span class="test-result-rewrite-label">{{ t('rewrittenUrl') }}:</span>
-                  <code class="test-result-url">{{ testResult.rewrittenUrl }}</code>
+                  <!-- 拆成「共用开头 / 这次换进来的 / 共用结尾」三段：读者要看的从来不是两个长地址
+                       像不像，而是这条规则动了哪一段。`:key` 让每次按下测试重新起头那段一闪。
+                       三段是同一份 `v-for` 渲染出来的，`<code>` 里不留空白兄弟，URL 不会被拆出空格。 -->
+                  <code
+                    :key="testRunSeq"
+                    class="test-result-url"
+                  >
+                    <span
+                      v-for="(segment, index) in rewriteSegments"
+                      :key="index"
+                      :class="{ 'url-changed': segment.changed }"
+                      >{{ segment.text }}</span
+                    >
+                  </code>
                 </div>
               </div>
               <div
@@ -647,6 +660,7 @@ import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { findInvalidHeaderNames } from '@/utils/headerValidation';
 import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule } from '@/utils/urlMatcher';
+import { diffRewrite } from '@/utils/rewriteDiff';
 import { collectRuleVariableRefs, findUndefinedVariableRefs, newlyIntroducedRefs } from '@/utils/variables';
 import { useVariables } from '@/composables/useVariables';
 
@@ -728,6 +742,26 @@ const queryList = ref<{ key: string; value: string }[]>([]);
 const showTestPanel = ref(false);
 const testUrl = ref('');
 const testResult = ref<{ matched: boolean; rewrittenUrl: string } | null>(null);
+/** 第几次按下「测试」：只用来给高亮重新起头，让连点两次也能看见结果确实又算了一遍 */
+const testRunSeq = ref(0);
+
+/**
+ * 改写结果按「动了哪一段」拆开
+ *
+ * 通配符与正则的替换对新用户并不直观（`*` 捕获到的那截到底去了哪里），而让读者在两个长地址
+ * 之间逐字找差异，基本等于没告诉任何人任何事。这里只高亮，不改写判定——`rewrittenUrl` 仍然
+ * 是 `rewriteUrl` 的原样输出，三段拼回去必然等于它（`utils/rewriteDiff.ts` 有单测钉住这条）。
+ */
+const rewriteSegments = computed(() => {
+  const result = testResult.value;
+  if (!result?.matched) return [];
+  const { before, changed, after } = diffRewrite(testUrl.value.trim(), result.rewrittenUrl);
+  return [
+    { text: before, changed: false },
+    { text: changed, changed: true },
+    { text: after, changed: false },
+  ].filter(segment => segment.text !== '');
+});
 
 // computed 保证语言切换后校验消息实时更新（一次性求值会把 t() 结果固化）
 const formRules = computed<FormRules>(() => ({
@@ -1092,6 +1126,7 @@ function runTest() {
   const matched = matchRule(url, testRule);
   const rewrittenUrl = matched ? applyQueryOverrides(rewriteUrl(url, testRule), testRule.queryOverrides) : '';
   testResult.value = { matched, rewrittenUrl };
+  testRunSeq.value += 1;
 }
 </script>
 
@@ -1216,11 +1251,27 @@ function runTest() {
 .test-result-url {
   padding: 6px 10px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--el-color-primary, #409eff);
   word-break: break-all;
   background: var(--el-fill-color-lighter, #f5f7fa);
   border-radius: 4px;
+}
+
+/* 换进去的那一段：底色 + 加粗是静止态，一闪是「刚算完这一次」的动效。
+   静止态自己就把话说完了，所以系统开了「减少动态效果」时（tokens.css 的降级段落把所有
+   动画时长压到 0.01ms）信息一条不少，只是不再闪。 */
+.test-result-url .url-changed {
+  font-weight: 600;
+  background-color: rgb(var(--cop-primary-rgb) / 14%);
+  border-radius: 3px;
+  animation: url-diff-in 0.5s ease-out;
+}
+
+@keyframes url-diff-in {
+  from {
+    background-color: rgb(var(--cop-primary-rgb) / 46%);
+  }
 }
 
 .test-result-no-match {

@@ -139,7 +139,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-21"
+            "dateModified": "2026-09-23"
           },
           {
             "@type": "SoftwareApplication",
@@ -167,7 +167,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-21",
+            "dateModified": "2026-09-23",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -695,6 +695,53 @@
               </tbody>
             </table>
           </div>
+          <div class="error-map">
+            <h3>控制台里的三句报错，卡在同源策略的三个不同位置</h3>
+            <p>
+              CORS 不是一种错误，而是一族。按
+              <a
+                href="https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Guides/CORS"
+                rel="noopener"
+                >MDN 的 CORS 说明</a
+              >，浏览器在三处分别校验：实际请求的响应头、预检（<code>OPTIONS</code>）的放行名单、以及带凭据时的严格模式。三句共享同一个前缀
+              <code
+                >Access to fetch at '&lt;目标地址&gt;' from origin '&lt;你的源&gt;' has been blocked by CORS
+                policy</code
+              >，差别全在后半段——拿整串去搜往往什么都搜不到，抓后半段那一句才准。
+            </p>
+            <ol>
+              <li>
+                <code>No 'Access-Control-Allow-Origin' header is present on the requested resource.</code>
+                <span
+                  >后端没有把 <code>fat-web.example.com</code> 回进
+                  <code>Access-Control-Allow-Origin</code
+                  >。让这条规则带上任一高级能力，请求改由扩展代发，页面侧根本不触发这道校验。</span
+                >
+              </li>
+              <li>
+                <code
+                  >Request header field "x-token" is not allowed by Access-Control-Allow-Headers in preflight
+                  response.</code
+                >
+                <span
+                  >预检被回答得太窄：你加的不是简单请求允许的头部集合，而后端只回
+                  <code>Content-Type</code
+                  >。这类报错和「后端没放开」不是一回事——把自定义请求头配到规则里由扩展注入，页面就压根不发
+                  <code>OPTIONS</code>。</span
+                >
+              </li>
+              <li>
+                <code
+                  >The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*'
+                  when the request's credentials mode is 'include'.</code
+                >
+                <span
+                  >带 Cookie 时最严：此时 <code>Access-Control-Allow-Origin</code> 不能是
+                  <code>*</code>，必须逐字是你的源。这就是「同源什么都好，一换环境就 401」最常见的成因。</span
+                >
+              </li>
+            </ol>
+          </div>
         </div>
       </section>
 
@@ -746,11 +793,19 @@
               ></span>
               <h3>两条通道，一套规则集</h3>
               <p>
-                仅重写 URL 的规则会被编译为 <code>declarativeNetRequest</code> 动态重定向，由浏览器网络栈完成，单请求零
-                JavaScript 开销——对
+                仅重写 URL 的规则会被编译为
+                <a
+                  href="https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest?hl=zh-cn"
+                  rel="noopener"
+                  ><code>declarativeNetRequest</code></a
+                >
+                动态重定向，由浏览器网络栈完成，单请求零 JavaScript 开销——对
                 XHR、页面跳转、内联框架、脚本、样式、图片、字体与媒体资源同样生效。更复杂的规则走后台服务线程：主世界拦截器接管
-                <code>fetch</code>、<code>XMLHttpRequest</code> 与
-                <code>WebSocket</code>，经隔离世界的内容脚本桥接，再把响应交回页面。
+                <code>fetch</code>、<code>XMLHttpRequest</code> 与 <code>WebSocket</code>，经
+                <a href="https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts?hl=zh-cn"
+                  >隔离世界的内容脚本</a
+                >
+                桥接，再把响应交回页面。
               </p>
               <div class="chip-row">
                 <span class="chip">网络层零 JS 快通道</span><span class="chip">主世界拦截</span
@@ -818,7 +873,13 @@
                 三种匹配类型：<code>*</code>
                 匹配任意字符、前缀匹配开头、正则整体匹配且目标地址可引用捕获组。通配符与前缀在两条通道上的重写结果完全一致；正则只有覆盖整个
                 URL 时才一致——网络层整条替换 URL，后台通道只替换模式命中的那一段。用户正则会先做嵌套量词 ReDoS
-                筛查，送往网络层的正则还要通过 Chrome 的 RE2 校验。
+                筛查，送往网络层的正则还要通过 Chrome 的
+                <a
+                  href="https://github.com/google/re2/wiki/Syntax"
+                  rel="noopener"
+                  >RE2</a
+                >
+                校验。
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1871,8 +1932,14 @@ pnpm build</code></pre>
             <div class="card">
               <h3>构建环境</h3>
               <p>
-                Node.js 20 及以上、pnpm 10（见 <code>packageManager</code>）。技术栈为 WXT + Vue 3 + TypeScript +
-                Element Plus + Vite，Element Plus 按组件引入以控制包体；匹配、重写与导入导出逻辑由 Vitest 覆盖。
+                Node.js 20 及以上、pnpm 10（见 <code>packageManager</code>）。技术栈为
+                <a
+                  href="https://wxt.dev/"
+                  rel="noopener"
+                  >WXT</a
+                >
+                + Vue 3 + TypeScript + Element Plus + Vite，Element Plus
+                按组件引入以控制包体；匹配、重写与导入导出逻辑由 Vitest 覆盖。
               </p>
             </div>
             <div class="card">
@@ -2397,7 +2464,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-09-21</span>
+            <span>最后更新 2026-09-23</span>
             <span
               ><a
                 href="en.html"

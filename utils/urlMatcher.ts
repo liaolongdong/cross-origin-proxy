@@ -184,6 +184,20 @@ function getCompiledRegex(pattern: string): RegExp | null {
 }
 
 /**
+ * 判断规则的模式是否「可用」——即 wildcard/prefix 恒可用，regex 需同时通过
+ * 嵌套量词 ReDoS 筛查与 JS 引擎编译。
+ *
+ * 为什么单独露这个判据：`matchRule` 对编译不过的 regex 一律返回 false，于是
+ * 「写了个浏览器不认的模式」和「这个地址确实不在模式覆盖范围内」在界面上长成
+ * 同一张脸，用户会去改一个根本没坏的地址。归因句（`utils/diagnosis.ts`）要分开
+ * 这两种情况，判据只能复用 `getCompiledRegex`，不能再抄一份。
+ */
+export function isPatternUsable(rule: Pick<ProxyRule, 'matchType' | 'matchPattern'>): boolean {
+  if (rule.matchType !== 'regex') return true;
+  return getCompiledRegex(rule.matchPattern) !== null;
+}
+
+/**
  * 检查 URL 是否匹配规则（可选按 HTTP 方法白名单收窄）
  */
 export function matchRule(url: string, rule: ProxyRule, method?: string): boolean {

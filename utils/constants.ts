@@ -93,6 +93,19 @@ export const DNR_MAX_PRIORITY = 1_000_000;
 // Message channel names
 export const CONTENT_SCRIPT_CHANNEL = 'cross-origin-proxy';
 
+/**
+ * Popup → 内容脚本：「这一页在调哪些接口」的一次性只读探测
+ *
+ * 刻意**不占** `MessageType`：那份枚举是通往 SW 的消息协议与 `isTrustedSender` 分档的清单，
+ * 而这条走 `tabs.sendMessage` 直达桥接层、同步回一份 origin 清单，永不进 SW 路由。
+ * 放进来就等于多一份需要同判的表（`tests/contentBridge.test.ts` 钉住桥接层通往 SW 的四个出口，
+ * 这条一个都不加）。
+ */
+export const PAGE_API_PROBE = 'PAGE_API_PROBE';
+
+/** 探测的等待上限：超时按「这一页问不到」处理，退回旧行为，绝不让点击悬着 */
+export const PAGE_API_PROBE_TIMEOUT_MS = 800;
+
 // Alarm names
 export const KEEPALIVE_ALARM = 'sw-keepalive';
 // Chrome 120+ 允许的最小周期为 1 分钟（低于下限会被浏览器钳制并告警）

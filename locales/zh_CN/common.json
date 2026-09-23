@@ -14,5 +14,16 @@
   "matchTypePrefix": "前缀",
   "matchTypeRegex": "正则",
   "statusEnabled": "已启用",
-  "statusDisabled": "已关闭"
+  "statusDisabled": "已关闭",
+  "diagnosisNoRules": "还没有任何代理规则，先新建一条。",
+  "diagnosisProxyDisabled": "代理总开关处于关闭状态，规则不会生效，开启即可。",
+  "diagnosisRuleNotApplied": "命中的规则「$1」走网络层通道，但浏览器不会应用它：把匹配模式换成通配符或前缀即可恢复。",
+  "diagnosisPageNotSynced": "规则「$1」本身没问题，但这一页还在用改动前的规则集，刷新页面即可。",
+  "diagnosisShadowedBy": "规则「$1」确实覆盖这个地址，但命中被优先级更高的「$2」抢走：把两者的优先级调开。",
+  "diagnosisDisabledMatch": "规则「$1」匹配这个地址，但它当前是关闭的，启用即可生效。",
+  "diagnosisMethodFiltered": "规则「$1」匹配这个地址，但它只处理方法 $2，这一笔的方法不在其中。",
+  "diagnosisPatternRejected": "规则「$1」的匹配模式没有被接受（正则语法不合法或有灾难性回溯风险），它永远不会命中，请改写这个模式。",
+  "diagnosisNoMatch": "没有任何规则的匹配模式覆盖这个地址。",
+  "diagnosisOkDnr": "这一笔会命中规则「$1」，由网络层通道改写地址。",
+  "diagnosisOkSw": "这一笔会命中规则「$1」，由代理通道转发。"
 }

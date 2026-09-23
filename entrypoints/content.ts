@@ -1,8 +1,9 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig } from '@/utils/types';
-import { CONTENT_SCRIPT_CHANNEL } from '@/utils/constants';
+import { CONTENT_SCRIPT_CHANNEL, PAGE_API_PROBE } from '@/utils/constants';
 import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
+import { summarizeApiOrigins } from '@/utils/pageApiOrigins';
 import { normalizeProxyResponse } from '@/utils/proxyResponse';
 import { logger } from '@/utils/logger';
 
@@ -190,10 +191,21 @@ export default defineContentScript({
     // 必须同步回执：后台靠这条 promise 的 resolve/reject 判断「这个页面接住了新配置」，
     // 而「有监听器但不作答」在 Chrome 那边与「压根没有内容脚本」难以区分。回执只说「收到了」，
     // 不回任何规则内容——页面侧本来就是配置的接收方，多回一份只是多一次外泄面。
+    //
+    // popup 的接口探测走同一个监听器：`tabs.sendMessage` 到不了网页（页面没有通往内容脚本的
+    // runtime 消息通道），所以这一支不需要来源校验，也不需要 `return true`——读资源计时是同步的。
+    // 只回 origin 与条数（判据在 `utils/pageApiOrigins.ts`）：路径与查询串常带 id、token，
+    // 而预填一条通配符规则用不到它们，少给一份就少一份外泄面（本机内网地址同样敏感）。
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.type === MessageType.UPDATE_PROXY_CONFIG) {
         postSyncRules(message.data as ProxyConfig);
         sendResponse({ received: true });
+        return;
+      }
+      if (message.type === PAGE_API_PROBE) {
+        sendResponse({
+          origins: summarizeApiOrigins(performance.getEntriesByType('resource')),
+        });
       }
     });
 

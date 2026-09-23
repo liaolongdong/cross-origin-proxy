@@ -97,7 +97,7 @@
         "name": "隐私政策 / Privacy Policy",
         "inLanguage": ["zh-CN", "en"],
         "datePublished": "2026-09-06",
-        "dateModified": "2026-09-21",
+        "dateModified": "2026-09-23",
         "isPartOf": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#website" },
         "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" }
       }
@@ -151,7 +151,7 @@
       <section aria-labelledby="pp-zh">
         <div class="wrap">
           <h2 id="pp-zh">隐私政策（中文）</h2>
-          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-21</p>
+          <p class="section-lede"><strong>生效日期 / Last updated:</strong> 2026-09-23</p>
 
           <h3>1. 我们收集什么</h3>
           <p>
@@ -227,6 +227,13 @@
             原样保留。你仍然可以在导出对话框里取消勾选拿到全量内容。数据始终只在你手里，但在分享任何文件或截图之前，请先确认里面没有凭据。
           </p>
 
+          <p>
+            弹窗里的「为当前页创建规则」会先看一眼这一页正在调用哪些接口。它读的是<strong>这一页自己的</strong>资源计时记录，只取其中
+            fetch / XHR 请求的来源地址与请求次数——路径、查询参数、请求头与正文都不读，也不跨 world
+            传回弹窗；这份清单只在弹窗里当场渲染，
+            不写入任何存储，更不会发往任何远端。这一页没有作答时（站点禁用了扩展、扩展刚重载、纯静态页没发过请求），那个按钮退回原本的按页面地址预填。
+          </p>
+
           <h3>5. 儿童隐私</h3>
           <p>本扩展是面向开发者的技术工具，不针对儿童，也不会刻意收集 13 岁以下儿童的任何信息。</p>
 
@@ -245,7 +252,7 @@
       >
         <div class="wrap">
           <h2 id="pp-en">Privacy Policy (English)</h2>
-          <p class="section-lede"><strong>Effective date / Last updated:</strong> 2026-09-21</p>
+          <p class="section-lede"><strong>Effective date / Last updated:</strong> 2026-09-23</p>
 
           <h3>1. What we collect</h3>
           <p>
@@ -331,6 +338,15 @@
             rules — while the HAR keeps bodies and URLs exactly as captured so the recording still reproduces the
             problem. You can untick it to export everything. The data stays in your hands, but check that nothing
             sensitive remains before you share a file or a screenshot.
+          </p>
+
+          <p>
+            "Create Rule for This Page" in the popup starts by looking at which APIs the page is actually calling. It
+            reads <strong>that page's own</strong> resource-timing entries and takes only the origin and request count
+            of its fetch / XHR calls — paths, query parameters, headers and bodies are neither read here nor carried
+            across the world boundary into the popup, and the resulting list is rendered on the spot: stored nowhere and
+            sent to no remote. When the page cannot answer (the extension is disabled for the site, it was reloaded, or
+            the page simply made no such request), the action falls back to prefilling from the page address as before.
           </p>
 
           <h3>5. Children</h3>

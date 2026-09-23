@@ -1096,6 +1096,61 @@ tbody tr:last-child td {
   color: var(--lp-warn);
 }
 
+/* ---------- 报错原文对照（#problem 表格之后）----------
+   三句报错是「读者会原样复制去搜」的东西，所以按块排、横向留滚动条，
+   不把它压成行内 code 的一小截；解释文字缩进对齐到原文左侧，读起来是一问一答。 */
+
+.error-map {
+  padding: 20px 22px;
+  margin-top: 16px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-left: 3px solid var(--lp-warn);
+  border-radius: var(--lp-radius);
+}
+
+.error-map h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.error-map > p {
+  margin: 0 0 14px;
+  font-size: 14.6px;
+  color: var(--lp-ink-soft);
+}
+
+.error-map ol {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.error-map li {
+  margin-bottom: 12px;
+}
+
+.error-map li:last-child {
+  margin-bottom: 0;
+}
+
+.error-map li > code {
+  display: block;
+  padding: 9px 12px;
+  overflow-x: auto;
+  font-size: 12.8px;
+  line-height: 1.55;
+  color: var(--lp-code-ink);
+  background: var(--lp-code-bg);
+  border-radius: var(--lp-radius-sm);
+}
+
+.error-map li > span {
+  display: block;
+  margin-top: 7px;
+  font-size: 14.2px;
+  color: var(--lp-ink-soft);
+}
+
 /* ---------- 截图轮播（CSS scroll-snap 为主，JS 只加控件） ---------- */
 
 .gallery {

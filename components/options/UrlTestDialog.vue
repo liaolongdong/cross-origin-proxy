@@ -57,6 +57,13 @@
             >{{ t('urlTestNoMatch') }}</el-tag
           >
           <p class="result-desc">{{ t('urlTestNoMatchDesc') }}</p>
+          <!-- 说得出原因时才多说一句：单纯「没有规则覆盖」与上面的标签同义，不重复一遍 -->
+          <p
+            v-if="missDiagnosis"
+            class="result-cause"
+          >
+            {{ diagnosisText(missDiagnosis) }}
+          </p>
         </div>
 
         <!-- 命中 -->
@@ -81,11 +88,19 @@
           </div>
           <div class="result-row">
             <span class="result-label">{{ t('urlTestRewrittenUrl') }}</span>
+            <!-- 与规则表单的预演同一份切分：读者要看的不是两个长地址像不像，而是这条规则动了哪一段。
+                 这里刻意**不带**那一闪——结果随输入实时重算，每次敲一个字都闪一下就成了干扰。 -->
             <code
               class="result-url"
               :class="{ unchanged: rewrittenUrl === testUrl.trim() }"
-              >{{ rewrittenUrl === testUrl.trim() ? t('urlTestUrlUnchanged') : rewrittenUrl }}</code
             >
+              <span
+                v-for="(segment, index) in rewrittenDiff"
+                :key="index"
+                :class="{ 'url-changed': segment.changed }"
+                >{{ segment.text }}</span
+              >
+            </code>
           </div>
           <div class="result-row">
             <span class="result-label">{{ t('urlTestChannel') }}</span>
@@ -168,8 +183,11 @@ import {
   matchRule,
   rewriteUrl,
 } from '@/utils/urlMatcher';
+import { diffRewrite } from '@/utils/rewriteDiff';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
+import { useDiagnosisText } from '@/composables/useDiagnosis';
+import { diagnoseRequest, type Diagnosis } from '@/utils/diagnosis';
 import type { DnrSkipReason } from '@/utils/dnrSupport';
 
 const props = defineProps<{
@@ -188,6 +206,7 @@ defineEmits<{
 
 const { t } = useI18n();
 const { skipReasonLines } = useDnrSkipText();
+const { diagnosisText } = useDiagnosisText();
 
 const testUrl = ref('');
 /** 参与命中测试的 HTTP 方法（空=不限，与无方法信息时的匹配行为一致） */
@@ -205,12 +224,50 @@ const rewrittenUrl = computed(() =>
     : '',
 );
 
+/**
+ * 改写结果按「共用开头 / 这次换进来的 / 共用结尾」拆开，与规则表单预演共用 `utils/rewriteDiff`
+ *
+ * 三段拼回去永远等于 `rewrittenUrl`（那条不变量有单测钉住），所以这只是画法不同，
+ * 不存在「高亮说的」和「地址本身」各讲一套的可能。未改写时整段就是那句提示，高亮为空。
+ */
+const rewrittenDiff = computed(() => {
+  const target = rewrittenUrl.value;
+  if (!target) return [];
+  const source = testUrl.value.trim();
+  if (target === source) return [{ text: t('urlTestUrlUnchanged'), changed: false }];
+  const { before, changed, after } = diffRewrite(source, target);
+  return [
+    { text: before, changed: false },
+    { text: changed, changed: true },
+    { text: after, changed: false },
+  ].filter(segment => segment.text !== '');
+});
+
 const channelIsDnr = computed(() => (matchedRule.value ? isSimpleRule(matchedRule.value) : false));
 
 // 走 DNR 通道却不会被浏览器应用：命中显示绿色「DNR」并不等于请求真的会被转发
 const matchedDnrSkipReason = computed<DnrSkipReason | undefined>(() =>
   matchedRule.value ? props.dnrSkippedRules.get(matchedRule.value.id) : undefined,
 );
+
+/**
+ * 未命中时的归因结论，`null` = 这一句没有可补充的信息
+ *
+ * 与 `matchedRule` 共用同一份判定（`diagnoseRequest` 内部就是 `findMatchingRule`），
+ * 所以绝不会出现「上面说没命中、下面说会命中」。两种刻意不说话的情形：
+ * 总开关关闭已由上方 `el-alert` 说清；单纯「没有规则覆盖」与「未命中任何规则」那个标签同义。
+ */
+const missDiagnosis = computed<Diagnosis | null>(() => {
+  if (!props.proxyEnabled) return null;
+  const diagnosis = diagnoseRequest({
+    url: testUrl.value,
+    method: testMethod.value || undefined,
+    rules: props.rules,
+    proxyEnabled: props.proxyEnabled,
+    dnrSkipped: props.dnrSkippedRules,
+  });
+  return diagnosis.code === 'noMatch' ? null : diagnosis;
+});
 
 const shadowedRules = computed(() => {
   const url = testUrl.value.trim();
@@ -280,6 +337,17 @@ const extraActions = computed(() => {
   color: var(--cop-text-color-secondary);
 }
 
+/* 归因句比上面那句结论更实（它给得出下一步），所以用常规文字色 + 一条主题色左线，
+   与 `.dnr-skip-alert` 同一套「告警靠左线」的语言，但用中性强度：它不是错误。 */
+.result-miss .result-cause {
+  padding-left: 9px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--cop-text-color-regular);
+  border-left: 2px solid var(--cop-primary-border);
+}
+
 .result-row {
   display: flex;
   flex-wrap: wrap;
@@ -306,6 +374,14 @@ const extraActions = computed(() => {
 
 .result-url.unchanged {
   color: var(--cop-text-color-secondary);
+}
+
+/* 换进来的那一段——与规则表单预演同一套画法（那边多一闪，因为那边要按下按钮才出结果）。
+   高亮本身就把话说完了，所以「减少动态效果」下两边都只是不再闪，信息一条不少。 */
+.result-url .url-changed {
+  font-weight: 600;
+  background-color: rgb(var(--cop-primary-rgb) / 14%);
+  border-radius: 3px;
 }
 
 .dnr-skip-alert {

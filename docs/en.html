@@ -139,7 +139,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-21"
+            "dateModified": "2026-09-23"
           },
           {
             "@type": "SoftwareApplication",
@@ -167,7 +167,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-21",
+            "dateModified": "2026-09-23",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -704,6 +704,57 @@
               </tbody>
             </table>
           </div>
+          <div class="error-map">
+            <h3>Three console messages, blocked at three different points in the same-origin policy</h3>
+            <p>
+              CORS is not one error but a family. Per
+              <a
+                href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS"
+                rel="noopener"
+                >MDN's CORS guide</a
+              >, the browser checks in three separate places: the response headers of the actual request, the allow-list
+              returned to the preflight (<code>OPTIONS</code>), and the stricter mode that applies when credentials are
+              sent. All three share one prefix,
+              <code
+                >Access to fetch at '&lt;target URL&gt;' from origin '&lt;your origin&gt;' has been blocked by CORS
+                policy</code
+              >, and the difference lives entirely in the rest of the sentence — searching the whole string usually
+              returns nothing, while searching the tail returns the rule that is actually failing.
+            </p>
+            <ol>
+              <li>
+                <code>No 'Access-Control-Allow-Origin' header is present on the requested resource.</code>
+                <span>
+                  The backend never echoed <code>fat-web.example.com</code> into
+                  <code>Access-Control-Allow-Origin</code>. Give the rule any advanced capability and the request is
+                  sent by the extension instead, so this check never runs on the page.
+                </span>
+              </li>
+              <li>
+                <code
+                  >Request header field "x-token" is not allowed by Access-Control-Allow-Headers in preflight
+                  response.</code
+                >
+                <span>
+                  The preflight was answered too narrowly: you sent something outside the simple-request header set, and
+                  the backend only allows <code>Content-Type</code>. This is a different problem from "the backend isn't
+                  open" — put the custom header in the rule and let the extension inject it, and the page stops sending
+                  <code>OPTIONS</code> altogether.
+                </span>
+              </li>
+              <li>
+                <code
+                  >The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*'
+                  when the request's credentials mode is 'include'.</code
+                >
+                <span>
+                  The strictest case, with cookies attached: <code>Access-Control-Allow-Origin</code> may not be
+                  <code>*</code> — it must be your origin verbatim. This is the usual cause of "everything works on the
+                  same origin, and it 401s the moment I switch environment".
+                </span>
+              </li>
+            </ol>
+          </div>
         </div>
       </section>
 
@@ -756,12 +807,17 @@
               ></span>
               <h3>Two channels, one rule set</h3>
               <p>
-                A rule that only rewrites the URL becomes a <code>declarativeNetRequest</code> dynamic redirect,
-                resolved by the browser's network stack with no JavaScript per request — for XHR, navigations, iframes,
-                scripts, styles, images, fonts and media alike. Anything richer runs through the background service
-                worker: a MAIN-world interceptor patches <code>fetch</code>, <code>XMLHttpRequest</code> and
-                <code>WebSocket</code>, bridges through an isolated-world content script, and hands the response back to
-                the page.
+                A rule that only rewrites the URL becomes a
+                <a href="https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest"
+                  ><code>declarativeNetRequest</code></a
+                >
+                dynamic redirect, resolved by the browser's network stack with no JavaScript per request — for XHR,
+                navigations, iframes, scripts, styles, images, fonts and media alike. Anything richer runs through the
+                background service worker: a MAIN-world interceptor patches <code>fetch</code>,
+                <code>XMLHttpRequest</code> and <code>WebSocket</code>, bridges through an
+                <a href="https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts"
+                  >isolated-world content script</a
+                >, and hands the response back to the page.
               </p>
               <div class="chip-row">
                 <span class="chip">Network-layer fast path</span><span class="chip">Main-world interception</span
@@ -833,7 +889,13 @@
                 capture groups the target URL can reference. Wildcard and prefix rewrite the same way on both channels;
                 a regex only does when it covers the whole URL, because the network layer replaces the URL while the
                 background channel replaces the matched part. Regexes are screened for nested-quantifier ReDoS patterns,
-                and anything heading for the network layer is validated against Chrome's RE2 engine first.
+                and anything heading for the network layer is validated against Chrome's
+                <a
+                  href="https://github.com/google/re2/wiki/Syntax"
+                  rel="noopener"
+                  >RE2</a
+                >
+                engine first.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1951,9 +2013,14 @@ pnpm build</code></pre>
             <div class="card">
               <h3>Build requirements</h3>
               <p>
-                Node.js 20 or newer and pnpm 10 (see <code>packageManager</code>). Built with WXT + Vue 3 + TypeScript +
-                Element Plus + Vite, with Element Plus imported per component so the bundle stays small; Vitest covers
-                the matching, rewriting and import/export logic.
+                Node.js 20 or newer and pnpm 10 (see <code>packageManager</code>). Built with
+                <a
+                  href="https://wxt.dev/"
+                  rel="noopener"
+                  >WXT</a
+                >
+                + Vue 3 + TypeScript + Element Plus + Vite, with Element Plus imported per component so the bundle stays
+                small; Vitest covers the matching, rewriting and import/export logic.
               </p>
             </div>
             <div class="card">
@@ -2504,7 +2571,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-21</span>
+            <span>Last updated 2026-09-23</span>
             <span
               ><a
                 href="./"

@@ -204,6 +204,12 @@
         class="page-hit-empty"
       >
         <span>{{ t('pageHitNoMatch') }}</span>
+        <p
+          v-if="pageHitCauseText"
+          class="page-hit-cause"
+        >
+          {{ pageHitCauseText }}
+        </p>
         <button
           type="button"
           class="page-hit-link"
@@ -236,6 +242,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :aria-expanded="apiPicker ? 'true' : 'false'"
         @click="handleCreateRuleFromTab"
         @keydown.enter="handleCreateRuleFromTab"
       >
@@ -246,6 +253,47 @@
           <div class="action-card__title">{{ t('actionCreateRuleFromTab') }}</div>
           <div class="action-card__desc">{{ t('actionCreateRuleFromTabDesc') }}</div>
         </div>
+      </div>
+
+      <!--
+        候选面板：代理要挂的是接口地址，不是页面文档地址，所以先把「这一页在调谁」摊出来。
+        面板紧跟在卡片后面，键盘用户按完 Enter 再 Tab 就落在第一行；每行是真按钮，指针与键盘同一条路。
+      -->
+      <div
+        v-if="apiPicker"
+        class="api-picker"
+        role="group"
+        :aria-label="t('apiPickerTitle')"
+      >
+        <p class="api-picker-title">{{ t('apiPickerTitle') }}</p>
+        <button
+          v-for="choice in apiPicker.choices"
+          :key="choice.origin"
+          type="button"
+          class="api-picker-row"
+          @click="chooseApiDraft(choice.origin)"
+        >
+          <span
+            class="api-picker-origin"
+            :title="choice.origin"
+            >{{ choice.origin }}</span
+          >
+          <span class="api-picker-count">{{ t('apiPickerCount', String(choice.count)) }}</span>
+        </button>
+        <button
+          v-if="apiPicker.fallback"
+          type="button"
+          class="api-picker-row api-picker-row--muted"
+          @click="chooseApiDraft(apiPicker.fallback.draft)"
+        >
+          <span
+            class="api-picker-origin"
+            :title="apiPicker.fallback.draft"
+            >{{ apiPicker.fallback.origin }}</span
+          >
+          <span class="api-picker-count">{{ t('apiPickerOwn') }}</span>
+        </button>
+        <p class="api-picker-boundary">{{ t('apiPickerBoundary') }}</p>
       </div>
 
       <div
@@ -376,8 +424,12 @@ import {
 } from '@element-plus/icons-vue';
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
+import { useDiagnosisText } from '@/composables/useDiagnosis';
 import { MessageType } from '@/utils/types';
+import { type PageApiOrigin } from '@/utils/pageApiOrigins';
+import { probePageApiOrigins } from '@/utils/pageApiProbe';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
+import { diagnoseRequest, type Diagnosis, type DiagnosisCode } from '@/utils/diagnosis';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
 import { describeInterceptorStats, isInterceptorStatsEntry } from '@/utils/interceptorStats';
@@ -393,6 +445,7 @@ import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@
  * 动作卡片通过 URL hash 直达 Options 的对应弹窗/抽屉，并支持按当前标签页地址预填新规则。
  */
 const { t } = useI18n();
+const { diagnosisText } = useDiagnosisText();
 const {
   enabled,
   activeRuleCount,
@@ -481,6 +534,21 @@ const pageHitChannelLabel = computed(() => {
 });
 
 /**
+ * 「本页地址没命中」时补的那一句成因；`null` = 无话可补
+ *
+ * 只说屏幕上别处还没说过的三种「差一点就命中」：规则被禁用、方法白名单不含 GET、模式本身
+ * 不被接受。总开关状态就在头顶那一行，「一条规则都没有」另有引导卡，重复一遍只会挤掉卡片。
+ * 它与 `pageHitRuleName` 互斥：命中了就没有「为什么没命中」可说。
+ */
+const pageHitCause = ref<Diagnosis | null>(null);
+
+/** 愿意补一句的成因编码；其余（含「没有任何规则覆盖」）沿用卡片里原有那行说明 */
+const PAGE_HIT_CAUSES: readonly DiagnosisCode[] = ['disabledMatch', 'methodFiltered', 'patternRejected'];
+
+/** 成因 → 那句话（判据来自 `utils/diagnosis`，措辞与 URL 匹配测试共用同一份出口） */
+const pageHitCauseText = computed(() => (pageHitCause.value ? diagnosisText(pageHitCause.value) : ''));
+
+/**
  * 读取当前活动标签页地址，用与实际代理同一套 urlMatcher 纯函数计算命中预览。
  * popup 生命周期短，仅在挂载时计算一次；非 http(s) 页面不可代理，仅展示提示。
  *
@@ -530,6 +598,13 @@ async function computePageHit() {
       pageHitRuleName.value = rule.name;
       pageHitRewritten.value = applyQueryOverrides(rewriteUrl(url, rule), rule.queryOverrides);
       pageHitChannelDnr.value = isSimpleRule(rule);
+    } else {
+      // 没命中才归因。总开关取这一份 config，不读 `enabled.value`：popup 挂载时
+      // `fetchStatus()` 与这里是并发的那两回事，取同一份读到的数据才不会把「还没读到」说成「关着」。
+      // 刻意不传 `dnrSkipped` / `pageSynced`：那两档说的是「命中了却不生效」，这一支用不到；
+      // 缺哪一档就跳过哪一档，绝不替没读到的事实说一句「正常」。
+      const diagnosis = diagnoseRequest({ url, method: 'GET', rules, proxyEnabled: config.enabled });
+      if (PAGE_HIT_CAUSES.includes(diagnosis.code)) pageHitCause.value = diagnosis;
     }
   } catch (error) {
     logger.debug('Compute page hit failed:', error);
@@ -707,7 +782,22 @@ async function handleToggleRule(ruleId: string, enabled: boolean) {
 const currentVersion = chrome.runtime.getManifest().version;
 
 /**
- * 为当前标签页创建规则：读取活动标签页 URL，经 hash 直达 Options 并预填 origin 通配符草稿。
+ * 「这一页在调哪些接口」的候选面板；`null` = 收起
+ *
+ * 面板里每一行点下去都走同一个 hash（`#add-rule-from-tab=<地址>`），只是带过去的地址
+ * 从「页面文档」换成了「这一页真正在调的接口」。`fallback` 是旧行为的那一行（本页文档地址），
+ * 只在本页 origin 没出现在候选里时补上——同一件事不该在同一列里出现两遍。
+ */
+const apiPicker = ref<{ choices: PageApiOrigin[]; fallback: { origin: string; draft: string } | null } | null>(null);
+
+/** 选定一个来源（或那行本页地址）：沿用与旧行为完全相同的 hash 契约直达 Options */
+async function chooseApiDraft(draft: string) {
+  apiPicker.value = null;
+  await openOptionsPage(`#add-rule-from-tab=${encodeURIComponent(draft)}`);
+}
+
+/**
+ * 为当前标签页创建规则：先问这一页在调哪些接口，问得出就给候选，问不到照旧按页面地址预填。
  * 非 http/https 页面（如浏览器内部页）无法代理，提示后保留 popup 不跳转。
  */
 async function handleCreateRuleFromTab() {
@@ -718,7 +808,17 @@ async function handleCreateRuleFromTab() {
       ElMessage.error(t('createRuleFromTabFailed'));
       return;
     }
-    await openOptionsPage(`#add-rule-from-tab=${encodeURIComponent(url)}`);
+    const choices = await probePageApiOrigins(tab?.id);
+    if (choices.length === 0) {
+      await openOptionsPage(`#add-rule-from-tab=${encodeURIComponent(url)}`);
+      return;
+    }
+    // 只取 origin 做「候选里有没有本页」的比对：文档地址带路径时字符串永远不相等
+    const pageOrigin = new URL(url).origin;
+    apiPicker.value = {
+      choices,
+      fallback: choices.some(choice => choice.origin === pageOrigin) ? null : { origin: pageOrigin, draft: url },
+    };
   } catch (error) {
     logger.error('Create rule from tab failed:', error);
     ElMessage.error(t('createRuleFromTabFailed'));
@@ -1017,6 +1117,17 @@ async function openOptionsPage(hash = '') {
   color: var(--cop-text-color-secondary);
 }
 
+/* 成因是这一屏唯一给得出下一步的说明，所以比上面那句「未被代理」更重一档：常规文字色 +
+   主题色左线，与 options「URL 匹配测试」里同一句话用同一套视觉语言（同一个 key，同一种说法）。 */
+.page-hit-cause {
+  padding-left: 8px;
+  margin: 8px 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-text-color-regular);
+  border-left: 2px solid var(--cop-primary-border);
+}
+
 .page-hit-link {
   padding: 0;
 
@@ -1150,6 +1261,80 @@ async function openOptionsPage(hash = '') {
   margin-top: 2px;
   font-size: 12px;
   line-height: 1.3;
+  color: var(--cop-text-color-secondary);
+}
+
+/* 候选面板（「为当前页创建规则」点开后）：与动作卡同一套圆角与底色，
+   靠主色边框表示「这是刚才那次点击展开的东西」，而不是第四张卡 */
+.api-picker {
+  padding: 10px 12px 12px;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-primary-border);
+  border-radius: 10px;
+}
+
+.api-picker-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--cop-text-color-primary);
+}
+
+.api-picker-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--cop-bg-color);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 6px;
+  transition: border-color 0.2s ease;
+}
+
+.api-picker-row + .api-picker-row {
+  margin-top: 6px;
+}
+
+.api-picker-row:hover {
+  border-color: var(--cop-primary-border);
+}
+
+.api-picker-row:focus-visible {
+  outline: none;
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 25%);
+}
+
+.api-picker-origin {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--cop-text-color-primary);
+  white-space: nowrap;
+}
+
+.api-picker-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--cop-text-color-secondary);
+}
+
+/* 那行「本页地址」是旧行为，措辞与颜色都退半步，别与真候选同权重 */
+.api-picker-row--muted .api-picker-origin {
+  color: var(--cop-text-color-regular);
+}
+
+.api-picker-boundary {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--cop-text-color-secondary);
 }
 

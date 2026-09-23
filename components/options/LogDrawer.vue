@@ -522,7 +522,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch, onUnmounted } from 'vue';
 import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
@@ -621,6 +621,56 @@ const filteredLogs = computed(() => {
 // 统计（基于筛选后的数据，单次遍历）
 const logStats = computed(() => computeLogStats(filteredLogs.value));
 
+// ─── 新到日志的落位提示 ──────────────────────────────────────────────────────
+
+/**
+ * 抽屉**开着**的时候刚落进来的那几条日志 id（用于给行加一次性强调）
+ *
+ * 自动刷新把新行加在表格顶部（`storage.ts` 的 unshift 已保证同批不倒序），但行数在变、
+ * 眼睛未必跟得上，这一闪说的是「就是这一条」。两种刻意不动的时候：
+ * - 抽屉没开：那一屏没人在看。所以这份账在关着的时候也照记不误，开抽屉那一刻屏幕上的
+ *   每一条都已经是「旧数据」，不会补闪一堆；
+ * - 这一批里没有新 id：只数数组长度会把「换了筛选」「同一批被重新推来」都算成新增，
+ *   而 id 是每条请求独有的（`generateId`），差出来的一定是刚发生的那一笔。
+ * 判据按 id 集合做差而不是监听 `props.visible`：这个文件被 `tests/full-verification.test.ts`
+ * 钉为「纯受控组件、不得有 visible watcher」（它的数据由 App.vue 拉），别绕着正则改写法躲守卫。
+ * 减弱动效下这一闪被 `tokens.css` 的降级段落压成 0.01ms，而信息不会丢：最新那条本来就在最上面。
+ */
+const freshLogIds = ref<Set<string>>(new Set());
+/** 上一次看到的这一屏日志 id；只在 watcher 里换，不参与渲染 */
+let knownIds = new Set<string>();
+/** 这一屏的第一份账只对齐、不点亮：初始加载会让整列「全都是新的」，那不是刚刚发生 */
+let primed = false;
+let freshTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.logs,
+  logs => {
+    const current = new Set(logs.map(log => log.id));
+    if (!props.visible) {
+      knownIds = current;
+      primed = false;
+      return;
+    }
+    const arrived = primed ? [...current].filter(id => !knownIds.has(id)) : [];
+    knownIds = current;
+    primed = true;
+    if (arrived.length === 0) return;
+    // 并集而不是覆盖：上一批还在闪的，不必被这一批提前掐掉
+    freshLogIds.value = new Set([...freshLogIds.value, ...arrived]);
+    if (freshTimer) clearTimeout(freshTimer);
+    // 到点摘掉类名：el-table 之后因排序/筛选重建行时，不该把旧行再点亮一遍
+    freshTimer = setTimeout(() => {
+      freshLogIds.value = new Set();
+      freshTimer = null;
+    }, 900);
+  },
+);
+
+onUnmounted(() => {
+  if (freshTimer) clearTimeout(freshTimer);
+});
+
 // URL 复制
 const copyUrl = async (url: string) => {
   try {
@@ -661,7 +711,8 @@ function statusTagType(status: number) {
 }
 
 function rowClassName({ row }: { row: RequestLogEntry }): string {
-  return row.error ? 'error-row' : '';
+  // 两个类各说一件事：`error-row` 是这一笔的结果，`log-row-new` 是「它刚刚才到」
+  return [row.error ? 'error-row' : '', freshLogIds.value.has(row.id) ? 'log-row-new' : ''].filter(Boolean).join(' ');
 }
 
 async function handleClear() {
@@ -928,6 +979,18 @@ function copyAsCurl() {
 
 .log-table :deep(.error-row) {
   background-color: var(--el-color-danger-light-9, #fef0f0);
+}
+
+/* 刚落进来的那一行闪一下：只动背景，不加边框也不改行高，表格布局纹丝不动。
+   900ms 后类名被摘掉，所以这一出只会播一次，滚动回看旧行时不会被重新点亮。 */
+.log-table :deep(.log-row-new) {
+  animation: log-row-arrive 0.7s ease-out;
+}
+
+@keyframes log-row-arrive {
+  from {
+    background-color: rgb(var(--cop-primary-rgb) / 16%);
+  }
 }
 
 .empty-state {
