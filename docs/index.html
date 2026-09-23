@@ -44,6 +44,10 @@
       href="assets/landing.css"
     />
     <script
+      src="assets/preview-engine.js"
+      defer
+    ></script>
+    <script
       src="assets/landing.js"
       defer
     ></script>
@@ -1630,6 +1634,185 @@ pnpm build</code></pre>
                 匹配测试器里预览这条地址，并看规则的 DNR 命中数。只有走后台通道的请求才会出现在请求日志里。
               </p>
             </article>
+          </div>
+          <div
+            class="try"
+            data-try
+          >
+            <h3>试一条规则：改写后的地址，与它实际走的那条通道</h3>
+            <p class="try-lede">
+              下面这一格跑的是扩展里同一套匹配与重写判据，改四个输入就能当场看到结果。它不联网，输入的字符也不离开这个页面。
+            </p>
+            <div
+              class="try-presets"
+              role="group"
+              aria-label="换个例子看看"
+            >
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="wildcard"
+                data-preset-pattern="https://fat-api.example.com/*"
+                data-preset-target="https://uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/api/user/list"
+              >
+                通配符
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="prefix"
+                data-preset-pattern="https://fat-api.example.com/v2/"
+                data-preset-target="https://uat-api.example.com/v2/"
+                data-preset-url="https://fat-api.example.com/v2/users"
+              >
+                前缀
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="wildcard"
+                data-preset-pattern="https://fat-api.example.com/*/x"
+                data-preset-target="https://uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/a/b/x"
+              >
+                末尾不是 *
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="regex"
+                data-preset-pattern="fat-api\.example\.com"
+                data-preset-target="uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/api/user/list"
+              >
+                正则：两通道不同
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="regex"
+                data-preset-pattern="^https://fat-api\.example\.com/api$"
+                data-preset-target="https://uat-api.example.com/$1"
+                data-preset-url="https://fat-api.example.com/api"
+              >
+                正则：引用越界的捕获组
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="regex"
+                data-preset-pattern="(a+)+$"
+                data-preset-target="https://uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/api"
+              >
+                正则：被嵌套量词筛查拦下
+              </button>
+            </div>
+            <div class="try-fields">
+              <label class="try-field">
+                匹配类型
+                <select data-try-matchtype>
+                  <option
+                    value="wildcard"
+                    selected
+                  >
+                    通配符
+                  </option>
+                  <option value="prefix">前缀</option>
+                  <option value="regex">正则</option>
+                </select>
+              </label>
+              <label class="try-field">
+                匹配模式
+                <input
+                  type="text"
+                  data-try-pattern
+                  value="https://fat-api.example.com/*"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="try-field">
+                目标地址
+                <input
+                  type="text"
+                  data-try-target
+                  value="https://uat-api.example.com"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="try-field try-field-last">
+                测试地址
+                <input
+                  type="text"
+                  data-try-url
+                  value="https://fat-api.example.com/api/user/list"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </label>
+            </div>
+            <p
+              class="try-verdict"
+              role="status"
+              data-try-verdict
+              data-net="会被接管：这一笔由浏览器的网络层直接改写"
+              data-ext="会被接管：这一笔交给扩展后台代发"
+              data-miss="不会被接管：这个地址不匹配上面的模式"
+              data-rejected="这个模式不会被接受：正则语法不过，或撞上嵌套量词筛查——它永远不会命中"
+              data-notapplied="这一笔归网络层管，可这条规则不会被应用：整个地址换完之后剩下的不是一段可跳转的 URL，或替换串引用了不存在的捕获组——哪一种是原因，下面那一格点名"
+            ></p>
+            <dl class="try-out">
+              <div
+                class="try-row"
+                data-row="ext"
+              >
+                <dt>后台通道改写为</dt>
+                <dd><code data-try-ext></code></dd>
+              </div>
+              <div
+                class="try-row"
+                data-row="net"
+              >
+                <dt>网络层改写为</dt>
+                <dd>
+                  <code data-try-net></code>
+                  <span
+                    class="try-alt"
+                    data-try-net-alt
+                    data-skip-notsimple="这条规则不走网络层，所以没有网络层结果"
+                    data-skip-substitutioninvalid="替换串引用了不存在的捕获组：浏览器不会应用这条网络层规则"
+                    data-skip-noturl="整个地址被换成了这一段，而它不是一个可跳转的 URL：正则模式请覆盖整个地址，目标地址请带上协议"
+                  ></span>
+                </dd>
+              </div>
+            </dl>
+            <p
+              class="try-diverged"
+              data-try-diverged
+              hidden
+            >
+              两行不一样不是坏在谁身上：后台通道只把匹配到的那段字符换掉，网络层则是整个地址被替换成替换串。走哪一行，看上面点名的那条通道。
+            </p>
+            <ul
+              class="try-why"
+              data-try-codes
+            >
+              <li data-code="noTarget">目标地址留空：不改写地址、只代理转发，这类规则必定走后台通道。</li>
+              <li data-code="wildcardNoStar">
+                通配符模式的末尾不是
+                <code>*</code>：网络层的替换串只能引用捕获组，会丢掉末尾那段固定文本，所以这条改走后台通道——而后台通道
+                的重写同样只认末尾的那个 <code>*</code>，上面那一行因此还是原地址：这一笔按原样代发，改的是头、体与
+                Mock，不是地址。
+              </li>
+              <li data-code="websocket">WebSocket 握手不在网络层规则能表达的资源类型里，只能由页面侧拦截器代理。</li>
+            </ul>
+            <p class="try-note">
+              还剩一件事只能交给扩展自己判：这条网络层规则会不会被 Chrome 的 RE2 引擎接受，网页里这一格调不到那个
+              API，正则模式请以设置页里的「未生效」标记为准。
+            </p>
           </div>
           <div class="callout">
             <svg

@@ -1064,8 +1064,15 @@ tbody tr:last-child td {
   text-align: center;
 }
 
+/* 这张表最宽的一格要横向滚动，所以把「方案」那一列钉在左边：读到哪一行、
+   比的是哪一列，不必来回拖。`border-collapse` 下 sticky 单元格不带边框，
+   分隔线改用内阴影。 */
 .compare th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
   min-width: 168px;
+  box-shadow: inset -1px 0 0 var(--lp-line);
 }
 
 .compare .col-us {
@@ -1080,6 +1087,25 @@ tbody tr:last-child td {
 
 .compare tbody tr:hover td.col-us {
   background: color-mix(in srgb, var(--lp-primary) 14%, var(--lp-surface));
+}
+
+.compare thead th:first-child {
+  z-index: 3;
+}
+
+/* 整列同色：读者横向拖到第 4 列时，眼睛跟得住这一竖列的是哪一家。
+   「本扩展」那一列本就有底色，悬停时只做加深，不许把它洗成普通色。 */
+.compare[data-col='1'] :is(td, th):nth-child(1),
+.compare[data-col='2'] :is(td, th):nth-child(2),
+.compare[data-col='3'] :is(td, th):nth-child(3),
+.compare[data-col='4'] :is(td, th):nth-child(4),
+.compare[data-col='5'] :is(td, th):nth-child(5),
+.compare[data-col='6'] :is(td, th):nth-child(6) {
+  background: var(--lp-primary-faint);
+}
+
+.compare[data-col='2'] td.col-us {
+  background: color-mix(in srgb, var(--lp-primary) 18%, var(--lp-surface));
 }
 
 .mark-yes {
@@ -1364,6 +1390,205 @@ html.js .gallery-bar {
   margin-top: 12px;
 }
 
+/* ---------- 重写预演（#steps 里的一格） ----------
+   判据在 `assets/preview-engine.js`，措辞在中英两份 HTML 里，`landing.js` 只负责挑出对应的那句。
+   面板默认不出现，`html.js.try-ready` 才亮：脚本被禁、脚本没加载、引擎单独缺失，
+   读者看到的都是一段没有空洞的正文，而不是一格按了没反应的输入框。 */
+
+.try {
+  display: none;
+  padding: 20px 22px;
+  margin-top: 16px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-left: 3px solid var(--lp-primary);
+  border-radius: var(--lp-radius);
+}
+
+html.js.try-ready .try {
+  display: block;
+}
+
+.try h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.try-lede {
+  margin: 0;
+  font-size: 14.6px;
+  color: var(--lp-ink-soft);
+}
+
+.try-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+.try-presets button {
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--lp-primary-strong);
+  cursor: pointer;
+  background: var(--lp-primary-faint);
+  border: 1px solid var(--lp-line-strong);
+  border-radius: 999px;
+}
+
+.try-presets button:hover {
+  background: var(--lp-primary-soft);
+}
+
+.try-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.try-field {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--lp-ink-soft);
+}
+
+.try-field input,
+.try-field select {
+  width: 100%;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--lp-ink);
+  background: var(--lp-bg);
+  border: 1px solid var(--lp-line-strong);
+  border-radius: var(--lp-radius-sm);
+}
+
+.try-verdict {
+  padding: 9px 12px;
+  margin: 14px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--lp-bg-alt);
+  border-radius: var(--lp-radius-sm);
+}
+
+/* 五种结论各配一档底色：这一笔到底有没有被接管、走哪条通道，读一眼就分得开。
+   「模式不被接受」与「归网络层管但不会被应用」是同一档颜色——两格说的都是这条规则落不了地。 */
+html[data-try-state='net'] .try-verdict {
+  color: var(--lp-accent);
+  background: var(--lp-accent-soft);
+}
+
+html[data-try-state='ext'] .try-verdict {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-soft);
+}
+
+html[data-try-state='miss'] .try-verdict {
+  color: var(--lp-ink-faint);
+}
+
+html[data-try-state='rejected'] .try-verdict,
+html[data-try-state='notapplied'] .try-verdict {
+  color: var(--lp-warn);
+  background: var(--lp-warn-soft);
+}
+
+.try-out {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.try-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  align-items: baseline;
+}
+
+.try-row dt {
+  font-size: 13px;
+  color: var(--lp-ink-faint);
+}
+
+/* 改写结果是一整条不许折行的 URL，所以让它自己横向滚动。两层的 `1fr` 都得写成
+   `minmax(0, 1fr)`：网格轨道默认按 min-content 起算，一格不换行的长地址会把整块面板
+   撑到一千多像素宽，而页面本身不横滚——读者看到的是答案被切掉了，且没有任何提示。 */
+.try-row dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.try-row dd code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.try-alt {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--lp-warn);
+}
+
+.try-diverged {
+  padding: 10px 12px;
+  margin: 12px 0 0;
+  font-size: 13.6px;
+  color: var(--lp-ink-soft);
+  background: var(--lp-warn-soft);
+  border-radius: var(--lp-radius-sm);
+}
+
+.try-why {
+  padding-left: 20px;
+  margin: 12px 0 0;
+  font-size: 13.6px;
+  color: var(--lp-ink-soft);
+}
+
+.try-why li + li {
+  margin-top: 4px;
+}
+
+.try-note {
+  padding-top: 12px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--lp-ink-faint);
+  border-top: 1px dashed var(--lp-line);
+}
+
+/* 被挑中才露出来：`hidden` 属性得压过 `display: grid` 这类显式声明才不占位。 */
+.try-row[hidden] {
+  display: none;
+}
+
+@media (width >= 720px) {
+  .try-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .try-field-last {
+    grid-column: 1 / -1;
+  }
+
+  .try-row {
+    grid-template-columns: 210px 1fr;
+    gap: 10px;
+  }
+}
+
 /* ---------- 代码与流程 ---------- */
 
 pre {
@@ -1468,6 +1693,26 @@ ul.ticks li::before {
    邻居一起撑高（`align-items: start` 只能止住拉伸，止不住视觉上的空洞），
    而 FAQ 的读法是「从上往下扫问题、按需展开一条」——一列才是它的自然形状。
    max-width 让答案保持可读行长，左边缘与 .section-head 对齐。 */
+
+/* 右栏：宽屏下问答列收成 760px（英文答案在 880px 一行能排到九十几个字符），
+   省出来的一格放「分类直达」与「没找到答案」。16 条问答纵向近两千像素，
+   目录是唯一值得常驻的东西，所以右栏跟着滚。两栏合计 760 + 40 + 320 正好等于
+   .wrap 的内容宽，`space-between` 只在更窄处把余量变成栏距，而不是右边缘的空档。
+   窄于 1080px 退回单列、右栏落在问答之后：锚点照旧能点，禁 JS 也一样可读。 */
+.wrap--faq {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+
+/* 小节标题横跨两栏，并且交回给 grid 的 gap 控制间距：
+   `.section-head` 自带 30px 下边距，留着就是标题与问答之间凭空多出一道缝。 */
+.wrap--faq > .section-head {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
 .faq-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1483,6 +1728,9 @@ ul.ticks li::before {
   margin-top: 10px;
   font-size: 15px;
   font-weight: 700;
+
+  /* 目录跳的是分类标题，页头是 sticky 的：不留出这段，落点会被页头压住半行。 */
+  scroll-margin-top: 88px;
 }
 
 .faq-category:first-child {
@@ -1498,6 +1746,96 @@ ul.ticks li::before {
 .faq-category .feature-icon svg {
   width: 17px;
   height: 17px;
+}
+
+/* ---------- FAQ 右栏 ---------- */
+
+.faq-rail {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.faq-rail-card {
+  padding: 16px 18px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  box-shadow: var(--lp-shadow);
+}
+
+/* 与 `.callout--key` 同一枚底色（同一个「下一步该去哪」的语义），但刻意不借它的
+   左边框：右栏是常驻栏，不是插叙，画一道竖线会读成引用。 */
+.faq-rail-card--key {
+  background: var(--lp-accent-soft);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.faq-rail-card h4 {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--lp-ink-faint);
+}
+
+.faq-rail-card p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--lp-ink-soft);
+}
+
+.faq-rail-card p + p {
+  margin-top: 8px;
+}
+
+/* 目录一行一个分类，条数右对齐并用等宽数字；两页的分类顺序由
+   tests/docs-consistency 的右栏守卫钉住。 */
+.faq-toc {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.faq-toc a {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin: 0 -8px;
+  font-size: 14px;
+  color: var(--lp-ink-soft);
+  border-radius: var(--lp-radius-sm);
+}
+
+.faq-toc a:hover {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
+}
+
+.faq-toc-n {
+  font-size: 12.5px;
+  color: var(--lp-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (width >= 1080px) {
+  .wrap--faq {
+    grid-template-columns: minmax(0, 760px) 320px;
+    gap: 34px 40px;
+    justify-content: space-between;
+  }
+
+  /* sticky 要靠 `.wrap--faq` 上的 `align-items: start`：默认的 stretch 会把右栏
+     拉成问答列那么高，它自己就是那一格，再也没有可移动的空间。 */
+  .faq-rail {
+    position: sticky;
+    top: 88px;
+  }
 }
 
 details {

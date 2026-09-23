@@ -44,6 +44,10 @@
       href="assets/landing.css"
     />
     <script
+      src="assets/preview-engine.js"
+      defer
+    ></script>
+    <script
       src="assets/landing.js"
       defer
     ></script>
@@ -1702,6 +1706,195 @@ pnpm build</code></pre>
                 Only background-channel requests appear in the request log.
               </p>
             </article>
+          </div>
+          <div
+            class="try"
+            data-try
+          >
+            <h3>Try a rule: the rewritten URL, and the channel that actually carries it</h3>
+            <p class="try-lede">
+              This panel runs the same matching and rewriting judgement the extension uses. Edit the four fields and the
+              answer changes on the spot. It makes no requests, and what you type never leaves this page.
+            </p>
+            <div
+              class="try-presets"
+              role="group"
+              aria-label="Load an example"
+            >
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="wildcard"
+                data-preset-pattern="https://fat-api.example.com/*"
+                data-preset-target="https://uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/api/user/list"
+              >
+                Wildcard
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="prefix"
+                data-preset-pattern="https://fat-api.example.com/v2/"
+                data-preset-target="https://uat-api.example.com/v2/"
+                data-preset-url="https://fat-api.example.com/v2/users"
+              >
+                Prefix
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="wildcard"
+                data-preset-pattern="https://fat-api.example.com/*/x"
+                data-preset-target="https://uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/a/b/x"
+              >
+                No trailing *
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="regex"
+                data-preset-pattern="fat-api\.example\.com"
+                data-preset-target="uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/api/user/list"
+              >
+                Regex: the two channels differ
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="regex"
+                data-preset-pattern="^https://fat-api\.example\.com/api$"
+                data-preset-target="https://uat-api.example.com/$1"
+                data-preset-url="https://fat-api.example.com/api"
+              >
+                Regex: out-of-range capture ref
+              </button>
+              <button
+                type="button"
+                data-try-preset
+                data-preset-matchtype="regex"
+                data-preset-pattern="(a+)+$"
+                data-preset-target="https://uat-api.example.com"
+                data-preset-url="https://fat-api.example.com/api"
+              >
+                Regex: rejected by the nested-quantifier screen
+              </button>
+            </div>
+            <div class="try-fields">
+              <label class="try-field">
+                Match type
+                <select data-try-matchtype>
+                  <option
+                    value="wildcard"
+                    selected
+                  >
+                    Wildcard
+                  </option>
+                  <option value="prefix">Prefix</option>
+                  <option value="regex">Regex</option>
+                </select>
+              </label>
+              <label class="try-field">
+                Match pattern
+                <input
+                  type="text"
+                  data-try-pattern
+                  value="https://fat-api.example.com/*"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="try-field">
+                Target URL
+                <input
+                  type="text"
+                  data-try-target
+                  value="https://uat-api.example.com"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </label>
+              <label class="try-field try-field-last">
+                Request URL
+                <input
+                  type="text"
+                  data-try-url
+                  value="https://fat-api.example.com/api/user/list"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </label>
+            </div>
+            <p
+              class="try-verdict"
+              role="status"
+              data-try-verdict
+              data-net="Handled: the browser rewrites this request in its network layer"
+              data-ext="Handled: the extension's background service worker sends this request"
+              data-miss="Not handled: this URL does not match the pattern above"
+              data-rejected="This pattern is never accepted: it fails to compile, or the nested-quantifier screen rejects it — so it can never match"
+              data-notapplied="The network layer owns this request, but this rule will not be applied: what the whole URL gets replaced with is not an address, or the substitution references a capture group that does not exist — the row below names which"
+            ></p>
+            <dl class="try-out">
+              <div
+                class="try-row"
+                data-row="ext"
+              >
+                <dt>Rewritten by the background channel</dt>
+                <dd><code data-try-ext></code></dd>
+              </div>
+              <div
+                class="try-row"
+                data-row="net"
+              >
+                <dt>Rewritten by the network layer</dt>
+                <dd>
+                  <code data-try-net></code>
+                  <span
+                    class="try-alt"
+                    data-try-net-alt
+                    data-skip-notsimple="This rule does not use the network layer, so there is no network-layer result"
+                    data-skip-substitutioninvalid="The substitution references a capture group that does not exist, so the browser would not apply this rule"
+                    data-skip-noturl="The entire URL was replaced by something that is not an address: let the pattern cover the whole URL, and give the target a scheme"
+                  ></span>
+                </dd>
+              </div>
+            </dl>
+            <p
+              class="try-diverged"
+              data-try-diverged
+              hidden
+            >
+              The two lines differing is not a defect in either one: the background channel replaces only the part of
+              the URL the regex matched, while the network layer replaces the whole URL with the substitution. Whichever
+              channel the sentence above names is the one that runs.
+            </p>
+            <ul
+              class="try-why"
+              data-try-codes
+            >
+              <li data-code="noTarget">
+                The target URL is empty: the address is not rewritten and the request is only forwarded, so this kind of
+                rule always uses the background channel.
+              </li>
+              <li data-code="wildcardNoStar">
+                The wildcard pattern does not end with <code>*</code>: a network-layer substitution can only reference
+                capture groups, so the fixed text at the end would be lost — the rule goes to the background channel
+                instead. Its rewrite only understands a trailing <code>*</code> as well, which is why the row above
+                still shows the original URL: that request is proxied as it is, changing headers, body or the mock — not
+                the address.
+              </li>
+              <li data-code="websocket">
+                A WebSocket handshake is not a resource type the network layer can express, so only the page-side
+                interceptor can proxy it.
+              </li>
+            </ul>
+            <p class="try-note">
+              One judgement stays with the extension: whether Chrome's RE2 engine accepts a network-layer rule. This
+              page cannot call that API, so for regex patterns trust the “not applied” marker inside the options page.
+            </p>
           </div>
           <div class="callout">
             <svg

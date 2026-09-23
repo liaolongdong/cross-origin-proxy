@@ -14,7 +14,11 @@
  * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）；
  * 7. 页头下沿的滚动进度条，以及页头离顶后的投影（无 JS 时两者都不出现）；
  * 8. 首屏流程图的「数据包巡航」只在真正滚进视口后才放行（样式默认按住，循环动效不在没人看的地方跑）；
- * 9. 卡片的指针追光：把光斑坐标按帧写进 `--lp-x/--lp-y`，触摸设备与减弱动效下不绑定。
+ * 9. 卡片的指针追光：把光斑坐标按帧写进 `--lp-x/--lp-y`，触摸设备与减弱动效下不绑定；
+ * 10. 重写预演：把界面上四项输入交给 `assets/preview-engine.js`（`utils/urlMatcher.ts` 与
+ *     `utils/dnrRules.ts` 的手工副本），当场说出这一笔命中与否、走哪条通道、两通道各改写成了什么。
+ *     判据与措辞各归其位——引擎只回理由码，句子全部住在 HTML 里，脚本只负责挑出对应的那句；
+ * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。
@@ -406,4 +410,112 @@
       ),
     );
   }
+
+  /* ─────────────── 10. 重写预演 ─────────────── */
+
+  const tryBlock = document.querySelector('[data-try]');
+  const engine = window.copRewritePreview;
+
+  /* 判据不在这里：脚本只做「读四项 → 问引擎 → 把答案填进 HTML 里备好的那句」。
+     面板本身在样式里默认不显示，只有引擎与控件都在（`try-ready`）才露出来——
+     禁用脚本、脚本没加载、引擎单独缺失，读者看到的都是一段没有空洞的正文。 */
+  if (tryBlock && engine) {
+    /* 属性名一律小写：HTML 解析器会把属性名转成小写，`data-try-matchType` 这种写法
+       在文档里根本查不到——四项输入用「字段名 → 小写属性名」成对写出，别靠大小写。 */
+    const fields = [
+      ['matchType', 'matchtype'],
+      ['pattern', 'pattern'],
+      ['target', 'target'],
+      ['url', 'url'],
+    ].map(([key, attr]) => [key, tryBlock.querySelector(`[data-try-${attr}]`)]);
+    const verdict = tryBlock.querySelector('[data-try-verdict]');
+    const extValue = tryBlock.querySelector('[data-try-ext]');
+    const netValue = tryBlock.querySelector('[data-try-net]');
+    const netAlt = tryBlock.querySelector('[data-try-net-alt]');
+    const codeList = Array.from(tryBlock.querySelectorAll('[data-try-codes] [data-code]'));
+    const divergedRow = tryBlock.querySelector('[data-try-diverged]');
+    const rowOf = name => tryBlock.querySelector(`[data-row="${name}"]`);
+    const extRow = rowOf('ext');
+    const netRow = rowOf('net');
+
+    /** 结论词写成 `data-*` 放在句子里，语言由 HTML 决定，脚本只挑属性名。 */
+    const say = (el, key) => {
+      if (el) el.textContent = key ? el.getAttribute(`data-${key}`) || '' : '';
+    };
+
+    const render = () => {
+      const input = {};
+      fields.forEach(([key, el]) => {
+        input[key] = el ? el.value : '';
+      });
+      const result = engine.preview({ ...input, matchType: input.matchType || 'wildcard' });
+      /* 结论那一格：归网络层管、却根本不会被应用时（引用越界，或换出来不是一个地址），
+         再说「由网络层改写」就是把没发生的事画成绿的——下面那一格才说清是哪一种。 */
+      let state = 'miss';
+      if (!result.usable) state = 'rejected';
+      else if (result.matched) state = result.channel === 'net' && result.netSkip ? 'notapplied' : result.channel;
+
+      root.dataset.tryState = state;
+      say(verdict, state);
+
+      if (extRow) extRow.hidden = !result.matched;
+      if (netRow) netRow.hidden = !result.matched;
+      if (extValue) extValue.textContent = result.matched ? result.extUrl : '';
+
+      if (netValue) netValue.textContent = result.netUrl || '';
+      if (netAlt) {
+        /* 措辞由 HTML 给：结论那句只能说「这两种里有一种」（它事先不知道是哪一种），
+           这一格才点名。某个理由码在这里没有对应句子时，宁可这一行不出现，
+           也不画一个空盒子。 */
+        const altKey = result.netSkip ? `data-skip-${result.netSkip.toLowerCase()}` : '';
+        const altText = altKey ? netAlt.getAttribute(altKey) || '' : '';
+        netAlt.hidden = !altText;
+        netAlt.textContent = altText;
+      }
+      if (divergedRow) divergedRow.hidden = !result.diverged;
+      codeList.forEach(span => {
+        span.hidden = result.codes.indexOf(span.getAttribute('data-code')) === -1;
+      });
+    };
+
+    fields.forEach(([, el]) => {
+      if (el) el.addEventListener('input', render);
+    });
+
+    /* 预设按钮把四项输入写成 `data-preset-*`（不带 `try-`，否则选择器会先选中按钮，
+       四项输入框就全成了按钮的附属品）：读者不必先想出一个例子也能看到三种模式的差别。 */
+    Array.from(tryBlock.querySelectorAll('[data-try-preset]')).forEach(button =>
+      button.addEventListener('click', () => {
+        fields.forEach(([key, el]) => {
+          const next = button.getAttribute(`data-preset-${key.toLowerCase()}`);
+          if (el && next !== null) el.value = next;
+        });
+        render();
+      }),
+    );
+
+    root.classList.add('try-ready');
+    render();
+  }
+
+  /* ─────────────── 11. 对比表：整列高亮 ─────────────── */
+
+  /* 「鼠标所在的那一列」在 CSS 里没有选中标号（`:has()` 也只能从行往下看），所以脚本把列序号
+     写成 `data-col`，样式负责把那一竖列染上底色——六列的表横向还要滚动，光有高亮行跟不住列。
+     只在指针真的落在某个格子上时改一次属性，离开表格就清掉，不参与任何其他状态。 */
+  all('.compare').forEach(table => {
+    table.addEventListener(
+      'pointermove',
+      event => {
+        const cell = event.target.closest('td, th');
+        if (!cell) return;
+        const col = Array.from(cell.parentElement.children).indexOf(cell) + 1;
+        if (col > 0) table.dataset.col = String(col);
+      },
+      { passive: true },
+    );
+    table.addEventListener('pointerleave', () => {
+      delete table.dataset.col;
+    });
+  });
 })();
