@@ -459,8 +459,9 @@ describe('restoreConfigHistory — 回退本身必须是可逆的', () => {
  * 那一份配置），换序之后依然成立，所以不在禁列。
  *
  * 负向半边单独存在会空转（把整句删掉、或把 key 改名也算通过），所以每条同时钉正向：这句话仍然要说清
- * 「被换掉的那一份会记成恢复点」，中英各一份。射程只到扩展内这三句：README、两份落地页与 `llms*.txt`
- * 上还有同一类说法，它们不走这三个 key、也不进 bundle，另算一轮（要中英成对，还连带 `docs/` 的日期三件套）。
+ * 「被换掉的那一份会记成恢复点」，中英各一份。射程只到扩展内这三句：README 的回退子句、两份落地页与
+ * `docs/llms.txt` 上还有同一类说法（`llms-full.txt` 那份已是内容口径），它们不走这三个 key、也不进
+ * bundle，另算一轮（要中英成对，还连带 `docs/` 的日期三件套）。
  */
 const zhOptions = JSON.parse(readFileSync('locales/zh_CN/options.json', 'utf-8')) as Record<string, string>;
 const enOptions = JSON.parse(readFileSync('locales/en/options.json', 'utf-8')) as Record<string, string>;
