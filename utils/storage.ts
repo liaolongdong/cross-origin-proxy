@@ -206,19 +206,21 @@ export async function deleteRule(ruleId: string): Promise<void> {
 /**
  * 批量删除规则（一次写入）
  *
- * 这一步是成套换掉规则集，所以先记一份恢复点；一个都没删掉时不记，
+ * 这一步是成套换掉规则集，所以记一份恢复点；一个都没删掉时不记，
  * 否则「选中 3 条、它们早已被删」这种空操作会挤掉真正的事故现场。
  */
 export async function batchDeleteRules(ruleIds: string[]): Promise<ProxyConfig> {
   return withStorageLock(async () => {
     const config = await getProxyConfig();
     const idSet = new Set(ruleIds);
-    const remaining = config.rules.filter(r => !idSet.has(r.id));
-    if (remaining.length !== config.rules.length) {
-      await pushConfigHistory('batch-delete', config);
-    }
+    // `config` 是就地改的那个对象（缓存本身），所以「被换掉的那一份」必须在改之前抓住引用
+    const previous = config.rules;
+    const remaining = previous.filter(r => !idSet.has(r.id));
     config.rules = remaining;
     await saveProxyConfig(config);
+    if (remaining.length !== previous.length) {
+      await pushConfigHistory('batch-delete', { enabled: config.enabled, rules: previous });
+    }
     return config;
   });
 }
@@ -327,9 +329,10 @@ export async function importProxyConfig(
     if (incoming.length > MAX_RULES) {
       return { success: false, error: 'MAX_RULES_EXCEEDED' };
     }
-    // 成套替换前先把现状记进恢复点：这一步在写之前，回退要的正是「被换掉的那一份」
-    await pushConfigHistory('replace-import', config);
+    // 主写入先落盘，再把「被换掉的那一份」记进恢复点：快照取的是手里这份锁内 `config`，
+    // 与新写入无关，排在后面只是为了不跟主写入抢配额（见 pushConfigHistory）
     await saveProxyConfig({ enabled: options.enabled ?? false, rules: incoming });
+    await pushConfigHistory('replace-import', config);
     return { success: true, added: incoming.length, skipped: 0 };
   });
 }
@@ -589,7 +592,7 @@ export async function saveProfile(profile: EnvironmentProfile): Promise<void> {
 /**
  * 加载环境配置：将指定 profile 的规则集替换当前配置
  *
- * 与替换式导入同属成套替换，写之前记一份恢复点。「加载快照必然打开总开关」是既有语义，本轮不动。
+ * 与替换式导入同属成套替换，落一份恢复点。「加载快照必然打开总开关」是既有语义，本轮不动。
  */
 export async function loadProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
   return withStorageLock(async () => {
@@ -598,8 +601,10 @@ export async function loadProfile(profileId: string): Promise<{ success: boolean
     if (!profile) {
       return { success: false, error: 'Profile not found' };
     }
-    await pushConfigHistory('load-profile', await getProxyConfig());
+    // 快照要在写之前拿到引用：写完再读回来拿到的就是 profile 那一份了
+    const previous = await getProxyConfig();
     await saveProxyConfig({ enabled: true, rules: profile.rules });
+    await pushConfigHistory('load-profile', previous);
     return { success: true };
   });
 }
@@ -736,17 +741,30 @@ export function getConfigHistory(): Promise<ConfigHistoryEntry[]> {
 }
 
 /**
- * 记下写入前的整包快照
+ * 记下那次替换所换掉的整包快照
  *
- * **只能在已持锁的调用里用**（替换式导入、加载快照、批量删除、回退前自查）：快照必须与它所对应的
+ * **只能在已持锁的调用里用**（替换式导入、加载快照、批量删除、回退后补记）：快照必须与它所对应的
  * 那次写入取自同一份锁内配置，锁外再读一次就可能记成「别的时刻的配置」；`withStorageLock` 也不可
  * 重入。刻意不缓存这份数据：读它的是设置页一次列表渲染，写在成套操作那一刻，缓存只会带来陈旧。
  *
- * 恢复点是安全网而不是主流程，所以下面三种情形都只 warn 后**跳过这一份**，绝不把用户请求的那次
- * 替换带失败：读旧账抛错、新快照单份就越过预算（此时旧账原样留着）、写配额失败。吞掉异常不等于
- * 静默——配额真满时紧随其后的配置写入会带着自己的错误浮出水面，那才是用户需要知道的那一句。
+ * **调用时机固定在主写入之后**，且传进去的必须是写之前就已拿在手里的旧配置（不是「此刻读回来的一份」，
+ * 那时它已经是新配置了）。这一笔最大可到 `MAX_CONFIG_HISTORY_TOTAL_SIZE`（1M 字符），写在前面就会去
+ * 抢主写入要的配额——用户要的那次替换被自己的安全网挤失败，正是「记录失败绝不能变成主操作失败」的
+ * 反面。代价是两次写之间 SW 恰好被回收时，这次替换少一份退路（主操作已经成功，丢的是安全网不是意图）。
+ *
+ * 恢复点是安全网而不是主流程，所以下面四种情形都只 warn 后**跳过这一份**，绝不让已经落盘的主写入
+ * 翻成失败：快照自己不带规则数组（storage 原文）、读旧账抛错、新快照单份就越过预算（此时旧账原样
+ * 留着）、写配额失败。吞掉异常不等于这件事没发生——这一份确实没落进 `CONFIG_HISTORY`，界面上的
+ * 恢复点列表就是少一条（全空时画「暂无恢复点」）。
  */
 async function pushConfigHistory(reason: ConfigHistoryReason, snapshot: ProxyConfig): Promise<void> {
+  // 换序之后新露出来的一格：快照本身也是 storage 里的原文，`rules` 能被手改成 null / 对象。
+  // 排在主写入之前它抛出去只是「这次替换没做成」，排在之后抛就是「替换明明成功了却报失败」，
+  // 所以这一格必须在函数自己手里兜住——与下面三格同罪：只跳过这一份，旧账原样留着。
+  if (!Array.isArray(snapshot?.rules)) {
+    logger.warn('Restore point skipped: the config being replaced carries no rule array');
+    return;
+  }
   let history: ConfigHistoryEntry[];
   try {
     history = await readConfigHistory();
@@ -779,7 +797,8 @@ async function pushConfigHistory(reason: ConfigHistoryReason, snapshot: ProxyCon
 /**
  * 回退到一个恢复点
  *
- * 先把当前配置也记一份再写：回退自己不能是那个不可逆的动作（回退错了还能再回退回来）。
+ * 回退成功后再把当前配置也记一份：回退自己不能是那个不可逆的动作（回退错了还能再回退回来）。
+ * 排在写之后与其它三类替换同一条理由——这一笔最大可到 1M 字符，写在前面会抢走回退自己要的配额。
  * 只回退规则集，**总开关维持现状**——点「回退」要的是找回规则，而不是让代理被顺手打开或关掉；
  * 快照里那份 `enabled` 因此只是记录，不参与回退结果。
  */
@@ -793,9 +812,10 @@ export async function restoreConfigHistory(
       // 手改过的存储能塞进超限快照；照写会让 DNR 整批被拒，等于回退完代理直接不工作
       return { success: false, error: 'MAX_RULES_EXCEEDED' };
     }
+    // 引用留在此刻：写完再读回来的就是回退结果，不是「回退之前的那份」，记它就等于记了个空转
     const current = await getProxyConfig();
-    await pushConfigHistory('before-restore', current);
     await saveProxyConfig({ enabled: current.enabled, rules: entry.config.rules });
+    await pushConfigHistory('before-restore', current);
     return { success: true, restored: entry.ruleCount };
   });
 }

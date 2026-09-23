@@ -43,7 +43,7 @@ export function useConfigHistory() {
   /**
    * 回退到一个恢复点
    *
-   * 后台会在写入前先把当前配置也记一份，所以这一步本身也是可回退的。
+   * 后台会在回退落盘之后把回退前的现状补记一份，所以这一步本身也是可回退的。
    */
   async function restore(id: string): Promise<{ success: boolean; restored?: number; error?: string }> {
     restoring.value = true;

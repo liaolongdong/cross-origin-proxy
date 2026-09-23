@@ -5,14 +5,29 @@ import { MAX_CONFIG_HISTORY, MAX_CONFIG_HISTORY_TOTAL_SIZE, MAX_RULES, STORAGE_K
 // 内存版 chrome.storage.local mock（在存储被测模块前安装），写入按 JSON 往返模拟真实序列化。
 // `failHistoryWrite` 单独让恢复点写入失败，用来验证「安全网写失败不阻断主流程」；
 // `failHistoryRead` 同理管读取侧（SW 回收/存储异常时 get 也会抛）。
+// `quota` 把整包占用卡住（真实 Chrome 按「这次写入落定后的总量」判定），用来验恢复点不与主写入抢配额。
+// `writeOrder` 只记**真正落盘**的那几笔（被拒的不算），顺序即契约。
 let store: Record<string, unknown> = {};
 let failHistoryWrite = false;
 let failHistoryRead = false;
+let quota = Infinity;
+let writeOrder: string[] = [];
+
+const bytes = (value: unknown): number => JSON.stringify(value).length;
+
+/** 被覆盖的键按新值计，其余原样留着——这就是 Chrome 判配额时看的那个数 */
+function projectedUsage(items: Record<string, unknown>): number {
+  const next = { ...store, ...JSON.parse(JSON.stringify(items)) };
+  return Object.values(next).reduce((sum: number, value: unknown) => sum + bytes(value), 0);
+}
+
 const setSpy = vi.fn(async (items: Record<string, unknown>) => {
   if (failHistoryWrite && Object.prototype.hasOwnProperty.call(items, STORAGE_KEYS.CONFIG_HISTORY)) {
     throw new TypeError('QUOTA_EXCEEDED');
   }
-  Object.assign(store, JSON.parse(JSON.stringify(items)));
+  if (projectedUsage(items) > quota) throw new TypeError('QUOTA_EXCEEDED');
+  writeOrder.push(...Object.keys(items));
+  store = { ...store, ...JSON.parse(JSON.stringify(items)) };
 });
 
 vi.stubGlobal('chrome', {
@@ -75,6 +90,8 @@ function reset(): void {
   store = {};
   failHistoryWrite = false;
   failHistoryRead = false;
+  quota = Infinity;
+  writeOrder = [];
   setSpy.mockClear();
   invalidateConfigCache();
 }
@@ -82,7 +99,7 @@ function reset(): void {
 describe('恢复点何时落下 — 只有成套替换才记', () => {
   beforeEach(reset);
 
-  it('替换式导入前记下「被换掉的那一份」', async () => {
+  it('替换式导入记下「被换掉的那一份」', async () => {
     seedConfig([makeRule('old')]);
     await importProxyConfig([makeRule('new')], { mode: 'replace' });
 
@@ -152,7 +169,7 @@ describe('恢复点何时落下 — 只有成套替换才记', () => {
     expect(storedHistory()).toHaveLength(0);
   });
 
-  it('恢复点写入失败只告警，不阻断主写入', async () => {
+  it('恢复点写入失败只告警，不让已经落盘的主操作翻成失败', async () => {
     seedConfig([makeRule('old')]);
     failHistoryWrite = true;
 
@@ -162,9 +179,80 @@ describe('恢复点何时落下 — 只有成套替换才记', () => {
     expect(storedHistory()).toHaveLength(0);
   });
 
-  it('读旧账失败同样不阻断主写入（安全网不能反过来咬主流程一口）', async () => {
+  it('读旧账失败同样只告警（安全网不能反过来咬主流程一口）', async () => {
     seedConfig([makeRule('old')]);
     failHistoryRead = true;
+
+    const result = await importProxyConfig([makeRule('new')], { mode: 'replace' });
+    expect(result.success).toBe(true);
+    expect((await getProxyConfig()).rules.map(r => r.id)).toEqual(['new']);
+    expect(storedHistory()).toHaveLength(0);
+  });
+});
+
+describe('恢复点排在主写入之后 — 安全网不抢主操作的配额', () => {
+  beforeEach(reset);
+
+  // 四对写入的顺序就是这条契约的全部，且每对都得单独钉：它们住在四个不同的调用点上，
+  // 只改其中一处（例如只挪替换式导入）剩下的三处照样是「先记再写」。
+  it('替换式导入：新配置先落盘，恢复点后写', async () => {
+    seedConfig([makeRule('old')]);
+    await importProxyConfig([makeRule('new')], { mode: 'replace' });
+    expect(writeOrder).toEqual([STORAGE_KEYS.PROXY_CONFIG, STORAGE_KEYS.CONFIG_HISTORY]);
+  });
+
+  it('批量删除：剩余规则集先落盘，删除前的整包后记', async () => {
+    seedConfig([makeRule('a'), makeRule('b')]);
+    await batchDeleteRules(['a']);
+    expect(writeOrder).toEqual([STORAGE_KEYS.PROXY_CONFIG, STORAGE_KEYS.CONFIG_HISTORY]);
+  });
+
+  it('加载快照：profile 的规则集先落盘，加载前的配置后记', async () => {
+    seedConfig([makeRule('old')]);
+    store[STORAGE_KEYS.PROFILES] = [{ id: 'p1', name: 'P1', rules: [makeRule('from-profile')], createdAt: 0 }];
+    await loadProfile('p1');
+    expect(writeOrder).toEqual([STORAGE_KEYS.PROXY_CONFIG, STORAGE_KEYS.CONFIG_HISTORY]);
+  });
+
+  it('回退：回退结果先落盘，回退前的现状后记', async () => {
+    seedConfig([makeRule('current')]);
+    seedHistory([validEntry('h1')]);
+    await restoreConfigHistory('h1');
+    expect(writeOrder).toEqual([STORAGE_KEYS.PROXY_CONFIG, STORAGE_KEYS.CONFIG_HISTORY]);
+  });
+
+  it('配额只够一次整包写入时：主写入拿走它，这一份恢复点让路', async () => {
+    const oldRules = [makeRule('old')];
+    const incoming = Array.from({ length: 30 }, (_, i) => makeRule(`n${i}`));
+    const filler = 'y'.repeat(200_000);
+    // 恢复点这一份到底占多少字符，按 pushConfigHistory 实际写出的形状算（键序、uuid 长度、时间戳位数一致）
+    const historyPayload = [
+      {
+        id: '0'.repeat(36),
+        savedAt: 1700000000000,
+        reason: 'replace-import',
+        ruleCount: oldRules.length,
+        config: { enabled: true, rules: oldRules },
+      },
+    ];
+    // 卡位：余量够「旧配置 + 恢复点」，也够「新配置」，但不够「新配置 + 恢复点」——
+    // 谁先写谁活下来，后写的那一笔必被拒。150 字符的松弛量是留给 JSON 细节的，不是留给顺序的。
+    quota = bytes(filler) + bytes({ enabled: false, rules: incoming }) + bytes(historyPayload) - 150;
+    seedConfig(oldRules);
+    store[STORAGE_KEYS.REQUEST_LOGS] = filler;
+
+    const result = await importProxyConfig(incoming, { mode: 'replace' });
+    expect(result.success).toBe(true);
+    expect((await getProxyConfig()).rules).toHaveLength(30);
+    // 这一份确实没记上——正是它该让路的那一种；主操作活着，用户才谈得上回来找退路
+    expect(storedHistory()).toHaveLength(0);
+  });
+
+  it('快照自己形状不对（手改过的 storage）时只跳过这一份，不推翻已经落盘的主写入', async () => {
+    // 恢复点排在主写入之后，就意味着 pushConfigHistory 里任何一句抛出去，都会把一次**已经成功**的
+    // 替换翻成 rejection。`rules: null` 是 AGENTS 明列的可信来路（手改或被截断的旧数据）。
+    store = { [STORAGE_KEYS.PROXY_CONFIG]: { enabled: true, rules: null } };
+    invalidateConfigCache();
 
     const result = await importProxyConfig([makeRule('new')], { mode: 'replace' });
     expect(result.success).toBe(true);
@@ -293,7 +381,7 @@ describe('sanitizeConfigHistory — 存储里的历史是可被手改的数据',
 describe('restoreConfigHistory — 回退本身必须是可逆的', () => {
   beforeEach(reset);
 
-  it('回退规则集但维持当前总开关，并先把现状记一份 before-restore', async () => {
+  it('回退规则集但维持当前总开关，并把现状补记一份 before-restore', async () => {
     seedConfig([makeRule('current')], false);
     seedHistory([
       {

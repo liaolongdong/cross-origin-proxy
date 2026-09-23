@@ -18,7 +18,7 @@ import { deduplicateRules, ruleMergeKey } from '@/utils/ruleConflicts';
  */
 export function planImport(current: ProxyRule[], incoming: ProxyRule[], mode: ImportMode): ImportPlan {
   if (mode === 'replace') {
-    // 替换模式不做去重：文件整包成为新规则集，现网那批会被换掉（恢复点因此必须落在写入之前）
+    // 替换模式不做去重：文件整包成为新规则集，现网那批会被换掉（那一份正是恢复点要记的内容）
     return {
       mode,
       added: incoming.length,
