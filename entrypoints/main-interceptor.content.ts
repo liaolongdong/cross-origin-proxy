@@ -354,11 +354,26 @@ export default defineContentScript({
         const requestId = `req-${++requestCounter}-${Date.now()}`;
         onRequestId?.(requestId);
         const pageSignal = options.signal ?? null;
+        // 这笔的取消钩子怎么摘。默认空函数：`signal` 是页面传进来的东西，只挂了
+        // `addEventListener` 的 polyfill 并不少见，去调一个不存在的方法等于把落定路径变成抛错。
+        let detachAbort: () => void = () => {};
+
+        // 页面取消（`controller.abort()`）：本地按 `signal.reason` 落定，同时让后台掐掉那笔上游。
+        // 不掐的后果是——连接继续握、凭据继续外发、retryCount 继续追加，而结果已经没人读了。
+        const onPageAbort = () => {
+          // 已落定（正常回包或代发超时）时登记项已摘除，这时不该补发一条无主的取消
+          if (!pendingRequests.has(requestId)) return;
+          pendingRequests.delete(requestId);
+          clearTimeout(timeout);
+          window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);
+          reject(pageSignal?.reason);
+        };
 
         // 超时上限按规则配置动态计算（延迟/重试会拉长 SW 侧总耗时）
         const timeout = setTimeout(() => {
           bump('timedOut');
           pendingRequests.delete(requestId);
+          detachAbort();
           reject(new Error('Proxy request timeout'));
         }, computeProxyTimeout(rule));
 
@@ -372,6 +387,7 @@ export default defineContentScript({
         pendingRequests.set(requestId, {
           resolve: (data: any) => {
             clearTimeout(timeout);
+            detachAbort();
             // status 越界或缺失一律无法构造 Response（合法范围 200-599，
             // 其中 204/205/304 只能配 null 正文）：
             // 含旁路（Proxy Bypass）、代理失败（Proxy Error）、桥接层错误、
@@ -473,20 +489,26 @@ export default defineContentScript({
         );
         bump('proxied');
 
-        // 页面取消（`controller.abort()`）：本地按 `signal.reason` 落定，同时让后台掐掉那笔上游。
-        // 不掐的后果是——连接继续握、凭据继续外发、retryCount 继续追加，而结果已经没人读了。
-        pageSignal?.addEventListener(
-          'abort',
-          () => {
-            // 已落定（正常回包或代发超时）时登记项已摘除，这时不该补发一条无主的取消
-            if (!pendingRequests.has(requestId)) return;
-            pendingRequests.delete(requestId);
-            clearTimeout(timeout);
-            window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);
-            reject(pageSignal.reason);
-          },
-          { once: true },
-        );
+        if (pageSignal) {
+          pageSignal.addEventListener('abort', onPageAbort, { once: true });
+          // 落定之后把这笔的钩子从页面 signal 上摘掉：`once` 只在页面真的 abort 时回收，而绝大多数
+          // 请求是正常落定的，于是那个闭包连同 url / rule / resolve 会一直挂在 controller 上——
+          // SPA 复用同一个 controller 发几十笔时，只有第一个钩子有机会自己离场。
+          // 留在上面那条 `pendingRequests.has` 早退本来就在处理「已落定之后再 abort」，摘掉不改变结局。
+          if (typeof pageSignal.removeEventListener === 'function') {
+            // 摘不掉就退回 `once` + `pendingRequests.has` 早退，与改动前同形。这里必须吞：
+            // 调用点在落定路径上（回包分支排在 `clearTimeout` 之后、超时分支排在 `reject` 之前），
+            // 而页面的 signal 是不可信输入——方法存在但抛错（getter、代理对象）完全可能，
+            // 让它冒出去就是把「一次回收失败」升级成「这一笔永远不落定」。
+            detachAbort = () => {
+              try {
+                pageSignal.removeEventListener('abort', onPageAbort);
+              } catch {
+                // 收尾动作，不额外开口：这一句抛错本身就是页面自己的问题
+              }
+            };
+          }
+        }
       });
     }
 

@@ -22,10 +22,11 @@ import { readFileSync } from 'node:fs';
  * ① 桥接层「发完即止」——`sendMessage` 在 SW 回收期被拒时既不等回执也不在控制台留噪音；
  *    运行时那几组只观察转发的载荷，观察不到这条 promise 怎么落定。
  * ② `catch` 里三条判据的**先后**：把「先判取消」挪到「再判阻断」之后，`tests/interceptorFetch.test.ts`
- *    25 条全绿，变的只有一种组合——被取消那一笔恰好命中阻断规则，页面拿到的就成了模拟网络错误的
+ *    整份运行时用例全绿（不写条数：这个数会长，写死就成了下次漂移的源头），变的只有一种组合——
+ *    被取消那一笔恰好命中阻断规则，页面拿到的就成了模拟网络错误的
  *    `TypeError` 而不是 `AbortError`（页面普遍按 `err.name === 'AbortError'` 分支）。
- *    作为对照，整句摘掉「先判取消」则是 `tests/interceptorFetch.test.ts`「取消」那一组里的两条红
- *    （用例本身用的都是非阻断规则，所以颠倒顺序时它们毫无反应）：取消走到回退分支，
+ *    作为对照，整句摘掉「先判取消」则是 `tests/interceptorFetch.test.ts`「取消」那一组里凡是断言
+ *    「这一笔按取消落定」的那几条红（只写判据不写条数，理由同上一段）：取消走到回退分支，
  *    页面刚放弃的请求被原样再发一遍（真实浏览器里是网络行为，桩里表现为一次成功落定）。
  */
 
@@ -54,14 +55,37 @@ describe('[MAIN world] 取消消息要先于响应写回发出去', () => {
 
   it('signal 触发 abort：摘掉待回复登记、撤掉代发超时、发取消、并按 signal.reason 落定', () => {
     const src = proxyFetchSrc();
-    expect(src).toContain('pageSignal?.addEventListener(');
-    expect(src).toContain('if (!pendingRequests.has(requestId)) return;');
-    expect(src).toContain('clearTimeout(timeout);');
-    expect(src).toContain(
+    expect(src).toContain("addEventListener('abort', onPageAbort");
+    expect(src).toContain('{ once: true }');
+
+    // 处理器体单独切出来钉：`clearTimeout(timeout);` 在 `proxyFetch` 里有四处，
+    // 整片 `toContain` 等于没钉（实测删掉处理器里那一句照样绿）。
+    const handlerAt = src.indexOf('const onPageAbort = () => {');
+    expect(handlerAt, '取消处理器不再是具名的 onPageAbort 了——把上面的锚点一起改掉，别删断言').toBeGreaterThan(-1);
+    // 终止锚也要单独钉：找不到时 `indexOf` 给 -1，`slice(start, -1)` 会切到「整段末尾减一字符」，
+    // 于是下面每一条 `toContain` 都在拿全文比——全都绿，却什么都没钉住。
+    const handlerEnd = src.indexOf('\n        };', handlerAt);
+    expect(handlerEnd, '取消处理器的收尾形状变了——换掉这里的终止锚，别删断言').toBeGreaterThan(handlerAt);
+    const handler = src.slice(handlerAt, handlerEnd);
+    expect(handler).toContain('if (!pendingRequests.has(requestId)) return;');
+    expect(handler).toContain('clearTimeout(timeout);');
+    expect(handler).toContain(
       'window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);',
     );
-    expect(src).toContain('reject(pageSignal.reason);');
-    expect(src).toContain('{ once: true }');
+    expect(handler).toContain('reject(pageSignal?.reason);');
+
+    // 摘钩本身：只在页面给的那个 signal 真支持时才去调（`signal` 属页面传入物，只有
+    // `addEventListener` 的 polyfill 并不少见），且抛错也得吞掉——它在落定路径上。
+    expect(src).toContain("typeof pageSignal.removeEventListener === 'function'");
+    expect(src).toContain("removeEventListener('abort', onPageAbort)");
+    const detachAt = src.indexOf('detachAbort = () => {');
+    expect(detachAt, '摘钩不再是闭包了——这里的锚点跟着改，别删断言').toBeGreaterThan(-1);
+    // 不切「到某个终止锚为止」，改成以那句调用为分界：终止锚找不到时 `slice(a, -1)` 会退化成
+    // 「一路切到段尾」，`try {` 于是从后面的响应构造分支里被捞到，这条就成了空断言。
+    const removeAt = src.indexOf("pageSignal.removeEventListener('abort', onPageAbort)");
+    expect(removeAt, '摘掉 abort 钩子的那句调用不见了').toBeGreaterThan(detachAt);
+    expect(src.slice(detachAt, removeAt)).toContain('try {');
+    expect(src.slice(removeAt, removeAt + 160)).toContain('catch {');
   });
 });
 

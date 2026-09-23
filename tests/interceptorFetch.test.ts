@@ -494,6 +494,130 @@ describe('取消', () => {
 
     expect(payloadOfType(CANCEL_REQUEST)).toEqual([]);
   });
+
+  /**
+   * 带钩子计数的假 signal：真 `AbortSignal` 在 Node 上不暴露 `listenerCount`，而用它的那几条要看的正是
+   * 「落定之后页面上还挂着几个 abort 钩子」。只实现拦截器用到的那四件事，`once` 按浏览器语义补齐。
+   */
+  function trackedSignal() {
+    const hooks = new Set<() => void>();
+    const signal = {
+      aborted: false,
+      reason: undefined as unknown,
+      addEventListener(type: string, fn: () => void) {
+        if (type === 'abort') hooks.add(fn);
+      },
+      removeEventListener(type: string, fn: () => void) {
+        if (type === 'abort') hooks.delete(fn);
+      },
+    };
+    return {
+      hooks,
+      signal: signal as unknown as AbortSignal,
+      abort: () => {
+        signal.aborted = true;
+        signal.reason = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+        for (const fn of [...hooks]) {
+          hooks.delete(fn);
+          fn();
+        }
+      },
+    };
+  }
+
+  it('落定之后不再往页面的 signal 上留钩子（正常回包与代发超时各一支）', async () => {
+    // 不摘的后果是一个闭包（连同 url / rule / resolve）长期驻留在页面复用的 controller 上：
+    // `once` 只在真的 abort 时回收，而绝大多数请求是正常落定的。
+    armProxy([rule()]);
+
+    const first = trackedSignal();
+    const pending = send(API_URL, { signal: first.signal });
+    // 在途读数：钩子确实挂上了。少了这一格，末尾的 0 与「压根没挂过」分不开
+    expect(first.hooks.size).toBe(1);
+    respond(lastRequestId(), { status: 200, body: 'ok' });
+    await pending;
+    expect(first.hooks.size).toBe(0);
+
+    const second = trackedSignal();
+    vi.useFakeTimers();
+    const timedOut = send(API_URL, { signal: second.signal });
+    expect(second.hooks.size).toBe(1);
+    await vi.advanceTimersByTimeAsync(35000);
+    await timedOut;
+    expect(second.hooks.size).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it('页面的 signal 只有 `addEventListener`（polyfill 那一类）：照旧挂得上，落定也不因摘钩而抛错', async () => {
+    // `signal` 属页面传入物，只挂 `addEventListener` 的实现并不少见。摘钩那一步不看类型就照着调，
+    // 成功的回包会被换成 TypeError——那才是这条用例要拦住的东西。
+    armProxy([rule()]);
+    const hooks = new Set<() => void>();
+    const bare = {
+      aborted: false,
+      reason: undefined as unknown,
+      addEventListener: (type: string, fn: () => void) => {
+        if (type === 'abort') hooks.add(fn);
+      },
+    };
+
+    const pending = send(API_URL, { signal: bare as unknown as AbortSignal });
+    expect(hooks.size).toBe(1);
+    respond(lastRequestId(), { status: 200, body: 'ok' });
+
+    const response = await pending;
+    expect(response.status).toBe(200);
+    // 摘不掉就原样留着（＝改动前的形态）：这条不是「应该」，是那种 signal 根本没有可摘的手段
+    expect(hooks.size).toBe(1);
+  });
+
+  it('页面的 signal 的 `removeEventListener` 抛错：这一笔照样落定，不许挂死', async () => {
+    // `signal` 是不可信输入，方法「存在但会抛」与「压根没有」是两回事：摘钩排在 `clearTimeout`
+    // 之后（回包那一支），抛出去就是登记已删、超时已撤、`resolve` 再也没机会跑——本文件最贵的
+    // 那一类症状（页面的 fetch 永远等不到结果）。少了 try/catch，这一条要挂到用例超时才红。
+    armProxy([rule()]);
+    const hooks = new Set<() => void>();
+    const hostile = {
+      aborted: false,
+      reason: undefined as unknown,
+      addEventListener: (type: string, fn: () => void) => {
+        if (type === 'abort') hooks.add(fn);
+      },
+      removeEventListener: () => {
+        throw new Error('页面自己的问题');
+      },
+    };
+
+    const pending = send(API_URL, { signal: hostile as unknown as AbortSignal });
+    respond(lastRequestId(), { status: 200, body: 'ok' });
+
+    const response = await pending;
+    expect(response.status).toBe(200);
+  });
+
+  it('同一个 signal 上两笔并发：只摘落定那一笔，留下的那一笔照样能取消', async () => {
+    // 这才是改动针对的那个形状——SPA 复用同一个 controller 连发。摘错对象（连别人的也清掉、
+    // 或几笔共用一份引用）在「一笔一个 signal」下面完全看不出来。
+    armProxy([rule()]);
+    const shared = trackedSignal();
+
+    const settled = send(API_URL, { signal: shared.signal });
+    const inflight = send(API_URL, { signal: shared.signal });
+    expect(shared.hooks.size).toBe(2);
+    const [settledId, inflightId] = proxiedRequests()
+      .slice(-2)
+      .map(entry => entry.requestId as string);
+
+    respond(settledId, { status: 200, body: 'ok' });
+    await settled;
+    expect(shared.hooks.size).toBe(1);
+
+    shared.abort();
+    const error = await inflight.catch((reason: unknown) => reason);
+    expect((error as Error).name).toBe('AbortError');
+    // 只替在途那一笔发取消：已落定那笔的钩子若还挂着，这里就会多出一条无主的
+    expect(payloadOfType(CANCEL_REQUEST).map(payload => payload.data)).toEqual([{ requestId: inflightId }]);
+  });
 });
 
 describe('超时与自报口径', () => {
