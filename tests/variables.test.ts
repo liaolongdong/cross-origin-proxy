@@ -460,9 +460,10 @@ describe('分流与世界边界（源码契约）', () => {
     expect(src).toMatch(
       /newlyIntroducedRefs\(\s*findUndefinedVariableRefs\([\s\S]*?\),\s*baselineVarNames\.value,?\s*\)/,
     );
-    // WS 那道刻意不共用基线：把 `{{X}}` 从请求头挪进 WS 查询参数是新造一份静默坏配置
+    // WS 那道刻意不共用基线：把 `{{X}}` 从请求头挪进 WS 查询参数是新造一份静默坏配置。
+    // 三处闸门断言一律空白宽容——钉死行形状就是给 prettier 埋雷（见下面那条基线断言的说明）
     expect(src).toMatch(
-      /newlyIntroducedRefs\(collectRuleVariableRefs\(\{ queryOverrides \}\),\s*baselineQueryVarNames\.value\)/,
+      /newlyIntroducedRefs\(\s*collectRuleVariableRefs\(\{\s*queryOverrides\s*\}\)\s*,\s*baselineWsQueryVarNames\.value\s*,?\s*\)/,
     );
     // 只 toContain 看得见第一处，两处都得在才算收口
     expect(src.match(/newlyIntroducedRefs\(/g)).toHaveLength(2);
@@ -475,7 +476,7 @@ describe('分流与世界边界（源码契约）', () => {
       // `&& isWebSocketRule(props.rule)` 是承重的那半：一条非 WS 的存量规则被改成 WS 时，
       // queryOverrides 里的引用是这次才够到「页面侧拼接、读不到变量表」那条路的，与新建时无异，
       // 摘掉它就是把设计好的拒绝漏掉（变异 B8）
-      /baselineQueryVarNames\.value =\s*props\.rule\s*&&\s*isWebSocketRule\(props\.rule\)\s*\?\s*collectRuleVariableRefs\(\{\s*queryOverrides: props\.rule\.queryOverrides,?\s*\}\)\s*:\s*\[\]/,
+      /baselineWsQueryVarNames\.value =\s*props\.rule\s*&&\s*isWebSocketRule\(props\.rule\)\s*\?\s*collectRuleVariableRefs\(\{\s*queryOverrides: props\.rule\.queryOverrides,?\s*\}\)\s*:\s*\[\]/,
     );
     // 拉取失败时闸门整体让路，别让「暂时读不到表」变成存不回去
     expect(src).toContain('if (variableNamesLoaded.value)');

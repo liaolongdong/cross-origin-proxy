@@ -194,8 +194,9 @@ describe('恢复点何时落下 — 只有成套替换才记', () => {
 describe('恢复点排在主写入之后 — 安全网不抢主操作的配额', () => {
   beforeEach(reset);
 
-  // 四对写入的顺序就是这条契约的全部，且每对都得单独钉：它们住在四个不同的调用点上，
-  // 只改其中一处（例如只挪替换式导入）剩下的三处照样是「先记再写」。
+  // 每一对「主写入 → 恢复点」的顺序就是这条契约的全部，且每对都得单独钉：它们住在彼此独立的调用点上，
+  // 只改其中一处（例如只挪替换式导入）剩下的照样是「先记再写」。调用点与断言是否配齐，由下面那条
+  // 计数互咬的用例负责，所以这里不写「几处」——那个数字一漂，这句话就成了假的安心来源。
   it('替换式导入：新配置先落盘，恢复点后写', async () => {
     seedConfig([makeRule('old')]);
     await importProxyConfig([makeRule('new')], { mode: 'replace' });
@@ -220,6 +221,20 @@ describe('恢复点排在主写入之后 — 安全网不抢主操作的配额',
     seedHistory([validEntry('h1')]);
     await restoreConfigHistory('h1');
     expect(writeOrder).toEqual([STORAGE_KEYS.PROXY_CONFIG, STORAGE_KEYS.CONFIG_HISTORY]);
+  });
+
+  it('每一处恢复点写入都有自己那对顺序用例（两份计数彼此制衡）', () => {
+    // 上面那组「一个调用点一对断言」是这条契约的全部射程，而任何写在注释里的调用点个数都会漂：
+    // 加第五处 `pushConfigHistory` 而忘了配对断言，剩下的用例照样全绿，新那处的顺序从此没人钉。
+    // 所以这里不比字面数字，比两份**互相独立**的计数——生产侧多一处、测试侧没跟上，当场红。
+    const callSites = readFileSync('utils/storage.ts', 'utf-8').match(/await pushConfigHistory\(/g) ?? [];
+    const orderCases =
+      readFileSync('tests/configHistory.test.ts', 'utf-8').match(
+        /expect\(writeOrder\)\.toEqual\(\[STORAGE_KEYS\.PROXY_CONFIG, STORAGE_KEYS\.CONFIG_HISTORY\]\);/g,
+      ) ?? [];
+    expect(orderCases).toHaveLength(callSites.length);
+    // 计数为 0 时上一条会自证（0 == 0），所以正向半边也得钉：调用点确实存在
+    expect(callSites.length).toBeGreaterThan(0);
   });
 
   it('配额只够一次整包写入时：主写入拿走它，这一份恢复点让路', async () => {
@@ -449,14 +464,21 @@ describe('restoreConfigHistory — 回退本身必须是可逆的', () => {
 /**
  * 界面措辞不得承诺恢复点的写入时机
  *
- * 四处写入点现在一律排在主写入之后，而这三句界面文案是扩展里唯一说这件事的地方——恢复点没有别的可
- * 观察面，读者只能照句子理解成「我那次替换之前，旧配置已经先存好了」。改了代码不改文案，两边都会以为
- * 自己在对齐事实，所以顺序契约与措辞落在同一支文件里（上面那组「落盘顺序」钉的是代码，这里钉的是话）。
+ * 每一处写入点现在一律排在主写入之后（上面那组「落盘顺序」钉的是代码，调用点是否配齐由那条计数互咬的
+ * 用例负责），而这三个 key 走出去的几句界面文案，是恢复点在扩展 bundle 里说这件事的唯一出口——恢复点
+ * 没有别的可观察面，读者只能照句子理解成「我那次替换之前，旧配置已经先存好了」。改了代码不改文案，
+ * 两边都会以为自己在对齐事实，所以顺序契约与措辞落在同一支文件里。
  *
- * 判据是「同一句里出现顺序承诺」，实现却刻意做成禁字：`先`（中英 `first`）在这三句话里只承担一个
- * 语义——「记」发生在被替换的那次写入之前。要写「请先…」之类的客套，请把这句话换成不含时序的说法，
- * 而不是往守卫里加例外。反过来，`改动前的配置`、`被换掉的那份` 说的是快照的**内容**（那次写入换掉的
- * 那一份配置），换序之后依然成立，所以不在禁列。
+ * 判据是「同一句里出现顺序承诺」，实现却刻意做成禁字：`先`（中英）与 `before` / `first`（英）在这三句
+ * 话里只承担一个语义——「记」发生在被替换的那次写入之前。要写「请先…」之类的客套，请把这句话换成不含
+ * 时序的说法，而不是往守卫里加例外。反过来，`改动前的配置`、`被换掉的那份` 说的是快照的**内容**（那次
+ * 写入换掉的那一份配置），换序之后依然成立，所以不在禁列。
+ *
+ * 英文侧为什么两个词都禁：`first` 钉住的是被换掉的那句 "stored first"，而下一句最可能长回来的写法是
+ * "record the config **before** replacing"——只禁 `first` 拦不住它。三句现值里 `before` 一个都没有，
+ * 所以这条禁字今天是零成本的。射程只到 `RECORDING_COPY_KEYS` 这三句：`restoreReason*` 那一组标签以
+ * "Before a replace-mode import" 之类开头，说的是这份快照**属于哪一次操作**（provenance），换序前后
+ * 都成立，所以既不在禁列里、也不在这条守卫的射程里。
  *
  * 负向半边单独存在会空转（把整句删掉、或把 key 改名也算通过），所以每条同时钉正向：这句话仍然要说清
  * 「被换掉的那一份会记成恢复点」，中英各一份。射程只到扩展内这三句：README 的回退子句、两份落地页与
@@ -472,7 +494,8 @@ const RECORDING_COPY_KEYS = ['restorePointsHint', 'restoreConfirm', 'importPrevi
 describe('恢复点的界面措辞 — 不承诺写入时机', () => {
   it.each(RECORDING_COPY_KEYS)('%s：中英两侧都没有「先记」这种顺序承诺', key => {
     expect(zhOptions[key]).not.toContain('先');
-    expect(enOptions[key]).not.toMatch(/\bfirst\b/i);
+    // 两个词都要禁：`first` 钉的是被换掉的那句说法，`before` 拦住下一句最可能长回来的写法
+    expect(enOptions[key]).not.toMatch(/\b(before|first)\b/i);
   });
 
   it.each([

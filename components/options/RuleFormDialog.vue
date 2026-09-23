@@ -677,7 +677,7 @@ const variableNamesLoaded = ref(false);
  * 非 WS 的存量规则改成 WS，那句引用同样是这次才够到那条路的。少任一条件都是漏掉设计好的拒绝。
  */
 const baselineVarNames = ref<string[]>([]);
-const baselineQueryVarNames = ref<string[]>([]);
+const baselineWsQueryVarNames = ref<string[]>([]);
 
 const formRef = ref<FormInstance>();
 
@@ -860,7 +860,7 @@ watch(
       // 空基线，那些引用与用户新敲进去的一句没有区别
       baselineVarNames.value = props.rule ? collectRuleVariableRefs(props.rule) : [];
       // WS 那道多一道条件：非 WS 的存量规则改成 WS 时，查询参数里那句引用与新建时无异，照旧要拦
-      baselineQueryVarNames.value =
+      baselineWsQueryVarNames.value =
         props.rule && isWebSocketRule(props.rule)
           ? collectRuleVariableRefs({ queryOverrides: props.rule.queryOverrides })
           : [];
@@ -953,7 +953,7 @@ async function handleSave() {
   // 变量表，引用只会被原样写进握手 URL —— 静默坏配置，不如当场拒绝保存
   if (
     isWebSocketRule({ matchPattern: form.matchPattern, targetUrl: form.targetUrl }) &&
-    newlyIntroducedRefs(collectRuleVariableRefs({ queryOverrides }), baselineQueryVarNames.value).length > 0
+    newlyIntroducedRefs(collectRuleVariableRefs({ queryOverrides }), baselineWsQueryVarNames.value).length > 0
   ) {
     ElMessage.error(t('variableWsQueryUnsupportedError'));
     return;
