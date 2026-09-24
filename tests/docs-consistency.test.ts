@@ -70,7 +70,6 @@ const BILINGUAL_PAIRS: Array<[string, string]> = [
   ['docs/en-alternatives.html', 'docs/alternatives.html'],
 ];
 
-
 describe('[Docs] 仓库自动化与文档一致性', () => {
   // ═══════════════════════════════════════════════════════════════════════════
   // Pages URL：产品站与隐私政策的可达性
@@ -874,7 +873,6 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
   describe('Chrome 商店提审素材', () => {
     const doc = read('CHROMEWEBSTORE.md');
-
 
     /** 取某个小节区间内的全部 ``` 代码块（商店表单的可粘贴值就放在这里）。 */
     const blocksIn = (from: string, to: string): string[] => {
