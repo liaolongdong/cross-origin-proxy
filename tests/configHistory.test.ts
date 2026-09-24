@@ -482,9 +482,11 @@ describe('restoreConfigHistory — 回退本身必须是可逆的', () => {
  *
  * 负向半边单独存在会空转（把整句删掉、或把 key 改名也算通过），所以每条同时钉正向：这句话仍然要说清
  * 「被换掉的那一份会记成恢复点」，中英各一份。扩展内是这三句，另加 `docs/llms.txt` 的那一条 bullet
- * （引用型 AI 引擎读的就是这一份，它不走 key、也不进 bundle，所以要单独钉一次）。README 两份的回退
- * 子句与两份落地页上还有同一类说法（`llms-full.txt` 那份已是内容口径），这几个文件正被同机另一会话改，
- * 改它们要连带中英成对与 `docs/` 的日期三件套，留待那一轮一起收。
+ * （它不走 key、也不进 bundle，上面那两条 `it.each` 一句也够不着，所以要单独钉一次）。剩下的外部落点
+ * 都在同一份「顺序承诺」下等收：README 两份的回退子句、两份落地页，以及 `docs/llms-full.txt` 的第 109
+ * 行——那一条中英都还在说「回退之前同样**先**留一份」/ "records its own point **first**"，别把它当
+ * 已经对齐了（`llms.txt` 收口这一格时曾把它记成「已是内容口径」，那是错的）。这些文件正被同机另一会话
+ * 改，改它们要连带中英成对与 `docs/` 的日期三件套，留待那一轮一起收。
  */
 const zhOptions = JSON.parse(readFileSync('locales/zh_CN/options.json', 'utf-8')) as Record<string, string>;
 const enOptions = JSON.parse(readFileSync('locales/en/options.json', 'utf-8')) as Record<string, string>;
@@ -509,19 +511,22 @@ describe('恢复点的界面措辞 — 不承诺写入时机', () => {
   });
 
   /**
-   * `docs/llms.txt` 是这一事实对引用型 AI 引擎的唯一出口，所以按 bullet 单独钉一次：
-   * 它不走 key、不进 bundle，上面那两条 `it.each` 一句也够不着它。中英同条，禁字与正向判据照抄。
+   * `docs/llms.txt` 是这一事实面向引用型 AI 引擎的两个出口之一（另一个是 `llms-full.txt`，
+   * 见上文），所以按 bullet 单独钉一次：它不走 key、不进 bundle，上面那两条 `it.each`
+   * 一句也够不着它。中英同条，禁字与正向判据照抄。
    */
   it('docs/llms.txt 的恢复点那条 bullet：同样只说内容、不承诺写入时机', () => {
-    const bullet =
-      readFileSync('docs/llms.txt', 'utf-8')
-        .split('\n')
-        .find(line => line.startsWith('- Config restore points:')) ?? '';
+    const text = readFileSync('docs/llms.txt', 'utf-8');
+    const bullet = text.split('\n').find(line => line.startsWith('- Config restore points:')) ?? '';
     expect(bullet.length, 'llms.txt 里那条 - Config restore points: 不见了').toBeGreaterThan(0);
     expect(bullet).not.toContain('先');
     expect(bullet).not.toMatch(/\b(before|first)\b/i);
     expect(bullet).toContain('记成恢复点');
     expect(bullet).toMatch(/recorded as a restore point/i);
+    // 「什么都没删掉的批量删除不落恢复点」（storage.ts 的 `remaining.length !== previous.length`），
+    // 这句限定是 `llms-full.txt` 一直写对、而 `llms.txt` 本轮才补上的那一格
+    expect(bullet).toContain('真正删掉了东西');
+    expect(bullet).toMatch(/that actually removed something/i);
   });
 });
 
