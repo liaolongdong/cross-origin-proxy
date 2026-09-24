@@ -187,8 +187,7 @@ async function handleSaveProfile() {
       createdAt: existing?.createdAt ?? Date.now(),
     };
     const resp = (await chrome.runtime.sendMessage({ type: MessageType.SAVE_PROFILE, data: profile })) as
-      | { success?: boolean; error?: string }
-      | undefined;
+      { success?: boolean; error?: string } | undefined;
     // 写入失败回的是 resolved 的 `{success:false}`（成功时是 undefined），不判就是拿着绿色「已保存」
     // 提示一个 storage 里并不存在的快照——重新打开弹窗时它会消失
     if (isFailureEnvelope(resp)) {

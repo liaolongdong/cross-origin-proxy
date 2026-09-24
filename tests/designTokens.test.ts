@@ -106,7 +106,9 @@ describe('暗色下的品牌取值只能由主题块自带（此前五处覆盖�
   const bodies = declarationBodies();
 
   it('默认主题与五个具名主题各带齐五个 --cop-dark-* 品牌令牌', () => {
-    const themeBodies = bodies.filter(b => /\[data-theme='[a-z]+'\]/.test(b.selector) && !b.selector.includes('data-mode'));
+    const themeBodies = bodies.filter(
+      b => /\[data-theme='[a-z]+'\]/.test(b.selector) && !b.selector.includes('data-mode'),
+    );
     expect(themeBodies.map(b => b.selector)).toHaveLength(5);
     const root = bodies.find(b => b.selector === ':root');
     expect(root, '找不到 :root 基座（晴空蓝的暗色取值就住在它里面）').toBeDefined();
@@ -117,7 +119,9 @@ describe('暗色下的品牌取值只能由主题块自带（此前五处覆盖�
   });
 
   it('两条暗色路径的品牌令牌一律 var() 取用，不写死颜色（写死就是拿默认蓝盖掉主题）', () => {
-    const darkBases = bodies.filter(b => /\[data-mode='dark'\]$/.test(b.selector) || /\[data-mode\]\)$/.test(b.selector));
+    const darkBases = bodies.filter(
+      b => /\[data-mode='dark'\]$/.test(b.selector) || /\[data-mode\]\)$/.test(b.selector),
+    );
     expect(darkBases).toHaveLength(2);
     for (const { selector, body } of darkBases) {
       const brandTokens = DARK_GROUP.concat('--cop-primary', '--cop-primary-rgb');
@@ -143,9 +147,7 @@ describe('--el-fill-color-lighter 没有暗色对应值，只能作 --cop-* 的�
    * （暗色 `#d0d0e0`）就是 1.46:1 的文字——面板与字都是「按亮色算的」。
    */
   const TOKENS_SRC = readFileSync(TOKENS_FILE, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, '');
-  const DARK_BASES = [
-    ...TOKENS_SRC.matchAll(/(^|\n)\s*([^\n{}]+)\s*\{([^{}]*)\}/g),
-  ]
+  const DARK_BASES = [...TOKENS_SRC.matchAll(/(^|\n)\s*([^\n{}]+)\s*\{([^{}]*)\}/g)]
     .map(m => ({ selector: m[2].trim(), body: m[3] }))
     .filter(b => /\[data-mode='dark'\]$/.test(b.selector) || /\[data-mode\]\)$/.test(b.selector));
 
@@ -215,7 +217,9 @@ describe('状态色浅档（surface 用的 light-N）必须在两条暗色路径
   for (const file of files) {
     if (file === TOKENS_FILE) continue;
     const s = readFileSync(file, 'utf-8');
-    for (const m of s.matchAll(/(?:background|background-color|border|border-color)\s*:[^;]*var\((--el-color-[a-z]+-light-\d)/g)) {
+    for (const m of s.matchAll(
+      /(?:background|background-color|border|border-color)\s*:[^;]*var\((--el-color-[a-z]+-light-\d)/g,
+    )) {
       usedTints.add(m[1]);
     }
   }
