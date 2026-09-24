@@ -1168,7 +1168,7 @@ function runTest() {
   gap: 16px;
   padding: 12px;
   margin-top: 8px;
-  background: var(--el-fill-color-lighter, #f5f7fa);
+  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
   border: 1px solid var(--el-border-color-lighter, #ebeef5);
   border-radius: 8px;
 }
@@ -1189,7 +1189,7 @@ function runTest() {
 .test-panel {
   margin-top: 16px;
   overflow: hidden;
-  background: var(--el-fill-color-lighter, #f5f7fa);
+  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
   border: 1px solid var(--el-border-color-light, #e4e7ed);
   border-radius: 8px;
 }
@@ -1256,7 +1256,7 @@ function runTest() {
   line-height: 1.6;
   color: var(--el-color-primary, #409eff);
   word-break: break-all;
-  background: var(--el-fill-color-lighter, #f5f7fa);
+  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
   border-radius: 4px;
 }
 

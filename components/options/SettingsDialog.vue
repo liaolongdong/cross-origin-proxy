@@ -239,6 +239,7 @@ import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
 import type { ConfigHistoryEntry, ConfigHistoryReason, ProxyRule, VariableStore } from '@/utils/types';
 import { collectRuleVariableRefs, findUndefinedVariableRefs, isVariableName } from '@/utils/variables';
 import { formatLocaleDateTime } from '@/utils/formatters';
+import { logger } from '@/utils/logger';
 import { useVariables } from '@/composables/useVariables';
 import { useConfigHistory } from '@/composables/useConfigHistory';
 import { useI18n } from '@/composables/useI18n';
@@ -497,7 +498,7 @@ async function handleAutoOffChange(val: string | number) {
   try {
     await chrome.storage.local.set({ [STORAGE_KEYS.AUTO_OFF_MINUTES]: minutes });
   } catch (error) {
-    console.error('Failed to save auto-off setting:', error);
+    logger.error('Failed to save auto-off setting:', error);
   }
 }
 

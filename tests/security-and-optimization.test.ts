@@ -18,33 +18,25 @@ function makeRule(overrides: Partial<ProxyRule>): ProxyRule {
 }
 
 describe('Security - ReDoS protection', () => {
-  it('urlMatcher.ts should validate regex patterns for ReDoS', () => {
-    // Dangerous pattern that could cause catastrophic backtracking
-    const dangerousRule = makeRule({
-      matchType: 'regex',
-      matchPattern: '(a+)+$',
-    });
-
-    // Should either reject the pattern or handle it safely
-    const start = Date.now();
-    const result = matchRule('a'.repeat(100), dangerousRule);
-    const duration = Date.now() - start;
-
-    // Should complete in reasonable time (< 100ms) or return false
-    expect(duration < 100 || result === false).toBe(true);
+  /**
+   * 这两条判的是「筛查有没有把危险模式挡在编译之前」，所以断的是**结果**而不是耗时。
+   * 原先写的是 `expect(duration < 100 || result === false).toBe(true)`——重言式，
+   * 而且喂的还是一支会匹配成功的输入，筛查整个摘掉也照样绿。
+   * 现在喂的输入若筛查失效会得到 `true`，红得有指向。
+   */
+  it('嵌套量词 `(a+)+$` 不参与匹配：不是「跑得够快」，是压根不编译', () => {
+    const dangerousRule = makeRule({ matchType: 'regex', matchPattern: '(a+)+$' });
+    expect(matchRule('a'.repeat(100), dangerousRule)).toBe(false);
   });
 
-  it('should handle nested quantifiers safely', () => {
-    const rule = makeRule({
-      matchType: 'regex',
-      matchPattern: '((a*)*)*',
-    });
+  it('多重嵌套量词 `((a*)*)*` 同样被拒', () => {
+    const rule = makeRule({ matchType: 'regex', matchPattern: '((a*)*)*' });
+    expect(matchRule('a'.repeat(50), rule)).toBe(false);
+  });
 
-    const start = Date.now();
-    matchRule('a'.repeat(50), rule);
-    const duration = Date.now() - start;
-
-    expect(duration < 100).toBe(true);
+  it('对照组：安全正则照常匹配，否则上面两条只是在断「regex 永不命中」', () => {
+    const safeRule = makeRule({ matchType: 'regex', matchPattern: '^https://a+\\.example\\.com/.*' });
+    expect(matchRule('https://aaa.example.com/x', safeRule)).toBe(true);
   });
 });
 

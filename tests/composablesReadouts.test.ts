@@ -612,13 +612,6 @@ describe('useProxyStatus — 开关的乐观更新只在成功之后', () => {
     await expect(status.toggleRule('r1', false)).rejects.toThrow('TOGGLE_RULE_FAILED');
     expect(typesSent()).toEqual([MessageType.TOGGLE_RULE]);
   });
-
-  it('打开配置页只是转交，不掺和状态', () => {
-    respond({});
-    useProxyStatus().openOptions();
-    expect(openOptionsPage).toHaveBeenCalledTimes(1);
-    expect(sendMessage).not.toHaveBeenCalled();
-  });
 });
 
 describe('useProxyStatus — 「多久之前」用的是当前语言的文案', () => {

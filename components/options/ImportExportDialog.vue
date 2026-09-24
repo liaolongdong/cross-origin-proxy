@@ -195,6 +195,8 @@ import { MAX_RULES } from '@/utils/constants';
 import { parseCurlCommand } from '@/utils/curlParser';
 import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
+import { isFailureEnvelope } from '@/utils/messageResult';
+import { logger } from '@/utils/logger';
 import { useImportExport } from '@/composables/useImportExport';
 
 defineProps<{
@@ -374,7 +376,7 @@ async function handleImport() {
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
       ElMessage.error(t('importConfigFailed'));
-      console.error('Import failed:', error);
+      logger.error('Import failed:', error);
     }
   }
 }
@@ -394,10 +396,15 @@ function handleImportCurl() {
 async function handleExportHar() {
   harExporting.value = true;
   try {
-    const har = await chrome.runtime.sendMessage({
+    const har = (await chrome.runtime.sendMessage({
       type: MessageType.EXPORT_HAR,
       data: { sanitize: sanitizeExport.value },
-    });
+    })) as { log?: unknown; success?: boolean; error?: string } | undefined;
+    // 后台失败回的是 resolved 的信封；少了这一判，错误体会被当成 .har 下载走，
+    // 界面还有一句「导出成功」
+    if (!har || isFailureEnvelope(har) || !har.log) {
+      throw new Error((har && 'error' in har && har.error) || 'EXPORT_HAR_FAILED');
+    }
     const blob = new Blob([JSON.stringify(har, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -408,7 +415,7 @@ async function handleExportHar() {
     ElMessage.success(t('exportHarSuccess'));
   } catch (error) {
     ElMessage.error(t('exportFailed'));
-    console.error('HAR export failed:', error);
+    logger.error('HAR export failed:', error);
   } finally {
     harExporting.value = false;
   }
@@ -457,7 +464,7 @@ async function handleImportHar() {
     }
   } catch (error) {
     ElMessage.error(t('importHarInvalid'));
-    console.error('HAR import failed:', error);
+    logger.error('HAR import failed:', error);
   } finally {
     harImporting.value = false;
   }

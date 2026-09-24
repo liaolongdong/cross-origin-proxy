@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 /**
- * F6：WS 徽标的文案不得超出拦截器真正做到的能力
+ * F6：WS 的能力面不得在文案与徽章上超出拦截器真正做到的事
  *
  * `wsRuleHint` 原先只写「此规则也适用于 WebSocket 连接」，读起来像整条规则原样作用到长连接上。
  * 实际只有三件事：`rewriteWsUrl`（内含 `queryOverrides` 注入）、`blocked`（连向必然拒绝的
@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
  * 「先阻断后重写」这类**顺序**与「哪几个字段根本不经过这条路径」的缺席断言留在这里；
  * 「交给原生构造器的到底是哪个地址、带不带 protocols、阻断连到哪个端口」这些结局，
  * 已由 `tests/interceptorWebSocket.test.ts` 按运行时接手（批次 L）。本文件继续守的是
- * 文案那一侧——它没有任何运行时对应物。
+ * 说出来的那两侧——文案与规则列表的能力徽章，它们都没有运行时对应物。
  */
 
 const source = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
@@ -57,6 +57,38 @@ describe('[WS 能力面] 拦截器对长连接只做这三件事', () => {
     ]) {
       expect(wsSrc, field).not.toContain(field);
     }
+  });
+});
+
+describe('[RuleTable 徽章] 界面画的徽章用的是同一份能力面', () => {
+  /**
+   * 徽章是这条规则「有什么能力」的唯一视觉声明，而上面那份无效项清单此前只约束了文案：
+   * 一条带 `headerOverrides` 的 WS 规则照旧亮着 H，两格之后 WS 那一枚又把这话收回去，
+   * 同一行里先承诺七次再撤销一次。现在七个无效项各由 `showsHttpOnlyBadge(row)` 收口。
+   */
+  const tableSrc = readFileSync('components/options/RuleTable.vue', 'utf-8');
+  const inertBadges: ReadonlyArray<readonly [string, string]> = [
+    ['headerOverrides', 'h'],
+    ['sendCredentials', 'c'],
+    ['requestBodyOverride', 'b'],
+    ['responseOverrides', 'r'],
+    ['mockResponse', 'm'],
+    ['delayMs', 'd'],
+    ['retryCount', 're'],
+  ];
+
+  it.each(inertBadges)('%s 那枚（--%s）在 WS 规则上不画', (field, mod) => {
+    expect(tableSrc, field).toMatch(new RegExp(`v-if="showsHttpOnlyBadge\\(row\\) && row\\.${field}`));
+    expect(tableSrc, mod).toContain(`class="rule-badge rule-badge--${mod}"`);
+  });
+
+  it('收口的枚数正好七个（多一枚就是阻断被误收，少一枚就是留了个空承诺）', () => {
+    expect([...tableSrc.matchAll(/v-if="showsHttpOnlyBadge\(row\)/g)]).toHaveLength(7);
+  });
+
+  it('阻断与 WS 本身不受收口（长连接上它们是生效项）', () => {
+    expect(tableSrc).toMatch(/v-if="row\.blocked"/);
+    expect(tableSrc).toMatch(/v-if="isWsRule\(row\)"/);
   });
 });
 

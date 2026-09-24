@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { MessageType } from '@/utils/types';
 import type { ExportData, ImportMode, ImportPlan } from '@/utils/types';
 import { sanitizeExportData } from '@/utils/exportSanitize';
+import { isFailureEnvelope } from '@/utils/messageResult';
 import { logger } from '@/utils/logger';
 
 /** 导入前 JSON 文本的本地校验结果：解析失败与结构缺失都归 `INVALID_CONFIG`，不发消息 */
@@ -27,9 +28,14 @@ export function useImportExport() {
    * @returns `removedCount` 为被摘掉的条目数，调用方据此决定提示文案
    */
   async function exportConfig(sanitize: boolean): Promise<{ removedCount: number }> {
-    const data: ExportData = await chrome.runtime.sendMessage({
+    const data = (await chrome.runtime.sendMessage({
       type: MessageType.EXPORT_CONFIG,
-    });
+    })) as ExportData | { success: false; error?: string } | undefined;
+    // 后台读配置失败时回的是这份 resolved 的信封，不是抛错：不判就是拿 `{success:false,error}`
+    // 当成配置下载走，用户手上多一份再也导不回去的文件
+    if (!data || isFailureEnvelope(data)) {
+      throw new Error((data && isFailureEnvelope(data) && data.error) || 'EXPORT_CONFIG_FAILED');
+    }
     const { data: payload, removedCount } = sanitize ? sanitizeExportData(data) : { data, removedCount: 0 };
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: 'application/json' });

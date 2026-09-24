@@ -104,6 +104,8 @@ import { MessageType } from '@/utils/types';
 import type { EnvironmentProfile, ProxyConfig } from '@/utils/types';
 import { generateId } from '@/utils/generateId';
 import { formatLocaleDateTime } from '@/utils/formatters';
+import { isFailureEnvelope } from '@/utils/messageResult';
+import { logger } from '@/utils/logger';
 import { useI18n } from '@/composables/useI18n';
 
 /**
@@ -144,7 +146,7 @@ async function fetchProfiles() {
     profiles.value = Array.isArray(list) ? list : [];
     rulesCount.value = config?.rules?.length ?? 0;
   } catch (error) {
-    console.error('Failed to fetch profiles:', error);
+    logger.error('Failed to fetch profiles:', error);
   } finally {
     loading.value = false;
   }
@@ -184,13 +186,22 @@ async function handleSaveProfile() {
       rules: config.rules.map(r => ({ ...r })),
       createdAt: existing?.createdAt ?? Date.now(),
     };
-    await chrome.runtime.sendMessage({ type: MessageType.SAVE_PROFILE, data: profile });
+    const resp = (await chrome.runtime.sendMessage({ type: MessageType.SAVE_PROFILE, data: profile })) as
+      | { success?: boolean; error?: string }
+      | undefined;
+    // 写入失败回的是 resolved 的 `{success:false}`（成功时是 undefined），不判就是拿着绿色「已保存」
+    // 提示一个 storage 里并不存在的快照——重新打开弹窗时它会消失
+    if (isFailureEnvelope(resp)) {
+      ElMessage.error(t('operationFailed'));
+      logger.error('Save profile rejected:', resp.error);
+      return;
+    }
     newProfileName.value = '';
     await fetchProfiles();
     ElMessage.success(t('profileSaved', name));
   } catch (error) {
     ElMessage.error(t('operationFailed'));
-    console.error('Save profile failed:', error);
+    logger.error('Save profile failed:', error);
   } finally {
     saving.value = false;
   }
@@ -224,7 +235,7 @@ async function handleLoadProfile(profile: EnvironmentProfile) {
     emit('update:visible', false);
   } catch (error) {
     ElMessage.error(t('operationFailed'));
-    console.error('Load profile failed:', error);
+    logger.error('Load profile failed:', error);
   }
 }
 
@@ -239,15 +250,21 @@ async function handleDeleteProfile(profile: EnvironmentProfile) {
     return; // 用户取消
   }
   try {
-    await chrome.runtime.sendMessage({
+    const resp = (await chrome.runtime.sendMessage({
       type: MessageType.DELETE_PROFILE,
       data: { profileId: profile.id },
-    });
+    })) as { success?: boolean; error?: string } | undefined;
+    // 本地先删、后台没删，下次打开这一条又回来：失败时既不动列表也不报成功
+    if (isFailureEnvelope(resp)) {
+      ElMessage.error(t('operationFailed'));
+      logger.error('Delete profile rejected:', resp.error);
+      return;
+    }
     profiles.value = profiles.value.filter(p => p.id !== profile.id);
     ElMessage.success(t('profileDeleted'));
   } catch (error) {
     ElMessage.error(t('operationFailed'));
-    console.error('Delete profile failed:', error);
+    logger.error('Delete profile failed:', error);
   }
 }
 </script>

@@ -160,7 +160,7 @@
 
 ## Vue 3 与界面规范
 
-- 新增 Vue 代码默认使用 Composition API 和 `<script setup lang="ts">`；SFC 顺序保持 `<script>`、`<template>`、`<style>`。
+- 新增 Vue 代码默认使用 Composition API 和 `<script setup lang="ts">`；SFC 顺序保持 `<template>`、`<script>`、`<style>`（仓库现状：14/14 个 `.vue` 都是 `template` 在前，ESLint 未启用 `vue/component-tags-order`，所以这条只靠约定；不要为「对齐文档」去重排已有的 14 个文件）。
 - 单一事实来源：源状态尽量少，派生值用纯 `computed`，watcher 只承担副作用并正确清理异步任务。
 - Props 只读、事件向上；组件边界用类型化 `defineProps`/`defineEmits`；只有真正的双向契约才用 `defineModel` 或 `v-model:xxx`。
 - 根入口组件（`App.vue`）保持为组合与装配层；重型或低频弹窗用 `defineAsyncComponent` 拆出首屏，避免扩大 popup/options 首屏体积。

@@ -25,6 +25,7 @@ vi.stubGlobal('chrome', {
 
 const { importProxyConfig, getProxyConfig, invalidateConfigCache } = await import('@/utils/storage');
 const { useImportExport } = await import('@/composables/useImportExport');
+const { isFailureEnvelope } = await import('@/utils/messageResult');
 const { logger } = await import('@/utils/logger');
 
 function makeRule(id: string, overrides: Partial<ProxyRule> = {}): ProxyRule {
@@ -187,6 +188,46 @@ describe('useImportExport.importConfig — 回传稳定错误码', () => {
     const [msg] = sendMessageSpy.mock.calls[0] as [{ type: string; data: { mode?: string } }];
     expect(msg.type).toBe('IMPORT_CONFIG');
     expect(msg.data.mode).toBe('merge');
+  });
+});
+
+/**
+ * 导出这一路：后台失败不许变成「下载成功的配置文件」
+ *
+ * `respondAsync`（`entrypoints/background/messageRouter.ts`）把 handler 的 reject 转成
+ * **resolved** 的 `{ success: false, error }`，所以 `exportConfig` 的 `catch` 永远不会因为
+ * 后台写失败而进入——不自己判这一步，用户手上就多一份 `{success:false,error}` 装的 .json，
+ * 界面还有一句「导出成功」，而那份文件再也导不回去（导入侧的结构判据会当场拒掉它）。
+ * 失败路径在 `new Blob` 之前抛出，因此 node 环境无需 DOM 桩。
+ */
+describe('useImportExport.exportConfig — 后台失败按失败处理', () => {
+  beforeEach(() => {
+    sendMessageSpy.mockReset();
+  });
+
+  it('后台回 `{success:false,error}` → 抛出那句 error，不进入下载', async () => {
+    sendMessageSpy.mockResolvedValue({ success: false, error: 'Quota exceeded' });
+    const { exportConfig } = useImportExport();
+    await expect(exportConfig(false)).rejects.toThrow('Quota exceeded');
+  });
+
+  it('无响应（resolve undefined）→ 抛稳定码，不是拿 undefined 去 JSON.stringify', async () => {
+    sendMessageSpy.mockResolvedValue(undefined);
+    const { exportConfig } = useImportExport();
+    await expect(exportConfig(false)).rejects.toThrow('EXPORT_CONFIG_FAILED');
+  });
+
+  // 反方向（数据本体不带 `success` 字段必须按成功走完下载）已由 `tests/exportSanitize.test.ts`
+  // 的「勾选值贯通到下载」钉住——那里补了一份下载桩，所以本文件不再重复一份。
+  // 它同时是「判据不能写成 !result?.success」的那条证据。
+});
+
+describe('isFailureEnvelope — 四种回包形状只认一种失败', () => {
+  it('resolved 的 undefined 不是失败（saveProfile / deleteProfile 成功时就是它）', () => {
+    expect(isFailureEnvelope(undefined)).toBe(false);
+    expect(isFailureEnvelope({ success: true })).toBe(false);
+    expect(isFailureEnvelope({ config: { rules: [] } })).toBe(false);
+    expect(isFailureEnvelope({ success: false, error: 'E' })).toBe(true);
   });
 });
 

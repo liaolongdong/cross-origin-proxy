@@ -533,7 +533,7 @@ import { computeLogStats } from '@/utils/ruleStats';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
-import { formatLocaleDateTime } from '@/utils/formatters';
+import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
 
 /**
  * 请求日志抽屉（由原 RequestLogPanel 标签页改造）
@@ -696,9 +696,9 @@ function formatTime(ts: number): string {
   return formatLocaleDateTime(ts, locale.value);
 }
 
-function truncateUrl(url: string, maxLen = 50): string {
-  if (!url) return '-';
-  return url.length > maxLen ? url.substring(0, maxLen) + '...' : url;
+/** 抽屉列宽比 popup 宽松，截断长度另给；空值画占位符（判据本身仍是 `utils/formatters` 那一份） */
+function truncateUrl(url: string): string {
+  return url ? _truncateUrl(url, 50) : '-';
 }
 
 /** HTTP 方法 → el-tag 类型（静态映射，模块级避免逐行重建） */

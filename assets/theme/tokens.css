@@ -2,8 +2,11 @@
  * 主题设计令牌层
  *
  * - `:root` 定义默认主题「晴空蓝」的令牌 + 语义层（背景/文字/边框/阴影）
- * - `:root[data-theme='xxx']` 覆盖品牌令牌，并同步重写 Element Plus 主色梯度
- * - `:root[data-mode='dark']` + `@media (prefers-color-scheme: dark)` 暗色变体
+ * - `:root[data-theme='xxx']` 覆盖品牌令牌，并同步重写 Element Plus 主色梯度；
+ *   每个主题同时带一组 `--cop-dark-*`（同一色系在暗色下的取值）
+ * - `:root[data-mode='dark']` + `@media (prefers-color-scheme: dark)` 暗色变体：
+ *   两条路径各自声明整套暗色语义层，品牌那一半一律取 `--cop-dark-*` 那一组，
+ *   所以主题切换在暗色下同样生效（含跟随系统那条没有 `data-mode` 的路径）
  *
  * 前缀: --cop- (cross-origin-proxy)
  */
@@ -54,6 +57,30 @@
   /* ====== 语义层：表单 ====== */
   --cop-form-label-color: #2c3e50;
 
+  /* ====== 装饰层：规则列表的能力徽章 ======
+   * 紫 / 青 / 琥珀三对。徽章的信息由「字母 + tooltip」两路承载，颜色只是第三层冗余，
+   * 不参与任何判定；之所以仍要进令牌而不是留在组件里——暗色下这三对各自需要一档，
+   * 而硬编码的颜色没有「暗色那一档」可说。
+   */
+  --cop-badge-violet: #8b5cf6;
+  --cop-badge-violet-bg: #f5f3ff;
+  --cop-badge-cyan: #06b6d4;
+  --cop-badge-cyan-bg: #ecfeff;
+  --cop-badge-amber: #f59e0b;
+  --cop-badge-amber-bg: #fffbeb;
+
+  /* ====== 暗色下的同族品牌取值 ======
+   * 由文件末尾两个暗色基座（`:root[data-mode='dark']` 与媒体查询里的 `:root:not([data-mode])`）
+   * 以 `var()` 取用。放在主题块自己身上，是因为「一个主题的亮暗两套值」从此只需一处维护：
+   * 先前基座里写死的是默认蓝，而 `:root:not([data-mode])` 与 `:root[data-theme='x']` 特指度
+   * 同为 (0,2,0) 且位置更后，于是跟随系统暗色的用户在 5 个非默认主题下拿到的是蓝色。
+   */
+  --cop-dark-primary: #66b3ff;
+  --cop-dark-primary-hover: #85c1ff;
+  --cop-dark-primary-tint: #a0cfff;
+  --cop-dark-primary-rgb: 102 179 255;
+  --cop-dark-primary-shade: #4d9ae0;
+
   /* 默认主题同步覆盖 Element Plus 主色梯度 */
   --el-color-primary: #409eff;
   --el-color-primary-light-3: #79bbff;
@@ -76,6 +103,11 @@
   --cop-surface-2: #fafdfc;
   --cop-surface-line: #ebf5f1;
   --cop-surface-hover: #f5faf8;
+  --cop-dark-primary: #88c5ae;
+  --cop-dark-primary-hover: #a0d4c0;
+  --cop-dark-primary-tint: #b8dcce;
+  --cop-dark-primary-rgb: 136 197 174;
+  --cop-dark-primary-shade: #6ba08e;
   --el-color-primary: #69b599;
   --el-color-primary-light-3: #96cbb8;
   --el-color-primary-light-5: #b4dacc;
@@ -97,6 +129,11 @@
   --cop-surface-2: #fdf9fb;
   --cop-surface-line: #f8e8ed;
   --cop-surface-hover: #fcf4f6;
+  --cop-dark-primary: #e199b1;
+  --cop-dark-primary-hover: #eab3c5;
+  --cop-dark-primary-tint: #edc2d0;
+  --cop-dark-primary-rgb: 225 153 177;
+  --cop-dark-primary-shade: #b57a8e;
   --el-color-primary: #d87998;
   --el-color-primary-light-3: #e4a1b7;
   --el-color-primary-light-5: #ecbccc;
@@ -118,6 +155,11 @@
   --cop-surface-2: #fcfafd;
   --cop-surface-line: #f1eaf6;
   --cop-surface-hover: #f8f4fb;
+  --cop-dark-primary: #c0a0da;
+  --cop-dark-primary-hover: #d0b8e4;
+  --cop-dark-primary-tint: #d9c6e9;
+  --cop-dark-primary-rgb: 192 160 218;
+  --cop-dark-primary-shade: #9a80ae;
   --el-color-primary: #ad84cd;
   --el-color-primary-light-3: #c6a9dc;
   --el-color-primary-light-5: #d6c2e6;
@@ -139,6 +181,11 @@
   --cop-surface-2: #fefbf9;
   --cop-surface-line: #faece6;
   --cop-surface-hover: #fdf6f3;
+  --cop-dark-primary: #eaa886;
+  --cop-dark-primary-hover: #f0be9e;
+  --cop-dark-primary-tint: #f2cbb6;
+  --cop-dark-primary-rgb: 234 168 134;
+  --cop-dark-primary-shade: #bb866b;
   --el-color-primary: #e28e65;
   --el-color-primary-light-3: #ebb093;
   --el-color-primary-light-5: #f0c6b2;
@@ -160,6 +207,11 @@
   --cop-surface-2: #fafbfc;
   --cop-surface-line: #eceff4;
   --cop-surface-hover: #f6f7fa;
+  --cop-dark-primary: #98a7c2;
+  --cop-dark-primary-hover: #b0bdd2;
+  --cop-dark-primary-tint: #c1cada;
+  --cop-dark-primary-rgb: 152 167 194;
+  --cop-dark-primary-shade: #7a869b;
   --el-color-primary: #7f92b4;
   --el-color-primary-light-3: #a5b3ca;
   --el-color-primary-light-5: #bfc8da;
@@ -173,16 +225,16 @@
 
 /* 手动暗色 */
 :root[data-mode='dark'] {
-  --cop-primary: #66b3ff;
-  --cop-primary-hover: #85c1ff;
-  --cop-primary-rgb: 102 179 255;
-  --cop-primary-bg: rgb(102 179 255 / 12%);
-  --cop-primary-bg-hover: rgb(102 179 255 / 18%);
-  --cop-primary-border: rgb(102 179 255 / 25%);
+  --cop-primary: var(--cop-dark-primary);
+  --cop-primary-hover: var(--cop-dark-primary-hover);
+  --cop-primary-rgb: var(--cop-dark-primary-rgb);
+  --cop-primary-bg: rgb(var(--cop-dark-primary-rgb) / 12%);
+  --cop-primary-bg-hover: rgb(var(--cop-dark-primary-rgb) / 18%);
+  --cop-primary-border: rgb(var(--cop-dark-primary-rgb) / 25%);
   --cop-surface: #1a1a2e;
   --cop-surface-2: #16213e;
   --cop-surface-line: #2a2a3e;
-  --cop-surface-hover: rgb(102 179 255 / 8%);
+  --cop-surface-hover: rgb(var(--cop-dark-primary-rgb) / 8%);
   --cop-bg-color: #1a1a2e;
   --cop-bg-color-secondary: #16213e;
   --cop-bg-color-tertiary: #0f3460;
@@ -200,13 +252,19 @@
   --cop-scrollbar-thumb: #4a4a60;
   --cop-scrollbar-thumb-hover: #5a5a70;
   --cop-form-label-color: #d8d8e8;
-  --el-color-primary: #66b3ff;
-  --el-color-primary-light-3: #85c1ff;
-  --el-color-primary-light-5: #a0cfff;
-  --el-color-primary-light-7: rgb(102 179 255 / 30%);
-  --el-color-primary-light-8: rgb(102 179 255 / 20%);
-  --el-color-primary-light-9: rgb(102 179 255 / 12%);
-  --el-color-primary-dark-2: #4d9ae0;
+  --cop-badge-violet: #c4b5fd;
+  --cop-badge-violet-bg: #241f3a;
+  --cop-badge-cyan: #67e8f9;
+  --cop-badge-cyan-bg: #083344;
+  --cop-badge-amber: #fcd34d;
+  --cop-badge-amber-bg: #3b2f15;
+  --el-color-primary: var(--cop-dark-primary);
+  --el-color-primary-light-3: var(--cop-dark-primary-hover);
+  --el-color-primary-light-5: var(--cop-dark-primary-tint);
+  --el-color-primary-light-7: rgb(var(--cop-dark-primary-rgb) / 30%);
+  --el-color-primary-light-8: rgb(var(--cop-dark-primary-rgb) / 20%);
+  --el-color-primary-light-9: rgb(var(--cop-dark-primary-rgb) / 12%);
+  --el-color-primary-dark-2: var(--cop-dark-primary-shade);
 
   /* Element Plus 暗色适配 */
   --el-bg-color: #1a1a2e;
@@ -222,22 +280,31 @@
   --el-fill-color-light: #16213e;
   --el-fill-color: #1a1a2e;
   --el-fill-color-blank: #1a1a2e;
+
+  /* 状态色的浅档（light-9 / danger 的 light-7）在 Element Plus 里只有亮色一套，
+   * 而本扩展从不打 `html.dark`，官方那份暗色变量表压根不引入。它们是徽章底色、
+   * 错误行底色与错误面板底色的取值来源——不补就等于让近白的浅粉贴在深色表格上。 */
+  --el-color-info-light-9: #202121;
+  --el-color-success-light-9: #1c2518;
+  --el-color-warning-light-9: #292218;
+  --el-color-danger-light-9: #2a1d1d;
+  --el-color-danger-light-7: #582e2e;
   --el-mask-color: rgb(0 0 0 / 60%);
 }
 
 /* 系统偏好暗色（仅在未手动设置 data-mode 时生效） */
 @media (prefers-color-scheme: dark) {
   :root:not([data-mode]) {
-    --cop-primary: #66b3ff;
-    --cop-primary-hover: #85c1ff;
-    --cop-primary-rgb: 102 179 255;
-    --cop-primary-bg: rgb(102 179 255 / 12%);
-    --cop-primary-bg-hover: rgb(102 179 255 / 18%);
-    --cop-primary-border: rgb(102 179 255 / 25%);
+    --cop-primary: var(--cop-dark-primary);
+    --cop-primary-hover: var(--cop-dark-primary-hover);
+    --cop-primary-rgb: var(--cop-dark-primary-rgb);
+    --cop-primary-bg: rgb(var(--cop-dark-primary-rgb) / 12%);
+    --cop-primary-bg-hover: rgb(var(--cop-dark-primary-rgb) / 18%);
+    --cop-primary-border: rgb(var(--cop-dark-primary-rgb) / 25%);
     --cop-surface: #1a1a2e;
     --cop-surface-2: #16213e;
     --cop-surface-line: #2a2a3e;
-    --cop-surface-hover: rgb(102 179 255 / 8%);
+    --cop-surface-hover: rgb(var(--cop-dark-primary-rgb) / 8%);
     --cop-bg-color: #1a1a2e;
     --cop-bg-color-secondary: #16213e;
     --cop-bg-color-tertiary: #0f3460;
@@ -255,13 +322,19 @@
     --cop-scrollbar-thumb: #4a4a60;
     --cop-scrollbar-thumb-hover: #5a5a70;
     --cop-form-label-color: #d8d8e8;
-    --el-color-primary: #66b3ff;
-    --el-color-primary-light-3: #85c1ff;
-    --el-color-primary-light-5: #a0cfff;
-    --el-color-primary-light-7: rgb(102 179 255 / 30%);
-    --el-color-primary-light-8: rgb(102 179 255 / 20%);
-    --el-color-primary-light-9: rgb(102 179 255 / 12%);
-    --el-color-primary-dark-2: #4d9ae0;
+    --cop-badge-violet: #c4b5fd;
+    --cop-badge-violet-bg: #241f3a;
+    --cop-badge-cyan: #67e8f9;
+    --cop-badge-cyan-bg: #083344;
+    --cop-badge-amber: #fcd34d;
+    --cop-badge-amber-bg: #3b2f15;
+    --el-color-primary: var(--cop-dark-primary);
+    --el-color-primary-light-3: var(--cop-dark-primary-hover);
+    --el-color-primary-light-5: var(--cop-dark-primary-tint);
+    --el-color-primary-light-7: rgb(var(--cop-dark-primary-rgb) / 30%);
+    --el-color-primary-light-8: rgb(var(--cop-dark-primary-rgb) / 20%);
+    --el-color-primary-light-9: rgb(var(--cop-dark-primary-rgb) / 12%);
+    --el-color-primary-dark-2: var(--cop-dark-primary-shade);
     --el-bg-color: #1a1a2e;
     --el-bg-color-overlay: #1e1e36;
     --el-bg-color-page: #141428;
@@ -275,50 +348,20 @@
     --el-fill-color-light: #16213e;
     --el-fill-color: #1a1a2e;
     --el-fill-color-blank: #1a1a2e;
+    --el-color-info-light-9: #202121;
+    --el-color-success-light-9: #1c2518;
+    --el-color-warning-light-9: #292218;
+    --el-color-danger-light-9: #2a1d1d;
+    --el-color-danger-light-7: #582e2e;
     --el-mask-color: rgb(0 0 0 / 60%);
   }
 }
 
-/* 暗色模式下的品牌主题色覆盖（保持与亮色同色系但调亮） */
-:root[data-mode='dark'][data-theme='green'] {
-  --cop-primary: #88c5ae;
-  --cop-primary-hover: #a0d4c0;
-  --cop-primary-rgb: 136 197 174;
-  --el-color-primary: #88c5ae;
-  --el-color-primary-dark-2: #6ba08e;
-}
-
-:root[data-mode='dark'][data-theme='pink'] {
-  --cop-primary: #e199b1;
-  --cop-primary-hover: #eab3c5;
-  --cop-primary-rgb: 225 153 177;
-  --el-color-primary: #e199b1;
-  --el-color-primary-dark-2: #b57a8e;
-}
-
-:root[data-mode='dark'][data-theme='mauve'] {
-  --cop-primary: #c0a0da;
-  --cop-primary-hover: #d0b8e4;
-  --cop-primary-rgb: 192 160 218;
-  --el-color-primary: #c0a0da;
-  --el-color-primary-dark-2: #9a80ae;
-}
-
-:root[data-mode='dark'][data-theme='orange'] {
-  --cop-primary: #eaa886;
-  --cop-primary-hover: #f0be9e;
-  --cop-primary-rgb: 234 168 134;
-  --el-color-primary: #eaa886;
-  --el-color-primary-dark-2: #bb866b;
-}
-
-:root[data-mode='dark'][data-theme='slate'] {
-  --cop-primary: #98a7c2;
-  --cop-primary-hover: #b0bdd2;
-  --cop-primary-rgb: 152 167 194;
-  --el-color-primary: #98a7c2;
-  --el-color-primary-dark-2: #7a869b;
-}
+/* 暗色下的品牌取值不再单独成块：每个主题块自带 `--cop-dark-*` 那一组，上面两个暗色基座
+ * 用 `var()` 取用。原先这里是五份 `[data-mode='dark'][data-theme='x']` 覆盖，只写了主色、
+ * 悬浮色、通道与 `--el-color-primary(-dark-2)`，浅底 / 描边 / 行悬浮 / light-3 / light-5 全留在
+ * 默认蓝上；跟随系统暗色（没有 `data-mode`）时更是整族都覆盖不到——两处同罪的根因是
+ * 「暗色品牌值写在了主题块之外」。 */
 
 /* ====== 动效降级 ======
  * 「减少动态效果」是用户在系统层面提出的诉求（前庭功能障碍者），扩展没有理由拒绝。

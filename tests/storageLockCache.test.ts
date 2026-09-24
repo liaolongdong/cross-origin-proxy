@@ -20,10 +20,10 @@
  *
  * 刻意不在这里测的：日志缓冲的刷写与配额收口（`round2-regression` 的并发刷写、`logQuota` 的
  * 失败回灌与总量预算）、恢复点的三份失败面（`configHistory`）、`importProxyConfig` 的两种模式
- * （`importConfig` / `importPlan`）。本文件只管锁与缓存这两本账。
+ * （`importConfig` / `importPlan`）。本文件管锁、两份缓存，以及三个键在取值侧的形状收口。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ProxyConfig, ProxyRule } from '@/utils/types';
+import type { ProxyConfig, ProxyRule, RequestLogEntry } from '@/utils/types';
 import { DEFAULT_PROXY_CONFIG, MAX_RULES, STORAGE_KEYS } from '@/utils/constants';
 
 /** 真实 `chrome.storage` 的 onChanged 回调签名，这里只用到 `storage.ts` 会读的那两个字段 */
@@ -77,9 +77,12 @@ const {
   batchAddRules,
   configRules,
   deleteRule,
+  getProfiles,
   getProxyConfig,
+  getRequestLogs,
   getVariables,
   invalidateConfigCache,
+  saveProfile,
   saveProxyConfig,
   saveVariables,
   toggleProxy,
@@ -323,6 +326,45 @@ describe('读写两侧对同一份坏数据的方向刻意相反', () => {
     // 写入侧若跟着取值侧「当空」，下一次读到的就是 `rules: []`——用户已有的规则被抹掉
     expect(setSpy).not.toHaveBeenCalled();
     expect(store[STORAGE_KEYS.PROXY_CONFIG]).toEqual({ enabled: true, rules: 'oops' });
+  });
+});
+
+/**
+ * 日志表与 profile 表：非数组当空
+ *
+ * 与上面那条 `rules` 的取值侧同一档收口（`getRequestLogs` / `getProfiles` 各自 `Array.isArray` 一次）。
+ * 这两个键被手改或截断成字符串／对象时，症状都不在读取那一刻：`getRequestLogs` 的结果会被
+ * flush 路径 `logs.unshift(...)`，抛进它自己的接手人之后变成「从此每一笔日志都落不了盘」；
+ * `getProfiles` 的结果要过 `findIndex` / `filter`，三条写入路径抛出来的错误信封又和
+ * 「profile 不存在」长得一样。所以这里断的是「读出的是空数组，不是那串字符」，
+ * 而刷写与配额收口那一半仍在 `round2-regression` / `logQuota`。
+ */
+describe('日志表与 profile 表：非数组当空', () => {
+  it('日志键是字符串 → 读出空表，不是长度为 4 的假日志', async () => {
+    store[STORAGE_KEYS.REQUEST_LOGS] = 'oops';
+    expect(await getRequestLogs()).toEqual([]);
+
+    store[STORAGE_KEYS.REQUEST_LOGS] = { 0: { id: 'x' } };
+    expect(await getRequestLogs()).toEqual([]);
+  });
+
+  it('日志键是数组时原样读出（判据不是无脑返回空表）', async () => {
+    const entries = [{ id: 'l1', timestamp: 1 } as RequestLogEntry];
+    store[STORAGE_KEYS.REQUEST_LOGS] = entries;
+    expect(await getRequestLogs()).toEqual(entries);
+  });
+
+  it('profile 键是对象 → 读出空表，`v-for` 不会按字符画列表', async () => {
+    store[STORAGE_KEYS.PROFILES] = { not: 'a-list' };
+    expect(await getProfiles()).toEqual([]);
+  });
+
+  it('坏数据之上的第一次保存照样落盘成一份单条列表', async () => {
+    store[STORAGE_KEYS.PROFILES] = 'oops';
+    await saveProfile({ id: 'p1', name: 'env', rules: [], createdAt: 0 });
+
+    expect(store[STORAGE_KEYS.PROFILES]).toEqual([{ id: 'p1', name: 'env', rules: [], createdAt: 0 }]);
+    expect(await getProfiles()).toHaveLength(1);
   });
 });
 

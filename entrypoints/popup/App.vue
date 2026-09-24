@@ -57,7 +57,7 @@
         role="button"
         tabindex="0"
         @click="rulesExpanded = !rulesExpanded"
-        @keydown.enter="rulesExpanded = !rulesExpanded"
+        @keydown.enter.space.prevent="rulesExpanded = !rulesExpanded"
       >
         <span class="rules-section-title">{{ t('quickToggleRules') }}</span>
         <span class="rules-section-count">{{ rules.length }}</span>
@@ -79,23 +79,25 @@
           >
             {{ t('noRulesInPopup') }}
           </div>
-          <div
-            v-for="rule in rules"
-            v-else
-            :key="rule.id"
-            class="rule-toggle-item"
-          >
-            <span
-              class="rule-toggle-name"
-              :title="rule.name"
-              >{{ rule.name }}</span
+          <!-- 不写成 v-for + v-else 同元素：那里 v-else 优先级更高，恰好条件不引用循环变量才「碰巧」对 -->
+          <template v-else>
+            <div
+              v-for="rule in rules"
+              :key="rule.id"
+              class="rule-toggle-item"
             >
-            <el-switch
-              :model-value="rule.enabled"
-              size="small"
-              @change="(val: boolean) => handleToggleRule(rule.id, val)"
-            />
-          </div>
+              <span
+                class="rule-toggle-name"
+                :title="rule.name"
+                >{{ rule.name }}</span
+              >
+              <el-switch
+                :model-value="rule.enabled"
+                size="small"
+                @change="(val: boolean) => handleToggleRule(rule.id, val)"
+              />
+            </div>
+          </template>
         </div>
       </Transition>
     </div>
@@ -227,7 +229,7 @@
         role="button"
         tabindex="0"
         @click="openOptionsPage('#add-rule')"
-        @keydown.enter="openOptionsPage('#add-rule')"
+        @keydown.enter.space.prevent="openOptionsPage('#add-rule')"
       >
         <div class="action-card__icon action-card__icon--primary">
           <el-icon><Setting /></el-icon>
@@ -244,7 +246,7 @@
         tabindex="0"
         :aria-expanded="apiPicker ? 'true' : 'false'"
         @click="handleCreateRuleFromTab"
-        @keydown.enter="handleCreateRuleFromTab"
+        @keydown.enter.space.prevent="handleCreateRuleFromTab"
       >
         <div class="action-card__icon action-card__icon--tint">
           <el-icon><Plus /></el-icon>
@@ -301,7 +303,7 @@
         role="button"
         tabindex="0"
         @click="openOptionsPage('#logs')"
-        @keydown.enter="openOptionsPage('#logs')"
+        @keydown.enter.space.prevent="openOptionsPage('#logs')"
       >
         <div class="action-card__icon action-card__icon--accent">
           <el-icon><Document /></el-icon>
@@ -317,7 +319,7 @@
         role="button"
         tabindex="0"
         @click="openOptionsPage('#import-export')"
-        @keydown.enter="openOptionsPage('#import-export')"
+        @keydown.enter.space.prevent="openOptionsPage('#import-export')"
       >
         <div class="action-card__icon action-card__icon--tint">
           <el-icon><FolderOpened /></el-icon>
@@ -333,7 +335,7 @@
         role="button"
         tabindex="0"
         @click="openOptionsPage('#profiles')"
-        @keydown.enter="openOptionsPage('#profiles')"
+        @keydown.enter.space.prevent="openOptionsPage('#profiles')"
       >
         <div class="action-card__icon action-card__icon--tint">
           <el-icon><Collection /></el-icon>
@@ -365,7 +367,7 @@
         class="recent-list"
       >
         <li
-          v-for="log in recentLogs.slice(0, 5)"
+          v-for="log in recentLogRows"
           :key="log.id"
           class="recent-item"
         >
@@ -464,6 +466,9 @@ const {
 } = useProxyStatus();
 
 const rulesExpanded = ref(false);
+
+/** 「最近请求」只露 5 行；模板里直接 slice 会每次渲染都新建一份数组 */
+const recentLogRows = computed(() => recentLogs.value.slice(0, 5));
 
 // ─── 本页网络层命中（DNR） ────────────────────────────────────────────────
 

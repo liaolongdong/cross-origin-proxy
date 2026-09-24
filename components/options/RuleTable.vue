@@ -93,42 +93,42 @@
             </el-tooltip>
             <span class="rule-badges">
               <el-tooltip
-                v-if="row.headerOverrides && Object.keys(row.headerOverrides).length > 0"
+                v-if="showsHttpOnlyBadge(row) && row.headerOverrides && Object.keys(row.headerOverrides).length > 0"
                 :content="t('hasHeaderOverrides')"
                 placement="top"
               >
                 <span class="rule-badge rule-badge--h">H</span>
               </el-tooltip>
               <el-tooltip
-                v-if="row.sendCredentials === true"
+                v-if="showsHttpOnlyBadge(row) && row.sendCredentials === true"
                 :content="t('hasSendCredentials')"
                 placement="top"
               >
                 <span class="rule-badge rule-badge--c">C</span>
               </el-tooltip>
               <el-tooltip
-                v-if="row.requestBodyOverride"
+                v-if="showsHttpOnlyBadge(row) && row.requestBodyOverride"
                 :content="t('hasBodyOverride')"
                 placement="top"
               >
                 <span class="rule-badge rule-badge--b">B</span>
               </el-tooltip>
               <el-tooltip
-                v-if="row.responseOverrides"
+                v-if="showsHttpOnlyBadge(row) && row.responseOverrides"
                 :content="t('hasResponseOverrides')"
                 placement="top"
               >
                 <span class="rule-badge rule-badge--r">R</span>
               </el-tooltip>
               <el-tooltip
-                v-if="row.mockResponse"
+                v-if="showsHttpOnlyBadge(row) && row.mockResponse"
                 :content="t('hasMockResponse')"
                 placement="top"
               >
                 <span class="rule-badge rule-badge--m">M</span>
               </el-tooltip>
               <el-tooltip
-                v-if="row.delayMs"
+                v-if="showsHttpOnlyBadge(row) && row.delayMs"
                 :content="t('hasDelay')"
                 placement="top"
               >
@@ -142,7 +142,7 @@
                 <span class="rule-badge rule-badge--x">X</span>
               </el-tooltip>
               <el-tooltip
-                v-if="row.retryCount"
+                v-if="showsHttpOnlyBadge(row) && row.retryCount"
                 :content="t('hasRetry')"
                 placement="top"
               >
@@ -549,6 +549,15 @@ function matchTypeLabel(matchType: string) {
 function isWsRule(rule: ProxyRule): boolean {
   return isWebSocketRule(rule);
 }
+
+/**
+ * 长连接的能力面只有「重写地址 / 注入查询参数 / 阻断」三项（同一句 `wsRuleHint` 说的就是它）。
+ * 头、体、响应改写、Mock、延迟、重试、携带 Cookie 在握手上一律不生效，所以 WS 规则上
+ * 不画这几枚徽章——否则同一行里先承诺七次、再由 WS 那一枚把话收回去。
+ */
+function showsHttpOnlyBadge(rule: ProxyRule): boolean {
+  return !isWsRule(rule);
+}
 </script>
 
 <style scoped>
@@ -731,13 +740,13 @@ function isWsRule(rule: ProxyRule): boolean {
 }
 
 .rule-badge--m {
-  color: #8b5cf6;
-  background: #f5f3ff;
+  color: var(--cop-badge-violet);
+  background: var(--cop-badge-violet-bg);
 }
 
 .rule-badge--d {
-  color: #06b6d4;
-  background: #ecfeff;
+  color: var(--cop-badge-cyan);
+  background: var(--cop-badge-cyan-bg);
 }
 
 .rule-badge--x {
@@ -746,15 +755,16 @@ function isWsRule(rule: ProxyRule): boolean {
 }
 
 .rule-badge--re {
-  color: #f59e0b;
-  background: #fffbeb;
+  color: var(--cop-badge-amber);
+  background: var(--cop-badge-amber-bg);
 }
 
+/* 与 M 同色系：两者如今不会同屏出现（WS 规则不再画 M 那七枚），字母也各不一样 */
 .rule-badge--ws {
   width: 20px;
   font-size: 8px;
-  color: #8b5cf6;
-  background: #f5f3ff;
+  color: var(--cop-badge-violet);
+  background: var(--cop-badge-violet-bg);
 }
 
 .hit-count-badge {

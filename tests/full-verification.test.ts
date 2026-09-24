@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
-import { findMatchingRule, rewriteUrl, isSimpleRule } from '@/utils/urlMatcher';
+import { findMatchingRule, rewriteUrl, isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
 import { toDnrPriority } from '@/utils/dnrRules';
 import { formatTimeAgo, getStatusColor, truncateUrl } from '@/utils/formatters';
 import { findConflictingRule, computeShadowedRuleIds } from '@/utils/ruleConflicts';
@@ -23,42 +23,23 @@ const { isRetryableError, matchesMockCondition } = await import('@/entrypoints/b
 const { REFRESH_INTERVAL_PRESETS } = await import('@/composables/useRequestLog');
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Bug 1: XHR fallback — 错误事件派发验证
+// Bug 1 / Bug 4 曾在本文件里以「测试自己写一份被测逻辑、再断那份副本」的形式存在
+// （事件名数组、`const failedStatus = 0`、`const duration = Date.now() - startTime`）。
+// 它们在任意生产改动下都不会变红，已删：
+// - XHR 代理失败的事件派发与 status 0 → `tests/interceptorXhr.test.ts`（假 XHR + 真拦截器）
+// - 日志 duration 的来源 → `tests/log-duration.test.ts`
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('[Bug 1] XHR fallback dispatches error events', () => {
-  it('should define exactly 3 events in correct order: readystatechange → error → loadend', () => {
-    const events = ['readystatechange', 'error', 'loadend'];
-    expect(events).toHaveLength(3);
-    expect(events[0]).toBe('readystatechange');
-    expect(events[1]).toBe('error');
-    expect(events[2]).toBe('loadend');
-  });
-
-  it('should NOT include "load" event (to avoid double-firing with onload)', () => {
-    const events = ['readystatechange', 'error', 'loadend'];
-    expect(events).not.toContain('load');
-  });
-
-  it('should set status to 0 on proxy failure (matching native XHR network error behavior)', () => {
-    const failedStatus = 0;
-    expect(failedStatus).toBe(0);
-    expect(failedStatus).toBeLessThan(200);
-  });
-});
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// Bug 2: WS badge — 条件化显示深度验证
+// Bug 2: WS 徽章 — 条件化显示深度验证
+//
+// 判据以前抄在本文件里一份（注释写着「与 RuleTable.vue 的三行显示助手同源」），
+// 而 `RuleTable.vue` 早已改调 `utils/urlMatcher.isWebSocketRule`：抄的这份既钉不住
+//  shipped 判据，还会在被测函数改口径时继续绿。现在直接 import 真实现。
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Bug 2] WS badge conditional display — deep verification', () => {
-  // Mirror of RuleTable.vue:361 isWsRule — kept here intentionally as the rule
-  // is a 3-line display helper tightly coupled to the template; the contract
-  // (wss?:// only, case-insensitive) is verified below.
-  function isWsRule(rule: ProxyRule): boolean {
-    const wsPattern = /wss?:\/\//i;
-    return wsPattern.test(rule.matchPattern) || wsPattern.test(rule.targetUrl);
-  }
+  const isWsRule = isWebSocketRule;
 
   it('should match wss:// in matchPattern', () => {
     expect(isWsRule(makeRule({ matchPattern: 'wss://ws.example.com/*' }))).toBe(true);
@@ -115,62 +96,30 @@ describe('[Bug 2] WS badge conditional display — deep verification', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('[Bug 3] Retry badge visual differentiation', () => {
-  it('retry badge "Re" must differ from response badge "R"', () => {
-    expect('Re').not.toBe('R');
+  /**
+   * 以前这三条断的是测试自己写的字面量（`expect('Re').not.toBe('R')`、把九个标签抄进
+   * 一个对象再断它们不重复），模板怎么改都不会红。现在直接从 `RuleTable.vue` 的模板里
+   * 挑「类名 + 文字」这一对，钉的是画出来的那一份。
+   */
+  const source = fs.readFileSync('components/options/RuleTable.vue', 'utf8');
+  const badges = [...source.matchAll(/class="rule-badge rule-badge--([a-z]+)">\s*([^<]+?)\s*</g)].map(m => ({
+    modifier: m[1],
+    label: m[2],
+  }));
+
+  it('模板里的徽章一枚都不能少（换写法时别把这条守卫一起改瞎）', () => {
+    expect(badges.map(b => b.modifier)).toEqual(['h', 'c', 'b', 'r', 'm', 'd', 'x', 're', 'ws']);
   });
 
-  it('retry badge CSS class should be rule-badge--re (not rule-badge--rt)', () => {
-    const retryClass = 'rule-badge--re';
-    const responseClass = 'rule-badge--r';
-    expect(retryClass).not.toBe(responseClass);
-    expect(retryClass).toContain('re');
+  it('文字标签两两不同：Re 与 R 撞了，重试和改响应就分不出来', () => {
+    const labels = badges.map(b => b.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(badges.find(b => b.modifier === 're')?.label).toBe('Re');
+    expect(badges.find(b => b.modifier === 'r')?.label).toBe('R');
   });
 
-  it('all rule badges should have unique text labels', () => {
-    const badges = {
-      header: 'H',
-      body: 'B',
-      response: 'R',
-      mock: 'M',
-      delay: 'D',
-      block: 'X',
-      retry: 'Re',
-      ws: 'WS',
-    };
-    const texts = Object.values(badges);
-    const unique = new Set(texts);
-    expect(unique.size).toBe(texts.length);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Bug 4: Mock duration — 实际耗时验证
-// ═══════════════════════════════════════════════════════════════════════════════
-
-describe('[Bug 4] Mock response log duration uses actual elapsed time', () => {
-  it('duration should be a number even when delayMs is 0', () => {
-    const startTime = Date.now();
-    const duration = Date.now() - startTime;
-    expect(typeof duration).toBe('number');
-    expect(duration).toBeGreaterThanOrEqual(0);
-  });
-
-  it('duration should be a number even when delayMs is undefined', () => {
-    const rule = makeRule({ delayMs: undefined });
-    expect(rule.delayMs).toBeUndefined();
-    const startTime = Date.now();
-    const duration = Date.now() - startTime;
-    expect(typeof duration).toBe('number');
-  });
-
-  it('duration should reflect actual elapsed time, not configured delay', () => {
-    const startTime = Date.now();
-    // Simulate some processing
-    let sum = 0;
-    for (let i = 0; i < 1000; i++) sum += i;
-    const duration = Date.now() - startTime;
-    expect(duration).toBeGreaterThanOrEqual(0);
-    expect(sum).toBeGreaterThan(0);
+  it('重试那枚不再留着旧类名 --rt（配色改的是 --re）', () => {
+    expect(source).not.toContain('rule-badge--rt');
   });
 });
 
@@ -551,7 +500,8 @@ describe('[Undo delete] 5 秒窗口与提交定时器不再各自为政', () => 
   const body = appSrc.slice(start, appSrc.indexOf('\n}\n', start));
 
   it('捕获规则走深拷贝，避免与原对象共享嵌套覆盖配置', () => {
-    expect(body).toContain('const capturedRule = structuredClone(rules.value[index])');
+    // cloneRule 而不是裸 structuredClone：从 rules.value 取出的那一条是响应式 Proxy
+    expect(body).toContain('const capturedRule = cloneRule(rules.value[index])');
   });
 
   it('定时器先置提交标志并收起撤销入口，再发出删除', () => {

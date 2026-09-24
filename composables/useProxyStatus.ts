@@ -60,10 +60,6 @@ export function useProxyStatus() {
     await fetchStatus();
   }
 
-  function openOptions() {
-    chrome.runtime.openOptionsPage();
-  }
-
   // 使用 i18n 标签调用 formatters
   function formatTimeAgo(timestamp: number): string {
     return _formatTimeAgo(timestamp, {
@@ -86,7 +82,6 @@ export function useProxyStatus() {
     autoOffAt,
     toggleProxy,
     toggleRule,
-    openOptions,
     fetchStatus,
     formatTimeAgo,
     getMethodColor,

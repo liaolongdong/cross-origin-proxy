@@ -339,10 +339,16 @@ export async function importProxyConfig(
 
 /**
  * 读取请求日志
+ *
+ * 与 {@link configRules} 同一档收口：手改或截断的旧数据能让这个键变成一个字符串或一个对象，
+ * 而两处用法都只在数组上成立——flush 路径的 `logs.unshift(...)` 抛在接手人里被回灌成
+ * 「从此每一笔都落不了盘」，抽屉的 `v-for` 则把字符串按字符画成一行行空记录。
+ * 非数组当空：写回去的正是这一笔刚真实发生过的请求，坏数据本来就读不出任何日志。
  */
 export async function getRequestLogs(): Promise<RequestLogEntry[]> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.REQUEST_LOGS);
-  return (result[STORAGE_KEYS.REQUEST_LOGS] as RequestLogEntry[] | undefined) ?? [];
+  const stored = result[STORAGE_KEYS.REQUEST_LOGS];
+  return Array.isArray(stored) ? (stored as RequestLogEntry[]) : [];
 }
 
 /**
@@ -566,11 +572,15 @@ async function doClearLogs(): Promise<void> {
 // ─── Environment Profiles ────────────────────────────────────────────────────
 
 /**
- * 获取所有环境配置
+ * 读取环境配置列表
+ *
+ * 非数组当空，与 {@link getRequestLogs} 同档：这个键不是数组时 `findIndex` / `filter` 当场抛，
+ * 而三条写入路径抛出来的错误信封长得和「profile 不存在」一模一样，看不出是存储被改坏了。
  */
 export async function getProfiles(): Promise<EnvironmentProfile[]> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.PROFILES);
-  return (result[STORAGE_KEYS.PROFILES] as EnvironmentProfile[] | undefined) ?? [];
+  const stored = result[STORAGE_KEYS.PROFILES];
+  return Array.isArray(stored) ? (stored as EnvironmentProfile[]) : [];
 }
 
 /**

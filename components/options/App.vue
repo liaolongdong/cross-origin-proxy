@@ -146,6 +146,7 @@ import {
 import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import { groupHitStatsByRule } from '@/utils/ruleStats';
+import { cloneRule } from '@/utils/ruleClone';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
@@ -375,6 +376,10 @@ function handleKeydown(e: KeyboardEvent) {
 
   // Escape：关闭最上层的弹窗/抽屉（优先级：规则弹窗 > 导入导出 > 环境配置 > 设置 > URL 测试 > 日志）
   if (e.key === 'Escape') {
+    // 确认框在场时整条级联让位：它由 ElMessageBox 自己的焦点陷阱接管 Escape，
+    // 而这个监听器挂在 window 上、看不见模态层级，照常往下走就是
+    // 「我只想关掉这个确认，结果连背后整个弹窗一起关了」
+    if (document.querySelector('.el-message-box')) return;
     if (showRuleDialog.value) {
       showRuleDialog.value = false;
     } else if (showImportExport.value) {
@@ -528,9 +533,10 @@ function flashHighlight(ruleId: string) {
 function handleDeleteRule(ruleId: string) {
   const index = rules.value.findIndex(r => r.id === ruleId);
   if (index === -1) return;
-  // structuredClone：嵌套的 headerOverrides / queryOverrides / mockResponse 等
-  // 不能与原规则共享引用，否则撤销回来的会是被人改过的对象
-  const capturedRule = structuredClone(rules.value[index]);
+  // cloneRule：嵌套的 headerOverrides / queryOverrides / mockResponse 等
+  // 不能与原规则共享引用，否则撤销回来的会是被人改过的对象。
+  // 这里不能直接 structuredClone——rules.value 里取出来的是响应式 Proxy，克隆它会抛 DataCloneError。
+  const capturedRule = cloneRule(rules.value[index]);
   const originalIndex = index;
 
   // 乐观更新：立即从 UI 移除，并登记进撤销窗口，
@@ -553,15 +559,20 @@ function handleDeleteRule(ruleId: string) {
       .finally(() => endPendingDelete(capturedRule.id));
   }, 5000);
 
+  // 「撤销」画成原生 button 而不是 a：没有 href 的 a 拿不到焦点，鼠标点得动、键盘走不到。
+  // 下面那串样式把它按原来链接的样子画回去（下划线 + 品牌色，font: inherit 对齐基线）。
   const message = ElMessage({
     message: h('div', [
       h('span', t('ruleDeleted') + ' '),
       h(
-        'a',
+        'button',
         {
-          style: 'color: var(--cop-primary, #409EFF); cursor: pointer; text-decoration: underline;',
+          type: 'button',
+          style:
+            'padding: 0; border: none; background: none; font: inherit; vertical-align: baseline;' +
+            'color: var(--cop-primary, #409EFF); cursor: pointer; text-decoration: underline;',
           onClick: () => {
-            // 提示的离场动画期间链接仍可能被点到，此时删除已落库，不能再假装恢复
+            // 提示的离场动画期间按钮仍可能被点到，此时删除已落库，不能再假装恢复
             if (committed) {
               ElMessage.warning(t('undoExpired'));
               return;

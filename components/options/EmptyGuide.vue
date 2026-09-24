@@ -50,7 +50,7 @@
             role="button"
             tabindex="0"
             @click="$emit('addRule')"
-            @keydown.enter="$emit('addRule')"
+            @keydown.enter.space.prevent="$emit('addRule')"
           >
             <div class="guide-card-icon">
               <el-icon><Plus /></el-icon>
@@ -65,7 +65,7 @@
             role="button"
             tabindex="0"
             @click="$emit('importConfig')"
-            @keydown.enter="$emit('importConfig')"
+            @keydown.enter.space.prevent="$emit('importConfig')"
           >
             <div class="guide-card-icon">
               <el-icon><Upload /></el-icon>
@@ -93,7 +93,7 @@
           role="button"
           tabindex="0"
           @click="handleTemplateClick(tpl)"
-          @keydown.enter="handleTemplateClick(tpl)"
+          @keydown.enter.space.prevent="handleTemplateClick(tpl)"
         >
           <div class="template-card-icon">
             <el-icon><component :is="tpl.icon" /></el-icon>
