@@ -481,9 +481,10 @@ describe('restoreConfigHistory — 回退本身必须是可逆的', () => {
  * 都成立，所以既不在禁列里、也不在这条守卫的射程里。
  *
  * 负向半边单独存在会空转（把整句删掉、或把 key 改名也算通过），所以每条同时钉正向：这句话仍然要说清
- * 「被换掉的那一份会记成恢复点」，中英各一份。射程只到扩展内这三句：README 的回退子句、两份落地页与
- * `docs/llms.txt` 上还有同一类说法（`llms-full.txt` 那份已是内容口径），它们不走这三个 key、也不进
- * bundle，另算一轮（要中英成对，还连带 `docs/` 的日期三件套）。
+ * 「被换掉的那一份会记成恢复点」，中英各一份。扩展内是这三句，另加 `docs/llms.txt` 的那一条 bullet
+ * （引用型 AI 引擎读的就是这一份，它不走 key、也不进 bundle，所以要单独钉一次）。README 两份的回退
+ * 子句与两份落地页上还有同一类说法（`llms-full.txt` 那份已是内容口径），这几个文件正被同机另一会话改，
+ * 改它们要连带中英成对与 `docs/` 的日期三件套，留待那一轮一起收。
  */
 const zhOptions = JSON.parse(readFileSync('locales/zh_CN/options.json', 'utf-8')) as Record<string, string>;
 const enOptions = JSON.parse(readFileSync('locales/en/options.json', 'utf-8')) as Record<string, string>;
@@ -505,6 +506,22 @@ describe('恢复点的界面措辞 — 不承诺写入时机', () => {
   ] as const)('$key：仍然把「被换掉的那一份会记成恢复点」说给用户', ({ key, zh, en }) => {
     for (const needle of zh) expect(zhOptions[key]).toContain(needle);
     for (const pattern of en) expect(enOptions[key]).toMatch(pattern);
+  });
+
+  /**
+   * `docs/llms.txt` 是这一事实对引用型 AI 引擎的唯一出口，所以按 bullet 单独钉一次：
+   * 它不走 key、不进 bundle，上面那两条 `it.each` 一句也够不着它。中英同条，禁字与正向判据照抄。
+   */
+  it('docs/llms.txt 的恢复点那条 bullet：同样只说内容、不承诺写入时机', () => {
+    const bullet =
+      readFileSync('docs/llms.txt', 'utf-8')
+        .split('\n')
+        .find(line => line.startsWith('- Config restore points:')) ?? '';
+    expect(bullet.length, 'llms.txt 里那条 - Config restore points: 不见了').toBeGreaterThan(0);
+    expect(bullet).not.toContain('先');
+    expect(bullet).not.toMatch(/\b(before|first)\b/i);
+    expect(bullet).toContain('记成恢复点');
+    expect(bullet).toMatch(/recorded as a restore point/i);
   });
 });
 
