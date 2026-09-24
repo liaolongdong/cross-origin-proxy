@@ -94,6 +94,7 @@ describe('diffRewrite —— 界面要能说的话', () => {
       ['https://a.com/x', 'https://a.com/api/x'],
       ['abc', 'x'],
     ];
+    // 这份判据刻意抄自 `isWordChar` 而不是 import 它：oracle 复用被测物，写坏了就一起绿。
     const isWord = (char: string) => /[A-Za-z0-9一-鿿]/.test(char);
     for (const [source, target] of pairs) {
       const { changed } = diffRewrite(source, target);
