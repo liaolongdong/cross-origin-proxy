@@ -42,11 +42,17 @@ describe('diffRewrite —— 硬性不变量', () => {
 });
 
 describe('diffRewrite —— 界面要能说的话', () => {
-  it('换主机名：高亮落在真正换掉的那一段，共用的头尾不进高亮', () => {
+  it('换主机名：高亮对齐到被换掉的那一整个词段，而不是一个字母', () => {
     const diff = diffRewrite('https://fat-api.example.com/api/users', 'https://uat-api.example.com/api/users');
     expect(diff.before).toBe('https://');
-    expect(diff.changed).toBe('u');
-    expect(diff.after).toBe('at-api.example.com/api/users');
+    // 裸的最小字符编辑会把 'at' 算成共用后缀，于是高亮只剩一个 'u'——
+    // 而读者要看的「这一段被换成了什么」恰恰是 'uat'。对齐到词边界，但不跨过分隔符。
+    expect(diff.changed).toBe('uat');
+    expect(diff.after).toBe('-api.example.com/api/users');
+  });
+
+  it('版本位换掉一个字符：整段路径参数一起点名', () => {
+    expect(diffRewrite('https://a.com/v1/x', 'https://a.com/v2/x').changed).toBe('v2');
   });
 
   it('整段主机名不同：高亮正好是那一截', () => {
@@ -66,6 +72,8 @@ describe('diffRewrite —— 界面要能说的话', () => {
   });
 
   it('纯删除：目标里没有可高亮的字符，changed 为空而不是报错', () => {
+    // 边界对齐**不**适用于空段——把隔壁那个没动过的词段染上色，是凭空圈人，
+    // 比不圈更糟（这条功能的立身之本是「不说谎」）。
     expect(diffRewrite('https://a.com/api/x', 'https://a.com/x').changed).toBe('');
   });
 
@@ -74,5 +82,29 @@ describe('diffRewrite —— 界面要能说的话', () => {
     expect(diff.before).toBe('http');
     expect(diff.changed).toBe('');
     expect(diff.after).toBe('://x.com');
+  });
+
+  it('对齐永远不从词的中间开始、也不在词的中间收尾', () => {
+    const pairs: [string, string][] = [
+      ['https://fat-api.example.com/api/users', 'https://uat-api.example.com/api/users'],
+      ['https://a.com/v1/x', 'https://a.com/v2/x'],
+      ['https://abc.com/x', 'https://abd.com/x'],
+      ['https://fat.example.com/a/b/c?x=1', 'https://uat.example.com/a/b/c?x=1'],
+      ['同一段中文地址/接口', '同一段中文地址/API'],
+      ['https://a.com/x', 'https://a.com/api/x'],
+      ['abc', 'x'],
+    ];
+    const isWord = (char: string) => /[A-Za-z0-9一-鿿]/.test(char);
+    for (const [source, target] of pairs) {
+      const { changed } = diffRewrite(source, target);
+      if (changed === '') continue;
+      const start = target.indexOf(changed);
+      expect(start >= 0).toBe(true);
+      const end = start + changed.length;
+      // 段首是词字符时，它左边必须是分隔符（或就是开头）——否则是「从词中间染起」
+      if (isWord(changed[0])) expect(start === 0 || !isWord(target[start - 1])).toBe(true);
+      // 段尾同理
+      if (isWord(changed[changed.length - 1])) expect(end === target.length || !isWord(target[end])).toBe(true);
+    }
   });
 });

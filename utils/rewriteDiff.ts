@@ -21,11 +21,26 @@ export interface RewriteDiff {
 }
 
 /**
- * 按公共前后缀切出改写中被换掉的那一段
+ * 词段里的字符：拉丁字母、数字与汉字。
+ * URL 的分隔符（`:` `/` `?` `&` `.` `-` `_` `%`）都不在其中，所以「推到分隔符为止」
+ * 等价于「不越过一段主机名 / 路径段 / 查询参数的边界」。
+ */
+function isWordChar(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9一-鿿]/.test(char);
+}
+
+/**
+ * 按公共前后缀切出改写中被换掉的那一段，再把这一段对齐到它所在的词段
  *
  * 两个地址完全相同时 `changed` 为空串——界面据此不画高亮，而不是画一个空的强调块。
  * 前后缀刻意不允许重叠（后缀最多取到前缀之后），否则 `abc` → `abc` 这类输入会让
  * 中间段算成负长度。
+ *
+ * 为什么要往外扩一格：裸的最小字符编辑在 `fat-api` → `uat-api` 上会把 `at` 算成共用
+ * 后缀，于是高亮只剩一个 `u`——那既不是「被改掉的那一段」，也不告诉读者换成了什么，
+ * 逐字对读的活儿又还给了用户。所以高亮段的两头一律推到分隔符为止（`-` `.` `/` `:` 之类），
+ * 让「uat」「v2」这样整段被换掉的词段完整地被染上。**只在确实有高亮时扩**：纯删除
+ * （目标里没有新字符）时把隔壁那个没动过的词段也染上，是凭空圈人——比不圈更糟。
  */
 export function diffRewrite(source: string, target: string): RewriteDiff {
   if (source === target) return { before: target, changed: '', after: '' };
@@ -40,9 +55,17 @@ export function diffRewrite(source: string, target: string): RewriteDiff {
     suffix += 1;
   }
 
+  let lo = prefix;
+  let hi = target.length - suffix;
+  if (hi > lo) {
+    // 段首是词字符才往左吃，且不吃过分隔符；段尾同理往右
+    if (isWordChar(target[lo])) while (lo > 0 && isWordChar(target[lo - 1])) lo -= 1;
+    if (isWordChar(target[hi - 1])) while (hi < target.length && isWordChar(target[hi])) hi += 1;
+  }
+
   return {
-    before: target.slice(0, prefix),
-    changed: target.slice(prefix, target.length - suffix),
-    after: target.slice(target.length - suffix),
+    before: target.slice(0, lo),
+    changed: target.slice(lo, hi),
+    after: target.slice(hi),
   };
 }
