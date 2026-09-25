@@ -171,7 +171,7 @@
 
 ## 国际化与文档
 
-- 单一自研响应式 i18n（`utils/i18n`）：`currentLocale` 为模块级共享 ref，`t(key, substitutions)` 支持 `$1..$9` 占位，**单轮替换**且实参按字面量插入（实参里含 `$&`、`$1` 不会被二次展开，缺失的实参保留占位符本身而不是留空）；组件侧经 `composables/useI18n.ts` 使用；偏好持久化在 `storage.local` 并镜像到 `localStorage`（消除首帧闪烁），`initLocaleSync()` 实现跨页实时同步。**本仓库无 `i18n-lite`/`tl()` 双体系。**
+- 单一自研响应式 i18n（`utils/i18n`）：`currentLocale` 为模块级共享 ref，`t(key, substitutions)` 支持 `$1..$9` 占位，**单轮替换**且实参按字面量插入（实参里含 `$&`、`$1` 不会被二次展开，缺失的实参保留占位符本身而不是留空）；组件侧经 `composables/useI18n.ts` 使用；偏好持久化在 `storage.local` 并镜像到 `localStorage`（消除首帧闪烁），`initLocaleSync()` 实现跨页实时同步。**镜像写入的不变量对语言与主题两份同时成立**（`cop_locale` 与 `cop_theme`/`cop_mode`）：镜像只在 `storage.local` 落成功之后刷新——它说的是「下次打开首帧该画什么」，落盘失败时提前写就让镜像领先于事实来源，之后每次打开先按用户没选定的那个值画一帧、再被异步校正回来，恰好是镜像本该消掉的那次闪色；两处各按运行时测，见 `tests/localeMirror.test.ts` 与 `tests/themeMirror.test.ts`。**本仓库无 `i18n-lite`/`tl()` 双体系。**
 - 应用文案在根 `locales/{zh_CN,en}/{common,options,popup}.json`，构建期静态合并为扁平字典；新增/删除/重命名 key 时中英 key 集必须一致。
 - manifest 名称/悬停短名/描述/命令文案走 `chrome.i18n`，仅维护 `public/_locales/{zh_CN,en}/messages.json`（`extensionName`/`extensionShortName`/`extensionDescription`/`commandToggleProxy`）。**Chrome 上传时硬校验 `name` ≤ 75、`description` ≤ 132 字符（按码点计数），超出直接拒包**；`tests/build-verification.test.ts` 已加回归守卫。
 - 商店关键词只加在 `public/_locales` 的 `extensionName`。它仍会出现在 Chrome 应用商店、安装确认弹窗、`chrome://extensions` 列表与工具栏扩展菜单——这是承载关键词的**已知代价**，无法由权限或代码消除；浏览器 UI 上接受显示长名。可收短的两处已收短：工具栏悬停提示走 `extensionShortName`，标签页标题由 `entrypoints/{options,popup}/main.ts` 用应用内 i18n 设置。**测试守卫的是“悬停短名 = HeaderBar 品牌名 = popup 标题”三者一致**；`optionsPageTitle` 带「- 配置 / - Options」后缀是故意设计，不要“顺手对齐”删掉后缀。

@@ -100,11 +100,17 @@ export function t(key: string, substitutions?: string | number | (string | numbe
   return message;
 }
 
-/** 切换语言并持久化（storage.onChanged 会同步其它扩展页） */
+/**
+ * 切换语言并持久化（storage.onChanged 会同步其它扩展页）
+ *
+ * 镜像在写入成功后才刷新，与 `utils/theme.ts` 的 `setStoredTheme` 同一条不变量：镜像表示的是
+ * 「下次打开首帧该用哪种语言」，落盘失败时提前写会让它领先于事实来源，之后每次打开都先按用户
+ * 并没有选定的语言画一帧、再被异步校正回来——那正是镜像要消掉的那次闪色，只是换了个方向。
+ */
 export async function setLocale(locale: LocaleName): Promise<void> {
   currentLocale.value = locale;
-  writeMirror(locale);
   await chrome.storage.local.set({ [STORAGE_KEYS.LOCALE]: locale });
+  writeMirror(locale);
 }
 
 /**
@@ -112,13 +118,20 @@ export async function setLocale(locale: LocaleName): Promise<void> {
  * 在 options/popup 的 main.ts 中调用（fire-and-forget）
  */
 export function initLocaleSync(): void {
-  void chrome.storage.local.get(STORAGE_KEYS.LOCALE).then(result => {
-    const stored = result[STORAGE_KEYS.LOCALE];
-    if (isLocaleName(stored) && stored !== currentLocale.value) {
-      currentLocale.value = stored;
-      writeMirror(stored);
-    }
-  });
+  // 读失败时什么都不做：镜像里那份上一次成功读到的值仍然比推断值更接近事实。
+  // 末尾那句 .catch 不是装饰——少了它，这笔拒绝在页面控制台里就是一条 Uncaught (in promise)，
+  // 而这里没有任何用户可以看到的后果值得用一句报错去打扰。`utils/theme.ts` 的读取侧做的是同一件事，
+  // 只是把 try/catch 收在 `readStoredTheme()` 里（那个 helper 永不 reject，所以它不需要 .catch）。
+  void chrome.storage.local
+    .get(STORAGE_KEYS.LOCALE)
+    .then(result => {
+      const stored = result[STORAGE_KEYS.LOCALE];
+      if (isLocaleName(stored) && stored !== currentLocale.value) {
+        currentLocale.value = stored;
+        writeMirror(stored);
+      }
+    })
+    .catch(() => {});
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
