@@ -38,6 +38,10 @@ export function getMethodColor(method: string): '' | 'success' | 'warning' | 'da
 
 /**
  * 获取 HTTP 状态码对应的 Element Plus tag 类型
+ *
+ * 3xx 落中性色（`''`）而不是 success 的绿。这与日志统计条**刻意不同**：`utils/ruleStats.ts` 的
+ * `computeLogStats` 把 200-399 一起算成 success——那里算的是「这一笔成不成」，这里画的是
+ * 「这一行长什么样」。别为了统一把 3xx 挪到任何一边。
  */
 export function getStatusColor(status: number): '' | 'success' | 'warning' | 'danger' | 'info' {
   if (status >= 200 && status < 300) return 'success';
