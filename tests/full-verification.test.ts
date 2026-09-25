@@ -950,7 +950,15 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
       'components/options/UrlTestDialog.vue',
     ]) {
       const src = fs.readFileSync(stateless, 'utf-8');
-      expect(src, stateless).not.toMatch(/\(\)\s*=>\s*props\.visible,/);
+      // 判据是「不许长出以 props.visible 为源的 watcher」，不是「不许读 props.visible」：
+      // 纯渲染用的闸门（日志抽屉那个「没人看的那一屏别往后挂」）本来就要读这个 prop，
+      // 原来那半截 `() => props.visible,` 太宽，把它一起判死了，于是收成 watcher 形状。
+      // 收成形状之后仍有牙：`watch(() => props.visible, ...)`、`watch([() => props.visible, ...])`
+      // 与换行写的 `watch(\n  () => props.visible,` 三种都在这一道闸口上，
+      // 用 `.test-tmp/mutate-visible-guard.py` 往 LogDrawer.vue 各插一种，本文件逐条变红。
+      // 与旧判据同款的已知漏口：把源起个别的名字再传给 watch（`() => props.visible,` 不在源码里
+      // 出现就没法用正则钉）——这条从来就不是靠正则守的，靠的是这个文件头顶那句「数据由 App.vue 拉」。
+      expect(src, stateless).not.toMatch(/watch\w*\(\s*(\[\s*)?\(\)\s*=>\s*props\.visible/);
       expect(src, stateless).not.toMatch(/@open\s*=/);
     }
   });

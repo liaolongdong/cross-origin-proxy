@@ -210,10 +210,10 @@
         </ul>
       </div>
 
-      <!-- 日志表格（SW 通道逐条日志） -->
+      <!-- 日志表格（SW 通道逐条日志；:data 是窗口化的那份，见下方「按帧续载」） -->
       <el-table
         v-loading="loading"
-        :data="filteredLogs"
+        :data="windowedLogs"
         :row-class-name="rowClassName"
         class="log-table"
         highlight-current-row
@@ -533,6 +533,7 @@ import { computeLogStats } from '@/utils/ruleStats';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
+import { useRenderWindow } from '@/composables/useRenderWindow';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
 
 /**
@@ -620,6 +621,51 @@ const filteredLogs = computed(() => {
 
 // 统计（基于筛选后的数据，单次遍历）
 const logStats = computed(() => computeLogStats(filteredLogs.value));
+
+// ─── 表格按帧续载 ────────────────────────────────────────────────────────────
+
+/**
+ * 表格一次只挂一截，剩下的每帧往前推。
+ *
+ * 2026-09-25 真机实测（干净产物、同一夹具只改条数、与改动前一版交错各跑两轮）：一次挂满
+ * 500 行时「点击 → 首行出现」要 3.7~4.9s，中间是一个 1.9s 的长任务；同一份夹具只挂 50 行
+ * 是 392ms。代价按**行数**走，而 CPU profile 里本组件自身代码只占 0.5%（31ms）——所以在抽屉
+ * 里优化任何一个函数都不管用，能让首行提前出现的只有「一次少挂几行」。判据抽在
+ * `composables/useRenderWindow.ts`，那条文件负责「窗口只往前推、界面没空时不干活」这半。
+ *
+ * 代价说清楚：全部挂上要 6.4~6.8s，比一次挂满晚 1.5~2s（每一截都要让 `el-table` 重排一次整张表），
+ * 换来的是那段时间里界面可用、可滚、可读。而统计条与筛选下拉**不读这份窗口化的数组**
+ * （`logStats` 读 `filteredLogs`、`uniqueRuleNames` 读 `props.logs`），所以续载过程中读数就是全量的，
+ * 不会先报一个好看的少数。
+ */
+const logRowWindow = useRenderWindow({
+  total: () => filteredLogs.value.length,
+  visible: () => props.visible,
+});
+
+/** 表格实际渲染的那一份 */
+const windowedLogs = computed(() => logRowWindow.slice(filteredLogs.value));
+
+/**
+ * 每开一次抽屉都必定重拉一次日志（`App.vue` 的 `watch(showLogs)`），所以这一处 arm 覆盖到了
+ * 「打开」这个时机——不需要、也不允许为本组件加 `props.visible` 的 watcher（见 `handleDrawerClose`）。
+ */
+watch(() => props.logs, logRowWindow.arm);
+
+/**
+ * 拉取失败时 `props.logs` 还是原来那个数组，上面那条 watcher 一声不响——而关闭已经把窗口收回首屏那一截，
+ * 于是「重开 + 恰好这次拉取失败」会把界面永久停在 60 行（改动前是看得见全部 500 行的）。
+ * 所以「这一轮拉完了」也必须 arm：成功时它和上面那条是同一次触发（`arm` 自身幂等，不叠加），
+ * 失败时它是唯一那次。抽屉关着时 arm 什么都不做（见 `useRenderWindow` 的 `visible` 闸门）。
+ */
+watch(
+  () => props.loading,
+  loading => {
+    if (!loading) logRowWindow.arm();
+  },
+);
+
+onUnmounted(logRowWindow.cancel);
 
 // ─── 新到日志的落位提示 ──────────────────────────────────────────────────────
 
@@ -770,6 +816,10 @@ function displayHeaderValue(name: string, value: string): string {
 // tests/full-verification.test.ts 的「无 visible watcher」清单里，那个契约不许它长出一个。
 function handleDrawerClose() {
   revealSensitive.value = false;
+  // 窗口退回首屏那一截：关掉之后表格仍然挂着（`el-drawer` 只在第一次打开时渲染内容，
+  // 之后靠 v-show 隐藏），留着 500 行就等于让自动刷新的每一拍都在替一个看不见的表格重渲染。
+  // 重新打开时由 `App.vue` 的那次重拉再 arm 起来。
+  logRowWindow.reset();
   emit('update:visible', false);
 }
 
