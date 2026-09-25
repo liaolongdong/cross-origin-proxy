@@ -178,6 +178,8 @@
             size="small"
             type="success"
             effect="light"
+            class="page-hit-rule-tag"
+            :title="pageHitRuleName"
             >{{ pageHitRuleName }}</el-tag
           >
           <el-tag
@@ -1167,6 +1169,20 @@ async function openOptionsPage(hash = '') {
 .page-hit-label {
   flex: none;
   color: var(--cop-text-color-secondary);
+}
+
+/* 规则名可以很长，而 el-tag 是 nowrap 的整块：不约束就会画到卡片右边界之外
+   （`.page-hit-row` 的 flex-wrap 救不了它——单个弹性项比行还宽时只能溢出）。
+   overflow 让自动最小尺寸归零，省略号落在 EP 自带 min-width:0 的内容层上，
+   完整名字经 title 悬停读到，与同一张卡片里 .page-hit-rewritten 的处理方式一致。 */
+.page-hit-rule-tag {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.page-hit-rule-tag :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .page-hit-rewritten {

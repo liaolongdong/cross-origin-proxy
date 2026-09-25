@@ -1030,4 +1030,19 @@ describe('[Visibility] popup 的生效证据来自三条独立线索，而不是
       expect(dict.metricDnrTab, locale).not.toMatch(/接口|请求数|API request/i);
     }
   });
+
+  it('「本页命中」的规则名标签必须被卡片宽度掐住：nowrap 的 el-tag 比行还宽时会画出卡片右边界', () => {
+    // flex-wrap 救不了「单个弹性项比整行还宽」——真机量过：368px 弹窗下标签右缘 351 > 卡片右缘 344，
+    // 名字尾巴压在卡片描边外面。三处缺一处就退回那个样子：类名没挂上 / 标签没被限宽 / 省略号没落在内容层。
+    const template = popupSrc.slice(0, popupSrc.indexOf('<script'));
+    const atName = template.indexOf('pageHitRuleName');
+    expect(atName, '模板里要能找到规则名那一处').toBeGreaterThan(-1);
+    const nameTag = template.slice(atName).match(/<el-tag[\s\S]*?<\/el-tag>/)?.[0] ?? '';
+    expect(nameTag).toContain('class="page-hit-rule-tag"');
+    expect(nameTag, '完整名字必须还能经 title 读回来（省略号只是收口显示）').toContain(':title="pageHitRuleName"');
+    const styleBlock = popupSrc.slice(popupSrc.indexOf('<style'));
+    expect(styleBlock).toMatch(/\.page-hit-rule-tag\s*\{[^}]*max-width:\s*100%/);
+    expect(styleBlock).toMatch(/\.page-hit-rule-tag\s*\{[^}]*overflow:\s*hidden/);
+    expect(styleBlock).toMatch(/\.page-hit-rule-tag\s+:deep\(\.el-tag__content\)\s*\{[^}]*text-overflow:\s*ellipsis/);
+  });
 });
