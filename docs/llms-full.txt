@@ -9,7 +9,7 @@ Category / 类别: Chrome extension (Manifest V3) · 开发者工具 / developer
 License / 协议: MIT
 Source / 源码: https://github.com/liaolongdong/cross-origin-proxy
 Store listing / 商店状态: 已上架 / Published on the Chrome Web Store — https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg（与 `CHROMEWEBSTORE.md` 第 8 节的提审记录一致）
-Last verified / 内容核对日期: 2026-09-20, against extension v1.0.0 (`package.json` version) and its source.
+Last verified / 内容核对日期: 2026-09-20, against the store build users install today (v1.0.0) and its source. The repository's working version is 1.1.0 (`package.json`), not yet released — see CHANGELOG.md for what it adds.
 
 ## 1. One-paragraph definition / 一段话定义
 
@@ -24,7 +24,7 @@ Last verified / 内容核对日期: 2026-09-20, against extension v1.0.0 (`packa
 - 方案对比页（中文）/ Comparison page (English) — dev-server proxy vs system capture proxy vs API client vs header-modifier extension vs editing app config: https://liaolongdong.github.io/cross-origin-proxy/alternatives.html · https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html
 - 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - 源码仓库 / Source: https://github.com/liaolongdong/cross-origin-proxy
-- 预构建 zip / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases (attached per tag)
+- 预构建 zip / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases (attached per tag / 每个 tag 自动附带；尚未发布第一个 tag / no tag published yet)
 - 商店文案与权限理由 / Store copy and permission justifications: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md
 - 贡献指南 / Contributing: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md
 
@@ -178,4 +178,4 @@ Commands / 命令: `pnpm dev`, `pnpm build`, `pnpm build:zip`, `pnpm test`, `pnp
 Questions not answered here: ask in the repository's issue tracker, or read 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 Issue tracker: https://github.com/liaolongdong/cross-origin-proxy/issues
 
-Last updated / 最后更新: 2026-09-20 (extension v1.0.0)
+Last updated / 最后更新: 2026-09-22 (documents the released v1.0.0; the repository is on 1.1.0, unreleased)

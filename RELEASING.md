@@ -24,7 +24,7 @@ GitHub Actions（.github/workflows/release.yml，tag 触发）
 
 1. `pnpm build:zip` → `.output/cross-origin-proxy-<version>-chrome.zip`。
 2. [Developer Dashboard](https://chrome.google.com/webstore/devconsole) → **New item** → 上传该 zip。
-3. 从条目编辑页 URL 取 Extension ID（32 位小写字母串，形如 `abcdefghijklmnopqrstuvwxyzabcdef`）。
+3. 从条目编辑页 URL 取 Extension ID。它是 32 位字母串，且**只含 `a`–`p`**（不含 `q`–`z`），形如 `abcdefghijklmnopqrstuvwxyzabcdef`；复制时别带进空格或换行，它们是不可见的，但会让 Secrets 里的值一直鉴权失败。
 4. 按 `CHROMEWEBSTORE.md` §1–§5 填名称/摘要/详细描述/截图/权限理由/数据披露，**先不提审**——自动化从第二个版本开始接管，或者在本机配好凭据后用 §3 的手动补跑把首个版本也交出去。
 
 ### 1.2 Google Cloud OAuth 凭据
@@ -69,9 +69,9 @@ pnpm exec wxt submit --dry-run          # 读 .env.submit，只验鉴权
 
 ```bash
 # 1) 改版本号（不自动 commit/tag，便于先把 CHANGELOG 一起写进同一个提交）
-npm version patch --no-git-tag-version     # 或 minor / major
+npm version minor --no-git-tag-version     # 有用户可感知的新功能用 minor，纯修复用 patch
 
-# 2) 在 CHANGELOG.md 顶部补 `## [<新版本>] - YYYY-MM-DD` 小节
+# 2) 把 CHANGELOG.md 的 `## [Unreleased]` 整段提升为 `## [1.1.0] - YYYY-MM-DD`
 #    它是版本历史的唯一事实源：Release 说明就是从这里切出来的
 
 pnpm exec prettier --check CHANGELOG.md package.json   # 只查改动文件
@@ -80,12 +80,16 @@ pnpm exec prettier --check CHANGELOG.md package.json   # 只查改动文件
 pnpm lint && pnpm typecheck && pnpm lint:style && pnpm test && pnpm build
 
 # 4) 提交、打 tag、推送（tag 一到即触发发布链路）
-git add -A && git commit -m "chore(release): v1.0.1"
-git tag v1.0.1
-git push origin main v1.0.1
+git add -A && git commit -m "chore(release): v1.1.0"
+git tag v1.1.0
+git push origin main v1.1.0
 ```
 
 可见文案或能力有变化时，按 `AGENTS.md` 的文档矩阵同步 `README.md`（中文主文档）/ `README.en.md` / `locales/` / `CHROMEWEBSTORE.md` / `docs/`（中英必须同事实）。商店 `name` ≤ 75、`description` ≤ 132 字符由 `pnpm test` 守卫。
+
+**商店的「更新说明」不在上面这条链路里**：`wxt submit` 没有对应参数，包上传时那一栏是空的（GitHub Release 的说明反倒是自动的，从 `CHANGELOG.md` 切）。所以 Run 页面显示提审成功后，去 Dashboard 该条目 → 更新信息 → 把 [`CHROMEWEBSTORE.md` §8.1](./CHROMEWEBSTORE.md) 的中英文两块分别粘进对应语言列表，一分钟内可完成，漏了不报错、只是这一版对用户没有说明。
+
+**tag 推出去之后还有一批「此刻为真、推完就为假」的句子要当场翻**——落地页页脚版本与日期、`llms*.txt` 的「尚未发布 tag」、README 方式 B 的空 Releases 提示、`CHROMEWEBSTORE.md` §8 的提审状态。清单只有一个出口：[`CHROMEWEBSTORE.md` §12](./CHROMEWEBSTORE.md)，它按文件逐行写明了每处现在写着什么、要改成什么。翻完跑 `pnpm test` 与本次改动文件的 `pnpm exec prettier --check`。
 
 ## 3. 手动补跑 / 灰度 / 只传草稿
 

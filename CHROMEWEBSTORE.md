@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — 跨域代理助手 / Cross-Origin Proxy
 
-> Last Updated: 2026-09-21
+> Last Updated: 2026-09-22
 > 本文件是商店上架的唯一素材源：把这里的内容逐项复制进 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)。
 > 商店表单（名称/描述/截图/权限理由/数据披露）无法由 API 代写，只能手动粘；**包上传与提审已经自动化**，见第 11 节。
 > 本文件位于仓库根目录，不在 `.output/chrome-mv3` 内，因此不会被打进上传包。
@@ -11,11 +11,11 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 优化重心因此放在后两个字段：
 
-| 字段     | 预算       | 当前投入               | 说明                                                                                                                     |
-| -------- | ---------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 名称     | 75 码点    | 36 / 52                | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                              |
-| 摘要     | 132 码点   | 100 / 127              | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                         |
-| 详细描述 | 16000 码点 | 中约 4.9K / 英约 13.1K | 参与索引且仍有大量余量；扩容只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
+| 字段     | 预算       | 当前投入               | 说明                                                                                                                                                                                                                                                                                                                       |
+| -------- | ---------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 名称     | 75 码点    | 36 / 52                | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                                                                                                                                                                                                                                |
+| 摘要     | 132 码点   | 100 / 127              | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                                                                                                                                                                                                                           |
+| 详细描述 | 16000 码点 | 中约 5.8K / 英约 15.9K | 中文侧余量充足，**英文侧只剩 88 码点**：中英按「行数 / 条目数 / 段落数」逐行对等同步（`tests/docs-consistency.test.ts` 守卫），所以**扩写瓶颈在英文，不在中文**。往下加新段落的唯一前提是先在英文侧腾出等量空间，见 §0.1；加字只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
 | 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
 | ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
@@ -37,11 +37,49 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - **典型配置示例**：给出可直接照抄的 match → target 形状，把「能力清单」翻译成「我下一步会怎么填」，并在截图之外提供可抽取的文本。
 - **角色分组**（「谁会用上它」）：同一种能力在前端、全栈、测试、交接四种说法下被检索，按角色切分比把能力清单复述一遍更能命中查询措辞，也直接回答「这算不算给我这个场景做的」。
 - **CORS 仍报错那一段**：与「装了没生效」并列的头号差评来源，且它是**真实机制**（纯地址重写仍是页面的跨域请求），只写在 README 与落地页等于把最容易误解的点留给差评。
+- **规则选择机制段**（2026-09-22 加）：「两条规则都能匹配，生效的是哪条」与「目标地址留空为什么也能用」是 Support 里的两类问题，前者决定排查顺序，后者是本扩展真实存在、却只在代码与 README 里写过的能力（只代发、不改地址）。商店描述是搜索结果与详情页唯一会读到的地方，缺了它就是让人靠试。
+- **同源策略解释段**：§0 关键词表把 `同源策略` / `same-origin policy` 的落点写在「CORS 解释段」上，而 2026-09-22 之前正文里根本没有这一段——表格承诺了、正文没兑现就是漂移。它同时给上面那段报错说明提供前置定义（scheme/host/port、预检、ACAO），使「为什么报错」不再只是一句结论。
+- **「它不是什么」段**：本扩展名称里的 `proxy` 与「跨域」两词在检索侧撞上 VPN / 系统级代理 / 抓包工具，这些错误预期正是差评与卸载理由；按类别（公开 CORS 中转、VPN、抓包调试器、API 平台、服务端网关）逐条划线，同时给 AI 检索一份实体消歧材料。它受本节末尾那条既有约束——**只写类别，不点名产品**。
+- **两条新 FAQ**（会不会波及别的标签页与线上环境 / 换电脑或同事要同一套配置）：前者是内网开发者的第一顾虑，答案不写进商店就等于让人赌；后者把「规则活在你的 Chrome profile 里」这个已知限制翻译成一条可执行路径（导出 JSON / 导入合并），与「差别」段末尾那句诚实的边界是一对。
 - **与抓包代理/项目配置的共存与越界段**：不装证书、不改系统设置、不占系统代理端口、不写项目文件——这些是相对系统级代理与 devServer 配置的真实差异化成本账，写在「差别」段里而不是散进能力清单。
 - **零远端依赖段**：面向企业内网与合规审查的说法，同时给审核对「数据不外传」的疑问一个可核对的落点。
 - **排查清单**：`<all_urls>` 类扩展的差评与申诉几乎都来自「装了没生效」，把排查顺序写进商店描述能同时降低差评率与审核沟通成本；其中「正则必须覆盖整条 URL」是本扩展两通道的真实差异（见第 9 节）。
 
 刻意**不做**的事：不在名称里堆同义词（Chrome 会因 "misleading keyword stuffing" 拒审，且 AI 检索研究里关键词堆砌反而降低可见度）；不写 "best"、"#1"、"free" 这类词；不出现 "Chrome" 字样冒充官方；不引用其他产品商标（详细描述里的对比段只写**方案类别**，不点名产品，避免不可核验的主张）；详细描述里不写版本号，避开每次发版都要改商店文案；不为了吃满 16000 码点而把同一批能力换说法重述。
+
+### 0.1 中英详细描述为什么码点差 2.7 倍、下次扩写先动谁
+
+**这个差不是「中文写得少」**。两份详细描述逐行对等：28 个段落、64 个 `- ` 条目、134 行，一条不多一条不少（`tests/docs-consistency.test.ts` 的「中英详细描述结构对等」按 `{lines, bullets, paragraphs}` 全等断言）。差的只有语言密度——2026-09-22 这一轮新增的五处内容块，中文侧 +852 码点，英文镜像 +2,781 码点，**约 3.3 倍**。所以「把中文字数追到和英文一样」只能靠给中文单独加行，而那当场就会让对等守卫变红；**不要把码点不等当缺陷去"修"**，它和「英文列表以 FAT/UAT 开头」是同一类事实：语言特性，不是覆盖差。
+
+真正的约束因此落在英文那一份上。商店按语言各填一份详细描述、各自吃 16000 上限，中文列表还剩约 10.2K，英文只剩 **88 码点**；但因为结构必须对等，**英文一满，中文同时封顶**。
+
+要再扩中文，按这个顺序腾空间：
+
+1. **先在英文侧做等行数内的措辞压缩**——不增删行、不合并段落，只把句子收紧。这是唯一不触发对等守卫的回收方式，也是本轮新增段落最该被压的地方（新写的英文镜像按「说清楚」优先，没有按字节优化过）。
+2. 不够就**整块换掉**已经失去转化或检索理由的内容块（上面那份清单就是判据；换段落，段落数不变）。
+3. **不要为了腾空间动这三处**：`Limits:` 段、隐私政策 URL、反馈与源码入口。前一个是审核要看的能力边界，后两个由 `docs-consistency` 直接断言必须出现在详细描述里。
+
+改完先量，再决定动谁（中英各段落的码点分布，顺序即文件内顺序）：
+
+````bash
+python3 - <<'PY'
+import re
+doc = open('CHROMEWEBSTORE.md', encoding='utf-8').read()
+# 小节号写成参数再拼前缀：把带前缀的完整标题字面量写进 §0，会抢在真标题前被检索到。
+def body(a, b):
+    a, b = '### ' + a, '### ' + b
+    s = doc.index(a); e = doc.index(b, s)
+    m = list(re.finditer(r'```\n([\s\S]*?)```', doc[s:e]))[2].group(1)
+    return m[:-1] if m.endswith('\n') else m
+for lang, (a, b) in (('zh', ('1.1', '1.2')), ('en', ('1.2', '1.3'))):
+    text = body(a, b)
+    print(lang, 'total=%d cp, paras=%d' % (len(text), len(text.split('\n\n'))))
+    for i, p in enumerate(text.split('\n\n')):
+        print('  %2d %5d  %s' % (i, len(p), p.split('\n')[0][:60]))
+PY
+````
+
+这条命令数出来的 `total` 就是 §0 预算表该写的数（除以 1000 保留一位小数；守卫用 `toBeCloseTo(..., 1)`，即 ±50 码点内）。改完正文必须回来同表更新，然后 `npx vitest run tests/docs-consistency.test.ts` 一次看三条（结构对等、≤16000、预算表），最后 `pnpm exec prettier --write CHROMEWEBSTORE.md` 重排表格列宽。
 
 ## 1. Store listing
 
@@ -87,6 +125,11 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - 转发 WebSocket 长连接，让实时功能跟着同一套环境走
 - 只做 URL 重写的简单规则由浏览器网络层完成（declarativeNetRequest），不给页面增加脚本开销；关闭总开关时这层规则一并卸载，不会留下隐形重定向
 
+规则是怎么被选中的：
+- 列表顺序就是优先级，数值越小越先匹配；一条请求只交给第一条命中的规则，后面的规则不再参与评估
+- 「URL 匹配测试」会把同样命中这条地址、但排在它后面的规则一并列出来，调整顺序前先看这里
+- 目标地址留空表示不换环境，只把这条请求交给扩展代发——需要改写请求头或响应、又不想换地址时用它
+
 典型配置（示例域名换成你自己的）：
 - 跨环境转发：匹配 https://fat-api.example.com/* → 目标 https://uat-api.example.com
 - 换目标环境的鉴权：在上面这条里加一个请求头覆盖 Authorization: Bearer <你的 UAT token>
@@ -123,6 +166,8 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 4. 在「URL 匹配测试」里输入实际请求地址，看是否被一条优先级数字更小（更靠前）的规则遮蔽
 5. 使用正则时确保它覆盖整条 URL：网络层会用替换结果整体替换 URL，而后台通道只替换命中的片段，覆盖不全的正则在两条通道上结果不同
 
+关于同源策略：页面只能读取与自己同源（协议、域名、端口三者都相同）的响应，带自定义请求头的调用还要先过一次预检（OPTIONS）。预检或正式响应里缺少允许你来源的 Access-Control-Allow-Origin，请求就到不了业务代码——「Network 里看得到响应、Console 却报错」正是同一件事的两面。这个扩展不改后端，也不假装让校验消失：简单规则改的是请求要去哪个地址，复杂规则改的是这个请求由谁发出。
+
 规则生效了、地址也换过去了，控制台却还是报 CORS——这通常不是没生效：只重写地址的请求在浏览器里仍然受同源策略约束，目标环境没允许你的来源就照样被拦。此时给这条规则加任一改写能力（最省事的是加一个响应头覆盖），它就改由后台通道代发：那一次请求由扩展发出，页面拿到的是扩展构造的响应，页面侧的跨域校验不再适用。「URL 匹配测试」会直接告诉你这条地址现在走的是哪条通道。
 
 与常见方案的差别：
@@ -131,6 +176,13 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 - 相比改项目配置或构建脚本：它不写任何项目文件、不进任何构建产物，同事不需要在你的仓库里找到那行代理配置，也不会有人把你的本地地址提交上去
 - 相比 API 客户端或改请求头插件：它处理页面真实发出的请求，不需要把请求手工搬进另一个工具里重放
 - 它的边界也说清楚：这是浏览器内的工具，帮不到服务端对服务端的调用；规则存在你的 Chrome 配置里，需要协作时用 JSON 导出交给同事
+
+它不是什么：
+- 不是公共 CORS 中转服务：请求只发往你规则里写的那个地址，不经过任何第三方服务器
+- 不是 VPN 或系统代理：它不改系统网络设置、不接管其他应用的流量，只管浏览器里你写了规则的那些请求
+- 不是抓包调试工具：不安装本地证书、不解析 TLS、不做全流量录制，也不替你保存历史响应
+- 不是接口管理平台：Mock 用来顶替还没写好的接口，不承担接口文档、用例管理与团队协作
+- 不是服务端网关或反向代理：目标地址由你在浏览器里填，任何配置都不会写进项目文件或基础设施
 
 界面：
 - 中文 / English 双语界面，6 套主题与浅色 / 深色 / 跟随系统
@@ -176,6 +228,12 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 支持哪些浏览器？
 需要较新版本的桌面 Google Chrome（Manifest V3），不支持 Firefox、Safari、Edge 或移动端浏览器。
+
+会影响其他标签页或线上环境吗？
+不会自动影响。只有处于启用状态、且地址匹配上的请求才会被处理；总开关一关，网络层那层规则也一起卸载。不想让代理一直挂着，可以设 30 分钟到 4 小时的自动关闭倒计时。
+
+换电脑，或同事要同一套配置怎么办？
+把配置导出成 JSON（默认开启分享模式，剔掉凭据类请求/响应头与 token 类查询参数），对方导入时可以选择覆盖或合并；整套规则也能存成命名环境快照，在多个环境之间一键切换。规则本身只存在你本机的浏览器存储里，没有云同步。
 ```
 
 ### 1.2 English listing（本地化列表）
@@ -220,6 +278,11 @@ What it does:
 - Forward WebSocket connections, so real-time features follow the same environment switch
 - Rules that only rewrite a URL are resolved inside the browser's network layer (declarativeNetRequest), adding no script work to your page; turning the global switch off uninstalls those rules too, so no invisible redirect is left behind
 
+How a rule gets picked:
+- List order is priority — the lowest number matches first, and a request is handed to the first rule that matches it; the rules below are never evaluated
+- The URL match tester also lists the rules that match the same URL but sit behind it, so you can see the effect of a reorder before you make one
+- An empty target URL means "stay on this environment": the request is issued by the extension without changing its address, which is how you add a header or response override without redirecting anything
+
 Typical rules (swap the example hosts for your own):
 - Cross-environment switch: match https://fat-api.example.com/* → target https://uat-api.example.com
 - Use the other environment's credentials: add a request header override Authorization: Bearer <your UAT token> to that rule
@@ -256,6 +319,8 @@ If a rule seems not to take effect, check in this order:
 4. Test the actual URL in the URL match tester: an enabled rule with a lower priority number may be matching first and shadowing it
 5. For regex rules, make sure the pattern covers the whole URL: the network layer replaces the entire URL while the background channel replaces only the part your pattern matched
 
+About the same-origin policy: a page may only read responses that come from the same origin — same scheme, same host, same port — and a call carrying custom request headers first has to survive a preflight (OPTIONS). If the preflight or the real response is missing an Access-Control-Allow-Origin that allows your origin, the request never reaches your application code: "the response is right there in the Network tab, but the console reports an error" is the same event seen from both sides. This extension changes nothing on the backend and does not pretend the check disappears — a simple rule changes the address a request goes to, a complex rule changes who issues it.
+
 The rule took effect, the address did change, and the console still says CORS — that usually is not a broken rule. A request whose only rewrite happened in the network layer is still a cross-origin request the browser checks against the same-origin policy, so a target environment that does not allow your origin gets blocked. Add any capability to that rule (a response header override is the cheapest) and it moves to the background channel: the extension issues the request and hands the page a response it constructed, so the page's CORS check never runs. The URL match tester shows which channel a given address is currently taking.
 
 How it differs from the usual options:
@@ -264,6 +329,13 @@ How it differs from the usual options:
 - Versus editing project config or build scripts: it writes no file in your repository and appears in no build output, so a teammate never has to find the proxy line in your project — and nobody commits their localhost address
 - Versus an API client or a header-modifier extension: it works on the requests the page actually makes, instead of asking you to replay them in another tool
 - Its limits, stated plainly: it is a browser tool. It cannot help a server-to-server call, and its rules live in your Chrome profile — export JSON when a teammate needs them.
+
+What it is not:
+- Not a public CORS relay: a request only ever goes to the address written in your own rule, never through somebody else's server
+- Not a VPN or a system proxy: it changes no system network setting and carries no other application's traffic — only the browser requests your rules name
+- Not a packet-capture debugger: no local root certificate, no TLS inspection, no recording of everything the machine sends, no archive of past responses
+- Not an API platform: mocking stands in for an endpoint that is not written yet; it is not interface documentation, test-case management, or a collaboration backend
+- Not a server-side gateway or reverse proxy: you type the target address in the browser, and no configuration ends up in a project file or in infrastructure
 
 Interface:
 - English and Chinese UI, six themes, light / dark / system modes
@@ -309,6 +381,12 @@ No. Rules, logs and preferences are stored in your browser's local storage only.
 
 Which browsers are supported?
 A recent desktop Google Chrome (Manifest V3) is required. Firefox, Safari, Edge and mobile browsers are not supported — the extension relies on Chrome-specific APIs.
+
+Will it touch my other tabs or production?
+Nothing happens by itself. Only enabled rules act, and only on requests whose URL matches one of them; switching the global toggle off removes the network-layer rules with it. If you would rather not leave proxying on all day, set the auto-off countdown to 30 minutes, 1, 2 or 4 hours.
+
+I changed machines — how does a teammate get the same setup?
+Export the configuration as JSON (share mode is on by default and strips credential-like request and response headers plus token-like query parameters) and let them import it either over their rules or merged into them; a whole rule set can also be saved as a named environment profile and switched in one click. The rules themselves live only in your browser's local storage — there is no cloud sync.
 ```
 
 **Category**: Developer Tools
@@ -322,7 +400,7 @@ Redirects a page's API requests to another backend environment and lets develope
 
 ## 2. Graphics & Assets
 
-运行 `pnpm assets`（中文版）与 `pnpm assets:en`（英文版）生成，产物在 `store-assets/`（已 gitignore，可再生）。
+运行 `pnpm assets`（中文版）与 `pnpm assets:en`（英文版）生成，产物在 `store-assets/`（已 gitignore，可再生）。原图按语言分两套：`screenshots/*.png` 是中文界面（落地页与 README 用），`screenshots/en/*.png` 是英文界面——`--en` 生成商店图时优先取后者，**英文列表因此配的是英文截图**。截图于 2026-09-22 用 1.1.0 构建实拍重拍（演示数据，7 条规则）。
 
 | Asset                  | Dimensions  | Status   | Filename                                                                              |
 | ---------------------- | ----------- | -------- | ------------------------------------------------------------------------------------- |
@@ -332,12 +410,12 @@ Redirects a page's API requests to another backend environment and lets develope
 | Screenshot 3（中文）   | 1280×800    | ✅ Ready | `store-assets/screenshots-zh/03-url-tester.png`                                       |
 | Screenshot 4（中文）   | 1280×800    | ✅ Ready | `store-assets/screenshots-zh/04-request-log.png`                                      |
 | Screenshot 5（中文）   | 1280×800    | ✅ Ready | `store-assets/screenshots-zh/05-popup.png`                                            |
-| Screenshot 1–5（英文） | 1280×800    | ✅ Ready | `store-assets/screenshots-en/0X-*.png`                                                |
+| Screenshot 1–5（英文） | 1280×800    | ✅ Ready | `store-assets/screenshots-en/0X-*.png`（英文界面，标题与说明为英文）                  |
 | Small promo tile       | 440×280     | ✅ Ready | `store-assets/tiles/small-tile-zh.png` / `small-tile-en.png`                          |
 | Marquee promo tile     | 1400×560    | ✅ Ready | `store-assets/tiles/marquee-zh.png` / `marquee-en.png`                                |
 | GitHub social preview  | 1280×640    | ✅ Ready | `store-assets/tiles/github-social-preview.png`（仓库 Settings → Social preview 上传） |
 
-**Screenshot notes**：每张图顶部带一句能力标题 + 一行说明，主体是真实界面截图（非 mockup、不含任何真实内网域名或 token）。商店只接受 **1280×800 或 640×400**，像素级校验，最多 5 张——顺序按「先讲清主用途 → 再讲能力 → 最后讲开关可见性」排列。
+**Screenshot notes**：每张图顶部带一句能力标题 + 一行说明，主体是真实界面截图（非 mockup、不含任何真实内网域名或 token）。商店只接受 **1280×800 或 640×400**，像素级校验，最多 5 张——顺序按「先讲清主用途 → 再讲能力 → 最后讲开关可见性」排列。标题与说明只写**这张图里画得出来的东西**：规则表单是可滚动的，所以 02 说「匹配 / 重写 / 方法 / 查询参数 / 请求头 + `{{凭据变量}}`」，Mock、延迟、阻断留给详细描述与落地页。落地页与 README 另有两张不进商店的图（`config-import`、`credential-variables`），因为 5 张是硬上限。
 
 ## 3. Permissions Justification
 
@@ -412,19 +490,76 @@ done
 | Homepage URL   | `https://liaolongdong.github.io/cross-origin-proxy/`                        |                                                                 |
 | Store URL      | `https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg` |                                                                 |
 
-> 仓库已建立并公开（`liaolongdong/cross-origin-proxy`，2026-09-07）。剩下的一次性动作全部列在 [GITHUB.md](./GITHUB.md)：About 描述与 website、topics、社交预览图、**Pages 源切到 GitHub Actions**、私密漏洞报告入口。**确认 `privacy.html` 能打开后再提审。**
->
+> 仓库已公开（`liaolongdong/cross-origin-proxy`，2026-09-07），[GITHUB.md](./GITHUB.md) §0.1 记录哪些一次性动作已经落地。提审前唯一必须复核的是**隐私政策可访问**：
+
+```bash
+for p in "" en.html privacy.html llms.txt llms-full.txt; do
+  printf '%-16s ' "/$p"
+  curl -s -o /dev/null -w '%{http_code}\n' "https://liaolongdong.github.io/cross-origin-proxy/$p"
+done
+```
+
 > 联系邮箱会在商店页与隐私政策页公开，可能被爬虫采集用于发送 Spam。若希望隔离，可改用 GitHub 专用可收信地址（`用户名+编号@users.noreply.github.com`），并同步更新本节与 `docs/privacy.html`。
 
 ## 8. Version History
 
 完整版本历史以 [CHANGELOG.md](./CHANGELOG.md) 为唯一事实源（发版链路会把它对应小节切成 GitHub Release 的说明）；本表只记**已向商店提审**的版本与状态。
 
-| Version | Date       | Changes                                                                                                                                               | Status    |
-| ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| 1.0.0   | 2026-09-18 | 首次提交：双通道代理（DNR + 后台）、请求/响应改写、Mock/延迟/阻断、方法与查询参数控制、WebSocket 转发、HAR/cURL 导入导出、环境快照、中英双语与 6 主题 | Published |
+| Version | Date       | Changes                                                                                                                                                                                                  | Status                         |
+| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 1.1.0   | 待提审     | 弹窗诊断补两处「不知道」与「没有」的区分（本页尚未收到最新配置 / 页面自报的拦截活动）、配置恢复点、导入预览、凭据变量 `{{NAME}}`、HAR 与 cURL 导出链路完善、双通道命中数分格、关闭总开关时卸载网络层规则 | 已备好，等首个 `v*` tag 推出去 |
+| 1.0.0   | 2026-09-18 | 首次提交：双通道代理（DNR + 后台）、请求/响应改写、Mock/延迟/阻断、方法与查询参数控制、WebSocket 转发、HAR/cURL 导入导出、环境快照、中英双语与 6 主题                                                    | Published                      |
 
-> ⚠️ 第 1 节描述承诺了「关闭总开关时这层规则一并卸载」，而这条行为修复目前只记在 [CHANGELOG.md](./CHANGELOG.md) 的 `## [Unreleased]` 段（`1.0.0` 尚未打 tag）。首次提审的 zip 必须带上它——商店描述与包体行为不一致，既是拒审风险也是最容易吃差评的地方。上表的 Changes 列只描述条目范围，不代表 2026-09-07 那一节的功能清单。
+> ⚠️ **商店在线的 1.0.0 与第 1 节描述之间有一条已知不一致**：描述承诺「关闭总开关时这层规则一并卸载」，而 1.0.0 的包里 `utils/dnrRules.ts` 并未按总开关清空动态规则。该行为修复住在 [CHANGELOG.md](./CHANGELOG.md) 的 `## [1.1.0]` 小节，**在它提审通过之前，商店页上这句话对已安装用户是不成立的**——这正是第 9 节要求「关总开关 → 请求不再被转发」实机验证一次的原因，也是本表刻意把提审状态与 `CHANGELOG.md` 分开记的理由。
+>
+> 上表 Changes 列只描述条目范围，不代表 2026-09-07 那一节的功能清单。
+
+### 8.1 新版本要粘贴的「更新说明 / Release notes」
+
+**这一步只能手工，别去工作流里找它。** GitHub Release 的说明由 `release.yml` 从本表对应的 `CHANGELOG.md` 小节自动切出，商店那一栏却没有任何自动化通路：实测于 2026-09-22，`pnpm exec wxt submit --help`（底层 `publish-extension/4.0.5`）只有 `--chrome-zip` / `--chrome-extension-id` / 三个凭据 / `--chrome-publish-target` / `--chrome-deploy-percentage` / `--chrome-review-exemption` / `--chrome-skip-submit-review` 这几项，**没有 whats-new 类参数**。所以下面两块文本是提审时在 Dashboard「更新信息 / Release notes」栏粘贴的素材，粘贴动作发生在包上传之后。
+
+写作约束与商店描述同源：不带版本号（这一栏本来就绑在版本上，写了反而在改包重传时变假）、不出现 `best` / `free` / 排名类措辞、不承诺下面第 9 节没被实机验证过的能力。中英文条目数一一对应，删减时**两边同步删**，只删一边就是下一次审计的一条发现。
+
+中文（粘贴进「中文（中国）」列表）：
+
+```
+- 复杂规则没生效时终于能看出卡在哪：弹窗新增「这一页尚未收到最新配置」提示，并多一行页面自报的拦截活动。
+- 修复复杂规则在 iframe 里从来没生效过的问题——此前只注入顶层页面。
+- 导入前先预览：说清哪几条算新增、哪几条保留；替换式导入、加载快照与批量删除之后，都能从「设置 · 配置恢复点」整包回退（最多 5 份）。
+- 凭据变量库：token 在规则里写成 {{名称}} 引用，真值只存在本机、只在后台代发那一刻展开，规则详情、导出文件与请求日志里始终只有这个引用。
+- 导出更放心：配置导出与 HAR 导出默认走「分享模式」，凭据类请求头与响应头不再跟着文件走。
+- 新增按规则的「携带 Cookie」开关，默认关闭。
+- 命中次数按两条通道分两格显示，「这条规则不走该通道」不再被画成 0；规则表与 URL 匹配预演会标出「浏览器不会应用这条规则」并说明原因。
+- 稳定性：被阻断的请求不再因后台重新匹配而真的发出；请求取消、超时、204/205/304 与含非 Latin-1 字符的响应头不再让页面请求永久挂起；同步 XHR 改为回退原生请求，而不是给页面一个空响应。
+- 关闭总开关时，浏览器网络层的重定向规则一并卸载——此前仅重写 URL 的简单规则仍会继续改写请求。
+- 界面细节：小屏菜单高亮当前区块、主题首帧不再闪默认配色、扩展内界面尊重系统的「减少动态效果」设置。
+```
+
+English（粘贴进 English 本地化列表）：
+
+```
+- When a complex rule does not take effect you can now see where it stalls: the popup adds a "this page has not received the latest config" notice and a page-reported interception line.
+- Fixed complex rules never applying inside iframes — only the top frame was injected before.
+- Preview an import before it lands: see which entries count as new and which stay, and roll back a whole replace-style import, a loaded snapshot or a bulk delete from "Settings · Config restore points" (up to 5).
+- Credential variables: write tokens in rules as a {{NAME}} reference. Real values stay on your machine and are expanded only at the moment the background sends the request, so rule details, exported files and request logs carry just the reference.
+- Safer exports: config and HAR exports now run through "share mode" by default, so credential headers no longer travel with the file.
+- New per-rule "send cookies" switch, off by default.
+- Hit counts are split into one column per channel, and "this rule does not use that channel" no longer renders as 0; the rule table and the URL match tester now flag rules the browser will not apply, with the reason.
+- Stability: blocked requests are no longer actually sent after a background re-match; cancelled requests, timeouts, 204/205/304 responses and response headers containing non Latin-1 characters no longer leave page requests pending forever; synchronous XHR falls back to a native request instead of handing the page an empty response.
+- Turning the global toggle off now unloads the network-layer redirect rules too — previously URL-rewrite-only rules kept rewriting requests.
+- Interface details: the small-screen menu highlights the current section, the first frame no longer flashes the default palette, and the extension UI honours the system "reduce motion" setting.
+```
+
+字段长度上限无法从本机核实（这一栏只在登录后的 Dashboard 出现，本仓库机器访问不到商店域名），所以上面按「一条一句」写：中文 10 条 599 码点、英文 10 条 1,821 字符，两边条目数一致。若粘贴时被截断，**两边同步删到最后 4 条**（每条独立成句，删尾部不伤前面），不要只删一边。重算上面两个数（本文件的代码块不是从 §1 起就成对闭合的，按「末尾两个代码块」取会错位，所以这里按小节标题定位）：
+
+````bash
+python3 - <<'PY'
+t = open('CHROMEWEBSTORE.md', encoding='utf-8').read()
+for marker in ('中文（粘贴进「中文（中国）」列表）：', 'English（粘贴进 English 本地化列表）：'):
+    a = t.index('```', t.index(marker)) + 4
+    print(len(t[a : t.index('```', a)].strip('\n')), '码点')
+PY
+````
 
 ## 9. Pre-Publish Checklist
 
@@ -436,7 +571,7 @@ done
 - [ ] About 描述 / website / topics 三项已填（[GITHUB.md](./GITHUB.md) §1–§3）；三项全空等于放弃 GitHub 搜索摘要与话题页这两条被动流量
 - [ ] Social preview 已上传（[GITHUB.md](./GITHUB.md) §4，无可用 API，只能设置页手动传）
 - [ ] 已勾选私密漏洞报告（[GITHUB.md](./GITHUB.md) §6；`SECURITY.md` 把私密上报列为首选，本扩展拿的是 `<all_urls>`）
-- [ ] 首个 `v*` tag 已推：Releases 有可下载 zip、README 的 `Release` 徽章转绿——上架前做掉，安装漏斗不必先落到「clone 源码」
+- [ ] 首个 `v*` tag 已推：Releases 有可下载 zip、README 的 `Release` 徽章转绿。商店已上架所以这一步不再影响「有没有安装入口」，但它决定「方式 B」是否成立，并且推完要按第 12 节 ① 那六处把「尚无 tag」的句子翻正
 
 包与清单：
 
@@ -450,6 +585,7 @@ done
 
 - [ ] 分类 = Developer Tools；默认语言 = 中文（中国），并新增 English 本地化列表
 - [ ] Single purpose 一句话填写（第 1.3 节）
+- [ ] 本次新版本的「更新说明」已粘贴（第 8.1 节两块文本，中英各一份，两边同步删减）——`wxt submit` 没有这个参数，自动化不会替你填
 - [ ] 每一项权限与 host 权限的理由都粘贴（第 3 节），`<all_urls>` 单独说明
 - [ ] 数据披露按第 4 节勾选，与隐私政策文本一致
 - [ ] 描述里的每条能力主张都对得上要提交的那个包，尤其是按实现收窄过的六处：URL 匹配测试的遮蔽方向、日志只落文本 body、cURL 仅限日志条目、覆盖/合并是**导入**模式、后台命中数是内存计数、弹窗「经扩展 · 今日」只含后台通道，网络层命中另占一格；2026-09-20 又按实现补了四处：长连接上只有地址重写、查询参数注入与阻断生效（请求头/请求体/响应改写、Mock、延迟、重试、携带 Cookie 对 socket 无效）、两条通道的命中数不可相加（窗口口径不同，且不适用的一格画「—」而不是 0）、HAR 导出与配置导出共用「分享模式」、携带 Cookie 是默认关闭的按规则开关
@@ -507,45 +643,32 @@ done
 
 - **一次性准备（无法绕开的手动部分）**：`publish-extension` 不提供「新建商店条目」能力，必须在 Dashboard 手动上传一次 zip 才能拿到 Extension ID；同时在 Google Cloud 建 OAuth 客户端换 refresh token。四个值落到仓库 Secrets：`CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`。逐步命令见 [RELEASING.md](./RELEASING.md) §1。
 - **日常**：推 `v*` 标签即触发 `.github/workflows/release.yml`——全量校验 → 打 zip → 建 GitHub Release → `pnpm exec wxt submit` 上传并提审。版本号必须与 `package.json` 一致，不一致时工作流直接终止（商店收到错版本号的包是静默失败）。
+- **不在这条链路里的两件事**：①新建商店条目（见上一条的一次性准备）；②**新版本绑定的「更新说明」**——`wxt submit` 的参数表里没有它，只能提审时在 Dashboard 粘贴第 8.1 节那两块文本。GitHub Release 的说明反而是自动的（工作流把 `CHANGELOG.md` 对应小节切出来），两边别互相以为对方已经填了。
 - **Secrets 未配时的行为**：Release 照建，商店那一步跳过并在 Run 页面留指引，不报红。
 - **先验后提审**：首次接管已有条目时，用 `Run workflow` 勾选 `skip-review`（只上传成草稿）或选 `publish-target=trustedTesters`，人工核对完再走 `default`。
 - **与商店表单的耦合点**：详细描述里刻意不写版本号，避开每次发版都要改商店文案；但限制条数（200 规则 / 500 日志 / 10MB）与能力清单必须与 `README.md`、`docs/` 落地页、`CHANGELOG.md` 保持同一事实。
 
-## 12. 上架后的安装漏斗切换
+## 12. 安装漏斗的两段状态与还没翻的句子
 
-第 1 节的描述、两份 README、落地页两页与 `llms*.txt` 目前全部按「商店还没上架、只能源码构建」写——这句话一共散在 17 处。上架不是一次翻转，而是**两次互相独立**的状态变化，不要合并成一次改：
+安装链路有两个**互相独立**的状态变化，不要合并成一次改：
 
-| 翻转       | 触发                      | 变化                                                                                                           |
-| ---------- | ------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| ① 打出 tag | 推 `v*` tag（见第 11 节） | GitHub Release 带上预构建 zip，README 的 `Release` 徽章从 unknown 转绿；「方式 A」这时才真的可用，商店与否无关 |
-| ② 商店上架 | 商店审核通过并公开发布    | 出现商店 URL，安装主入口从 GitHub 换成商店；下表在这一步一次性改完                                             |
+| 翻转       | 触发                      | 变化                                                                                  | 状态                           |
+| ---------- | ------------------------- | ------------------------------------------------------------------------------------- | ------------------------------ |
+| ① 打出 tag | 推 `v*` tag（见第 11 节） | GitHub Release 带上预构建 zip，README 的 `Release` 徽章转绿，「方式 B」这时才真的可用 | **未做**——仓库至今 0 个 tag    |
+| ② 商店上架 | 审核通过并公开发布        | 出现商店 URL，安装主入口从源码构建换成商店                                            | **已于 2026-09-20 改完**，见下 |
 
-**②必须在拿到真实商店 URL 之后做**：URL 里的 Extension ID 只能由第 11 节那次「Dashboard 手动上传首个 zip」产生，提前用猜的 ID 写进文档会让所有链接 404——而隐私政策与商店链接打不开正是首审最常见的拒审理由。
+②的落点已全部落地，留此一行避免有人再去「补」：`docs/index.html` 与 `docs/en.html` 的 hero 主按钮是「添加到 Chrome / Add to Chrome」，两页 `#install` 卡片以商店为默认路径，两份 README 的 `### A` 就是 Chrome Web Store、首屏 CTA 第一位也换成它（页内锚点「三种安装方式 / Install options」退到第二位），`llms*.txt` 也已把商店 URL 列为第一个安装路径，本文件 §7 另有 Store URL 一行。商店表单文案本身从来不需要为上架而改——名称、摘要、详细描述都不含安装路径，这正是当初不写版本号的收益。
 
-### 12.1 翻转②要改的位置
+**①还没做，所以这几句此刻为真、推完 tag 就变假**，逐个改掉：
 
-| #   | 文件                 | 位置（按可见文案定位，别记行号）                      | 现在写的是                                                          | 改成                                                                    |
-| --- | -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 1   | `docs/index.html`    | hero 区主按钮 `class="btn btn-primary"`               | `在 GitHub 查看源码`                                                | `添加到 Chrome`，同上                                                   |
-| 2   | `docs/en.html`       | hero 区主按钮 `class="btn btn-primary"`               | `View source on GitHub` → 仓库                                      | `Add to Chrome` → 商店 URL；原 GitHub 链接降为 ghost 按钮留作次入口     |
-| 3   | `docs/index.html`    | `#install` 区第一张卡「运行环境」                     | 「商店上架准备中，因此需以『加载已解压的扩展程序』方式加载」        | 同上                                                                    |
-| 4   | `docs/en.html`       | `#install` 区第一张卡 `Runtime requirements`          | 「The store listing is in preparation, so load the unpacked build」 | 商店装法是默认路径，源码构建改为「开发者」小节的补充说明                |
-| 5   | `README.md`          | `## 安装` 首句 + `### 方式 A`                         | 「Chrome 应用商店上架准备中」                                       | 商店为方式 A；「从源码构建」降为方式 B，并把「首个 tag 之前请用 B」删掉 |
-| 6   | `README.en.md`       | `## Install` 首句 + `### A. Prebuilt package`         | 「The Chrome Web Store listing is in preparation」                  | 同上                                                                    |
-| 7   | `docs/llms.txt`      | 运行要求段                                            | 「the only install path is to build from source」                   | 商店 URL 列为第一个安装路径，源码构建附后                               |
-| 8   | `docs/llms-full.txt` | 头部 `Store listing / 商店状态`                       | 「no store URL exists yet」                                         | 直接写商店 URL，并把「上架准备中」整句删掉                              |
-| 9   | `docs/llms-full.txt` | 安装路径 B（`Tagged release`）                        | 「No tag has been published yet」                                   | 打 tag 后这条就不再成立，改为描述 Releases 是回退路径                   |
-| 10  | `docs/llms-full.txt` | 安装路径 C（`Chrome Web Store`）                      | 「In preparation; there is no store URL」                           | 写商店 URL；C 提到最前或与 B 调换顺序                                   |
-| 11  | `docs/llms-full.txt` | 「常见误解」清单第 6 条（「它在 Chrome 商店可下载」） | 「not yet」                                                         | 这条误解不再成立，整条删除或改成「已上架，商店 URL 见上」               |
-| 12  | `CHROMEWEBSTORE.md`  | 第 8 节 Version History 的 Status 列                  | `Draft`                                                             | 改 `Published` 并补发布日期；同时清掉该节下方的 ⚠️ 待发布提示           |
-| 13  | `CHROMEWEBSTORE.md`  | 第 7 节 Developer Info                                | 只有 Support URL / Homepage URL                                     | 可增一行 Store URL，便于后续文档互链                                    |
+| #   | 文件                                        | 位置                                       | 现在写的是                                                  | 推 tag 后改成                                    |
+| --- | ------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------ |
+| 1   | `docs/llms.txt` 与 `llms-full.txt` 的链接节 | 预构建产物那一行                           | 「尚未发布第一个 tag / no tag published yet」（两份各一处） | 删掉那半句，保留「每个 tag 自动附带」            |
+| 2   | `docs/llms-full.txt`                        | 安装路径 B                                 | 「**No tag has been published yet**，这条路不可用」         | 整句删除，B 成为可用的回退路径                   |
+| 3   | `docs/llms-full.txt`                        | 「常见误解」第 6 条                        | 「商店为真，但没有任何 git tag」                            | 不再构成误解，删掉或改成「商店与 Releases 都有」 |
+| 4   | 四页落地页与 `llms*.txt`                    | 页脚 `v1.0.0`、`softwareVersion`、页脚日期 | 仍是 1.0.0 / 旧日期                                         | 与 `package.json` 对齐，日期与 sitemap 同日      |
+| 5   | 本文件 §8                                   | `1.1.0` 那一行                             | 「待提审」                                                  | 填实际提审日期与状态                             |
+| 6   | `README.md` / `.en.md`                      | `### B. GitHub Releases`                   | 那句 ⚠️「仓库还没有打出第一个 tag，此刻 Releases 是空的」   | 删掉那一句——首个 tag 之后它是假的                |
+| 7   | `docs/llms-full.txt`                        | 头部 `Last verified` 那一行                | 「working version is 1.1.0, **not yet released**」          | 改成已发布版本，与页脚与 `softwareVersion` 同值  |
 
-第 1 节的**商店表单文案本身不用改**——名称、摘要、详细描述都不含安装路径或版本号，这也是当初不写版本号的收益。同一批能力主张继续与 `README.md`、`docs/`、`CHANGELOG.md` 保持同一事实即可。
-
-### 12.2 改完必须跑的守卫
-
-- `pnpm test`：`tests/docs-consistency.test.ts` 对中英落地页做**逐条对等**校验（`<summary>` 列表、FAQ 答案文本、结构化数据），所以第 1–4 项必须**两页同时改**，只改英文页会直接红。
-- 同一支测试的 `PAGES_URL_SOURCES` 要求清单里每个文件仍然引用至少一个 Pages URL。第 8–11 项若把 `llms-full.txt` 里的站点信息整段替换，确认页脚/源码链接没被一起删掉。
-- 第 5–6 项同样必须**两篇同改**：同一支测试在守中英 README 的章节数对等、语言互链方向与二维码路径可解析，只改一边会红。改完跑一次 `pnpm exec prettier --check README.md README.en.md`（两份 README 的徽章与表格格式由 prettier 管）。
-- 第 3–4 项改完在浏览器里目测两页 `#install` 区（含禁用 JS 的降级态），确认没有残留「上架准备中」的半句。
-- 商店侧动作与本节无关：`pnpm assets` 生成的图里烧的是**产品站地址**，不含商店 URL，所以②不需要重跑图。
+改完必须跑的守卫：`pnpm test`（`tests/docs-consistency.test.ts` 对中英落地页逐条对等，第 4 项两页同改；它同时要求 `CHANGELOG.md` 存在 `## [<package.json 版本>]` 小节，并在 §0 预算表偏离正文实测码点时变红）+ `pnpm exec prettier --check` 只作用于本次改动的 `.md`。落地页正文若动过，把该页 `dateModified`、页脚「最后更新」与 `docs/sitemap.xml` 对应 `<lastmod>` 一起推到同一天。`pnpm assets` 生成的商店图里烧的是**产品站地址**，不含版本号也不含商店 URL，所以①不需要重跑图——除非界面本身变了，那要走第 2 节重拍。

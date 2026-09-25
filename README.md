@@ -14,11 +14,11 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
 [![产品站](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/)
 [![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
-[![Chrome Web Store](https://img.shields.io/badge/CWS-v1.0.0-409eff?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dednngakllblfilbndkaggphohmpgcbg?label=CWS&color=409eff&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
 
-<img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手配置页规则总览：FAT → UAT 通配符重写、Mock API、阻断埋点三条规则，顶部代理总开关与搜索筛选" width="100%" />
+<img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手配置页规则总览：七条演示规则覆盖 FAT → UAT 通配符重写、注入凭据变量、Mock API、延迟、阻断埋点与 WebSocket 转发，顶部代理总开关与搜索筛选" width="100%" />
 
-**[📥 立即安装](#-安装) · [⚡ 一分钟配出第一条规则](#一分钟配出第一条规则) · [🌐 产品站](https://liaolongdong.github.io/cross-origin-proxy/) · [💬 交流群](#-交流与反馈)**
+**[🛒 从 Chrome 应用商店添加](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg) · [📥 三种安装方式](#-安装) · [⚡ 一分钟配出第一条规则](#一分钟配出第一条规则) · [🌐 产品站](https://liaolongdong.github.io/cross-origin-proxy/) · [💬 交流群](#-交流与反馈)**
 
 > 页面连着 FAT，你要的修复只在 UAT。传统做法要么改每个项目的 devServer 代理、要么硬塞一个 token、要么请后端放开 CORS 再发一次版。这里只需要在 Chrome 里加一条规则：匹配 `https://fat-api.example.com/*`，目标 `https://uat-api.example.com`。同一套规则还能改写请求头与响应、Mock 数据、注入延迟、阻断请求、转发 WebSocket。
 
@@ -45,16 +45,19 @@
 
 ## 📸 界面预览
 
-四张图对应四种日常动作：**建规则 → 先验证会不会命中 → 看请求实际发生了什么 → 快捷开关**。点图可看原图。
+六张图对应六种日常动作：**看全局 → 建规则 → 先验证会不会命中 → 看请求实际发生了什么 → 快捷开关 → 迁移配置**。点图可看原图。
 
 <table>
   <tr>
-    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="规则编辑弹窗：匹配、重写、Mock、延迟、阻断一处配齐" width="100%" /></a><br /><b>规则编辑器</b>——匹配 / 重写 / 请求头与响应覆盖 / 条件化 Mock / 延迟 / 阻断 / 重试，一个表单配齐，带实时冲突提示</td>
+    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="规则编辑弹窗：正则匹配模式、重写目标、HTTP 方法、查询参数与请求头覆盖" width="100%" /></a><br /><b>规则编辑器</b>——匹配 / 重写 / 请求头与响应覆盖 / 条件化 Mock / 延迟 / 阻断 / 重试，一个表单配齐，带实时冲突提示</td>
     <td width="50%" align="center"><a href="./docs/assets/img/url-tester.jpg"><img src="./docs/assets/img/url-tester.jpg" alt="URL 匹配预演：命中规则、重写后地址与转发通道" width="100%" /></a><br /><b>URL 匹配预演</b>——粘贴任意地址，实时查看命中规则、重写结果、转发通道与被遮蔽规则</td>
   </tr>
   <tr>
-    <td align="center"><a href="./docs/assets/img/request-log.jpg"><img src="./docs/assets/img/request-log.jpg" alt="请求日志抽屉：方法、状态、耗时与命中统计" width="100%" /></a><br /><b>请求日志</b>——最近 500 条，可筛选、复制为 cURL、导出 HAR，含两条通道各自的命中统计</td>
+    <td align="center"><a href="./docs/assets/img/request-log.jpg"><img src="./docs/assets/img/request-log.jpg" alt="请求日志抽屉：总计与成功失败、两条通道各自的命中统计、原始与代理地址并排" width="100%" /></a><br /><b>请求日志</b>——最近 500 条，可筛选、复制为 cURL、导出 HAR，含两条通道各自的命中统计</td>
     <td align="center"><a href="./docs/assets/img/popup.jpg"><img src="./docs/assets/img/popup.jpg" alt="扩展弹窗：总开关、今日请求与快捷入口" width="100%" /></a><br /><b>弹窗</b>——总开关、今日请求、自动关闭倒计时、当前页命中预演与「为本页创建规则」</td>
+  <tr>
+    <td align="center"><a href="./docs/assets/img/config-import.jpg"><img src="./docs/assets/img/config-import.jpg" alt="导入前预览：预计写入 2 条规则、2 条同键规则将被跳过，并点名不会生效的目标地址" width="100%" /></a><br /><b>导入与导出</b>——粘贴或选择 JSON 后先「预览变更」：写入几条、哪几条因同名同匹配模式被跳过、哪个目标地址不会生效，导入前就说清楚；同一弹窗还负责导出（分享模式剔除凭据）、cURL / HAR 导入与整套替换前的恢复点</td>
+    <td align="center"><a href="./docs/assets/img/credential-variables.jpg"><img src="./docs/assets/img/credential-variables.jpg" alt="偏好设置弹窗：主题颜色、界面语言、自动关闭代理与凭据变量表，变量真值以圆点遮蔽" width="100%" /></a><br /><b>凭据变量</b>——token 只在本机存一份，规则里写 <code>{{名称}}</code> 引用，代发那一刻才展开；导出、日志与页面侧脚本都拿不到真值</td>
   </tr>
 </table>
 
@@ -95,6 +98,8 @@
 ### B. GitHub Releases（预构建包）
 
 每个 `v*` tag 的 [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) 都附带构建好的 zip：
+
+> 仓库还没有打出第一个 tag，所以**此刻 Releases 是空的**——这条路径要等首个 tag 跑完发布链路才有产物。想马上用上请走 A（商店），或按 C 从源码构建。
 
 1. 下载并解压 zip。
 2. 打开 `chrome://extensions`。

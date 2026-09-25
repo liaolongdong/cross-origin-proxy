@@ -7,6 +7,16 @@
       content="width=device-width, initial-scale=1"
     />
     <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#ffffff"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#0e1621"
+    />
+    <meta
       name="google-site-verification"
       content="unD6BHVEHRxOhyZ353oO_77V8GXyLInc8gvbrh_ARbI"
     />
@@ -157,6 +167,11 @@
             "url": "https://liaolongdong.github.io/cross-origin-proxy/",
             "codeRepository": "https://github.com/liaolongdong/cross-origin-proxy",
             "downloadUrl": "https://github.com/liaolongdong/cross-origin-proxy/releases",
+            "installUrl": "https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg",
+            "sameAs": [
+              "https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg",
+              "https://github.com/liaolongdong/cross-origin-proxy"
+            ],
             "image": "https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-zh.png",
             "screenshot": [
               "https://liaolongdong.github.io/cross-origin-proxy/assets/img/rules-overview.jpg",
@@ -164,6 +179,8 @@
               "https://liaolongdong.github.io/cross-origin-proxy/assets/img/url-tester.jpg",
               "https://liaolongdong.github.io/cross-origin-proxy/assets/img/request-log.jpg",
               "https://liaolongdong.github.io/cross-origin-proxy/assets/img/popup.jpg",
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/config-import.jpg",
+              "https://liaolongdong.github.io/cross-origin-proxy/assets/img/credential-variables.jpg",
               "https://liaolongdong.github.io/cross-origin-proxy/assets/img/dark-theme.jpg"
             ],
             "license": "https://spdx.org/licenses/MIT.html",
@@ -655,7 +672,7 @@
                     r="3.2"
                   />
                   <path d="M12 1.5v2.6M12 19.9v2.6M1.5 12h2.6M19.9 12h2.6" /></svg></span
-              >它消掉了哪一类成本
+              >CORS 跨域报错的成本，出在哪三处
             </h2>
             <p class="section-lede">
               跨环境调试通常要付出三种成本之一：改后端、每个项目改一次配置，或者本地伪造一套构建。这款扩展把这三者收敛成一条浏览器规则，并对你打开的每个页面生效。
@@ -762,7 +779,7 @@
                 ><svg viewBox="0 0 24 24">
                   <path d="M10 6h10M10 12h10M10 18h10" />
                   <path d="M3.5 6.2 5 7.7 7.6 4.8M3.5 12.2 5 13.7 7.6 10.8M3.5 18.2 5 19.7 7.6 16.8" /></svg></span
-              >一条规则能做到哪些事
+              >一条代理规则能改什么：URL、请求头、响应与 Mock
             </h2>
             <p class="section-lede">
               匹配模式、目标地址与优先级是一条规则的骨架。其余能力都是可选且可叠加的——而你开启的每一项能力，同时也决定了这条规则走哪条通道。
@@ -1114,7 +1131,9 @@
               <h3>每天真正要碰的部分</h3>
               <p>
                 弹窗里集中了总开关、启用规则数、经扩展请求数（只统计后台通道）、本页近 5
-                分钟的网络层命中数、最近请求、规则快捷启停、自动关闭倒计时，以及本页地址命中预览和「为此页面创建规则」。数据行下方按需出现一行「页面自报」：那是一句话，只露两个数——这一页的
+                分钟的网络层命中数、最近请求、规则快捷启停、自动关闭倒计时、本页地址命中预览，以及「为此页面创建规则」——点后者时先看这一页自己发过哪些请求（本地
+                <code>performance</code> 条目里的 fetch/XHR
+                来源，最多六项），把接口地址列出来让你挑，而不是只把页面地址抄进规则；这一页问不到任何接口时，仍旧按页面地址预填。数据行下方按需出现一行「页面自报」：那是一句话，只露两个数——这一页的
                 JS
                 层拦到多少、其中多少交给后台代发（有回退时改说回退成了原生请求多少，没有回退但有超时时说的是多少个没等到响应），有读数时悬停才展开四个数与上报时刻，并注明同一请求可同时计入多项、不能相加，四个数按本次文档累计、导航即归零。回退与超时原本只在控制台留一行日志，而「一次都没拦到」与「这个页面本来没请求」在此之前长得一模一样。这四个数由页面自己上报、可被同页脚本伪造，所以只做诊断线索、不参与任何判定，措辞也始终写明是「自报」。工具栏角标显示代理状态；自动关闭（30
                 分钟至 4 小时，基于 <code>chrome.alarms</code>）会到点关掉总开关，忘了关的代理不会活过调试本身。
@@ -1183,10 +1202,13 @@
                     r="1.6"
                   />
                   <path d="M21 15.5 15.5 10 6 19.5" /></svg></span
-              >界面预览
+              >界面预览：规则配置、URL 匹配测试、请求日志与配置迁移
             </h2>
             <p class="section-lede">
-              以下均为当前版本的真实截图。配置页承载规则表、匹配测试、请求日志与导入导出；弹窗把总开关与当前页预览放在一步可达的位置。
+              以下均为当前版本的真实截图（演示数据为 <code>fat-api.example.com</code> →
+              <code>uat-api.example.com</code
+              >，不含任何真实内网地址）。配置页承载规则表、匹配测试、请求日志与导入导出；弹窗把总开关与当前页预览放在一步可达的位置；凭据变量表让
+              token 只在本机存一份。
             </p>
           </div>
           <div class="gallery reveal">
@@ -1207,7 +1229,7 @@
                 <figure>
                   <img
                     src="assets/img/rules-overview.jpg"
-                    alt="规则列表：三条代理规则、能力徽标、优先级与状态列"
+                    alt="规则列表：七条演示规则的匹配模式、类型徽标、优先级、开关与行内操作"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1216,8 +1238,8 @@
                   <figcaption>
                     <b>规则列表</b
                     ><span
-                      >能力徽标（H · C · B · R · M · D · X ·
-                      WS）、拖拽排序的优先级、每条规则分网络层与后台两格显示的命中数，以及批量启停、批量删除与目标迁移。</span
+                      >通配符 / 正则 / 前缀三类匹配、能力徽标（H · C · B · R · M · D · X ·
+                      WS）、拖拽排序的优先级与行内开关；顶部一排筛选与批量启停，命中数按网络层与后台两格分开统计。</span
                     >
                   </figcaption>
                 </figure>
@@ -1226,7 +1248,7 @@
                 <figure>
                   <img
                     src="assets/img/rule-editor.jpg"
-                    alt="规则编辑弹窗：匹配模式、目标地址、请求头覆盖与 Mock 响应分区"
+                    alt="规则编辑弹窗：正则匹配模式、重写目标、HTTP 方法、查询参数与请求头覆盖"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1235,8 +1257,9 @@
                   <figcaption>
                     <b>规则编辑器</b
                     ><span
-                      >匹配、重写、方法过滤、查询参数注入、请求头与请求体覆盖、携带 Cookie、响应覆盖、条件化
-                      Mock、延迟、阻断与重试——全部在一个表单里，并带实时冲突提示。</span
+                      >一个表单配齐匹配、重写、方法过滤、查询参数注入、请求头与请求体覆盖、携带 Cookie；头值里直接写
+                      <code>{{名称}}</code> 引用凭据变量。往下滚还有响应覆盖、条件化
+                      Mock、延迟、阻断与重试，并带实时冲突提示。</span
                     >
                   </figcaption>
                 </figure>
@@ -1264,7 +1287,7 @@
                 <figure>
                   <img
                     src="assets/img/request-log.jpg"
-                    alt="请求日志抽屉：方法、状态、耗时与命中统计"
+                    alt="请求日志抽屉：总计与成功失败、两条通道各自的命中统计、原始与代理地址并排"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1273,8 +1296,9 @@
                   <figcaption>
                     <b>请求日志</b
                     ><span
-                      >最近 500 条，支持筛选与可调的自动刷新，完整详情视图、按原始请求地址复制为 cURL、HAR 导出，以及
-                      DNR 与后台通道各自的命中统计。</span
+                      >最近 500 条，按方法、状态、规则与 URL
+                      筛选，可开自动刷新；列表把原始地址与代理后的地址并排给出，详情视图支持复制为 cURL 与导出
+                      HAR，网络层与后台通道各自的命中统计分区显示。</span
                     >
                   </figcaption>
                 </figure>
@@ -1294,6 +1318,46 @@
                     ><span
                       >总开关、启用规则数、经扩展请求数（只统计后台通道）、本页近 5
                       分钟网络层命中数、最近请求、规则快捷启停、自动关闭倒计时、本页地址命中预览，以及「为此页面创建规则」。</span
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/config-import.jpg"
+                    alt="导入前预览：预计写入 2 条规则、2 条同键规则将被跳过，并点名不会生效的目标地址"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>导入与导出</b
+                    ><span
+                      >粘贴或选择 JSON
+                      后先点「预览变更」：这次写入几条、哪几条因同名同匹配模式被跳过、哪个目标地址不会生效，导入前就说清楚了。同一弹窗还负责导出（分享模式剔除凭据）、cURL
+                      / HAR 导入，以及整套替换前的配置恢复点。</span
+                    >
+                  </figcaption>
+                </figure>
+              </div>
+              <div class="slide">
+                <figure>
+                  <img
+                    src="assets/img/credential-variables.jpg"
+                    alt="偏好设置弹窗：主题颜色、界面语言、自动关闭代理与凭据变量表，变量真值以圆点遮蔽"
+                    width="1200"
+                    height="750"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <figcaption>
+                    <b>凭据变量与偏好</b
+                    ><span
+                      >token、appSecret 只存在本机一张变量表里，规则中写
+                      <code>{{名称}}</code>
+                      引用，代发那一刻才展开；配置导出、分享模式、日志与页面侧脚本都拿不到真值。同一弹窗还承载主题、语言与自动关闭。</span
                     >
                   </figcaption>
                 </figure>
@@ -1392,7 +1456,7 @@
                     r="2.8"
                   />
                   <path d="M18 9.3a9 9 0 0 1-9 9" /></svg></span
-              >工作原理
+              >工作原理：浏览器网络层重定向与后台代发两条通道
             </h2>
             <p class="section-lede">
               每条启用的规则在每次配置同步时从存储里重新分类。是这个分类决定请求由浏览器网络栈还是扩展后台应答，匹配测试器展示给你的也就是它的结果。总开关管着两条通道：关掉时网络层规则被整体清空，后台通道也原样放行请求。
@@ -1589,7 +1653,7 @@
                 class="section-icon"
                 aria-hidden="true"
                 ><svg viewBox="0 0 24 24"><path d="M2.5 20h5v-5h5v-5h5V5" /></svg></span
-              >四步开始使用
+              >四步开始使用：从安装到第一条代理规则
             </h2>
             <p class="section-lede">无需注册、无需服务器、无需安装证书。从克隆到第一条代理请求大约一分钟。</p>
           </div>
@@ -1863,7 +1927,7 @@ pnpm build</code></pre>
                   />
                   <path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7" />
                   <path d="M3 13h18" /></svg></span
-              >使用场景与对应的规则写法
+              >使用场景与规则写法：跨环境联调、Mock 假数据、弱网与超时
             </h2>
             <p class="section-lede">从场景到配置的最短路径。下表每一行都是扩展已实现的行为，不是变通方案。</p>
           </div>
@@ -1962,7 +2026,7 @@ pnpm build</code></pre>
                   <path d="M5 7.5h14" />
                   <path d="M5 7.5 2.6 13h4.8L5 7.5Z" />
                   <path d="M19 7.5 16.6 13h4.8L19 7.5Z" /></svg></span
-              >与其他方案对比
+              >与其他方案对比：devServer 代理、系统抓包与改头工具
             </h2>
             <p class="section-lede">
               表头是工具<em>类别</em>而非具体产品：同一类里的能力差异很大，请以你在用的工具实际文档为准。
@@ -2095,7 +2159,7 @@ pnpm build</code></pre>
                   />
                   <path d="M7.5 10.5 10 13l-2.5 2.5" />
                   <path d="M12.5 15.5h4" /></svg></span
-              >运行要求与开发命令
+              >安装方式与运行要求（Chrome MV3）
             </h2>
           </div>
           <div class="grid">
@@ -2153,7 +2217,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                 ><svg viewBox="0 0 24 24">
                   <path d="M12 3.5 5.2 5.9v5.4c0 4.1 2.8 7.1 6.8 8.6 4-1.5 6.8-4.5 6.8-8.6V5.9L12 3.5Z" />
                   <path d="m9.3 11.9 1.9 1.9 3.8-3.9" /></svg></span
-              >隐私与权限
+              >隐私与权限：数据只存在你本机
             </h2>
             <p class="section-lede">
               所有内容都存在本机的
@@ -2261,7 +2325,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
         id="faq"
         aria-labelledby="faq-title"
       >
-        <div class="wrap">
+        <div class="wrap wrap--faq">
           <div class="section-head">
             <h2 id="faq-title">
               <span
@@ -2275,7 +2339,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                   />
                   <path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.7.2-1.2.9-1.2 1.6v.4" />
                   <path d="M12 17.2h.01" /></svg></span
-              >常见问题
+              >跨域代理常见问题
             </h2>
             <p class="section-lede">
               页面内容也是机器可读的：同样的问答以 <code>FAQPage</code> 结构化数据发布，<a href="llms.txt">llms.txt</a>
@@ -2283,7 +2347,10 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             </p>
           </div>
           <div class="faq-list">
-            <h3 class="faq-category">
+            <h3
+              class="faq-category"
+              id="faq-basics"
+            >
               <span class="feature-icon"
                 ><svg
                   width="17"
@@ -2343,7 +2410,10 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               </p>
             </details>
 
-            <h3 class="faq-category">
+            <h3
+              class="faq-category"
+              id="faq-channels"
+            >
               <span class="feature-icon feature-icon--green"
                 ><svg
                   width="17"
@@ -2397,7 +2467,10 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               </p>
             </details>
 
-            <h3 class="faq-category">
+            <h3
+              class="faq-category"
+              id="faq-mock"
+            >
               <span class="feature-icon feature-icon--purple"
                 ><svg
                   width="17"
@@ -2446,7 +2519,10 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               </p>
             </details>
 
-            <h3 class="faq-category">
+            <h3
+              class="faq-category"
+              id="faq-sharing"
+            >
               <span class="feature-icon feature-icon--orange"
                 ><svg
                   width="17"
@@ -2495,7 +2571,10 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               </p>
             </details>
 
-            <h3 class="faq-category">
+            <h3
+              class="faq-category"
+              id="faq-privacy"
+            >
               <span class="feature-icon feature-icon--pink"
                 ><svg
                   width="17"
@@ -2530,6 +2609,42 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               </p>
             </details>
           </div>
+          <aside
+            class="faq-rail"
+            aria-label="常见问题辅助导航"
+          >
+            <nav
+              class="faq-rail-card"
+              aria-labelledby="faq-toc-title"
+            >
+              <h4 id="faq-toc-title">分类直达</h4>
+              <ol class="faq-toc">
+                <li>
+                  <a href="#faq-basics">基础与匹配<span class="faq-toc-n">4</span></a>
+                </li>
+                <li>
+                  <a href="#faq-channels">通道、CORS 与性能<span class="faq-toc-n">4</span></a>
+                </li>
+                <li>
+                  <a href="#faq-mock">Mock 与故障注入<span class="faq-toc-n">3</span></a>
+                </li>
+                <li>
+                  <a href="#faq-sharing">分享、限制与安全兜底<span class="faq-toc-n">3</span></a>
+                </li>
+                <li>
+                  <a href="#faq-privacy">隐私与兼容性<span class="faq-toc-n">2</span></a>
+                </li>
+              </ol>
+            </nav>
+            <div class="faq-rail-card faq-rail-card--key">
+              <h4>没找到答案？</h4>
+              <p>
+                问题还卡着就直接问：页脚的<a href="#community">微信交流群</a>（备注 <code>cxp</code>），或者开一条
+                <a href="https://github.com/liaolongdong/cross-origin-proxy/issues">GitHub issue</a>。
+              </p>
+              <p>附上日志与规则配置，通常一轮就能定位到是哪条规则、哪条通道。</p>
+            </div>
+          </aside>
         </div>
       </section>
       <section

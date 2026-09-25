@@ -1704,6 +1704,26 @@ ul.ticks li::before {
    邻居一起撑高（`align-items: start` 只能止住拉伸，止不住视觉上的空洞），
    而 FAQ 的读法是「从上往下扫问题、按需展开一条」——一列才是它的自然形状。
    max-width 让答案保持可读行长，左边缘与 .section-head 对齐。 */
+
+/* 右栏：宽屏下问答列收成 760px（英文答案在 880px 一行能排到九十几个字符），
+   省出来的一格放「分类直达」与「没找到答案」。16 条问答纵向近两千像素，
+   目录是唯一值得常驻的东西，所以右栏跟着滚。两栏合计 760 + 40 + 320 正好等于
+   .wrap 的内容宽，`space-between` 只在更窄处把余量变成栏距，而不是右边缘的空档。
+   窄于 1080px 退回单列、右栏落在问答之后：锚点照旧能点，禁 JS 也一样可读。 */
+.wrap--faq {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+
+/* 小节标题横跨两栏，并且交回给 grid 的 gap 控制间距：
+   `.section-head` 自带 30px 下边距，留着就是标题与问答之间凭空多出一道缝。 */
+.wrap--faq > .section-head {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
 .faq-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1719,6 +1739,9 @@ ul.ticks li::before {
   margin-top: 10px;
   font-size: 15px;
   font-weight: 700;
+
+  /* 目录跳的是分类标题，页头是 sticky 的：不留出这段，落点会被页头压住半行。 */
+  scroll-margin-top: 88px;
 }
 
 .faq-category:first-child {
@@ -1734,6 +1757,100 @@ ul.ticks li::before {
 .faq-category .feature-icon svg {
   width: 17px;
   height: 17px;
+}
+
+/* ---------- FAQ 右栏 ---------- */
+
+.faq-rail {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+
+  /* 单列那一档右栏是通栏的：不封顶的话，目录一行的标题与条数会被拉到九十来像素
+     的两端，读起来像两张表拼在一起。≥1080px 时它自己那格只有 320px，这条不生效。 */
+  max-width: 420px;
+}
+
+.faq-rail-card {
+  padding: 16px 18px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+  box-shadow: var(--lp-shadow);
+}
+
+/* 与 `.callout--key` 同一枚底色（同一个「下一步该去哪」的语义），但刻意不借它的
+   左边框：右栏是常驻栏，不是插叙，画一道竖线会读成引用。 */
+.faq-rail-card--key {
+  background: var(--lp-accent-soft);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.faq-rail-card h4 {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--lp-ink-faint);
+}
+
+.faq-rail-card p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--lp-ink-soft);
+}
+
+.faq-rail-card p + p {
+  margin-top: 8px;
+}
+
+/* 目录一行一个分类，条数右对齐并用等宽数字；两页的分类顺序由
+   tests/docs-consistency 的右栏守卫钉住。 */
+.faq-toc {
+  display: grid;
+  gap: 1px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.faq-toc a {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 5px 8px;
+  margin: 0 -8px;
+  font-size: 14px;
+  color: var(--lp-ink-soft);
+  border-radius: var(--lp-radius-sm);
+}
+
+.faq-toc a:hover {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
+}
+
+.faq-toc-n {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lp-ink-faint);
+}
+
+@media (width >= 1080px) {
+  .wrap--faq {
+    grid-template-columns: minmax(0, 760px) 320px;
+    gap: 34px 40px;
+    justify-content: space-between;
+  }
+
+  /* sticky 要靠 `.wrap--faq` 上的 `align-items: start`：默认的 stretch 会把右栏
+     拉成问答列那么高，它自己就是那一格，再也没有可移动的空间。 */
+  .faq-rail {
+    position: sticky;
+    top: 88px;
+  }
 }
 
 details {

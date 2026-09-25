@@ -70,6 +70,24 @@ const BILINGUAL_PAIRS: Array<[string, string]> = [
   ['docs/en-alternatives.html', 'docs/alternatives.html'],
 ];
 
+/**
+ * 出现商店链接的文档。扩展 ID 写错的代价很直接：README 首屏与落地页
+ * `installUrl` / `sameAs` 全部指向 404，而 JSON-LD 里的错 ID 不会有任何渲染报错。
+ * `marketing/` 是 gitignore 的本地产物，因此按存在与否取用。
+ */
+const STORE_URL_SOURCES = [
+  'README.md',
+  'README.en.md',
+  'CHROMEWEBSTORE.md',
+  'docs/index.html',
+  'docs/en.html',
+  'docs/alternatives.html',
+  'docs/en-alternatives.html',
+  'docs/llms.txt',
+  'docs/llms-full.txt',
+  'marketing/directory-submissions.md',
+].filter(exists);
+
 describe('[Docs] 仓库自动化与文档一致性', () => {
   // ═══════════════════════════════════════════════════════════════════════════
   // Pages URL：产品站与隐私政策的可达性
@@ -259,6 +277,41 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       const enCount = [...faqHtml(en).matchAll(/<details\b/g)].length;
       expect(enCount, `${en} 的 FAQ 小节应含与 schema 条数一致的折叠项`).toBeGreaterThan(0);
       expect([...faqHtml(zh).matchAll(/<details\b/g)].length).toBe(enCount);
+    });
+
+    /**
+     * 右栏目录是在替读者数问题：写「4」而那一类其实有 5 条，页面就开始撒谎，而补一条
+     * FAQ 的人只会记得改问答、不会记得回来改目录。所以把两边的数咬住：每个分类都带锚点、
+     * 目录与分类同序同集合、每格条数等于该分类到下一个分类之间的 `<details>` 数，
+     * 外加中英两页必须是同一批锚点（切语言时目录不能跳到页面上不存在的位置）。
+     *
+     * 只针对两份落地页：对比页也有 `#faq` 小节，但它没有分类分组，也就没有目录可钉。
+     */
+    it('中英落地页的 FAQ 右栏目录与分类一一对应、条数不谎报', () => {
+      const [landingEn, landingZh] = BILINGUAL_PAIRS[0];
+      /** 分类：`[锚点 id, 该分类下的折叠条数]`，保持文档顺序。 */
+      const categoriesOf = (file: string): Array<[string, number]> => {
+        const html = faqHtml(file);
+        const marks = [...html.matchAll(/<h3\b[^>]*\bid="([^"]+)"/g)].map(m => [m[1], m.index] as [string, number]);
+        return marks.map(([id, start], i) => {
+          const end = marks[i + 1]?.[1] ?? html.length;
+          return [id, [...html.slice(start, end).matchAll(/<details\b/g)].length] as [string, number];
+        });
+      };
+
+      /** 目录：`[锚点 href, 声明的条数]`，保持文档顺序。 */
+      const tocOf = (file: string): Array<[string, number]> =>
+        [...faqHtml(file).matchAll(/<a href="#([^"]+)">[^<]*<span class="faq-toc-n">(\d+)<\/span>/g)].map(
+          m => [m[1], Number(m[2])] as [string, number],
+        );
+
+      for (const file of [landingEn, landingZh] as const) {
+        expect(categoriesOf(file), `${file} 的每个 FAQ 分类都应带目录可达的锚点`).toHaveLength(5);
+        expect(tocOf(file), `${file} 的右栏目录与分类不一致（锚点、顺序或条数）`).toEqual(categoriesOf(file));
+      }
+      expect(Object.fromEntries(tocOf(landingEn)), `${landingEn} 与 ${landingZh} 的目录锚点或条数不一致`).toEqual(
+        Object.fromEntries(tocOf(landingZh)),
+      );
     });
 
     /**
@@ -873,6 +926,28 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
   describe('Chrome 商店提审素材', () => {
     const doc = read('CHROMEWEBSTORE.md');
+
+    /**
+     * 全仓库的商店链接必须共用同一个扩展 ID，真值取 `CHROMEWEBSTORE.md` 的 Store URL 行。
+     *
+     * 只匹配「`detail/` 后紧跟一段无连字符的 slug」，因此对比页里引用的竞品链接
+     * （`detail/<slug>/<id>` 形式，slug 含连字符）不会被误计。此前实测存在三种写法
+     * （30 位漏字、32 位换字、真值），JSON-LD 的那两份正是错的。
+     */
+    it('所有商店链接共用同一个扩展 ID', () => {
+      const truth = doc.match(/chromewebstore\.google\.com\/detail\/([a-z0-9]{32})(?![a-z0-9-])/)?.[1];
+      expect(truth, 'CHROMEWEBSTORE.md 的 Store URL 里应能解析出 32 位扩展 ID').toBeTruthy();
+
+      const ids = STORE_URL_SOURCES.flatMap(file => [
+        ...read(file)
+          .matchAll(/chromewebstore\.google\.com\/detail\/([a-z0-9]+)(?![a-z0-9-])/g)
+          .map(m => ({ file, id: m[1] })),
+      ]);
+      expect(ids.length, '文档里应当出现商店链接').toBeGreaterThan(0);
+
+      const wrong = ids.filter(row => row.id !== truth).map(row => `${row.file}: ${row.id}`);
+      expect([...new Set(wrong)].sort(), '存在与 CHROMEWEBSTORE.md 真值不一致的商店 ID').toEqual([]);
+    });
 
     /** 取某个小节区间内的全部 ``` 代码块（商店表单的可粘贴值就放在这里）。 */
     const blocksIn = (from: string, to: string): string[] => {

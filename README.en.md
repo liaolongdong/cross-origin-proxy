@@ -14,11 +14,11 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](./CONTRIBUTING.md)
 [![Product site](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/en.html)
 [![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
-[![Chrome Web Store](https://img.shields.io/badge/CWS-v1.0.0-409eff?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dednngakllblfilbndkaggphohmpgcbg?label=CWS&color=409eff&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
 
-<img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy options page: three rules — FAT to UAT wildcard rewrite, a mocked API and a blocked tracker — plus the global switch and search filters" width="100%" />
+<img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy options page: seven demo rules covering a FAT to UAT wildcard rewrite, an injected credential variable, a mocked API, an added delay, a blocked tracker and a WebSocket rewrite, plus the global switch and search filters" width="100%" />
 
-**[📥 Install it](#-install) · [⚡ First rule in one minute](#first-rule-in-one-minute) · [🌐 Product site](https://liaolongdong.github.io/cross-origin-proxy/en.html) · [💬 Community](#-community--feedback)**
+**[🛒 Add to Chrome](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg) · [📥 Install options](#-install) · [⚡ First rule in one minute](#first-rule-in-one-minute) · [🌐 Product site](https://liaolongdong.github.io/cross-origin-proxy/en.html) · [💬 Community](#-community--feedback)**
 
 > Your frontend runs against FAT, the fix you need only exists on UAT. Instead of editing a devServer proxy per project, hardcoding a token, or asking the backend to open CORS and redeploy, you add one rule in Chrome: match `https://fat-api.example.com/*`, target `https://uat-api.example.com`, done. The same rule set can also rewrite headers and responses, mock data, inject latency, block requests and forward WebSocket.
 
@@ -45,16 +45,19 @@ Built with [WXT](https://wxt.dev) + Vue 3 + TypeScript + Element Plus + Vite, on
 
 ## 📸 Interface preview
 
-The four screens map to the four everyday actions: **write a rule → check what it matches → see what actually happened → flip the switch**. Click any screenshot for the full-size image.
+The six screens map to six everyday actions: **see the whole picture → write a rule → check what it matches → see what actually happened → flip the switch → move config between machines**. Click any screenshot for the full-size image.
 
 <table>
   <tr>
-    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="Rule editor: matching, rewriting, mock, delay and block in one form" width="100%" /></a><br /><b>Rule editor</b> — matching / rewriting / header & response overrides / conditional mock / delay / block / retry in one form, with live conflict hints</td>
+    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="Rule editor: regex match pattern, rewrite target, HTTP methods, query and header overrides" width="100%" /></a><br /><b>Rule editor</b> — matching / rewriting / header & response overrides / conditional mock / delay / block / retry in one form, with live conflict hints</td>
     <td width="50%" align="center"><a href="./docs/assets/img/url-tester.jpg"><img src="./docs/assets/img/url-tester.jpg" alt="URL match tester: matched rule, rewritten URL and forwarding channel" width="100%" /></a><br /><b>URL match tester</b> — paste any URL to see the matched rule, rewrite result, forwarding channel and shadowed rules in real time</td>
   </tr>
   <tr>
-    <td align="center"><a href="./docs/assets/img/request-log.jpg"><img src="./docs/assets/img/request-log.jpg" alt="Request log drawer: method, status, duration and hit stats" width="100%" /></a><br /><b>Request log</b> — last 500 entries, filterable, copy as cURL, HAR export, with per-channel hit statistics</td>
+    <td align="center"><a href="./docs/assets/img/request-log.jpg"><img src="./docs/assets/img/request-log.jpg" alt="Request log drawer: totals, per-channel hit stats, original and proxied URLs side by side" width="100%" /></a><br /><b>Request log</b> — last 500 entries, filterable, copy as cURL, HAR export, with per-channel hit statistics</td>
     <td align="center"><a href="./docs/assets/img/popup.jpg"><img src="./docs/assets/img/popup.jpg" alt="Extension popup: global switch, today's requests and quick links" width="100%" /></a><br /><b>Popup</b> — global switch, today's requests, auto-off countdown, current-page hit preview and "create a rule for this page"</td>
+  <tr>
+    <td align="center"><a href="./docs/assets/img/config-import.jpg"><img src="./docs/assets/img/config-import.jpg" alt="Import preview: two rules will be written, two same-key rules will be skipped, and the target URL that would take no effect is named" width="100%" /></a><br /><b>Import and export</b> — paste or pick a JSON file and hit Preview first: how many rules get written, which are skipped for sharing a name and match pattern, and which target URL would take no effect; the same dialog covers export with credential-stripping share mode, cURL / HAR import and the restore points taken before a whole-set replace</td>
+    <td align="center"><a href="./docs/assets/img/credential-variables.jpg"><img src="./docs/assets/img/credential-variables.jpg" alt="Preferences dialog: theme colours, interface language, auto-off and the credential variable table with masked values" width="100%" /></a><br /><b>Credential variables</b> — each token lives in one local table; rules reference it as <code>{{NAME}}</code> and the real value is expanded only at send time, so exports, logs and page scripts never see it</td>
   </tr>
 </table>
 
@@ -95,6 +98,8 @@ Install directly from [Chrome Web Store](https://chromewebstore.google.com/detai
 ### B. GitHub Releases (prebuilt package)
 
 Every `v*` tag on [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) includes a built zip:
+
+> No tag has been cut yet, so **Releases is empty right now** — this path has an artifact only after the first tag goes through the release workflow. Use A (the store) or C (build from source) in the meantime.
 
 1. Download and unzip the file.
 2. Open `chrome://extensions`.

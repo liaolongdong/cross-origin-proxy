@@ -16,20 +16,23 @@
 | Social preview      | 所有聊天工具、Twitter/X、Slack、掘金/知乎链接卡（1280×640） | 分享时只显示灰底仓库名，点击率显著下降                  |
 | Pages Source        | 产品站与隐私政策的托管开关                                  | `privacy.html` 打不开是 Chrome 商店首审最常见的拒审理由 |
 
-## 0.1 当前实测状态（2026-09-18，用 §7 的命令可复核）
+## 0.1 当前实测状态（2026-09-22，用 §7 的命令可复核）
 
-| 字段               | 实测值                                                              | 结论                                            |
-| ------------------ | ------------------------------------------------------------------- | ----------------------------------------------- |
-| `description`      | **已填**，与 §1 逐字一致                                            | §1 已完成                                       |
-| `homepage`         | **已填**，就是 §2 那条产品站 URL                                    | §2 已完成                                       |
-| topics             | `[]`（0 个）                                                        | §3 未填                                         |
-| `has_pages`        | `true`；§7 列的 7 个 URL 全部 200（含两个对比页与 `llms-full.txt`） | §5 已经切到 GitHub Actions 源，Pages 链路是通的 |
-| `has_wiki`         | `true`                                                              | 建议关闭（理由见 §8），需你确认                 |
-| `v*` tag / Release | 0 个 tag、0 个 Release                                              | README 的 `Release` 徽章与「方式 A」都还是空态  |
-| `stargazers_count` | 1                                                                   | —                                               |
-| Social preview     | API 读不出来                                                        | 只能在设置页目测                                |
+| 字段               | 实测值                                                                                                               | 结论                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `description`      | **已填**，214 码点，与 §1 的代码块逐字节相同（含结尾那句中文检索词）                                                 | §1 已完成                                                                 |
+| `homepage`         | **已填**，就是 §2 那条产品站 URL                                                                                     | §2 已完成                                                                 |
+| topics             | **20 个，已用满上限**                                                                                                | §3 已完成；只有 `request-interceptors` 是复数，与 §3 清单的单数差一个 `s` |
+| `has_pages`        | `true`；§7 列的 URL 全部 200（另实测 `sitemap.xml` 与 `robots.txt` 也 200）                                          | §5 的源已切到 GitHub Actions，Pages 链路是通的                            |
+| `has_wiki`         | `true`                                                                                                               | 建议关闭（理由见 §8），需你确认                                           |
+| `v*` tag / Release | 本地与 GitHub 均 **0 个 tag、0 个 Release**                                                                          | README 的 `Release` 徽章与「方式 B」都还是空态                            |
+| `pushed_at`        | `2026-09-20T05:00:41Z`（本地领先 19 个提交，这个数每提交一次就变，用 `git rev-list --count origin/main..main` 复核） | 远端、产品站、商店看到的一切都比本地慢一个批次                            |
+| `stargazers_count` | 1                                                                                                                    | —                                                                         |
+| Social preview     | 匿名 API 读不出来（`security_and_analysis` 同样为 `null`）                                                           | 只能在设置页目测；私密漏洞报告同理，§6 要人工确认                         |
 
-**§1 与 §2 已落库，GitHub 侧只剩 §3 的 topics 一项没填（20 个 slug 已备好，粘贴即可），而它正是话题页被动流量的唯一入口。**Pages 侧已经没有瓶颈——隐私政策、`llms.txt` 与两个对比页都可达，商店首审最常见的「隐私政策打不开」在这里不成立。剩下的曝光量差距按代价排序：topics（一次粘贴）、社交预览（§4，图片已有）、首个 `v*` tag（README 的 `Release` 徽章与 HowTo 第一步都指向它）。
+**§1–§3、§5 都已落库，GitHub 侧的一次性清单只剩 §4 社交预览（图片已有，只能手动传）与 §6 私密漏洞报告勾选，外加 §8 那条「关 wiki」的建议。**
+
+现在真正的曝光瓶颈不在设置页，而在**没有任何东西被推出去**：0 个 tag 意味着 Releases 空、`Release` 徽章画不出数、README 的「方式 B」是空口承诺、`docs/` 落地页的 HowTo 第一步指向一个空页面；18 个未推的提交又让产品站停在上一批内容。所以下面这些"再优化"都比不上把这一批推出去：按 [RELEASING.md](./RELEASING.md) §2 提一个 `chore(release): v1.1.0` 提交、打 tag、`git push origin main v1.1.0`，推完回头把 §12 那六处「尚无 tag」的句子翻正（清单在 `CHROMEWEBSTORE.md` §12 ①）。
 
 ## 1. About → Description
 
@@ -178,15 +181,15 @@ done
 curl -s https://api.github.com/repos/liaolongdong/cross-origin-proxy \
   | grep -E '"(description|homepage|has_pages|default_branch)"'
 
-# topics（GitHub 把它放在独立端点）
+# topics（GitHub 把它放在独立端点；本机没有 jq，用 python3 数）
 curl -s -H "Accept: application/vnd.github.mercy-preview+json" \
   https://api.github.com/repos/liaolongdong/cross-origin-proxy/topics \
-  | jq '.names | length'
+  | python3 -c 'import json,sys; n=json.load(sys.stdin)["names"]; print(len(n), n)'
 ```
 
-期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 都应返回 200。两个例外窗口：本轮把中文页搬到站点根、英文页改名带 `en` 前缀，在 `docs/**` 推上 `main` 且 `deploy-pages` 跑完之前 `/en.html` 与 `/en-alternatives.html` 仍是 404，属预期而不是配置错。旧的 `/zh.html` 与 `/zh-alternatives.html` 已下线且**没有 301**（Pages 是纯静态目录，没有重写规则），所以仓库内任何文档都不许再引用它们——`tests/docs-consistency.test.ts` 已把这条钉死。
+期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 都应返回 200——2026-09-22 实测七个全绿，另外 `sitemap.xml` 与 `robots.txt` 也是 200。中文页在站点根、英文页带 `en` 前缀这次搬迁**已经在远端生效**，`/en.html` 与 `/en-alternatives.html` 不再是 404。旧的 `/zh.html` 与 `/zh-alternatives.html` 已下线且**没有 301**（Pages 是纯静态目录，没有重写规则），所以仓库内任何文档都不许再引用它们——`tests/docs-consistency.test.ts` 已把这条钉死。
 
-还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（因为还没有任何 Release），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。
+还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（因为还没有任何 Release，2026-09-22 实测仍是 0 个 tag），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。`CWS` 那枚已改成 shields 的商店版本端点，**不需要每次发版手改**：它显示的是商店在线版本，本轮之前一直是 `v1.0.0`。
 
 ## 8. 本文刻意没有做的事（需要时另行确认）
 

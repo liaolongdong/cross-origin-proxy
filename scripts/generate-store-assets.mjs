@@ -10,12 +10,15 @@
  * - `store-assets/`：商店上传原图（精确尺寸 PNG）。属于可再生的构建产物，已加入 .gitignore。
  * - `docs/assets/`：落地页 / Open Graph 用图（压缩 JPG + PNG）。需要入库，Pages 直接托管。
  *
+ * 原图按语言分目录：`screenshots/*.png` 是中文界面（落地页与 README 只用这一套），
+ * `screenshots/en/*.png` 是英文界面（`--en` 生成商店图时优先取它，缺失则回落中文原图）。
+ *
  * 用法：
  *   node scripts/generate-store-assets.mjs          # 中文文案（默认）
  *   node scripts/generate-store-assets.mjs --en     # 英文文案（用于英文本地化列表）
  */
 import sharp from 'sharp';
-import { mkdirSync, readFileSync } from 'fs';
+import { mkdirSync, readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -49,14 +52,23 @@ const PAD_X = 56;
 const CAPTION_H = 118;
 
 /**
- * 参与导出的截图。最多取前 5 张上传 Chrome Web Store，第 6 张仅用于落地页。
- * @type {Array<{ file: string, slug: string, alt: Record<string, string>, caption: Record<string, { title: string, sub: string }> }>}
+ * 参与导出的截图。`store: true` 的按顺序取前 5 张上传 Chrome Web Store（商店硬上限就是 5 张），
+ * `store: false` 的仅用于落地页与 README。
+ *
+ * 注释文案（`caption` / `alt`）必须与 `screenshots/` 里那张图**实际画得出来的东西**一致：
+ * 弹窗表单是可滚动的，截图只拍到首屏，所以「Mock / 延迟 / 阻断」这类在下半部分的字段
+ * 不能写进对应那张图的说明里。
+ * @type {Array<{ file: string, slug: string, store: boolean, alt: Record<string, string>, caption: Record<string, { title: string, sub: string }> }>}
  */
 const SHOTS = [
   {
     file: 'opt-options-main.png',
     slug: '01-rules-overview',
-    alt: { zh: '规则总览页', en: 'Rules overview' },
+    store: true,
+    alt: {
+      zh: '规则总览页：七条规则的匹配模式、类型徽标、优先级与开关',
+      en: 'Rules overview: seven rules with patterns, type badges, priority and switches',
+    },
     caption: {
       zh: {
         title: '一条规则，把 FAT 前端指到 UAT 后端',
@@ -71,19 +83,30 @@ const SHOTS = [
   {
     file: 'opt-rule-dialog.png',
     slug: '02-rule-editor',
-    alt: { zh: '规则编辑弹窗', en: 'Rule editor dialog' },
+    store: true,
+    alt: {
+      zh: '规则编辑弹窗：正则匹配、重写目标、方法限定、查询参数与请求头覆盖',
+      en: 'Rule editor: regex match, rewrite target, method filter, query and header overrides',
+    },
     caption: {
-      zh: { title: '重写、Mock、延迟、阻断，一处配齐', sub: '请求头 / 请求体 / 响应字段改写，支持按 HTTP 方法限定' },
+      zh: {
+        title: '重写地址，顺手把请求头和查询参数也改了',
+        sub: '正则 / 通配符 / 前缀、HTTP 方法限定、查询参数注入、请求头覆盖与 {{凭据变量}} 引用',
+      },
       en: {
-        title: 'Rewrite, mock, delay and block in one form',
-        sub: 'Header / body / response field overrides with HTTP method filtering',
+        title: 'Rewrite the URL, override headers and query params too',
+        sub: 'Regex / wildcard / prefix, method filter, header overrides and {{credential variables}}',
       },
     },
   },
   {
     file: 'opt-rule-test.png',
     slug: '03-url-tester',
-    alt: { zh: 'URL 匹配预演', en: 'URL match tester' },
+    store: true,
+    alt: {
+      zh: 'URL 匹配预演：命中规则、重写后地址与转发通道',
+      en: 'URL match tester: matched rule, rewritten URL and forwarding channel',
+    },
     caption: {
       zh: { title: '上线前先预演：这条 URL 命中谁', sub: '实时显示命中规则、重写后的地址、转发通道与被遮蔽规则' },
       en: {
@@ -95,31 +118,84 @@ const SHOTS = [
   {
     file: 'opt-log-drawer.png',
     slug: '04-request-log',
-    alt: { zh: '请求日志抽屉', en: 'Request log drawer' },
+    store: true,
+    alt: {
+      zh: '请求日志抽屉：总计与成功失败、双通道命中统计、原始与代理地址并排',
+      en: 'Request log drawer: totals, per-channel hit stats, original and proxied URLs side by side',
+    },
     caption: {
-      zh: { title: '每一次代理都可复盘', sub: '方法 / 状态 / 耗时 / DNR 命中统计，一键复制为 cURL 或导出 HAR' },
+      zh: {
+        title: '每一次代理都可复盘',
+        sub: '按方法 / 状态 / 规则筛选，原始与代理地址并排，网络层与后台通道各自的命中数',
+      },
       en: {
         title: 'Every proxied request is reviewable',
-        sub: 'Method / status / duration / DNR hits, copy as cURL or export HAR',
+        sub: 'Filter by method / status / rule, original vs proxied URL, per-channel hit counts',
       },
     },
   },
   {
     file: 'opt-popup.png',
     slug: '05-popup',
-    alt: { zh: '弹窗快速开关', en: 'Popup quick panel' },
+    store: true,
+    alt: {
+      zh: '弹窗：总开关、活跃规则数、今日请求数与五个快捷入口',
+      en: 'Popup: master switch, active rules, requests today and five shortcuts',
+    },
     caption: {
-      zh: { title: '开关一按即生效，当前页命中看得见', sub: '全局开关、今日统计、自动关闭倒计时与当前页面命中预演' },
+      zh: {
+        title: '总开关一按即生效，规则与请求数就在旁边',
+        sub: '活跃规则数、今日经扩展请求数、规则列表、为当前页创建规则、请求日志与导入导出入口',
+      },
       en: {
-        title: 'Toggle and see the current page match instantly',
-        sub: 'Global switch, today stats, auto-off countdown and page hit preview',
+        title: 'One switch, with the counts right beside it',
+        sub: 'Active rules, requests today, rule list, create-rule-for-this-page, log and export',
+      },
+    },
+  },
+  {
+    file: 'opt-import-export.png',
+    slug: '06-config-import',
+    store: false,
+    alt: {
+      zh: '导入前预览：预计写入条数、被跳过的同键规则，以及点名出「不会生效」的目标地址',
+      en: 'Import preview: how many rules will be written, which same-key rules are skipped, and the target URL called out as taking no effect',
+    },
+    caption: {
+      zh: {
+        title: '导入前先预览：哪几条会进、哪几条被跳过',
+        sub: '合并只追加、不更新已有规则，同键但目标地址不同的条目会被点名，并给出改法',
+      },
+      en: {
+        title: 'Preview before importing: what lands, what is skipped',
+        sub: 'Merge appends instead of updating, so a same-key rule with a new URL is skipped and named',
+      },
+    },
+  },
+  {
+    file: 'opt-variables-dialog.png',
+    slug: '07-credential-variables',
+    store: false,
+    alt: {
+      zh: '偏好设置弹窗：主题与语言、自动关闭、凭据变量表（真值以圆点遮蔽）',
+      en: 'Preferences dialog: theme and language, auto-off, credential variables (values masked)',
+    },
+    caption: {
+      zh: {
+        title: '凭据只存本机一份，规则里写 {{名称}}',
+        sub: '代发那一刻才展开；配置导出、分享模式、日志与页面侧脚本都拿不到真值',
+      },
+      en: {
+        title: 'Keep credentials in one local table, reference them as {{NAME}}',
+        sub: 'Expanded only at send time; exports, share mode, logs and page scripts never see the real value',
       },
     },
   },
   {
     file: 'opt-dark-mode.png',
-    slug: '06-dark-theme',
-    alt: { zh: '深色主题', en: 'Dark theme' },
+    slug: '08-dark-theme',
+    store: false,
+    alt: { zh: '深色主题下的规则总览', en: 'Rules overview in dark theme' },
     caption: {
       zh: { title: '6 套主题 + 深色模式', sub: '中英双语界面，跟随系统或手动切换' },
       en: { title: 'Six themes plus dark mode', sub: 'Bilingual UI, follow the system or switch manually' },
@@ -158,10 +234,24 @@ async function roundCorners(image, width, height, radius) {
 }
 
 /**
+ * 解析某张截图在当前语言下使用的原图。
+ *
+ * 商店列表按语言各自上传截图，所以英文列表要用**英文界面**的截图：
+ * `screenshots/en/` 下存在同名文件时优先用它，缺失时回落到中文原图
+ * （落地页只消费中文版原图，不受影响）。
+ * @param {string} file 相对 `screenshots/` 的文件名
+ * @returns {string} 原图绝对路径
+ */
+function resolveSource(file) {
+  const localized = resolve(ROOT, 'screenshots', LANG, file);
+  return existsSync(localized) ? localized : resolve(ROOT, 'screenshots', file);
+}
+
+/**
  * 合成一张商店截图：浅色渐变底 + 标题说明 + 圆角截图 + 描边。
  */
 async function buildScreenshot(shot) {
-  const source = resolve(ROOT, 'screenshots', shot.file);
+  const source = resolveSource(shot.file);
   const meta = await sharp(source).metadata();
   const boxW = SHOT_W - PAD_X * 2;
   const boxH = SHOT_H - CAPTION_H - 44;
@@ -308,10 +398,13 @@ async function main() {
   }
   for (const shot of SHOTS) {
     if (LANG === 'zh') await buildWebImage(shot);
-    if (shot.slug !== '06-dark-theme') await buildScreenshot(shot);
+    if (shot.store) await buildScreenshot(shot);
   }
   await buildTiles();
-  console.log(`\nDone (lang=${LANG}). 商店图在 store-assets/，落地页图在 docs/assets/img/。`);
+  const storeCount = SHOTS.filter(shot => shot.store).length;
+  const webNote =
+    LANG === 'zh' ? `${SHOTS.length} 张落地页图在 docs/assets/img/` : '落地页图只在中文模式下生成（两页共用一套）';
+  console.log(`\nDone (lang=${LANG}). ${storeCount} 张商店图在 store-assets/，${webNote}。`);
 }
 
 await main();
