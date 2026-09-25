@@ -20,7 +20,8 @@
  *
  * 刻意不在这里测的：日志缓冲的刷写与配额收口（`round2-regression` 的并发刷写、`logQuota` 的
  * 失败回灌与总量预算）、恢复点的三份失败面（`configHistory`）、`importProxyConfig` 的两种模式
- * （`importConfig` / `importPlan`）、批量启停的落点与「只写一次」（`batchToggle`）。
+ * （`importConfig` / `importPlan`）、批量启停的落点与「只写一次」（`batchToggle`）、拖拽排序的
+ * 顺序与「补到末尾」兜底（`reorderRules`）。
  * 本文件管锁、两份缓存，以及三个键在取值侧的形状收口。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
