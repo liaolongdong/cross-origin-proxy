@@ -39,7 +39,10 @@
  * 刻意不在这里测的：fetch 通道（批次 I）、WebSocket（批次 L 补的是**选址**那半——交给原生构造器的
  * 地址与 protocols，见 `interceptorWebSocket`；握手与帧语义仍只有 `wsCapabilitySurface` 守着）、
  * `proxyFetch` 内部的回包整形与超时公式（`proxyResponseGuard` /
- * `interceptorResponseGuard` / `round3-bugfixes`）、以及规则匹配与优先级本身（`proxyRuleSelection`）。
+ * `interceptorResponseGuard` / `round3-bugfixes`）、以及规则优先级与模式匹配本身（`proxyRuleSelection` /
+ * `urlMatcher`）。方法白名单例外，XHR 这一路的落点归本文件——页面那份手工副本在 fetch 那支只测了
+ * 「白名单不符就不拦 + 请求方法侧的大小写」，握手那支测了「把握手当 GET 过白名单 + 条目侧小写」，
+ * `methods: []` 两支都没有，所以 XHR 上原先一格都没有；两份副本是否同源另由 `channel-consistency` 判。
  * 假 `postMessage` 按引用记录载荷、不做结构化克隆；`xhr.upload` 与 `withCredentials` 拦截器根本不读。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -366,6 +369,18 @@ describe('什么时候不走代理：一律原样交给原生 XHR', () => {
     expect(proxiedRequests()).toEqual([]);
   });
 
+  it('方法白名单不符：这一路把那条规则当不存在，原生 send 照原样发', () => {
+    // `request()` 用的是 `open('GET', …)`，而这条规则只放行 POST。结局必须是「等价于未装本扩展」，
+    // 而不是「命中了但不发」——后者会让页面以为请求已经出去，却什么都没人收到。
+    armProxy([rule({ methods: ['POST'] })]);
+    const xhr = newXhr();
+
+    request(xhr, API_URL, 'payload');
+
+    expect(xhr.nativeSends).toEqual(['payload']);
+    expect(proxiedRequests()).toEqual([]);
+  });
+
   it('同步 XHR（open 第三参显式 false）只能原生：代理响应来不及在调用栈返回前到达', () => {
     armProxy([rule()]);
     const xhr = newXhr();
@@ -451,6 +466,27 @@ describe('代理成功：属性回填、头读取与事件顺序', () => {
     request(xhr, '/api/users');
 
     expect(lastRequest()?.url).toBe(API_URL);
+  });
+
+  it('白名单的大小写与空数组这两半在 XHR 通道上同样成立', () => {
+    // 页面侧那份 `methodAllowed` 是 `utils/urlMatcher` 的手工副本：条目侧小写此前只有握手那支钉着，
+    // `methods: []` 三条路一格都没有——所以只改镜像那一半时，fetch 与 XHR 两条路照样绿。
+    // 小写条目与 `[]` 的来路是导入文件与手改 storage（界面的下拉七个值全是大写，且只在非空时才写这个字段）。
+    armProxy([rule({ id: 'r-lower', methods: ['post'] })]);
+    const lower = newXhr();
+    lower.open('POST', API_URL);
+    lower.send('p1');
+
+    expect(lower.nativeSends).toEqual([]);
+    expect(lastRequest()).toMatchObject({ method: 'POST', ruleId: 'r-lower' });
+
+    armProxy([rule({ id: 'r-empty', methods: [] })]);
+    const empty = newXhr();
+    empty.open('DELETE', API_URL);
+    empty.send('p2');
+
+    expect(empty.nativeSends).toEqual([]);
+    expect(lastRequest()).toMatchObject({ method: 'DELETE', ruleId: 'r-empty' });
   });
 
   it('回包把 readyState / status / statusText / response / responseText / responseURL 一次填齐', async () => {

@@ -159,6 +159,27 @@ describe('method 过滤匹配', () => {
     expect(matchRule('https://a.com/x', postOnly)).toBe(true);
   });
 
+  it('白名单里那条写法的大小写不算数：文件里写 post 照样放行 POST', () => {
+    // `HTTP_METHODS` 七个值全是大写，界面选不出小写，所以这一格的来路只有导入文件（cURL/HAR/JSON）
+    // 与手改 storage——`utils/types.ts` 那句「大小写不敏感」承诺的就是这条来路。
+    const lower = makeRule({ id: 'l', matchPattern: 'https://a.com/*', methods: ['post'] });
+    expect(matchRule('https://a.com/x', lower, 'POST')).toBe(true);
+    expect(matchRule('https://a.com/x', lower, 'post')).toBe(true);
+    expect(matchRule('https://a.com/x', lower, 'GET')).toBe(false);
+    // 后台代发入口同样按这条来路命中（`findMatchingRule` 是 `proxyHandler` 用的那一个）
+    expect(findMatchingRule('https://a.com/x', [lower], 'POST')?.id).toBe('l');
+  });
+
+  it('空数组是「不限方法」，不是「一个都不许」', () => {
+    // 表单只在 `methodsList.length > 0` 时才写 `methods`，所以 `[]` 也是文件／手改那条来路。
+    // 它必须与「字段不存在」同义：否则同一份 storage 里的一条规则，方法过滤在两条通道上一个放行、
+    // 一个谁都别想过去——而分流判据那边已经把 `methods: []` 当作「不限方法」（见 `isSimpleRule` 那组用例）。
+    const empty = makeRule({ id: 'e', matchPattern: 'https://a.com/*', methods: [] });
+    expect(matchRule('https://a.com/x', empty, 'GET')).toBe(true);
+    expect(matchRule('https://a.com/x', empty, 'DELETE')).toBe(true);
+    expect(findMatchingRule('https://a.com/x', [empty], 'GET')?.id).toBe('e');
+  });
+
   it('findMatchingRule 传递 method 后跳过方法不符的高优先规则', () => {
     const postOnly = makeRule({ id: 'p', matchPattern: 'https://a.com/*', methods: ['POST'], priority: 1 });
     const anyRule = makeRule({ id: 'a', matchPattern: 'https://a.com/*', priority: 20 });

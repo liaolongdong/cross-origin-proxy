@@ -227,8 +227,12 @@ describe('setByPath 拒绝原型链键名（来自不可信导入配置）', () 
 });
 
 /**
- * MAIN world 拦截器自包含、无法 import 共享模块，本轮修复的三类缺陷在它自己的
- * WebSocket / 排序镜像里同样存在。这里按源码契约固定，防止再次漂移。
+ * MAIN world 拦截器自包含、无法 import 共享模块，所以它那份镜像只要不跟着改就会自己漂移。
+ * 这一组按源码契约固定这些镜像，两种写法各有所指：
+ * - 正则/字面量比对：镜像里必须留着那句承重写法（`normalizePriority`、`DEFAULT_RULE_PRIORITY` 的取值、
+ *   prefix 补分隔符、不整体重编码 query）——utils 侧改动没照抄过来时红在这里。
+ * - 逐字比函数体：整段逻辑只有一份语义、两份文本的方法白名单（`methodAllowed`），任何只改一边的
+ *   写法都红，而「两边一起演进」必须保持绿——语义本身由行为用例负责，不由这条负责。
  */
 describe('MAIN world 镜像与 utils 侧同源', () => {
   const source = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
@@ -255,6 +259,52 @@ describe('MAIN world 镜像与 utils 侧同源', () => {
     expect(source).not.toMatch(/parsed\.toString\(\)/);
     // 定点改写：从原始串的 `?` 之后切片，而不是走 URL 的序列化器
     expect(source).toMatch(/function applyWsQuery[\s\S]*?beforeHash\s*\.slice\(\s*queryAt\s*\+\s*1\s*\)/);
+  });
+
+  /**
+   * 按花括号配对取出 `function <name>(…) { … }` 的函数体，并把空白压成单空格。
+   *
+   * 只给「两份手工副本是否同源」这类断言用：它关心语义，所以缩进（utils 侧两格、拦截器嵌在
+   * `main()` 里六格）与换行位置不该算红。这两处函数体里没有带花括号的字符串、模板或注释，配对才敢
+   * 这么写；哪天有了就得先剥注释或换真正的解析器，别硬撑正则。
+   */
+  function bodyOf(text: string, name: string): string {
+    const at = text.indexOf(`function ${name}(`);
+    expect(at, `源码里找不到 function ${name}`).toBeGreaterThan(-1);
+    const open = text.indexOf('{', at);
+    let depth = 0;
+    for (let i = open; i < text.length; i++) {
+      if (text[i] === '{') depth += 1;
+      else if (text[i] === '}') {
+        depth -= 1;
+        if (depth === 0)
+          return text
+            .slice(open + 1, i)
+            .replace(/\s+/g, ' ')
+            .trim();
+      }
+    }
+    throw new Error(`function ${name} 的函数体没有闭合`);
+  }
+
+  /**
+   * `methodAllowed` 是双份实现里唯一一份「两份都不长注释、可以直接逐字比」的：
+   * 它被 utils 侧（SW 代发与归因）和页面侧（拦截器的 HTTP 与握手两条通道）各写了一遍，而方法白名单
+   * 一旦两半说法不同，表现是同一条规则在两条通道上一个放行、一个当它不存在。
+   *
+   * 这条只判「有没有人只改一边」，语义本身由 `tests/urlMatcher.test.ts` 与
+   * `tests/interceptorXhr.test.ts` 各自的行为用例担着——**两边一起等价改动时这条必须保持绿**，
+   * 否则它就退化成一道「禁止演进」的排版闸门；也别在语义改动时顺手删它。
+   */
+  it('方法白名单的两份实现逐字同源', () => {
+    const utilsBody = bodyOf(readFileSync('utils/urlMatcher.ts', 'utf-8'), 'methodAllowed');
+    const mirrored = bodyOf(source, 'methodAllowed');
+    // 防空转：只钉「两份函数体都在、且不为空」，不钉它用 `toUpperCase` 还是 `toLowerCase`——
+    // 拿承重写法的拼写当闸门，会把「两份一起等价改写」也判成红（实测过：换成小写比较时红在这里）。
+    // 锚点被单侧改名时 `bodyOf` 先红，这里补的是「函数体存在但被掏空」那一种。
+    expect(utilsBody, 'utils 侧 methodAllowed 函数体为空').not.toBe('');
+    expect(mirrored, '页面侧 methodAllowed 函数体为空').not.toBe('');
+    expect(mirrored).toBe(utilsBody);
   });
 });
 
