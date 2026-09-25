@@ -309,7 +309,7 @@
   "variableWsQueryUnsupportedError": "WebSocket 规则的查询参数由页面侧拼接，读不到凭据变量，因此不支持 {{名称}} 引用。",
   "headerOverridesHint": "值里可用 {{名称}} 引用「设置 → 凭据变量」中的凭据，导出与分享配置时不会带出真值。",
   "restorePointsLabel": "配置恢复点",
-  "restorePointsHint": "整体替换规则集的操作（替换式导入、加载环境快照、批量删除）会在本地记下改动前的配置，最多保留 $1 份。导入出错时在这里找回",
+  "restorePointsHint": "整体替换规则集的操作（替换式导入、加载环境快照、真正删掉了东西的批量删除）会在本地记下改动前的配置，最多保留 $1 份。导入出错时在这里找回",
   "restorePointsEmpty": "暂无恢复点",
   "restorePointsLoadFailed": "恢复点读取失败，请重新打开本弹窗",
   "restoreReasonReplaceImport": "替换式导入前",

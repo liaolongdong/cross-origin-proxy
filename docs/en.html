@@ -143,7 +143,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-23"
+            "dateModified": "2026-09-25"
           },
           {
             "@type": "SoftwareApplication",
@@ -171,7 +171,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-23",
+            "dateModified": "2026-09-25",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -199,7 +199,7 @@
               "cURL import from DevTools Copy as cURL output",
               "JSON config export with share mode on by default, stripping credentials, and replace or merge modes on import, with a preview of what would be added and which same-name, same-pattern rules are kept before anything is written",
               "Named environment profiles for one-click FAT / UAT / PROD switching",
-              "Config restore points: the rule set a replace-import, profile load or batch delete is about to overwrite is snapshotted first, and the last 5 are listed in Settings for one-click rollback",
+              "Config restore points: a replace-import, a profile load or a batch delete that actually removed something keeps the rule set it replaces, and the last 5 are listed in Settings for one-click rollback",
               "Auto-off countdown that disables the proxy after 30 minutes to 4 hours",
               "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's self-reported interception activity, this page's address match preview and create-rule-for-this-page",
               "English and Chinese UI, six themes, light / dark / system modes, keyboard shortcuts"
@@ -1103,13 +1103,13 @@
                 export of captured traffic and HAR import that turns recorded requests into rules (those rules arrive
                 disabled until you enable them); cURL paste that prefills the form; copy-as-cURL on every log entry,
                 using its original URL. Named profiles snapshot the whole rule set so FAT, UAT and PROD are one click
-                apart, and batch migration rewrites target domains across selected rules with a change preview. Before a
-                replace-import, a profile load or a batch delete overwrites the rule set, what it replaces is kept as a
-                restore point under Settings → Config restore points (the last 5), ready to roll back. Header and
-                query-parameter values can also be written as a reference such as <code>{{UAT_TOKEN}}</code>, with the
-                real value kept in the credential variable table under Settings → Credential Variables — the rule
-                itself, the exported config, the profiles and the configuration sent down to the page all carry nothing
-                but that reference, and the substitution happens at the last moment inside the extension-proxied
+                apart, and batch migration rewrites target domains across selected rules with a change preview. A
+                replace-import, a profile load or a batch delete that actually removed something keeps the rule set it
+                replaces as a restore point under Settings → Config restore points (the last 5), ready to roll back.
+                Header and query-parameter values can also be written as a reference such as <code>{{UAT_TOKEN}}</code>,
+                with the real value kept in the credential variable table under Settings → Credential Variables — the
+                rule itself, the exported config, the profiles and the configuration sent down to the page all carry
+                nothing but that reference, and the substitution happens at the last moment inside the extension-proxied
                 request.
               </p>
             </article>
@@ -2764,7 +2764,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-23</span>
+            <span>Last updated 2026-09-25</span>
             <span
               ><a
                 href="./"

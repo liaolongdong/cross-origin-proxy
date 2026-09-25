@@ -309,7 +309,7 @@
   "variableWsQueryUnsupportedError": "Query parameters of a WebSocket rule are built page-side, which cannot read the variable store — {{NAME}} references are not supported there.",
   "headerOverridesHint": "Values may reference credentials stored under Settings → Credential Variables as {{NAME}}, so exporting or sharing the config never carries the real value.",
   "restorePointsLabel": "Config restore points",
-  "restorePointsHint": "Operations that replace the whole rule set (replace-mode import, loading a profile, batch delete) record the config they replace locally, keeping up to $1 of them. Use them here to undo a bad import",
+  "restorePointsHint": "Operations that replace the whole rule set (replace-mode import, loading a profile, a batch delete that actually removed something) record the config they replace locally, keeping up to $1 of them. Use them here to undo a bad import",
   "restorePointsEmpty": "No restore points yet",
   "restorePointsLoadFailed": "Couldn't load restore points — reopen this dialog",
   "restoreReasonReplaceImport": "Before a replace-mode import",

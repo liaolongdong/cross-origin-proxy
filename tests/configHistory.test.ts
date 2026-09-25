@@ -469,24 +469,33 @@ describe('restoreConfigHistory — 回退本身必须是可逆的', () => {
  * 没有别的可观察面，读者只能照句子理解成「我那次替换之前，旧配置已经先存好了」。改了代码不改文案，
  * 两边都会以为自己在对齐事实，所以顺序契约与措辞落在同一支文件里。
  *
- * 判据是「同一句里出现顺序承诺」，实现却刻意做成禁字：`先`（中英）与 `before` / `first`（英）在这三句
- * 话里只承担一个语义——「记」发生在被替换的那次写入之前。要写「请先…」之类的客套，请把这句话换成不含
- * 时序的说法，而不是往守卫里加例外。反过来，`改动前的配置`、`被换掉的那份` 说的是快照的**内容**（那次
- * 写入换掉的那一份配置），换序之后依然成立，所以不在禁列。
+ * 判据是「同一句里出现顺序承诺」，实现却刻意做成禁字，而中文有两种写法、英文有两个词，缺一个就是漏口：
  *
- * 英文侧为什么两个词都禁：`first` 钉住的是被换掉的那句 "stored first"，而下一句最可能长回来的写法是
- * "record the config **before** replacing"——只禁 `first` 拦不住它。三句现值里 `before` 一个都没有，
- * 所以这条禁字今天是零成本的。射程只到 `RECORDING_COPY_KEYS` 这三句：`restoreReason*` 那一组标签以
- * "Before a replace-mode import" 之类开头，说的是这份快照**属于哪一次操作**（provenance），换序前后
- * 都成立，所以既不在禁列里、也不在这条守卫的射程里。
+ * - `先`（副词）：钉住 README 与 `llms-full.txt` 被换掉的那句「回退之前同样**先**留一份」。
+ * - 操作名（导入 / 删除 / 替换 / 回退 / 快照）后面挂 `前`：`docs/index.html` 的 JSON-LD 那条此前写的是
+ *   「批量删除**前**自动留下被替换掉的整套规则」——一个 `先` 都没有，只禁 `先` 拦不住它。这条不是凑数，
+ *   是那一行真实漏过的口径。
+ * - `first`（英）：钉住被换掉的那句 "stored first"；`before`（英）：拦住下一句最可能长回来的
+ *   "record the config **before** replacing"。现值里 `before` 一个都没有，所以它是零成本的。
+ *
+ * 反过来，`改动前的配置`、`被换掉的那份`、"the rule set it replaces" 说的是快照的**内容**（那次写入换掉的
+ * 那一份配置），换序之后依然成立，所以不在禁列——这也是上面那五个操作名之外的 `改动` 不进门的原因。
+ * 要写「请先…」之类的客套，请把这句话换成不含时序的说法，而不是往守卫里加例外。
+ *
+ * 两处分界各落在不同的地方，别混成一句：`before-restore` 是 `ConfigHistoryEntry.reason` 的字面量（数据
+ * 标签，不是散文），所以禁 `before` 的正则在 `timingClaim` 里跳过紧跟着 `-restore` 的那一次；而
+ * `restoreReason*` 那一组界面标签以 "Before a replace-mode import" 之类开头，说的是这份快照**属于哪一次
+ * 操作**（provenance），换序前后都成立——它压根不在这条守卫的射程里（`RECORDING_COPY_KEYS` 只有三句），
+ * 因此不需要往判据里加例外。
  *
  * 负向半边单独存在会空转（把整句删掉、或把 key 改名也算通过），所以每条同时钉正向：这句话仍然要说清
- * 「被换掉的那一份会记成恢复点」，中英各一份。扩展内是这三句，另加 `docs/llms.txt` 的那一条 bullet
- * （它不走 key、也不进 bundle，上面那两条 `it.each` 一句也够不着，所以要单独钉一次）。剩下的外部落点
- * 都在同一份「顺序承诺」下等收：README 两份的回退子句、两份落地页，以及 `docs/llms-full.txt` 的第 109
- * 行——那一条中英都还在说「回退之前同样**先**留一份」/ "records its own point **first**"，别把它当
- * 已经对齐了（`llms.txt` 收口这一格时曾把它记成「已是内容口径」，那是错的）。这些文件正被同机另一会话
- * 改，改它们要连带中英成对与 `docs/` 的日期三件套，留待那一轮一起收。
+ * 「被换掉的那一份会记成恢复点」，中英各一份。
+ *
+ * 扩展之外还有十几句说同一件事（README 两份、两份落地页的 JSON-LD 与正文各一句、`llms.txt`、
+ * `llms-full.txt` 中英各两句、`CHANGELOG.md` 顶部那条未发布小节中英各一段），它们不走 key、不进 bundle，
+ * 上面两条 `it.each` 一句也够不着，所以外面另有一张窗口表（见 `EXTERNAL_RESTORE_POINT_WINDOWS`）。
+ * `llms.txt` 与 `llms-full.txt` 同为面向引用型 AI 引擎的出口，两处口径曾不一致（前者收口时把后者记成
+ * 「已是内容口径」，那是错的），现在都由同一份判据钉住。
  */
 const zhOptions = JSON.parse(readFileSync('locales/zh_CN/options.json', 'utf-8')) as Record<string, string>;
 const enOptions = JSON.parse(readFileSync('locales/en/options.json', 'utf-8')) as Record<string, string>;
@@ -494,15 +503,40 @@ const enOptions = JSON.parse(readFileSync('locales/en/options.json', 'utf-8')) a
 /** 会提到「整套替换会留一份恢复点」的三句界面文案 */
 const RECORDING_COPY_KEYS = ['restorePointsHint', 'restoreConfirm', 'importPreviewReplaces'] as const;
 
+/**
+ * 一句话里出现「记在主写入之前」的说法就把它挑出来（失败信息据此点名），否则返回 null。
+ * 中文的两种写法共用一条正则；英文侧 `before` 跳过紧跟着 `-restore` 的那一次——那是
+ * `ConfigHistoryEntry.reason` 的字面量，不是散文。
+ */
+function timingClaim(scope: string): string | null {
+  return (
+    scope.match(/先|(?:导入|删除|替换|回退|快照)(?:之前|前)/)?.[0] ??
+    scope.match(/\b(?:first|before)\b(?!-restore)/i)?.[0] ??
+    null
+  );
+}
+
+/** 措辞判据只有一个出口：界面 key、`llms.txt` 与外部落点窗口跑的是同一条正则 */
+function expectNoTimingClaim(scope: string, label: string): void {
+  const hit = timingClaim(scope);
+  expect(hit, `${label}：这句措辞又把「记」写在了被替换的那次写入之前（命中『${hit}』）`).toBeNull();
+}
+
 describe('恢复点的界面措辞 — 不承诺写入时机', () => {
   it.each(RECORDING_COPY_KEYS)('%s：中英两侧都没有「先记」这种顺序承诺', key => {
-    expect(zhOptions[key]).not.toContain('先');
-    // 两个词都要禁：`first` 钉的是被换掉的那句说法，`before` 拦住下一句最可能长回来的写法
-    expect(enOptions[key]).not.toMatch(/\b(before|first)\b/i);
+    expectNoTimingClaim(zhOptions[key], `${key} 中文`);
+    expectNoTimingClaim(enOptions[key], `${key} 英文`);
   });
 
   it.each([
-    { key: 'restorePointsHint', zh: ['改动前的配置', '$1'], en: [/replace the whole rule set/i, /record/i, /\$1/] },
+    {
+      key: 'restorePointsHint',
+      // 「真正删掉了东西的批量删除」这半句限定语与 README / `llms.txt` / 落地页同口径：什么都没删掉的
+      // 批量删除不落恢复点（`storage.ts` 的 `remaining.length !== previous.length`），界面那句列举
+      // 少了它，就等于把三种操作说成无条件落一份
+      zh: ['改动前的配置', '真正删掉了东西', '$1'],
+      en: [/replace the whole rule set/i, /actually removed something/i, /record/i, /\$1/],
+    },
     { key: 'restoreConfirm', zh: ['恢复点', '记为'], en: [/restore point/i, /recorded/i] },
     { key: 'importPreviewReplaces', zh: ['恢复点', '记为'], en: [/restore point/i, /kept as/i] },
   ] as const)('$key：仍然把「被换掉的那一份会记成恢复点」说给用户', ({ key, zh, en }) => {
@@ -519,14 +553,73 @@ describe('恢复点的界面措辞 — 不承诺写入时机', () => {
     const text = readFileSync('docs/llms.txt', 'utf-8');
     const bullet = text.split('\n').find(line => line.startsWith('- Config restore points:')) ?? '';
     expect(bullet.length, 'llms.txt 里那条 - Config restore points: 不见了').toBeGreaterThan(0);
-    expect(bullet).not.toContain('先');
-    expect(bullet).not.toMatch(/\b(before|first)\b/i);
+    expectNoTimingClaim(bullet, 'docs/llms.txt 的恢复点 bullet');
     expect(bullet).toContain('记成恢复点');
     expect(bullet).toMatch(/recorded as a restore point/i);
     // 「什么都没删掉的批量删除不落恢复点」（storage.ts 的 `remaining.length !== previous.length`），
     // 这句限定是 `llms-full.txt` 一直写对、而 `llms.txt` 本轮才补上的那一格
     expect(bullet).toContain('真正删掉了东西');
     expect(bullet).toMatch(/that actually removed something/i);
+  });
+
+  /**
+   * 外部落点按「窗口」钉，而不是整行或整篇：这些句子在 HTML 里会被 prettier 折成好几个物理行（整行找
+   * 就把句子切断），而整篇禁字会咬到合法的「批量迁移会**先**给出变更预览」与
+   * "**Before** writing, you can **preview** the file"——那两句说的是预览，跟恢复点什么时候记无关。
+   * 所以每行显式给出窗口的起止短语（读进来先把空白折成单空格再找），起点短语本身就是正向：这句话还在，
+   * 还在说「被换掉的那一份记成恢复点」。两个短语任一找不到就红，「把句子删掉」过不了关。
+   *
+   * `to` 只能收在「记」这半句的末尾，不能顺手往后贪一节：CHANGELOG 那两段的下一句写的是「超过 200 条的
+   * 快照在回退**前**就被拒绝」/ "refused **before** it can be applied"——那句话说的是回退**自己**被拒的
+   * 时机，真话，被窗口吞进来就成假红。红了先核对命中短语落在哪半句，别改句子。
+   *
+   * 新增外部落点时回来添一行即可，判据不另立——同一件事在几个出口上说成好几种口径，正是这一轮修掉的那件事。
+   */
+  const EXTERNAL_RESTORE_POINT_WINDOWS: { file: string; from: string; to: string }[] = [
+    { file: 'README.md', from: '- **配置恢复点**：', to: '回退本身也同样留下一份' },
+    { file: 'README.en.md', from: '- **Config restore points** —', to: 'keeps its own copy the same way' },
+    { file: 'docs/index.html', from: '"配置恢复点：', to: '可在设置里一键回退"' },
+    { file: 'docs/index.html', from: '这三类整套替换，会把自己换掉的那份规则集留在', to: '随时一键回退' },
+    { file: 'docs/en.html', from: '"Config restore points: ', to: 'for one-click rollback"' },
+    {
+      file: 'docs/en.html',
+      from: 'A replace-import, a profile load or a batch delete that actually removed',
+      to: 'ready to roll back',
+    },
+    { file: 'docs/llms-full.txt', from: 'store what they replaced:', to: 'never blocks the main write' },
+    { file: 'docs/llms-full.txt', from: 'a rollback records its own point', to: 'keeps its current value' },
+    { file: 'docs/llms-full.txt', from: '这三类整套替换，会把自己换掉的那份规则集存下来', to: '里一键回退' },
+    { file: 'docs/llms-full.txt', from: '回退也同样留一份', to: '不动总开关' },
+    { file: 'CHANGELOG.md', from: '**配置恢复点**为', to: '回退也同样留一条' },
+    { file: 'CHANGELOG.md', from: '**config restore points** store', to: 'point the same way' },
+  ];
+
+  /** 空白折成单空格：HTML 正文与 Markdown 表格都会被格式化器折行，句子却跨行 */
+  const flat = (file: string): string => readFileSync(file, 'utf-8').replace(/\s+/g, ' ');
+
+  /** 找不到起止短语就当窗口为空——由下面那条带名字的断言报错，不在这里抛 */
+  const windowOf = (text: string, from: string, to: string): string => {
+    const start = text.indexOf(from);
+    const end = start < 0 ? -1 : text.indexOf(to, start + from.length);
+    return start < 0 || end < 0 ? '' : text.slice(start, end + to.length);
+  };
+
+  it.each(EXTERNAL_RESTORE_POINT_WINDOWS)('$file：『$from…』这一句不承诺写入时机', ({ file, from, to }) => {
+    const window = windowOf(flat(file), from, to);
+    expect(window, `${file} 里找不到窗口『${from}…${to}』`).not.toBe('');
+    expectNoTimingClaim(window, `${file} 的『${from}…』`);
+  });
+
+  /**
+   * 失败面的条数单独钉：`pushConfigHistory` 现在跳过四种（快照自己不带规则数组是换序之后新露出来的
+   * 那一格），而顶部那条未发布小节起初写的是「三种情形」——少一种就是少一句用户该知道的「这份没记上」。
+   * 用例名与判据都按**内容**认这一小节，不按版本号认：这条 bullet 现在还挂在 `## [Unreleased]` 下面，
+   * 发版时会被切成 `## [1.1.0]`，把它钉在标题上等于给守卫埋一条会过期的假事实。
+   */
+  it('CHANGELOG：跳过这一份的失败面写的是四种（不是三种）', () => {
+    const changelog = flat('CHANGELOG.md');
+    expect(changelog).toContain('快照自己不带规则数组、读不到旧账、新快照单份越预算、写配额失败这四种情形');
+    expect(changelog).toContain('a snapshot carrying no rule array, a failed history read');
   });
 });
 
