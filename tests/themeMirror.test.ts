@@ -5,7 +5,21 @@
  * 切过主题的用户每次打开 popup/options 都会看到一次闪色。`utils/theme.ts` 因此照
  * `utils/i18n` 的做法加了一份 localStorage 镜像：挂载前同步应用，存储仍是事实来源。
  *
- * 这里要守住的是「同步」这个前提——镜像若改成异步生效就等于没加。
+ * 这里要守住两件事：
+ * - **同步**：镜像若改成异步生效就等于没加（首帧仍按默认配色画）。
+ * - **镜像只是缓存**：读不懂的值不当真、落盘失败不提前写、读失败不回写——三条都指向
+ *   「镜像不许领先于事实来源，也不许把脏值带上根元素」。语言侧的同构镜像见 `tests/localeMirror.test.ts`。
+ *
+ * 落证在 `.test-tmp/mutate-r18.py`（不入库，16 条变异）：这几格补上之前，摘掉首帧与变更事件处的合法性
+ * 闸门、摘掉 `areaName !== 'local'` 那道区域判据、把「读不到」的兜底默认值改掉，全仓都不红。表里刻意
+ * 保持 ALIVE 的三条都是等价改写：M9 摘掉首帧那道 `isThemeMode` 闸门（理由写在下面那一格注释里）、
+ * M14 摘掉 `readMirror` 的 `typeof localStorage` 守卫（与它外面的 `try/catch` 是同一件事的两道写法）、
+ * M15 把两份异步校正调换先后（两者各写各的属性，谁先谁后观察不到）。
+ *
+ * 另有三格**已有主人，本轮不再补**：把 `applyThemeToRoot` 换成别的属性名、把 `applyThemeMode` 的亮/暗
+ * 两档写成同一个值、把 `system` 那档从删属性改成写 `'system'` —— 三者红的都是本文件既有的用例（不是新加
+ * 的那三格）；把 `readStoredTheme` 的 `catch` 改成回默认值（抹掉「读不到 ≠ 存的就是默认值」）红的也是
+ * 既有的「存储读取失败时不改渲染也不回写镜像」那条。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -136,6 +150,62 @@ describe('system 模式', () => {
     root.dataset.mode = 'dark';
     applyThemeMode('system');
     expect('mode' in root.dataset).toBe(false);
+  });
+});
+
+/**
+ * 三个入口（首帧镜像、异步校正、变更事件）各自读一次主题与显示模式，读来的东西都可能是脏的：
+ * 镜像是别的扩展页写的，存储可能被手改，`onChanged` 的 `newValue` 更是直接来自 storage 原文。
+ * 令牌层只认那六个主题名与三种显示模式，落不到它们身上就是「根元素挂着一个没有任何样式的属性值」。
+ */
+describe('读不懂的值 — 三处入口都不当真', () => {
+  it('首帧镜像里躺着非法值时根元素上不留脏值，等存储校正', async () => {
+    mirror.set('cop_theme', 'bogus');
+    mirror.set('cop_mode', 'bogus');
+    store.theme = 'pink';
+    store.theme_mode = 'dark';
+
+    initThemeSync();
+
+    // 断言发生在任何一次 storage 回包之前：把镜像当真就会立刻画出这两个非法值
+    expect(root.dataset.theme).toBeUndefined();
+    // 显示模式这一半钉不住 `isThemeMode` 那道闸门：未知值落进 `applyThemeMode` 的 else，
+    // 与「不应用」给出同一个结果（删属性），变异 M9 实测 ALIVE。这里断的是**结果**——
+    // 闸门与 else 分支是同一件事的两道写法，谁被摘掉都不改变任何可观察行为。
+    expect('mode' in root.dataset).toBe(false);
+
+    await flush();
+    expect(root.dataset.theme).toBe('pink');
+    expect(root.dataset.mode).toBe('dark');
+  });
+
+  it('变更事件里的非法值回落默认（是「重置」，不是「保持上一次」）', () => {
+    mirror.set('cop_theme', 'mauve');
+    mirror.set('cop_mode', 'dark');
+
+    initThemeSync();
+    const onStorageChanged = changeHandlers.at(-1)!;
+
+    onStorageChanged({ theme: { newValue: 'bogus' }, theme_mode: { newValue: 'bogus' } }, 'local');
+
+    // 这一格刻意不 `await flush()`：`store` 是空的，异步校正一回来就把首帧的 mauve/dark 盖成 sky/system，
+    // 「回落默认」与「保持上一次」从此不可区分——留在同步这一侧，首帧那两个值才是承重的对照。
+    expect(root.dataset.theme).toBe('sky');
+    expect('mode' in root.dataset).toBe(false);
+    expect(mirror.get('cop_theme')).toBe('sky');
+    expect(mirror.get('cop_mode')).toBe('system');
+  });
+
+  it('非 local 区的同名键一概不动：别的存储区不是本模块的数据源', async () => {
+    initThemeSync();
+    await flush();
+    const onStorageChanged = changeHandlers.at(-1)!;
+
+    onStorageChanged({ theme: { newValue: 'orange' }, theme_mode: { newValue: 'dark' } }, 'session');
+
+    expect(root.dataset.theme).toBe('sky');
+    expect('mode' in root.dataset).toBe(false);
+    expect(mirror.get('cop_theme')).toBe('sky');
   });
 });
 
