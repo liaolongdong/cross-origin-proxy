@@ -9,7 +9,7 @@
  * - **缓存不失效**：另一个上下文（options 页、popup）改完 storage，本上下文还拿旧对象判断与写回，
  *   于是把别人刚写的整份覆盖回去；SW 被回收后它又「自己好了」，是最难复现的一类。
  *
- * 已有 14 支测试文件用到本模块：5 支直接 `vi.mock` 换掉它（其中 `badgeManager` 经 `importOriginal`
+ * 用到本模块的测试文件有一把：5 支直接 `vi.mock` 换掉它（其中 `badgeManager` 经 `importOriginal`
  * 只替掉 `getProxyConfig`），其余虽走真实现，测的也只是自己那条业务（新增上限、导入模式、
  * 恢复点……），只有 `round2-regression` 碰过并发——那是日志刷写的串行队列。
  * 锁与这两份缓存本身，至今没有一条按运行时断言过。
@@ -20,7 +20,8 @@
  *
  * 刻意不在这里测的：日志缓冲的刷写与配额收口（`round2-regression` 的并发刷写、`logQuota` 的
  * 失败回灌与总量预算）、恢复点的三份失败面（`configHistory`）、`importProxyConfig` 的两种模式
- * （`importConfig` / `importPlan`）。本文件管锁、两份缓存，以及三个键在取值侧的形状收口。
+ * （`importConfig` / `importPlan`）、批量启停的落点与「只写一次」（`batchToggle`）。
+ * 本文件管锁、两份缓存，以及三个键在取值侧的形状收口。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProxyConfig, ProxyRule, RequestLogEntry } from '@/utils/types';
