@@ -5,7 +5,7 @@
     "email": "924902324@qq.com",
     "url": "https://github.com/liaolongdong"
   },
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "description": "跨环境 API 请求代理：把页面请求转发到 FAT/UAT/PROD 等后端环境，支持 URL、请求头与响应改写、条件化 Mock、延迟、阻断、重试与 WebSocket 转发，数据只存本机",
   "keywords": [

@@ -413,7 +413,15 @@
  * `transition: color !important` 会顺带盖掉每个元素自己的过渡清单。VT 由浏览器对新旧画面
  * 各出一张快照做交叉溶解，渐变、Element Plus 组件与滚动条一并覆盖，且不碰任何元素自身样式。
  * 不支持该 API 的运行时（含没有 `document` 的 SW）根本不进这个分支，无需兜底样式。
+ *
+ * 四层都要点名，一层都不能省。`::view-transition-group` 此前是漏网的那一层：2026-09-26 在真
+ * Chrome 152 里按 resolved timing 量过，不写它它就是 UA 的 `250ms / ease`，而交叉溶解那两层是
+ * 我们的 `280ms / standard`——同一次换肤、两种节奏，正是这层令牌要避免的事。group 管的是快照框
+ * 的位置与尺寸形变，整页快照下看不出差别（仓库里没有第二个 `view-transition-name`），所以这条
+ * 不改变观感，只把「量出来一致」变成事实。同一轮实测作者声明压得住这一层（注入 333ms 哨兵后
+ * `getAnimations()` 读回 333ms）。回归守卫见 `tests/designTokens.test.ts` 的「换肤快照的四层」。
  */
+::view-transition-group(root),
 ::view-transition-image-pair(root) {
   animation-duration: var(--cop-duration-recolour, 280ms);
   animation-timing-function: var(--cop-ease-standard, cubic-bezier(0.2, 0, 0, 1));

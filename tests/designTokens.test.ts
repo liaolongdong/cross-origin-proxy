@@ -456,3 +456,38 @@ describe('EP 节奏覆盖必须靠特异度赢，而不是靠加载顺序', () =
     expect(tooWeak).toEqual([]);
   });
 });
+
+/**
+ * 换肤那一次整页淡入由四个快照层一起完成，四层都得挂在同一档上。
+ *
+ * 这条是 2026-09-26 真机量出来的：`::view-transition-group(root)` 当时没人写，于是它保持 UA 的
+ * `250ms / ease`，而交叉溶解的 old/new 两层是 `280ms / standard`——同一次点击、两种节奏，正是
+ * 令牌层存在的理由被自己破掉。它**看不见**（整页快照下 group 框不发生形变，仓库里也搜不到
+ * `view-transition-name`，只有默认的 root 一层），所以只有 resolved timing 说得出这件事。
+ * 同一轮还实测了「作者声明压得住这一层」（注入 333ms 哨兵后 `getAnimations()` 读回 333ms），
+ * 因此这里钉的是写法，不是「反正盖不住」。
+ */
+describe('换肤快照的四层同时长同缓动（漏一层就退回 UA 的 250ms/ease）', () => {
+  const LAYERS = [
+    '::view-transition-group(root)',
+    '::view-transition-image-pair(root)',
+    '::view-transition-old(root)',
+    '::view-transition-new(root)',
+  ];
+
+  it('每一层都在同一条声明了 recolour 时长与 standard 缓动的规则里', () => {
+    const src = readFileSync(TOKENS_FILE, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const covered = new Set<string>();
+    for (const [, selectorList, body] of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/animation-duration:\s*var\(--cop-duration-recolour/.test(body)) continue;
+      if (!/animation-timing-function:\s*var\(--cop-ease-standard/.test(body)) continue;
+      for (const selector of selectorList.split(',')) {
+        const trimmed = selector.trim();
+        if (LAYERS.includes(trimmed)) covered.add(trimmed);
+      }
+    }
+    const missing = LAYERS.filter(layer => !covered.has(layer));
+    // 数量级守卫：一条都没匹配上就是解析失效（改了写法或块结构），不是「恰好都不需要」
+    expect(covered.size, `四层里没人接管的有：${missing.join(' ')}`).toBe(LAYERS.length);
+  });
+});
