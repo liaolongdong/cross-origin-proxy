@@ -116,6 +116,7 @@
           <el-switch
             :model-value="autoRefresh"
             :active-text="t('autoRefresh')"
+            :aria-label="t('autoRefresh')"
             @change="val => $emit('refresh', val as boolean)"
           />
         </div>
@@ -210,13 +211,24 @@
         </ul>
       </div>
 
-      <!-- 日志表格（SW 通道逐条日志；:data 是窗口化的那份，见下方「按帧续载」） -->
+      <!-- 日志表格（SW 通道逐条日志；:data 是窗口化的那份，见下方「按帧续载」）
+           行详情以前只有指针一条路（`@row-click`，而 `<tr>` 拿不到焦点），键盘与读屏用户根本
+           翻不开它。这里把表格自身变成一个焦点位：上下方向键移动高亮行、回车或空格展开——
+           与点击共用同一个 `toggleLogDetail`，两条路看到的是同一件事，不存在「键盘版是另一套逻辑」。
+           这些属性透传到 `.el-table` 根 div（EP 没有设 `inheritAttrs: false`），而裸 `<div>` 上的
+           `aria-label` 不会被念出来，所以同时给 `role="group"`。 -->
       <el-table
         v-loading="loading"
         :data="windowedLogs"
         :row-class-name="rowClassName"
+        row-key="id"
+        :current-row-key="focusedRowId"
         class="log-table"
         highlight-current-row
+        tabindex="0"
+        role="group"
+        :aria-label="t('logTableA11y')"
+        @keydown="handleTableKeydown"
         @row-click="handleRowClick"
       >
         <el-table-column
@@ -261,12 +273,16 @@
               >
                 <span class="url-text">{{ truncateUrl(row.originalUrl) }}</span>
               </el-tooltip>
-              <el-icon
+              <button
+                type="button"
                 class="copy-btn"
+                :aria-label="t('copyUrlA11y')"
                 @click.stop="copyUrl(row.originalUrl)"
               >
-                <CopyDocument />
-              </el-icon>
+                <el-icon>
+                  <CopyDocument />
+                </el-icon>
+              </button>
             </span>
           </template>
         </el-table-column>
@@ -284,12 +300,16 @@
               >
                 <span class="url-text">{{ truncateUrl(row.proxiedUrl) }}</span>
               </el-tooltip>
-              <el-icon
+              <button
+                type="button"
                 class="copy-btn"
+                :aria-label="t('copyUrlA11y')"
                 @click.stop="copyUrl(row.proxiedUrl)"
               >
-                <CopyDocument />
-              </el-icon>
+                <el-icon>
+                  <CopyDocument />
+                </el-icon>
+              </button>
             </span>
           </template>
         </el-table-column>
@@ -356,6 +376,7 @@
                 v-model="revealSensitive"
                 size="small"
                 :active-text="t('revealSensitive')"
+                :aria-label="t('revealSensitive')"
               />
               <el-button
                 size="small"
@@ -522,7 +543,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue';
+import { computed, ref, watch, nextTick, onUnmounted } from 'vue';
 import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
@@ -534,6 +555,7 @@ import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
 import { useRenderWindow } from '@/composables/useRenderWindow';
+import { resolveLogRowKey } from '@/utils/logRowNavigation';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
 
 /**
@@ -823,9 +845,49 @@ function handleDrawerClose() {
   emit('update:visible', false);
 }
 
+/**
+ * 当前被选中/高亮的那一行 id（指针与键盘共用这一份，见 {@link handleTableKeydown}）
+ *
+ * 绑给 `el-table` 的 `current-row-key`，所以「点过的行」与「方向键走到的行」画的是同一个高亮。
+ */
+const focusedRowId = ref<string | null>(null);
+
 function handleRowClick(row: RequestLogEntry) {
-  selectedLog.value = selectedLog.value?.id === row.id ? null : row;
-  detailTab.value = 'request';
+  focusedRowId.value = row.id;
+  toggleLogDetail(row);
+}
+
+/** 展开 / 收起某一行的详情：指针与键盘两条路都只走这一个出口，避免长成两套逻辑 */
+function toggleLogDetail(row: RequestLogEntry) {
+  const isSame = selectedLog.value?.id === row.id;
+  selectedLog.value = isSame ? null : row;
+  if (!isSame) detailTab.value = 'request';
+}
+
+/**
+ * 键盘操作日志表格：↑/↓ 移动高亮行，Enter / 空格展开或收起那一行。
+ *
+ * 补的是「详情只有指针一条路」——`<tr>` 拿不到焦点，键盘用户此前根本翻不开任何一行。
+ * 判据本身在 `utils/logRowNavigation.ts`（那才是需要按「输入 → 答案」核的部分），这里只做三件事：
+ * 取事件当前的容器（`currentTarget` 在处理函数返回后就是 null，必须同步取走）、按结果落状态、
+ * 把高亮行滚进视野最近的一侧（`block: 'nearest'`，不把用户正在看的表头顶走）。
+ */
+function handleTableKeydown(event: KeyboardEvent) {
+  const rows = windowedLogs.value;
+  const result = resolveLogRowKey(rows, focusedRowId.value, event.key);
+  if (!result.consumed) return;
+  event.preventDefault();
+
+  const row = rows[result.index];
+  focusedRowId.value = row.id;
+  if (result.action === 'toggle') {
+    toggleLogDetail(row);
+    return;
+  }
+  const root = event.currentTarget as HTMLElement | null;
+  void nextTick(() => {
+    root?.querySelector('.el-table__row.current-row')?.scrollIntoView({ block: 'nearest' });
+  });
 }
 
 /** 基于当前日志创建规则：交由父组件解析 URL 并预填充规则表单 */
@@ -1016,11 +1078,19 @@ function copyAsCurl() {
   white-space: nowrap;
 }
 
+/* 复制按钮：以前这个可点击的东西是一个 `<i>`（`<el-icon>` 渲染出的 i 标签）——
+   没有 role、没有名字、Tab 到不了，再加上 `opacity: 0` 只靠行悬停显形，
+   于是键盘与读屏两条路都走不通（WCAG 4.1.2 / 2.1.1）。换成真正的 `<button>` 并给 aria-label，
+   「看得见」这件事因此必须跟着焦点走，否则键盘焦点会落在一个隐形的控件上（2.4.7）。 */
 .copy-btn {
+  display: inline-flex;
   flex-shrink: 0;
+  padding: 0;
   font-size: 14px;
   color: var(--cop-text-color-secondary);
   cursor: pointer;
+  background: none;
+  border: 0;
   opacity: 0;
   transition: opacity var(--cop-duration-instant) var(--cop-ease-standard);
 }
@@ -1029,8 +1099,17 @@ function copyAsCurl() {
   color: var(--cop-primary);
 }
 
-.log-table :deep(.el-table__row:hover .copy-btn) {
+/* 行 hover 与「焦点落在这一行的任何一个控件上」都要显形：后者用 `:focus-within`，
+   它同时覆盖 Tab 直接进到按钮、以及键盘用户先停在行内其它控件上的情形。 */
+.log-table :deep(.el-table__row:hover .copy-btn),
+.log-table :deep(.el-table__row:focus-within .copy-btn) {
   opacity: 1;
+}
+
+/* 表格这个焦点位（↑/↓ 选行）要看得见。用 inset 描边而不是 outline：
+   后者画在盒子外，会被 `.el-drawer__body` 的滚动容器裁掉左半边。 */
+.log-table:focus-visible {
+  box-shadow: inset 0 0 0 2px rgb(var(--cop-primary-rgb) / 40%);
 }
 
 .log-table :deep(.el-table__row:hover) {

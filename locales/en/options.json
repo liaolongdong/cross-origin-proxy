@@ -381,5 +381,8 @@
   "migratePreviewCount": "$1 rule(s) will be updated:",
   "migrateApply": "Apply",
   "migrateSuccess": "$1 rule target(s) migrated",
-  "migrateFailed": "Migrate targets failed"
+  "migrateFailed": "Migrate targets failed",
+  "proxyToggleA11y": "Proxy master switch",
+  "logTableA11y": "Request log list (use Up and Down arrows to pick a row, Enter to open details)",
+  "copyUrlA11y": "Copy this request's URL"
 }

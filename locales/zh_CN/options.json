@@ -381,5 +381,8 @@
   "migratePreviewCount": "将更新 $1 条规则：",
   "migrateApply": "应用",
   "migrateSuccess": "已迁移 $1 条规则的目标",
-  "migrateFailed": "迁移目标失败"
+  "migrateFailed": "迁移目标失败",
+  "proxyToggleA11y": "代理总开关",
+  "logTableA11y": "请求日志列表（用上下方向键选择行，回车展开详情）",
+  "copyUrlA11y": "复制这一笔的 URL"
 }

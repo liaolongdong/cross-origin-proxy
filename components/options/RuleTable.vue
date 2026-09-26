@@ -282,6 +282,7 @@
             <el-switch
               :model-value="row.enabled"
               size="small"
+              :aria-label="t('enableRuleA11y', row.name)"
               @change="val => $emit('toggle', row.id, val as boolean)"
             />
           </template>

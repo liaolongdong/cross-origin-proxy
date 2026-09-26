@@ -46,6 +46,7 @@
       <el-switch
         v-model="enabled"
         :loading="loading"
+        :aria-label="t('proxySwitch')"
         @change="handleToggleProxy"
       />
     </div>
@@ -96,6 +97,7 @@
               <el-switch
                 :model-value="rule.enabled"
                 size="small"
+                :aria-label="t('enableRuleA11y', rule.name)"
                 @change="(val: boolean) => handleToggleRule(rule.id, val)"
               />
             </div>

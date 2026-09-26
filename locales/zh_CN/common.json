@@ -15,6 +15,7 @@
   "matchTypeRegex": "正则",
   "statusEnabled": "已启用",
   "statusDisabled": "已关闭",
+  "enableRuleA11y": "启用规则「$1」",
   "diagnosisNoRules": "还没有任何代理规则，先新建一条。",
   "diagnosisDisabledMatch": "规则「$1」匹配这个地址，但它当前是关闭的，启用即可生效。",
   "diagnosisMethodFiltered": "规则「$1」匹配这个地址，但它只处理方法 $2，这一笔的方法不在其中。",

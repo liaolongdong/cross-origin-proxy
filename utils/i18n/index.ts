@@ -11,9 +11,11 @@
  *   页面入口可同步读取镜像消除首帧闪烁；storage.onChanged 实现跨页面实时同步
  * - manifest 的名称 / 悬停短名 / 描述 / 命令文案走 chrome.i18n（`public/_locales` 仅这 4 个键，
  *   中英键集由 tests/build-verification.test.ts 守卫）；应用内可见文案一律用本模块
+ * - 根元素的 `lang` 由 `currentLocale` 驱动（见 {@link DOCUMENT_LANGS}）：入口 HTML 里那份静态
+ *   `lang` 只是首帧兜底，切换语言后必须以实际渲染的语言为准
  */
 
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, watch } from 'vue';
 import { STORAGE_KEYS } from '@/utils/constants';
 import { withViewTransition } from '@/utils/transitions';
 
@@ -78,6 +80,34 @@ function writeMirror(locale: LocaleName): void {
 
 /** 当前语言（共享响应式状态，t() 依赖它实现切换后全组件自动更新） */
 export const currentLocale = ref<LocaleName>(readMirror() ?? detectDefaultLocale());
+
+/**
+ * 应用内语言 → HTML `lang` 属性值（BCP 47）。
+ *
+ * `zh_CN` 是 chrome.i18n 风格的目录名，**不是**合法的 BCP 47 标签（下划线在标签里非法），
+ * 直接写进 `lang` 会被浏览器按「未声明语言」处理——读屏因此拿错发音引擎、中文按英文规则念。
+ */
+const DOCUMENT_LANGS: Record<LocaleName, string> = { zh_CN: 'zh-CN', en: 'en' };
+
+/**
+ * 让根元素的 `lang` 始终等于屏幕上真正渲染的语言（WCAG 3.1.1 / 3.1.2）。
+ *
+ * 挂在 `currentLocale` 的 watcher 上，而不是散在三处赋值里：写这个 ref 的路径有三条
+ * （`setLocaleValue` 的过渡回调、`initLocaleSync` 首帧从 storage 读到的那份、模块加载时
+ * 由镜像或浏览器 UI 语言定下的初值），漏掉任何一条都是「界面已经是英文、文档仍声明中文」
+ * 这种只有读屏用户看得见的错位。
+ *
+ * 守卫 `document`：本模块也被后台 SW 与内容脚本 import（`t()` 在那边用于日志与消息文案），
+ * 那两个上下文没有 DOM。
+ */
+watch(
+  currentLocale,
+  locale => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.lang = DOCUMENT_LANGS[locale];
+  },
+  { immediate: true },
+);
 
 /**
  * 取当前语言的国际化文案

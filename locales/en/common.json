@@ -15,6 +15,7 @@
   "matchTypeRegex": "Regex",
   "statusEnabled": "Enabled",
   "statusDisabled": "Disabled",
+  "enableRuleA11y": "Enable rule $1",
   "diagnosisNoRules": "No proxy rules yet — create one first.",
   "diagnosisDisabledMatch": "Rule “$1” matches this address, but it is currently off — enable it.",
   "diagnosisMethodFiltered": "Rule “$1” matches this address, but it only handles $2, and this request's method is not in that list.",
