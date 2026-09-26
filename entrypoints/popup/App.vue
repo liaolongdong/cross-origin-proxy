@@ -57,6 +57,8 @@
         class="rules-section-header"
         role="button"
         tabindex="0"
+        :aria-expanded="rulesExpanded ? 'true' : 'false'"
+        aria-controls="rules-section-collapse"
         @click="rulesExpanded = !rulesExpanded"
         @keydown.enter.space.prevent="rulesExpanded = !rulesExpanded"
       >
@@ -70,8 +72,12 @@
         </el-icon>
       </div>
       <!-- 折叠用 grid-template-rows: 0fr → 1fr，不再用 max-height 夹：
-           旧的 `max-height: 300px` 在规则多于约八条时先在动画里被裁一刀、过渡结束后又突然长全 -->
+           旧的 `max-height: 300px` 在规则多于约八条时先在动画里被裁一刀、过渡结束后又突然长全。
+           `aria-controls` 指向的就是这一层（它始终在 DOM 里，只是收起时 `visibility: hidden`，
+           因此既不出现在读屏的朗读顺序里、也拿不到焦点）；标题那侧配 `aria-expanded`，
+           否则读屏只报得出「按钮」，报不出它是开着的还是关着的、开了会多出什么来。 -->
       <div
+        id="rules-section-collapse"
         class="rules-section-collapse"
         :class="{ 'is-open': rulesExpanded }"
       >
@@ -266,6 +272,9 @@
       <!--
         候选面板：代理要挂的是接口地址，不是页面文档地址，所以先把「这一页在调谁」摊出来。
         面板紧跟在卡片后面，键盘用户按完 Enter 再 Tab 就落在第一行；每行是真按钮，指针与键盘同一条路。
+        上面那张卡片只给 `aria-expanded`、不给 `aria-controls`，与规则列表那处折叠刻意不同：
+        这一层是 `v-if`，收起时目标元素根本不在 DOM 里，指向一个不存在的 id 是无效 IDREF
+        （axe 的 aria-valid-attr-value 直接报），而规则列表那层的折叠体始终在、只是 `visibility: hidden`。
       -->
       <div
         v-if="apiPicker"
@@ -1510,6 +1519,15 @@ async function openOptionsPage(hash = '') {
 
 .rules-section-header:hover {
   background: var(--cop-primary-bg-hover);
+}
+
+/* 焦点环画在盒子里侧（inset），因为父级 `.rules-section` 带 `overflow: hidden`——
+   标题正好铺满那一层的宽度，UA 默认描边（或任何往外长的环）会在四边被裁掉，
+   于是「有焦点样式」与「焦点看得见」是两件事。同 `.api-picker-row:focus-visible` 一样
+   显式接管描边，只是把环换成内阴影。 */
+.rules-section-header:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgb(var(--cop-primary-rgb) / 45%);
 }
 
 .rules-section-title {

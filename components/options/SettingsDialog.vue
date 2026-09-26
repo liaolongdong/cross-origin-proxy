@@ -625,7 +625,6 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   width: 32px;
   height: 32px;
   cursor: pointer;
-  outline: none;
   border: 2px solid transparent;
   border-radius: 50%;
 
@@ -641,8 +640,16 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   transform: scale(1.12);
 }
 
+/* 焦点环走 outline，不走 box-shadow：`.theme-swatch.active` 与 `.theme-swatch:focus-visible`
+   的特异度相同（都是两个类级选择器），而 `.active` 写在后面，于是它那条 box-shadow 把焦点环
+   整条盖掉——键盘用户打开设置框时焦点恰好停在「当前主题」那一格，焦点就此完全看不见
+   （WCAG 2.4.7）。outline 是「焦点」这件事自己的属性，选中态不会来抢，也就与源码顺序无关；
+   基础规则里那句 `outline: none`（正是它连 UA 默认环一起关掉的）也一并删了。
+   偏移给到 5px 而不是 2px：`.active` 那圈的外沿正落在 2–4px，而它的颜色就是这一格自己的主题色
+   （`color: opt.swatch`），焦点环压在同一圈上等于用同一种颜色画同一条线——默认主题那一格当场看不见。 */
 .theme-swatch:focus-visible {
-  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 40%);
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 5px;
 }
 
 .theme-swatch.active {
