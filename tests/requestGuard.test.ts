@@ -129,7 +129,9 @@ describe('保存侧必须与运行时同源校验（防两处判据漂移）', (
   const enOptions = JSON.parse(fs.readFileSync('locales/en/options.json', 'utf-8'));
 
   it('表单在拼出 result 之前就拦下非法的请求头/响应头覆盖', () => {
-    const save = formSrc.slice(formSrc.indexOf('async function handleSave'));
+    // 组装规则的那段现在叫 `submitRule`：`handleSave` 是它外面的重入闸门（M-6），
+    // 只包一层 try/finally，判据全在 `submitRule` 里
+    const save = formSrc.slice(formSrc.indexOf('async function submitRule'));
     const beforeBuild = save.slice(0, save.indexOf('const headerOverrides'));
     expect(beforeBuild).toContain('findInvalidHeaderNames(headerList.value)');
     expect(beforeBuild).toContain('findInvalidHeaderNames(responseHeaderList.value)');

@@ -326,12 +326,29 @@ function handleExport() {
   emit('export', sanitizeExport.value);
 }
 
-function handleFileChange(file: UploadFile) {
+/**
+ * 把选择器里那个文件读成文本（配置 JSON 与 HAR 两条通道共用）
+ *
+ * `onerror` 必须有接手人：读失败（文件选完后被移走或删掉、磁盘与权限问题）时 `onload` 永不触发，
+ * 而界面上那一行已经是刚选的新文件名——上一次的内容还留在 `fileContent` 里等着被导入。
+ * 用户以为自己换了文件，实际按下的是旧那一份，且没有任何地方说过这件事。
+ * 失败时清空目标（回到「请选择文件或粘贴 JSON」的口径）并点名，绝不让旧内容冒充新文件。
+ */
+function readFileAsText(file: File, apply: (text: string) => void): void {
   const reader = new FileReader();
-  reader.onload = e => {
-    fileContent.value = e.target?.result as string;
+  reader.onload = e => apply(typeof e.target?.result === 'string' ? e.target.result : '');
+  reader.onerror = () => {
+    apply('');
+    ElMessage.error(t('fileReadFailed'));
   };
-  reader.readAsText(file.raw!);
+  reader.readAsText(file);
+}
+
+function handleFileChange(file: UploadFile) {
+  if (!file.raw) return;
+  readFileAsText(file.raw, text => {
+    fileContent.value = text;
+  });
 }
 
 function handleFileRemove() {
@@ -422,11 +439,10 @@ async function handleExportHar() {
 }
 
 function handleHarFileChange(file: UploadFile) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    harFileContent.value = e.target?.result as string;
-  };
-  reader.readAsText(file.raw!);
+  if (!file.raw) return;
+  readFileAsText(file.raw, text => {
+    harFileContent.value = text;
+  });
 }
 
 function handleHarFileRemove() {
@@ -451,11 +467,14 @@ async function handleImportHar() {
     if (!harData.log || !Array.isArray(harData.log.entries)) {
       throw new Error('Invalid HAR format');
     }
-    const result = await chrome.runtime.sendMessage({
+    const result = (await chrome.runtime.sendMessage({
       type: MessageType.IMPORT_HAR,
       data: harData,
-    });
-    if (result.success && result.rules) {
+    })) as { success?: boolean; rules?: ProxyRule[]; error?: string } | undefined;
+    // `?.` 是必需的：SW 刚被回收时 `sendMessage` 会 resolve `undefined`（与 `importConfig`
+    // 同一件事）。少了它，这一行抛的 TypeError 会被下面的 catch 收成「文件不合法」——
+    // 用户的 HAR 明明没问题，却被指着格式说事，重试多少次都是同一句话。
+    if (result?.success && result.rules) {
       // 只负责把规则交给父组件写入：emit 是同步的，此处弹「成功」会在达上限时
       // 与父组件的失败提示同时出现，输入也会被提前清掉、无法重试
       emit('importHarRules', result.rules);

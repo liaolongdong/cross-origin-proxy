@@ -97,7 +97,7 @@
           <div class="header-overrides">
             <div
               v-for="(query, index) in queryList"
-              :key="index"
+              :key="query.uid"
               class="header-pair"
             >
               <el-input
@@ -134,7 +134,7 @@
           <div class="header-overrides">
             <div
               v-for="(header, index) in headerList"
-              :key="index"
+              :key="header.uid"
               class="header-pair"
             >
               <el-input
@@ -219,7 +219,7 @@
                 <label class="response-field-label">{{ t('responseHeadersOverride') }}</label>
                 <div
                   v-for="(header, index) in responseHeaderList"
-                  :key="index"
+                  :key="header.uid"
                   class="header-pair"
                 >
                   <el-input
@@ -243,7 +243,7 @@
                 <el-button
                   type="primary"
                   link
-                  @click="responseHeaderList.push({ key: '', value: '' })"
+                  @click="addResponseHeader"
                 >
                   <el-icon><Plus /></el-icon>
                   {{ t('addHeader') }}
@@ -253,7 +253,7 @@
                 <label class="response-field-label">{{ t('responseBodyReplacements') }}</label>
                 <div
                   v-for="(replacement, index) in bodyReplacementList"
-                  :key="index"
+                  :key="replacement.uid"
                   class="header-pair"
                 >
                   <el-input
@@ -277,7 +277,7 @@
                 <el-button
                   type="primary"
                   link
-                  @click="bodyReplacementList.push({ path: '', value: '' })"
+                  @click="addBodyReplacement"
                 >
                   <el-icon><Plus /></el-icon>
                   {{ t('addReplacement') }}
@@ -346,7 +346,7 @@
                 <label class="response-field-label">{{ t('mockConditions') }}</label>
                 <div
                   v-for="(cond, index) in mockConditions"
-                  :key="index"
+                  :key="cond.uid"
                   class="mock-condition-card"
                 >
                   <div class="condition-header">
@@ -389,7 +389,7 @@
                   </el-select>
                   <div
                     v-for="(qp, qi) in cond.queryPairs"
-                    :key="qi"
+                    :key="qp.uid"
                     class="header-pair"
                   >
                     <el-input
@@ -413,7 +413,7 @@
                   <el-button
                     type="primary"
                     link
-                    @click="cond.queryPairs.push({ key: '', value: '' })"
+                    @click="addMockQueryPair(cond)"
                   >
                     {{ t('addQueryMatch') }}
                   </el-button>
@@ -453,16 +453,7 @@
                 <el-button
                   type="primary"
                   link
-                  @click="
-                    mockConditions.push({
-                      matchUrl: '',
-                      matchMethod: '',
-                      queryPairs: [],
-                      body: '',
-                      status: 200,
-                      contentType: 'application/json',
-                    })
-                  "
+                  @click="addMockCondition"
                 >
                   <el-icon><Plus /></el-icon>
                   {{ t('addMockCondition') }}
@@ -641,6 +632,7 @@
         </el-button>
         <el-button
           type="primary"
+          :loading="saving"
           @click="handleSave"
           >{{ t('save') }}</el-button
         >
@@ -683,6 +675,22 @@ const { variables, loadVariables } = useVariables();
 /** 变量表是否读到过：没读到就别拿它去否决用户的保存 */
 const variableNamesLoaded = ref(false);
 /**
+ * 变量表这一趟读取的 promise（打开弹窗时挂上）
+ *
+ * 保存闸门等的是它，不是「旗标为假就当读失败」（M-7）：SW 冷启动那几百毫秒里点保存，
+ * 读失败与还在路上在旗标上完全同形，按旗标放过的结果是规则静默落盘、运行时原样发出
+ * `{{TOKEN}}`，用户只看到一次看不懂的上游 401。
+ */
+let variablesLoad: Promise<boolean> | null = null;
+/**
+ * 保存是否在途（按钮的 `:loading`）
+ *
+ * `validate()` 与变量表那一趟都要 await，弹窗在此期间一直开着、按钮一直可点；
+ * 而 `ADD_RULE` 只做 append（去重只在导入侧跑），连点两下就是两条同名同模式的规则。
+ * 父组件那一侧还有一道同族的旗标，接住「本组件已把请求交出去、存储写入还在途」的那一段。
+ */
+const saving = ref(false);
+/**
  * 打开时这条规则里已经写着的引用名，两道保存闸门各自按它过滤（见 `handleSave`）：
  * 闸门拦的是这次新写进去的引用，不是存储里本来就有的那一句。
  *
@@ -715,28 +723,63 @@ const defaultForm = {
 };
 
 const form = reactive({ ...defaultForm });
-const headerList = ref<{ key: string; value: string }[]>([]);
-const responseHeaderList = ref<{ key: string; value: string }[]>([]);
-const bodyReplacementList = ref<{ path: string; value: string }[]>([]);
+
+/**
+ * 可编辑行的稳定 key
+ *
+ * 表单里六个列表（请求头、查询参数、响应头、响应体替换、Mock 条件、条件里的查询参数）都能从
+ * 中间删一行。以 `index` 为 key 时，删掉中间那行会把后面每一行的输入框实例往前挪一位复用：
+ * 正在用 IME 组合的那半截字符跟着串到相邻行，焦点与校验态也一起错位，且没有任何报错。
+ * 一个组件内的自增 id 就够——它只服务渲染，保存时按字段重建对象自然不带出去（`SettingsDialog`
+ * 的变量行是同一做法）。
+ */
+let rowUidSeed = 0;
+const nextRowUid = (): number => ++rowUidSeed;
+
+/** 给刚建出来的一行补上 key；初始化与「新增一行」共用，避免某个入口漏加导致 key 为 `undefined` */
+function withUid<T extends object>(row: T): T & { uid: number } {
+  return { ...row, uid: nextRowUid() };
+}
+
+/**
+ * 头 / 查询参数的可编辑行
+ *
+ * `uid` 只做列表 key（见 `nextRowUid`），不进规则数据——保存处按字段解构重建对象，它自然落下。
+ */
+interface PairRow {
+  uid: number;
+  key: string;
+  value: string;
+}
+/** 响应体 JSON 路径替换行，`uid` 同上 */
+interface ReplacementRow {
+  uid: number;
+  path: string;
+  value: string;
+}
+/** 一条条件化 Mock 响应，`uid` 同上；嵌套的 `queryPairs` 与外面的列表同样支持中间删行 */
+interface MockConditionRow {
+  uid: number;
+  matchUrl: string;
+  matchMethod: string;
+  queryPairs: PairRow[];
+  body: string;
+  status: number;
+  contentType: string;
+}
+const headerList = ref<PairRow[]>([]);
+const responseHeaderList = ref<PairRow[]>([]);
+const bodyReplacementList = ref<ReplacementRow[]>([]);
 const enableRequestBodyOverride = ref(false);
 const enableResponseOverrides = ref(false);
 const enableMockResponse = ref(false);
 const enableDelay = ref(false);
 const enableRetry = ref(false);
-const mockConditions = ref<
-  {
-    matchUrl: string;
-    matchMethod: string;
-    queryPairs: { key: string; value: string }[];
-    body: string;
-    status: number;
-    contentType: string;
-  }[]
->([]);
+const mockConditions = ref<MockConditionRow[]>([]);
 
 // 规则级 HTTP 方法白名单（空=任意方法）与查询参数追加/覆盖列表
 const methodsList = ref<string[]>([]);
-const queryList = ref<{ key: string; value: string }[]>([]);
+const queryList = ref<PairRow[]>([]);
 
 // Test panel state
 const showTestPanel = ref(false);
@@ -816,8 +859,10 @@ watch(
     if (val) {
       // 每次打开重新拉一遍引用名：设置页可能刚改过表，拿旧表校验会误报「未定义」
       variableNamesLoaded.value = false;
-      void loadVariables().then(ok => {
+      saving.value = false;
+      variablesLoad = loadVariables().then(ok => {
         variableNamesLoaded.value = ok;
+        return ok;
       });
       if (props.rule) {
         Object.assign(form, {
@@ -839,7 +884,7 @@ watch(
           sendCredentials: props.rule.sendCredentials ?? false,
         });
         headerList.value = props.rule.headerOverrides
-          ? Object.entries(props.rule.headerOverrides).map(([key, value]) => ({ key, value }))
+          ? Object.entries(props.rule.headerOverrides).map(([key, value]) => withUid({ key, value }))
           : [];
         enableRequestBodyOverride.value = props.rule.requestBodyOverride !== undefined;
         enableResponseOverrides.value = !!props.rule.responseOverrides;
@@ -847,33 +892,39 @@ watch(
         enableDelay.value = !!props.rule.delayMs;
         enableRetry.value = !!props.rule.retryCount;
         responseHeaderList.value = props.rule.responseOverrides?.headers
-          ? Object.entries(props.rule.responseOverrides.headers).map(([key, value]) => ({ key, value }))
+          ? Object.entries(props.rule.responseOverrides.headers).map(([key, value]) => withUid({ key, value }))
           : [];
         bodyReplacementList.value = props.rule.responseOverrides?.bodyReplacements
-          ? Object.entries(props.rule.responseOverrides.bodyReplacements).map(([path, value]) => ({
-              path,
-              // 始终 JSON.stringify 保证往返一致：字符串 "123" 若裸显示，下次保存会被 parse 成数字
-              value: JSON.stringify(value),
-            }))
+          ? Object.entries(props.rule.responseOverrides.bodyReplacements).map(([path, value]) =>
+              withUid({
+                path,
+                // 始终 JSON.stringify 保证往返一致：字符串 "123" 若裸显示，下次保存会被 parse 成数字
+                value: JSON.stringify(value),
+              }),
+            )
           : [];
         mockConditions.value =
-          props.rule.mockResponse?.conditions?.map(c => ({
-            matchUrl: c.matchUrl ?? '',
-            matchMethod: c.matchMethod ?? '',
-            queryPairs: c.matchQuery ? Object.entries(c.matchQuery).map(([key, value]) => ({ key, value })) : [],
-            body: c.body,
-            status: c.status ?? 200,
-            contentType: c.contentType ?? 'application/json',
-          })) ?? [];
+          props.rule.mockResponse?.conditions?.map(c =>
+            withUid({
+              matchUrl: c.matchUrl ?? '',
+              matchMethod: c.matchMethod ?? '',
+              queryPairs: c.matchQuery
+                ? Object.entries(c.matchQuery).map(([key, value]) => withUid({ key, value }))
+                : [],
+              body: c.body,
+              status: c.status ?? 200,
+              contentType: c.contentType ?? 'application/json',
+            }),
+          ) ?? [];
         methodsList.value = props.rule.methods ? [...props.rule.methods] : [];
         queryList.value = props.rule.queryOverrides
-          ? Object.entries(props.rule.queryOverrides).map(([key, value]) => ({ key, value }))
+          ? Object.entries(props.rule.queryOverrides).map(([key, value]) => withUid({ key, value }))
           : [];
       } else {
         const source = props.initialData ?? defaultForm;
         Object.assign(form, source);
         headerList.value = props.initialData?.headerOverrides
-          ? Object.entries(props.initialData.headerOverrides).map(([key, value]) => ({ key, value }))
+          ? Object.entries(props.initialData.headerOverrides).map(([key, value]) => withUid({ key, value }))
           : [];
         // 预填数据（模板/日志建规则等）可能携带请求体覆盖，按其存在与否初始化开关，
         // 硬编码 false 会让保存逻辑丢弃已赋值的 requestBodyOverride
@@ -917,7 +968,7 @@ watch(
 );
 
 function addHeader() {
-  headerList.value.push({ key: '', value: '' });
+  headerList.value.push(withUid({ key: '', value: '' }));
 }
 
 function removeHeader(index: number) {
@@ -925,11 +976,99 @@ function removeHeader(index: number) {
 }
 
 function addQuery() {
-  queryList.value.push({ key: '', value: '' });
+  queryList.value.push(withUid({ key: '', value: '' }));
 }
 
 function removeQuery(index: number) {
   queryList.value.splice(index, 1);
+}
+
+/** 响应头：模板里原本直接 `push({ key: '', value: '' })`，补 key 得有个出口 */
+function addResponseHeader() {
+  responseHeaderList.value.push(withUid({ key: '', value: '' }));
+}
+
+/** 响应体 JSON 路径替换行 */
+function addBodyReplacement() {
+  bodyReplacementList.value.push(withUid({ path: '', value: '' }));
+}
+
+/** 一条条件化 Mock 响应（默认值与模板里原先那份内联对象一致） */
+function addMockCondition() {
+  mockConditions.value.push(
+    withUid({
+      matchUrl: '',
+      matchMethod: '',
+      queryPairs: [],
+      body: '',
+      status: 200,
+      contentType: 'application/json',
+    }),
+  );
+}
+
+/** 某条 Mock 条件里的查询参数匹配行 */
+function addMockQueryPair(cond: MockConditionRow) {
+  cond.queryPairs.push(withUid({ key: '', value: '' }));
+}
+
+/**
+ * 挑出「行 → 名称」列表里重复的名字
+ *
+ * 四张可变长列表落到规则里都是 `Record<string, string>`：同一个名称写两行，后一行静默盖掉前一行，
+ * 而界面上两行都还在，看着像两条都生效。空行跳过（没填名称的行本来就不进记录）。
+ * 头名按 HTTP 口径不区分大小写，查询参数名与 JSON 路径是精确匹配，所以分开判。
+ */
+function findDuplicateNames(names: string[], caseInsensitive: boolean): string[] {
+  const seen = new Set<string>();
+  const duplicates: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name) continue;
+    const dedupeKey = caseInsensitive ? name.toLowerCase() : name;
+    if (seen.has(dedupeKey) && !duplicates.includes(name)) duplicates.push(name);
+    seen.add(dedupeKey);
+  }
+  return duplicates;
+}
+
+/**
+ * 同名条目只提醒、不拦保存（L-9）
+ *
+ * 拦下来会把已有这种形状的老规则（导入、手改 storage 都可能带进来）变成存不动的死路，
+ * 而重复本身不是错误——用户大概率只是想改其中一个值，只是忘了删另一行。所以保存照走，
+ * 话要说一句：哪个列表里的哪个名称，最后一条才算数。
+ */
+function warnAboutDuplicateNames(): void {
+  const segments: string[] = [];
+  const pushSegment = (label: string, names: string[], caseInsensitive: boolean) => {
+    const duplicates = findDuplicateNames(names, caseInsensitive);
+    if (duplicates.length > 0) segments.push(`${label}: ${duplicates.join(', ')}`);
+  };
+  pushSegment(
+    t('headerOverridesLabel'),
+    headerList.value.map(header => header.key),
+    true,
+  );
+  if (enableResponseOverrides.value) {
+    pushSegment(
+      t('responseHeadersOverride'),
+      responseHeaderList.value.map(header => header.key),
+      true,
+    );
+    pushSegment(
+      t('responseBodyReplacements'),
+      bodyReplacementList.value.map(replacement => replacement.path),
+      false,
+    );
+  }
+  pushSegment(
+    t('queryOverridesLabel'),
+    queryList.value.map(query => query.key),
+    false,
+  );
+  // 连接符不用任何一侧语言的标点：这条消息中英共用一个模板
+  if (segments.length > 0) ElMessage.warning(t('duplicateOverrideNames', [segments.join(' · ')]));
 }
 
 function handleClose() {
@@ -937,7 +1076,7 @@ function handleClose() {
   emit('update:visible', false);
 }
 
-async function handleSave() {
+async function submitRule() {
   if (!formRef.value) return;
   const valid = await formRef.value.validate().catch(() => false);
   if (!valid) return;
@@ -957,6 +1096,9 @@ async function handleSave() {
     }
   }
 
+  // 同名条目在这一刻起只会生效最后一条，先说清楚再往下拼记录（拦不得，见该函数注释）
+  warnAboutDuplicateNames();
+
   const headerOverrides: Record<string, string> = {};
   headerList.value.forEach(({ key, value }) => {
     if (key.trim()) {
@@ -970,8 +1112,15 @@ async function handleSave() {
   });
 
   // 变量引用拦在保存处：未定义的 `{{名称}}` 存下去会在请求时原样发出，用户看到的只是一次
-  // 看不懂的上游 401。拉取变量表失败时**不做这项校验**——宁可放过一个拼错的引用（运行时会
+  // 看不懂的上游 401。拉取变量表**失败**时不做这项校验——宁可放过一个拼错的引用（运行时会
   // 宽容原样发出，控制台点名），也不要在扩展暂时读不到表的时候把保存按钮变成死路。
+  // 但「还在路上」不等于「失败」（M-7）：先等这一趟落定再判，代价只是这一次保存多等一会儿。
+  if (!variableNamesLoaded.value) {
+    await (variablesLoad ??= loadVariables().then(ok => {
+      variableNamesLoaded.value = ok;
+      return ok;
+    }));
+  }
   // 同理，按基线过滤：存储里已经写着的那句引用不是这次带进来的，改优先级也该存得回去
   // （导入侧不跑这道校验、手改 storage 也能造出这种规则，否则它们从此再也编不动）。
   if (variableNamesLoaded.value) {
@@ -1099,6 +1248,25 @@ async function handleSave() {
   }
 
   emit('save', result);
+}
+
+/**
+ * 保存按钮的入口：一次点击只允许一笔在途（M-6）
+ *
+ * `submitRule` 里有两处 await（表单校验、变量表那一趟），这期间弹窗一直开着、按钮一直可点，
+ * 而 `ADD_RULE` 只做 append——连点两下就是 storage 里两条同名同模式的规则。旗标早退挡住
+ * 「同一轮里被点两次」，`:loading` 让第二次点击在界面上就发生不了；父组件写存储那一段
+ * 另有 `handleSaveRule` 里的同名旗标接住。
+ * 校验没过或被闸门拦下时按钮照常回到可点状态，否则用户改完就再也存不动了。
+ */
+async function handleSave() {
+  if (saving.value) return;
+  saving.value = true;
+  try {
+    await submitRule();
+  } finally {
+    saving.value = false;
+  }
 }
 
 // ─── Test panel matching logic（直接复用 utils/urlMatcher，与生产通道语义一致）───

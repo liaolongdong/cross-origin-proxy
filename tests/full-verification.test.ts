@@ -530,7 +530,9 @@ describe('[Undo delete] 5 秒窗口与提交定时器不再各自为政', () => 
 
 describe('[Mock save gate] 只配条件或只改状态码的 Mock 不再被静默丢弃', () => {
   const formSrc = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf-8');
-  const save = formSrc.slice(formSrc.indexOf('async function handleSave'));
+  // 组装规则的那段现在叫 `submitRule`：`handleSave` 是它外面的重入闸门（M-6），
+  // 只包一层 try/finally，判据全在 `submitRule` 里
+  const save = formSrc.slice(formSrc.indexOf('async function submitRule'));
   const mockBlock = save.slice(save.indexOf('if (enableMockResponse.value)'), save.indexOf('if (enableDelay.value)'));
 
   it('条件列表先于写入门计算，门同时看 body、状态码与条件', () => {
@@ -1052,5 +1054,137 @@ describe('[Visibility] popup 的生效证据来自三条独立线索，而不是
     expect(styleBlock).toMatch(/\.page-hit-rule-tag\s*\{[^}]*max-width:\s*100%/);
     expect(styleBlock).toMatch(/\.page-hit-rule-tag\s*\{[^}]*overflow:\s*hidden/);
     expect(styleBlock).toMatch(/\.page-hit-rule-tag\s+:deep\(\.el-tag__content\)\s*\{[^}]*text-overflow:\s*ellipsis/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 批次三（2026-09-26 评审轮）：弹窗保存、快捷键与文件读取的闸门
+//
+// 本环境无 DOM（`jsdom` / `@vue/test-utils` 未装），这一层的渲染与点击没有运行时对应物，
+// 所以按源码契约钉「闸门在、且排在它该拦的那件事之前」。每条断言的位置关系都是承重的：
+// 顺序颠倒（先判定后等待、先提示失败后诊断）就是这条用例要拦的那个 bug 本身。
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Batch 3] 弹窗保存与快捷键的闸门（源码契约）', () => {
+  const ruleDialogSrc = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf-8');
+  const optionsAppSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
+  const importExportSrc = fs.readFileSync('components/options/ImportExportDialog.vue', 'utf-8');
+  const popupSrc = fs.readFileSync('entrypoints/popup/App.vue', 'utf-8');
+  const ruleDialogTemplate = ruleDialogSrc.slice(0, ruleDialogSrc.indexOf('<script'));
+
+  /** 取某个函数从声明到第一个顶格 `}` 的源码片段（这些函数内部没有顶格收尾的块） */
+  function fnSource(src: string, signature: string): string {
+    const at = src.indexOf(signature);
+    expect(at, `找不到 ${signature}`).toBeGreaterThan(-1);
+    const end = src.indexOf('\n}', at);
+    expect(end, `${signature} 的结尾找不到`).toBeGreaterThan(at);
+    return src.slice(at, end);
+  }
+
+  it('六个可变长列表的 v-for key 是行自身的 uid，不是下标（L-9）', () => {
+    // 以 index 为 key + 支持中间删行 = 删掉那一行后，后面每一行的输入框实例往前挪一位复用：
+    // IME 正在组合的那半截字符跟着串到相邻行，焦点与校验态一起错位，且全程无报错。
+    for (const list of [
+      'queryList',
+      'headerList',
+      'responseHeaderList',
+      'bodyReplacementList',
+      'mockConditions',
+      'cond.queryPairs',
+    ]) {
+      const at = ruleDialogTemplate.indexOf(`in ${list}"`);
+      expect(at, `模板里找不到 ${list} 的 v-for`).toBeGreaterThan(-1);
+      const head = ruleDialogTemplate.slice(at, at + 120);
+      expect(head, `${list} 的 key 不是行自身的 uid`).toMatch(/:key="\w+\.uid"/);
+      expect(head, `${list} 还在用下标当 key`).not.toMatch(/:key="(index|qi)"/);
+    }
+    // 允许留下标 key 的只有重写结果那三段：computed 全量重建，行内没有任何状态可串
+    expect(ruleDialogTemplate.match(/:key="(index|qi)"/g)).toEqual([':key="index"']);
+    expect(ruleDialogTemplate).toMatch(/in rewriteSegments"\s*\n\s*:key="index"/);
+  });
+
+  it('每一处新建行都过 withUid，模板里不再内联造对象（漏一处就是那一行没有 key）', () => {
+    expect(ruleDialogSrc).toMatch(/function withUid<T extends object>\(row: T\)/);
+    expect(ruleDialogTemplate).not.toMatch(/\.push\(\s*\{/);
+    for (const fn of [
+      'addHeader',
+      'addQuery',
+      'addResponseHeader',
+      'addBodyReplacement',
+      'addMockCondition',
+      'addMockQueryPair',
+    ]) {
+      expect(fnSource(ruleDialogSrc, `function ${fn}(`), fn).toContain('withUid(');
+    }
+  });
+
+  it('变量表还在路上时先等它落定，再谈「未定义引用」那道闸门（M-7）', () => {
+    // 读失败与「还在路上」在 `variableNamesLoaded` 这一个旗标上完全同形。按旗标放过的代价是
+    // 规则静默落盘、运行时原样发出 `{{TOKEN}}`，用户只看到一次看不懂的上游 401。
+    const wait = ruleDialogSrc.indexOf('if (!variableNamesLoaded.value) {');
+    expect(wait, '等待那一趟的代码不见了').toBeGreaterThan(-1);
+    expect(ruleDialogSrc.slice(wait, wait + 220)).toContain('await (variablesLoad ??= loadVariables()');
+    // 真正做判据的那一段必须排在等待之后，否则等的就是空气
+    const judge = ruleDialogSrc.indexOf('if (variableNamesLoaded.value) {');
+    expect(judge).toBeGreaterThan(wait);
+    // 打开弹窗时这笔读取要挂住 promise：只 `void` 掉的话，保存时无从 await
+    expect(fnSource(ruleDialogSrc, 'watch(\n  () => props.visible,')).toContain('variablesLoad = loadVariables()');
+  });
+
+  it('保存在途时按钮是 loading 态、两处旗标各盖一段（M-6）', () => {
+    expect(ruleDialogTemplate).toMatch(/:loading="saving"/);
+    const dialogSave = fnSource(ruleDialogSrc, 'async function handleSave()');
+    expect(dialogSave).toContain('if (saving.value) return;');
+    // 弹窗那一道只盖到「把规则交给父组件」为止；`addRule` / `updateRule` 还要等 SW 往返，
+    // 那一段里再来一次点击就是第二条同名同模式的规则（append 不去重）。
+    expect(fnSource(optionsAppSrc, 'async function handleSaveRule')).toContain('if (savingRule.value) return;');
+  });
+
+  it('DNR 诊断不与保存共用 try：它抛错不能把已存好的规则说成「操作失败」（L-11）', () => {
+    const body = fnSource(optionsAppSrc, 'async function handleSaveRule');
+    const diag = body.indexOf('checkDnrRule');
+    expect(diag, '保存后的 DNR 诊断不见了').toBeGreaterThan(-1);
+    const failHint = body.indexOf('showAddFailedMessage(error)');
+    expect(failHint).toBeGreaterThan(-1);
+    expect(failHint, '失败提示排在诊断之后：它现在拦的是诊断的抛错').toBeLessThan(diag);
+    expect(body.slice(diag), '诊断那段又去报「操作失败」了').not.toContain('showAddFailedMessage');
+  });
+
+  it('N 与 / 两个快捷键让位给任何在场的弹窗，判据与 Escape 同一批入口（L-10）', () => {
+    const decl = fnSource(optionsAppSrc, 'const anyOverlayOpen = computed(');
+    for (const flag of [
+      'showRuleDialog',
+      'showImportExport',
+      'showProfiles',
+      'showSettings',
+      'showUrlTest',
+      'showLogs',
+      'showMigrate',
+    ]) {
+      expect(decl, `${flag} 不在快捷键的让位判据里`).toContain(`${flag}.value`);
+    }
+    const handler = fnSource(optionsAppSrc, 'function handleKeydown');
+    // 两处：N 那一支与 / 那一支。少一处就是「导入弹窗开着时按 N，规则弹窗叠上去抢焦点」
+    expect(handler.match(/if \(anyOverlayOpen\.value\) return;/g)).toHaveLength(2);
+  });
+
+  it('自动关闭倒计时归零只刷一次状态：先清 `autoOffAt` 再拉（L-8）', () => {
+    const body = fnSource(popupSrc, 'function tickAutoOff');
+    const clear = body.indexOf('autoOffAt.value = undefined;');
+    const refresh = body.indexOf('void fetchStatus();');
+    expect(clear, '到期后没有归零：每一 tick 都会重新判到期').toBeGreaterThan(-1);
+    expect(refresh).toBeGreaterThan(-1);
+    expect(clear, '先拉后清：这一次拉到的过程中下一 tick 已经又起跑').toBeLessThan(refresh);
+  });
+
+  it('文件读取失败清空目标并点名，HAR 回包允许整个是 undefined（L-12）', () => {
+    const reader = fnSource(importExportSrc, 'function readFileAsText');
+    // 两处选择器共用一份，各写一遍迟早有一遍漏掉 onerror
+    expect(importExportSrc.match(/reader\.onerror/g)).toHaveLength(1);
+    expect(reader).toContain('onerror');
+    expect(reader).toContain("apply('')");
+    expect(reader).toContain("t('fileReadFailed')");
+    // sendMessage 在 SW 刚被回收时会 resolve undefined；少了 `?.` 就是 TypeError → catch → 「文件不合法」
+    expect(fnSource(importExportSrc, 'async function handleImportHar')).toContain('result?.success');
   });
 });

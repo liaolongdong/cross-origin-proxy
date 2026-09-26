@@ -752,7 +752,11 @@ function tickAutoOff() {
   const remaining = autoOffAt.value - Date.now();
   if (remaining <= 0) {
     autoOffText.value = '';
-    // 到期后 SW 可能已自动关闭代理，刷新状态保持一致
+    // 到期后 SW 可能已自动关闭代理，刷新一次状态保持一致。
+    // 刷完必须把 `autoOffAt` 清掉（L-8）：不归零的话每一 tick 都重新「判到期 → 拉整份状态」，
+    // `loading` 每秒被置真一次——开关下面反复闪 spinner 且短暂禁点，而下一秒的读数与这一秒相同，
+    // 多刷的这几轮什么也没换来（真正的终态由那一次 `fetchStatus` 写回）。
+    autoOffAt.value = undefined;
     void fetchStatus();
     return;
   }

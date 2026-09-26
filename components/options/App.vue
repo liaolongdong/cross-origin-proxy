@@ -231,7 +231,31 @@ const showSettings = ref(false);
 const showUrlTest = ref(false);
 const showLogs = ref(false);
 const showMigrate = ref(false);
+/**
+ * 七个弹窗/抽屉里是否有一个在场
+ *
+ * 键盘快捷键用它，而不是各自记一份「我该让给谁」：`N` 原先只看规则弹窗，导入弹窗开着时照样
+ * 能叠一层；`/` 与 `Ctrl+F` 原先谁都不看，会把焦点交给躲在模态背后的搜索框。
+ * Escape 的级联早已按「最上层优先」处理这七个入口——同一批入口，同一份判据（L-10）。
+ */
+const anyOverlayOpen = computed(
+  () =>
+    showRuleDialog.value ||
+    showImportExport.value ||
+    showProfiles.value ||
+    showSettings.value ||
+    showUrlTest.value ||
+    showLogs.value ||
+    showMigrate.value,
+);
 const editingRule = ref<ProxyRule | null>(null);
+/**
+ * 写存储那一趟是否在途（规则弹窗的保存路径）
+ *
+ * 弹窗那边的 `saving` 只盖到「把规则交给我」为止，`addRule` / `updateRule` 还要等 SW 往返；
+ * 那一段里再来一次点击就是第二条同名同模式的规则（append 不去重）。见 `handleSaveRule`。
+ */
+const savingRule = ref(false);
 const templateInitialData = ref<Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> | null>(null);
 const highlightRuleId = ref<string | null>(null);
 
@@ -359,16 +383,20 @@ function handleKeydown(e: KeyboardEvent) {
   // N（或 Ctrl/Cmd + N）：打开新增规则弹窗。
   // 注意 Ctrl/Cmd+N 在多数平台是浏览器保留快捷键（新窗口），页面无法捕获，
   // 因此以单键 N 为主（同 Gmail 风格的单键快捷操作）
-  // 规则弹窗打开时忽略 N 键：避免编辑中的弹窗被静默重置为新增模式丢失修改
+  // 任意弹窗/抽屉在场时忽略 N 键（L-10）：原先那一条 `showRuleDialog` 拦的是「编辑中的弹窗被
+  // 静默重置为新增模式丢失修改」，另外六个入口是同一个形状——导入弹窗开着时按 N，规则弹窗叠
+  // 上去抢走焦点，关掉上层后底下那份的焦点已经不在原来的控件上。判据与 Escape 的级联同源。
   if (e.key === 'n' || e.key === 'N' || (modKey && e.key === 'n')) {
-    if (showRuleDialog.value) return;
+    if (anyOverlayOpen.value) return;
     e.preventDefault();
     handleAddRule();
     return;
   }
 
-  // / 或 Ctrl/Cmd + F：聚焦搜索框
+  // / 或 Ctrl/Cmd + F：聚焦搜索框。同样让位给在场的弹窗——搜索框在模态背后，
+  // 把它聚焦既看不见也接不住键。
   if (e.key === '/' || (modKey && e.key === 'f')) {
+    if (anyOverlayOpen.value) return;
     e.preventDefault();
     const searchInput = document.querySelector('.search-filter-bar input');
     if (searchInput) (searchInput as HTMLInputElement).focus();
@@ -462,7 +490,13 @@ function showAddFailedMessage(error: unknown) {
 }
 
 async function handleSaveRule(ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
+  // 弹窗那边的 `saving` 只盖到「把请求交给我」为止，写存储这一趟另有它自己的一段（SW 冷启动
+  // 可达数百毫秒）。少了这道旗标，那一段里的第二次点击会再走一遍 `addRule`——而 append 不去重，
+  // storage 里就是两条同名同模式的规则。早退不报错：那一刻第一次保存正在进行，界面没有第二件事要说。
+  if (savingRule.value) return;
+  savingRule.value = true;
   const editingId = editingRule.value?.id;
+  let savedId: string | undefined;
   try {
     const conflict = findConflictingRule(ruleData, editingId);
     if (conflict) {
@@ -470,7 +504,6 @@ async function handleSaveRule(ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'up
     }
 
     // addRule / updateRule 成功后会同步更新 rules.value，故可直接按 id 回查刚保存的规则
-    let savedId: string;
     if (editingId) {
       await updateRule(editingId, ruleData);
       savedId = editingId;
@@ -480,10 +513,20 @@ async function handleSaveRule(ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'up
       flashHighlight(rule.id);
     }
     showRuleDialog.value = false;
+  } catch (error) {
+    showAddFailedMessage(error);
+    logger.error('Save rule failed:', error);
+    return;
+  } finally {
+    savingRule.value = false;
+  }
 
-    // 「保存成功」不等于「会被应用」：走 DNR 通道的规则可能因 RE2 不兼容或捕获引用越界被跳过，
-    // 此时给一条可行动的提示，而不是让用户回头去猜为什么流量没被代理
-    const savedRule = rules.value.find(r => r.id === savedId);
+  // 「保存成功」不等于「会被应用」：走 DNR 通道的规则可能因 RE2 不兼容或捕获引用越界被跳过，
+  // 此时给一条可行动的提示，而不是让用户回头去猜为什么流量没被代理。
+  // 这段诊断排在保存的 try **之外**（L-11）：它只是读数，自己抛错（chrome API 暂时不可用）
+  // 不能翻成「操作失败」——那时规则已经存好了，说反比不说更糟。失败只记日志，界面上仍是保存本身的那句话。
+  try {
+    const savedRule = savedId ? rules.value.find(r => r.id === savedId) : undefined;
     const skipReason = savedRule ? await checkDnrRule(savedRule) : null;
     if (skipReason) {
       ElMessage.warning(t('dnrSkippedMsg', [skipReasonText(skipReason)]));
@@ -491,8 +534,8 @@ async function handleSaveRule(ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'up
       ElMessage.success(editingId ? t('ruleUpdated') : t('ruleAdded'));
     }
   } catch (error) {
-    showAddFailedMessage(error);
-    logger.error('Save rule failed:', error);
+    logger.error('DNR support check failed after save:', error);
+    ElMessage.success(editingId ? t('ruleUpdated') : t('ruleAdded'));
   }
 }
 
