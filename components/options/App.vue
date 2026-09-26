@@ -138,10 +138,10 @@ import {
   type ThemeName,
   getStoredTheme,
   setStoredTheme,
-  applyThemeToRoot,
+  applyThemeVisually,
   getStoredThemeMode,
   setStoredThemeMode,
-  applyThemeMode,
+  applyThemeModeVisually,
 } from '@/utils/theme';
 import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
@@ -282,15 +282,16 @@ const hitStatsByRule = computed(() => groupHitStatsByRule(dnrStats.value, swStat
 const currentTheme = ref<ThemeName>('sky');
 const themeMode = ref<ThemeMode>('system');
 
+/** 换主题：先用一次交叉淡入改本页（同页还有别的配色相关状态时以 `currentTheme` 为准），再落盘让其它扩展页跟上 */
 async function switchTheme(theme: ThemeName) {
   currentTheme.value = theme;
-  applyThemeToRoot(theme);
+  applyThemeVisually(theme);
   await setStoredTheme(theme);
 }
 
 async function switchThemeMode(mode: ThemeMode) {
   themeMode.value = mode;
-  applyThemeMode(mode);
+  applyThemeModeVisually(mode);
   await setStoredThemeMode(mode);
 }
 

@@ -13,8 +13,9 @@
  *   中英键集由 tests/build-verification.test.ts 守卫）；应用内可见文案一律用本模块
  */
 
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 import { STORAGE_KEYS } from '@/utils/constants';
+import { withViewTransition } from '@/utils/transitions';
 
 import zhCommon from '@/locales/zh_CN/common.json';
 import zhOptions from '@/locales/zh_CN/options.json';
@@ -101,6 +102,39 @@ export function t(key: string, substitutions?: string | number | (string | numbe
 }
 
 /**
+ * 在途过渡正要画成哪种语言（回声去重的账，与 `utils/theme.ts` 的 `pendingVisual` 同一条理由）
+ *
+ * 界面侧换语言是「先就地应用、再写 `chrome.storage.local`」两步，写下去那一笔会沿
+ * `storage.onChanged` 绕回发起页自己；而过渡回调被浏览器推迟到下一帧，回声赶在它前面时
+ * `currentLocale` 还是旧值。只比当前值就会把回声判成真变更，第二次过渡当场顶掉正在淡的那一次：
+ * 多拍一张整页快照，外加一条 `AbortError: Transition was skipped` 的未处理拒绝。
+ */
+let pendingLocale: LocaleName | null = null;
+
+/**
+ * 写入语言状态，屏幕上已有画面时淡过去，而不是在一帧之内换掉整页文字。
+ *
+ * 与 `utils/theme.ts` 的 `applyThemeVisually` 共用一条判断：同值重写不进过渡（本页自己
+ * `setLocale` 之后 storage.onChanged 绕回来的那一次、以及首帧镜像与存储同值的那一次），
+ * 在途的那一次正要画这个语言时也不进——见 {@link pendingLocale}。
+ *
+ * 回调必须 async 并 `await nextTick()`：Vue 的赋值要等一个 tick 才落到 DOM，少了这一句，
+ * 新帧采到的还是旧文案，淡出来的反而是旧语言。收账排在赋值之后、`nextTick` 之前：
+ * DOM 还没更新就被后来的请求当成「没人正要画它」，会又开一次过渡。
+ * 减少动效或不支持该 API 时 `withViewTransition` 同步执行回调，账在同一个 tick 里被收掉。
+ */
+function setLocaleValue(locale: LocaleName): void {
+  if (locale === currentLocale.value) return;
+  if (pendingLocale === locale) return;
+  pendingLocale = locale;
+  withViewTransition(async () => {
+    currentLocale.value = locale;
+    if (pendingLocale === locale) pendingLocale = null;
+    await nextTick();
+  });
+}
+
+/**
  * 切换语言并持久化（storage.onChanged 会同步其它扩展页）
  *
  * 镜像在写入成功后才刷新，与 `utils/theme.ts` 的 `setStoredTheme` 同一条不变量：镜像表示的是
@@ -108,7 +142,7 @@ export function t(key: string, substitutions?: string | number | (string | numbe
  * 并没有选定的语言画一帧、再被异步校正回来——那正是镜像要消掉的那次闪色，只是换了个方向。
  */
 export async function setLocale(locale: LocaleName): Promise<void> {
-  currentLocale.value = locale;
+  setLocaleValue(locale);
   await chrome.storage.local.set({ [STORAGE_KEYS.LOCALE]: locale });
   writeMirror(locale);
 }
@@ -138,7 +172,7 @@ export function initLocaleSync(): void {
     const change = changes[STORAGE_KEYS.LOCALE];
     if (!change) return;
     if (isLocaleName(change.newValue)) {
-      currentLocale.value = change.newValue;
+      setLocaleValue(change.newValue);
       writeMirror(change.newValue);
     }
   });

@@ -342,7 +342,7 @@
       </el-table>
 
       <!-- 日志详情面板 -->
-      <transition name="el-fade-in">
+      <transition name="detail-panel">
         <div
           v-if="selectedLog"
           class="log-detail-panel"
@@ -1022,7 +1022,7 @@ function copyAsCurl() {
   color: var(--cop-text-color-secondary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
 .copy-btn:hover {
@@ -1043,7 +1043,11 @@ function copyAsCurl() {
 
 /* 刚落进来的那一行闪一下：只动背景，不加边框也不改行高，表格布局纹丝不动。
    淡出本身 0.7s 走完，类名留到 900ms 才摘（多给的这一截是余量，不是让它在屏上多停一会儿），
-   所以这一出每笔只播一次，滚动回看旧行时不会被重新点亮。 */
+   所以这一出每笔只播一次，滚动回看旧行时不会被重新点亮。
+   0.7s 不在交互时长阶梯（instant/base/slow）里：那不是「按钮按下去要有反馈」的时长，
+   而是一次注意力闪光从亮到退回本色所需的时间，与上面那个 900ms 定时器配对。
+   与规则表单里「换进去的那段 URL」是同一个家族，但两处各留一份关键帧：起始浓度（这里 16%、
+   那里 46%）与时长各按那一屏的需要定，合成一份只会让下一个人去猜哪一档才是本意。 */
 .log-table :deep(.log-row-new) {
   animation: log-row-arrive 0.7s ease-out;
 }
@@ -1069,6 +1073,29 @@ function copyAsCurl() {
 
 .log-table :deep(.el-table__body tr) {
   cursor: pointer;
+}
+
+/* 详情面板的进出：Element Plus 自带的 `el-fade-in` 只淡 opacity，而这一块是
+   在表格下面凭空长出来的——纯淡入时「多出来一截」这件事没有任何交代，
+   补一个自下而上的位移，读起来才是「这一条翻开了」。退场只做淡出且更快：
+   收起不需要观众，位移反而会让下面的内容跟着顶一下。 */
+.detail-panel-enter-active {
+  transition:
+    opacity var(--cop-duration-base) var(--cop-ease-enter),
+    transform var(--cop-duration-base) var(--cop-ease-enter);
+}
+
+.detail-panel-leave-active {
+  transition: opacity var(--cop-duration-fast) var(--cop-ease-exit);
+}
+
+.detail-panel-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.detail-panel-leave-to {
+  opacity: 0;
 }
 
 .log-detail-panel {

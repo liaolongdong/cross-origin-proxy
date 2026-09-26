@@ -9,9 +9,14 @@
  * - 显示模式（light/dark/system）独立存储
  * - 两者各有一份 localStorage 镜像，扩展页挂载前同步应用以消除首帧闪色（与 utils/i18n 同构）
  * - 本模块直接读取 storage.local，保持轻量
+ * - 屏幕上已经画出画面之后再改配色，走一次 View Transition 交叉淡入（`applyThemeVisually`），
+ *   不再是整页硬翻；首帧那几次仍然同步直写，否则淡的就是一屏还没画完的默认配色
+ * - 一次操作只淡一次：存储回声（`storage.onChanged` 绕回发起页自己）按「在途目标」去重，
+ *   不能只比根元素当前值——过渡回调被推迟到下一帧，那时旧值还挂在根元素上（见 `pendingVisual`）
  */
 
 import { STORAGE_KEYS, THEME_MODES, DEFAULT_THEME_MODE, type ThemeMode } from '@/utils/constants';
+import { withViewTransition } from '@/utils/transitions';
 
 /** 主题名（顺序即 UI 展示顺序） */
 export type ThemeName = 'sky' | 'green' | 'pink' | 'mauve' | 'orange' | 'slate';
@@ -85,6 +90,96 @@ export function applyThemeMode(mode: ThemeMode, root: HTMLElement = document.doc
     // system: 移除 data-mode，让 CSS 媒体查询接管
     delete root.dataset.mode;
   }
+}
+
+/**
+ * 一次视觉请求的目标：`undefined` 表示这一项不动。
+ *
+ * 两个属性合成一个目标是刻意的——用户在设置面板里可以一次只动配色、一次只动亮暗，
+ * 但存储变更事件可以把两个键装进同一批 `changes` 里送来，此时必须只淡一次。
+ */
+interface VisualTarget {
+  theme?: ThemeName;
+  mode?: ThemeMode;
+}
+
+/**
+ * 在途过渡正把根元素画成什么（每次请求写入、由该次过渡的回调收账）。
+ *
+ * 为什么需要这一份账：界面侧换配色是「先就地应用、再写 `chrome.storage.local`」两步，
+ * 而写下去的那一笔会沿 `storage.onChanged` **绕回发起页自己**。View Transition 的回调被
+ * 浏览器推迟到下一帧才跑，回声赶在它前面时根元素上还挂着旧值——只看「根元素现在是什么」，
+ * 回声就会被判成一次真变更，于是第二次过渡把正在淡的那一次当场顶掉。画面照样淡过去，代价是
+ * 每次换肤多拍一张整页快照，外加一条 `AbortError: Transition was skipped` 的未处理拒绝
+ * （2026-09-26 在真实 Chrome 里量到，一次点击一条；接手那两条 promise 的是 `withViewTransition`）。
+ *
+ * 收账排在回调里、由回调自己完成：回调真正跑过，才说明「画成目标值」这件事已经落地。
+ * 中途改口（在途 green、又来一笔 pink）不会被当成回声吞掉——账上的目标对不上，照常淡第二次，
+ * 先跑的那次回调不会抹掉后一笔的账（见 `requestVisual` 里那句「只收自己那一份」）。
+ */
+const pendingVisual: VisualTarget = {};
+
+/**
+ * 把一次「配色 / 显示模式」变更包进整页交叉淡入，并按 {@link pendingVisual} 去重。
+ *
+ * 三种落点，按判据从严到宽：
+ * - 两项都已是当前值 → 直接写，不进过渡（同值重写连快照都不该拍）；
+ * - 想改的那一项**正是在途过渡的目标** → 这一笔是它自己的回声，丢掉，不开第二次过渡；
+ * - 其余 → 记账 + 开一次过渡。减少动效、运行时不支持该 API、或过渡被引擎当场判死（回调一次
+ *   都没跑）时，由 `withViewTransition` 退回直接执行，账因此总能被收掉，不会留下谁也擦不掉
+ *   的目标——擦不掉的账会把之后同一目标的请求全当成回声吞掉。
+ */
+function requestVisual(target: VisualTarget, root: HTMLElement): void {
+  const write = () => {
+    if (target.theme !== undefined) applyThemeToRoot(target.theme, root);
+    if (target.mode !== undefined) applyThemeMode(target.mode, root);
+    // 只收自己那一份账：中途被后一个目标顶掉时，那份账归后者，先跑的回调不许把它抹了
+    if (target.theme !== undefined && pendingVisual.theme === target.theme) delete pendingVisual.theme;
+    if (target.mode !== undefined && pendingVisual.mode === target.mode) delete pendingVisual.mode;
+  };
+
+  const themeWanted = target.theme !== undefined && root.dataset.theme !== target.theme;
+  // 没有 data-mode 就是「跟随系统」——媒体查询那一档不写属性，所以这里要按同一个口径比
+  const modeWanted = target.mode !== undefined && (root.dataset.mode ?? THEME_MODES.SYSTEM) !== target.mode;
+  if (!themeWanted && !modeWanted) {
+    write();
+    return;
+  }
+  const coveredByPending =
+    (!themeWanted || pendingVisual.theme === target.theme) && (!modeWanted || pendingVisual.mode === target.mode);
+  if (coveredByPending) return;
+
+  if (themeWanted) pendingVisual.theme = target.theme;
+  if (modeWanted) pendingVisual.mode = target.mode;
+  withViewTransition(write);
+}
+
+/**
+ * 把主题切换包进一次整页交叉淡入（屏幕上已有画面时的那条路径）。
+ *
+ * 为什么要淡：改一个 `data-theme` 就有几十个 `--cop-*` 同时换值，不处理的话整页在同一帧里
+ * 翻过去，观感上是「页面重新加载了一次」而不是「我换了个配色」。淡的具体形态（时长、缓动、
+ * 暗色→亮色不留亮度爆点）全部住在 `assets/theme/tokens.css` 的 `::view-transition-*` 那一节。
+ *
+ * 去重判据（同值、回声）见 {@link requestVisual}。
+ */
+export function applyThemeVisually(
+  theme: ThemeName,
+  mode?: ThemeMode,
+  root: HTMLElement = document.documentElement,
+): void {
+  requestVisual({ theme, mode }, root);
+}
+
+/**
+ * 只换显示模式（亮 / 暗 / 跟随系统）时的淡入版，判据与 {@link applyThemeVisually} 同一条。
+ *
+ * 与主题名那条分开，是因为这一项单独被改的场合更多（用户在亮暗之间来回切），
+ * 而 `theme` 这时候原样不动——不能顺手把两个属性都写一遍，那会把
+ * 「跟随系统时根元素上没有 `data-mode`」这条契约（见 tests/themeMirror.test.ts）多一个写入方。
+ */
+export function applyThemeModeVisually(mode: ThemeMode, root: HTMLElement = document.documentElement): void {
+  requestVisual({ mode }, root);
 }
 
 /**
@@ -198,17 +293,18 @@ export function initThemeSync(): void {
     if (areaName !== 'local') return;
 
     const themeChange = changes[STORAGE_KEYS.THEME];
-    if (themeChange) {
-      const theme = isThemeName(themeChange.newValue) ? themeChange.newValue : DEFAULT_THEME;
-      writeMirror(THEME_MIRROR_KEY, theme);
-      applyThemeToRoot(theme);
-    }
-
     const modeChange = changes[STORAGE_KEYS.THEME_MODE];
-    if (modeChange) {
-      const mode = isThemeMode(modeChange.newValue) ? modeChange.newValue : DEFAULT_THEME_MODE;
-      writeMirror(THEME_MODE_MIRROR_KEY, mode);
-      applyThemeMode(mode);
-    }
+    if (!themeChange && !modeChange) return;
+
+    // 落不到合法值上的一律按「重置」处理，与首帧那两处同一口径
+    const theme = themeChange ? (isThemeName(themeChange.newValue) ? themeChange.newValue : DEFAULT_THEME) : undefined;
+    const mode = modeChange ? (isThemeMode(modeChange.newValue) ? modeChange.newValue : DEFAULT_THEME_MODE) : undefined;
+
+    if (theme !== undefined) writeMirror(THEME_MIRROR_KEY, theme);
+    if (mode !== undefined) writeMirror(THEME_MODE_MIRROR_KEY, mode);
+
+    // 两个键同批变更时只淡一次；回声（改动页自己身上绕回来的那一次）由 `requestVisual`
+    // 按「在途目标」去重——判据不能只看根元素，因为过渡回调还没跑，旧值还挂在上面。
+    requestVisual({ theme, mode }, document.documentElement);
   });
 }

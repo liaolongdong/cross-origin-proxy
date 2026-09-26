@@ -1,318 +1,332 @@
 <template>
   <div class="rule-table-card">
-    <!-- 空状态引导（无任何规则时） -->
-    <EmptyGuide
-      v-if="rules.length === 0 && !hasAnyRules"
-      @add-rule="$emit('add')"
-      @import-config="$emit('importConfig')"
-      @use-template="data => $emit('useTemplate', data)"
-    />
-
-    <!-- 筛选无结果 -->
-    <div
-      v-else-if="rules.length === 0"
-      class="no-match"
+    <!-- 三块面板占同一个位置，换起来本来是一次硬切：空态 / 无匹配 / 表格之间给一次
+         先退后换的交接（`mode="out-in"`），新面板不再叠在旧面板的高度上把卡片撑一下。 -->
+    <Transition
+      name="panel-swap"
+      mode="out-in"
     >
-      <p>{{ t('noMatch') }}</p>
-    </div>
-
-    <!-- 规则表格 -->
-    <el-table
-      v-else
-      ref="tableRef"
-      v-loading="loading"
-      :data="rules"
-      :row-class-name="rowClassName"
-      row-key="id"
-      class="rule-table"
-      @selection-change="(selection: ProxyRule[]) => $emit('selectionChange', selection)"
-      @dragover.prevent="onTableDragOver"
-      @drop.prevent="onTableDrop"
-    >
-      <el-table-column
-        type="selection"
-        width="48"
-        :reserve-selection="true"
+      <!-- 空状态引导（无任何规则时） -->
+      <EmptyGuide
+        v-if="rules.length === 0 && !hasAnyRules"
+        key="empty-guide"
+        @add-rule="$emit('add')"
+        @import-config="$emit('importConfig')"
+        @use-template="data => $emit('useTemplate', data)"
       />
-      <el-table-column
-        width="36"
-        align="center"
+
+      <!-- 筛选无结果 -->
+      <div
+        v-else-if="rules.length === 0"
+        key="no-match"
+        class="no-match"
       >
-        <template #header>
-          <el-tooltip
-            :content="t('dragToReorder')"
-            placement="top"
-          >
-            <span class="drag-header-icon">⠿</span>
-          </el-tooltip>
-        </template>
-        <template #default="{ row }">
-          <span
-            class="drag-handle"
-            draggable="true"
-            @dragstart="onDragStart($event, row)"
-            @dragend="onDragEnd"
-            >⠿</span
-          >
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="name"
-        :label="t('colName')"
-        min-width="120"
+        <p>{{ t('noMatch') }}</p>
+      </div>
+
+      <!-- 规则表格 -->
+      <el-table
+        v-else
+        key="rule-table"
+        ref="tableRef"
+        v-loading="loading"
+        :data="rules"
+        :row-class-name="rowClassName"
+        row-key="id"
+        class="rule-table"
+        @selection-change="(selection: ProxyRule[]) => $emit('selectionChange', selection)"
+        @dragover.prevent="onTableDragOver"
+        @drop.prevent="onTableDrop"
       >
-        <template #default="{ row }">
-          <span class="rule-name-cell">
+        <el-table-column
+          type="selection"
+          width="48"
+          :reserve-selection="true"
+        />
+        <el-table-column
+          width="36"
+          align="center"
+        >
+          <template #header>
+            <el-tooltip
+              :content="t('dragToReorder')"
+              placement="top"
+            >
+              <span class="drag-header-icon">⠿</span>
+            </el-tooltip>
+          </template>
+          <template #default="{ row }">
+            <span
+              class="drag-handle"
+              draggable="true"
+              @dragstart="onDragStart($event, row)"
+              @dragend="onDragEnd"
+              >⠿</span
+            >
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="name"
+          :label="t('colName')"
+          min-width="120"
+        >
+          <template #default="{ row }">
+            <span class="rule-name-cell">
+              <HighlightText
+                :text="row.name"
+                :keyword="searchText"
+                :title="row.name"
+              />
+              <el-tooltip
+                v-if="shadowedRuleIds.has(row.id)"
+                :content="t('conflictWarningTitle')"
+                placement="top"
+              >
+                <span class="shadowed-indicator">!</span>
+              </el-tooltip>
+              <el-tooltip
+                v-if="dnrSkipReason(row.id)"
+                placement="top"
+              >
+                <template #content>
+                  <div class="dnr-skip-tip">
+                    <p
+                      v-for="(line, index) in skipReasonLines(dnrSkipReason(row.id))"
+                      :key="index"
+                    >
+                      {{ line }}
+                    </p>
+                  </div>
+                </template>
+                <span class="dnr-dead-tag">{{ t('dnrSkippedTag') }}</span>
+              </el-tooltip>
+              <span class="rule-badges">
+                <el-tooltip
+                  v-if="showsHttpOnlyBadge(row) && row.headerOverrides && Object.keys(row.headerOverrides).length > 0"
+                  :content="t('hasHeaderOverrides')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--h">H</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="showsHttpOnlyBadge(row) && row.sendCredentials === true"
+                  :content="t('hasSendCredentials')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--c">C</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="showsHttpOnlyBadge(row) && row.requestBodyOverride"
+                  :content="t('hasBodyOverride')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--b">B</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="showsHttpOnlyBadge(row) && row.responseOverrides"
+                  :content="t('hasResponseOverrides')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--r">R</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="showsHttpOnlyBadge(row) && row.mockResponse"
+                  :content="t('hasMockResponse')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--m">M</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="showsHttpOnlyBadge(row) && row.delayMs"
+                  :content="t('hasDelay')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--d">D</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="row.blocked"
+                  :content="t('hasBlocked')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--x">X</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="showsHttpOnlyBadge(row) && row.retryCount"
+                  :content="t('hasRetry')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--re">Re</span>
+                </el-tooltip>
+                <el-tooltip
+                  v-if="isWsRule(row)"
+                  :content="t('wsRuleHint')"
+                  placement="top"
+                >
+                  <span class="rule-badge rule-badge--ws">WS</span>
+                </el-tooltip>
+              </span>
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="matchPattern"
+          :label="t('colMatchPattern')"
+          min-width="200"
+        >
+          <template #default="{ row }">
             <HighlightText
-              :text="row.name"
+              :text="row.matchPattern"
               :keyword="searchText"
-              :title="row.name"
+              :title="row.matchPattern"
             />
-            <el-tooltip
-              v-if="shadowedRuleIds.has(row.id)"
-              :content="t('conflictWarningTitle')"
-              placement="top"
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="matchType"
+          :label="t('colMatchType')"
+          width="100"
+          align="center"
+        >
+          <template #default="{ row }">
+            <el-tag
+              :type="matchTypeTagType(row.matchType)"
+              size="small"
             >
-              <span class="shadowed-indicator">!</span>
-            </el-tooltip>
-            <el-tooltip
-              v-if="dnrSkipReason(row.id)"
-              placement="top"
+              {{ matchTypeLabel(row.matchType) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="targetUrl"
+          :label="t('colTargetUrl')"
+          min-width="200"
+        >
+          <template #default="{ row }">
+            <HighlightText
+              :text="row.targetUrl"
+              :keyword="searchText"
+              :title="row.targetUrl"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="priority"
+          :label="t('colPriority')"
+          width="80"
+          align="center"
+        />
+        <el-table-column
+          :label="t('hitCountLabel')"
+          width="96"
+          align="center"
+        >
+          <template #default="{ row }">
+            <span
+              v-if="hitCells[row.id]"
+              class="hit-stats-pair"
             >
-              <template #content>
-                <div class="dnr-skip-tip">
-                  <p
-                    v-for="(line, index) in skipReasonLines(dnrSkipReason(row.id))"
-                    :key="index"
-                  >
-                    {{ line }}
-                  </p>
-                </div>
-              </template>
-              <span class="dnr-dead-tag">{{ t('dnrSkippedTag') }}</span>
-            </el-tooltip>
-            <span class="rule-badges">
               <el-tooltip
-                v-if="showsHttpOnlyBadge(row) && row.headerOverrides && Object.keys(row.headerOverrides).length > 0"
-                :content="t('hasHeaderOverrides')"
+                :content="hitCells[row.id].netTip"
                 placement="top"
               >
-                <span class="rule-badge rule-badge--h">H</span>
+                <span :class="['hit-count-badge', hitCells[row.id].netUnknown && 'hit-count-unknown']">
+                  {{ hitCells[row.id].net }}
+                </span>
               </el-tooltip>
               <el-tooltip
-                v-if="showsHttpOnlyBadge(row) && row.sendCredentials === true"
-                :content="t('hasSendCredentials')"
+                :content="hitCells[row.id].extTip"
                 placement="top"
               >
-                <span class="rule-badge rule-badge--c">C</span>
-              </el-tooltip>
-              <el-tooltip
-                v-if="showsHttpOnlyBadge(row) && row.requestBodyOverride"
-                :content="t('hasBodyOverride')"
-                placement="top"
-              >
-                <span class="rule-badge rule-badge--b">B</span>
-              </el-tooltip>
-              <el-tooltip
-                v-if="showsHttpOnlyBadge(row) && row.responseOverrides"
-                :content="t('hasResponseOverrides')"
-                placement="top"
-              >
-                <span class="rule-badge rule-badge--r">R</span>
-              </el-tooltip>
-              <el-tooltip
-                v-if="showsHttpOnlyBadge(row) && row.mockResponse"
-                :content="t('hasMockResponse')"
-                placement="top"
-              >
-                <span class="rule-badge rule-badge--m">M</span>
-              </el-tooltip>
-              <el-tooltip
-                v-if="showsHttpOnlyBadge(row) && row.delayMs"
-                :content="t('hasDelay')"
-                placement="top"
-              >
-                <span class="rule-badge rule-badge--d">D</span>
-              </el-tooltip>
-              <el-tooltip
-                v-if="row.blocked"
-                :content="t('hasBlocked')"
-                placement="top"
-              >
-                <span class="rule-badge rule-badge--x">X</span>
-              </el-tooltip>
-              <el-tooltip
-                v-if="showsHttpOnlyBadge(row) && row.retryCount"
-                :content="t('hasRetry')"
-                placement="top"
-              >
-                <span class="rule-badge rule-badge--re">Re</span>
-              </el-tooltip>
-              <el-tooltip
-                v-if="isWsRule(row)"
-                :content="t('wsRuleHint')"
-                placement="top"
-              >
-                <span class="rule-badge rule-badge--ws">WS</span>
+                <span
+                  :class="[
+                    'hit-count-badge',
+                    'hit-count-badge--ext',
+                    hitCells[row.id].extUnknown && 'hit-count-unknown',
+                  ]"
+                >
+                  {{ hitCells[row.id].ext }}
+                </span>
               </el-tooltip>
             </span>
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="matchPattern"
-        :label="t('colMatchPattern')"
-        min-width="200"
-      >
-        <template #default="{ row }">
-          <HighlightText
-            :text="row.matchPattern"
-            :keyword="searchText"
-            :title="row.matchPattern"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="matchType"
-        :label="t('colMatchType')"
-        width="100"
-        align="center"
-      >
-        <template #default="{ row }">
-          <el-tag
-            :type="matchTypeTagType(row.matchType)"
-            size="small"
-          >
-            {{ matchTypeLabel(row.matchType) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="targetUrl"
-        :label="t('colTargetUrl')"
-        min-width="200"
-      >
-        <template #default="{ row }">
-          <HighlightText
-            :text="row.targetUrl"
-            :keyword="searchText"
-            :title="row.targetUrl"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column
-        prop="priority"
-        :label="t('colPriority')"
-        width="80"
-        align="center"
-      />
-      <el-table-column
-        :label="t('hitCountLabel')"
-        width="96"
-        align="center"
-      >
-        <template #default="{ row }">
-          <span
-            v-if="hitCells[row.id]"
-            class="hit-stats-pair"
-          >
-            <el-tooltip
-              :content="hitCells[row.id].netTip"
-              placement="top"
+            <span
+              v-else
+              class="hit-count-zero"
+              >-</span
             >
-              <span :class="['hit-count-badge', hitCells[row.id].netUnknown && 'hit-count-unknown']">
-                {{ hitCells[row.id].net }}
-              </span>
-            </el-tooltip>
-            <el-tooltip
-              :content="hitCells[row.id].extTip"
-              placement="top"
-            >
-              <span
-                :class="['hit-count-badge', 'hit-count-badge--ext', hitCells[row.id].extUnknown && 'hit-count-unknown']"
+          </template>
+        </el-table-column>
+        <el-table-column
+          :label="t('colStatus')"
+          width="80"
+          align="center"
+        >
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.enabled"
+              size="small"
+              @change="val => $emit('toggle', row.id, val as boolean)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
+          :label="t('colActions')"
+          width="140"
+          align="center"
+          header-align="center"
+          fixed="right"
+        >
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-tooltip
+                :content="t('edit')"
+                placement="top"
+                :show-after="400"
               >
-                {{ hitCells[row.id].ext }}
-              </span>
-            </el-tooltip>
-          </span>
-          <span
-            v-else
-            class="hit-count-zero"
-            >-</span
-          >
-        </template>
-      </el-table-column>
-      <el-table-column
-        :label="t('colStatus')"
-        width="80"
-        align="center"
-      >
-        <template #default="{ row }">
-          <el-switch
-            :model-value="row.enabled"
-            size="small"
-            @change="val => $emit('toggle', row.id, val as boolean)"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column
-        :label="t('colActions')"
-        width="140"
-        align="center"
-        header-align="center"
-        fixed="right"
-      >
-        <template #default="{ row }">
-          <div class="row-actions">
-            <el-tooltip
-              :content="t('edit')"
-              placement="top"
-              :show-after="400"
-            >
-              <el-button
-                circle
-                size="small"
-                :icon="EditPen"
-                @click="$emit('edit', row)"
-              />
-            </el-tooltip>
-            <el-tooltip
-              :content="t('duplicateRule')"
-              placement="top"
-              :show-after="400"
-            >
-              <el-button
-                circle
-                size="small"
-                :icon="CopyDocument"
-                @click="$emit('duplicate', row)"
-              />
-            </el-tooltip>
-            <el-popconfirm
-              :title="t('confirmDeleteRule')"
-              :confirm-button-text="t('confirm')"
-              :cancel-button-text="t('cancel')"
-              @confirm="handleDelete(row)"
-            >
-              <template #reference>
                 <el-button
                   circle
                   size="small"
-                  type="danger"
-                  plain
-                  :icon="Delete"
+                  :icon="EditPen"
+                  @click="$emit('edit', row)"
                 />
-              </template>
-            </el-popconfirm>
-          </div>
-        </template>
-      </el-table-column>
-    </el-table>
+              </el-tooltip>
+              <el-tooltip
+                :content="t('duplicateRule')"
+                placement="top"
+                :show-after="400"
+              >
+                <el-button
+                  circle
+                  size="small"
+                  :icon="CopyDocument"
+                  @click="$emit('duplicate', row)"
+                />
+              </el-tooltip>
+              <el-popconfirm
+                :title="t('confirmDeleteRule')"
+                :confirm-button-text="t('confirm')"
+                :cancel-button-text="t('cancel')"
+                @confirm="handleDelete(row)"
+              >
+                <template #reference>
+                  <el-button
+                    circle
+                    size="small"
+                    type="danger"
+                    plain
+                    :icon="Delete"
+                  />
+                </template>
+              </el-popconfirm>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
 import type { TableInstance } from 'element-plus';
@@ -322,6 +336,7 @@ import { isDnrCountReadable, type DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
 import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
+import { applyFlip, motionTokenToMs, prefersReducedMotion, readMotionToken, readRects } from '@/utils/transitions';
 import EmptyGuide from './EmptyGuide.vue';
 import HighlightText from './HighlightText.vue';
 
@@ -507,22 +522,81 @@ function onTableDragOver(e: DragEvent) {
   }
 }
 
+/** 表格里的可见行（`row-key="id"` 保证重排时 Vue 挪的是同一批 DOM 节点，FLIP 才有得比） */
+function visibleRowElements(): HTMLElement[] {
+  const root = tableRef.value?.$el as HTMLElement | undefined;
+  if (!root) return [];
+  return Array.from(root.querySelectorAll<HTMLElement>('tr.el-table__row'));
+}
+
+/**
+ * 拖拽落位后等着归位的行矩形，以及那一刻的行 id 序列。
+ *
+ * 为什么要等：`reorderRules` 要先走一次存储写入才换数组，DOM 到位比 emit 晚若干帧，
+ * 所以位置先存着，等 `props.rules` 的顺序真的变了再放动画。两个值成对使用——id 序列
+ * 用来认出「这次变化就是刚才那次拖拽」（同一批行、换了顺序）；中途发生增删或筛选变化时
+ * 旧矩形已经不代表这批行，直接作废，宁可少一次动画也不能画出一次假移动。
+ */
+let pendingFlip: Map<HTMLElement, DOMRect> | null = null;
+let pendingFlipIds: string[] = [];
+
 function onTableDrop(e: DragEvent) {
+  const fromId = dragFromId.value;
   const toRow = findRowFromEvent(e);
-  if (dragFromId.value && toRow && dragFromId.value !== toRow.id) {
-    emit('reorder', dragFromId.value, toRow.id);
+  const moving = Boolean(fromId && toRow && fromId !== toRow.id);
+  if (moving && toRow) {
+    // 位置必须在 emit 之前读：这一步之后父组件才会改数组
+    const rows = visibleRowElements();
+    pendingFlip = readRects(rows);
+    pendingFlipIds = rows.length ? props.rules.map(rule => rule.id) : [];
+  }
+  if (moving && fromId && toRow) {
+    emit('reorder', fromId, toRow.id);
   }
   dragFromId.value = null;
   dragOverId.value = null;
 }
 
+/** 同一批行换了顺序＝刚才那次拖拽落位；行数或行集变了就作废那份位置 */
+function isPureReorder(nextIds: string[]): boolean {
+  if (!pendingFlipIds.length || nextIds.length !== pendingFlipIds.length) return false;
+  const sorted = [...nextIds].sort().join('\u0000');
+  return sorted === [...pendingFlipIds].sort().join('\u0000');
+}
+
+watch(
+  () => props.rules.map(rule => rule.id).join('\u0000'),
+  next => {
+    const rects = pendingFlip;
+    pendingFlip = null;
+    if (!rects || !isPureReorder(next.split('\u0000'))) return;
+    // pre-flush 的 watcher 跑在重渲染之前，再等一帧才量得到新位置
+    void nextTick().then(() =>
+      applyFlip(rects, motionTokenToMs('--cop-duration-slow', 320), readMotionToken('--cop-ease-spring', 'ease-out')),
+    );
+  },
+);
+
+/** 删除行的离场时长：与 CSS 那条 transition 同源，减 20ms 让移除落在动画收尾之前，避免尾帧空跳 */
+function leaveDurationMs(): number {
+  // 减少动效时 CSS 那边已被压成 0.01ms，这里若还等 320ms，那一行就是「先淡没再凭空消失」
+  if (prefersReducedMotion()) return 0;
+  return Math.max(0, motionTokenToMs('--cop-duration-slow', 320) - 20);
+}
+
 /** 删除：先播放右滑出屏动画，再真正移除 */
 function handleDelete(rule: ProxyRule) {
   leavingIds.value.add(rule.id);
+  const delay = leaveDurationMs();
+  if (delay === 0) {
+    leavingIds.value.delete(rule.id);
+    emit('delete', rule.id);
+    return;
+  }
   window.setTimeout(() => {
     leavingIds.value.delete(rule.id);
     emit('delete', rule.id);
-  }, 280);
+  }, delay);
 }
 
 function rowClassName({ row }: { row: ProxyRule }): string {
@@ -575,6 +649,29 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   text-align: center;
 }
 
+/* 空态 / 无匹配 / 表格三块面板的交接：旧的先退（90ms，只淡出不占时间），
+   新的再进（150ms，淡入 + 4px 上浮）。`mode="out-in"` 让两者不重叠——
+   重叠会让卡片高度在中间那一帧取两者的最大值，整页跟着往下弹一次。
+   时长全部取自令牌，减弱动效下由 tokens.css 那条全局收口压成瞬时切换。 */
+.panel-swap-enter-active {
+  transition:
+    opacity var(--cop-duration-fast) var(--cop-ease-enter),
+    transform var(--cop-duration-fast) var(--cop-ease-enter);
+}
+
+.panel-swap-leave-active {
+  transition: opacity var(--cop-duration-instant) var(--cop-ease-exit);
+}
+
+.panel-swap-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.panel-swap-leave-to {
+  opacity: 0;
+}
+
 /* 表头底色跟随主题浅面色 */
 .rule-table :deep(.el-table__header th) {
   color: var(--cop-text-color-regular);
@@ -583,7 +680,12 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
 
 /* 行 hover 上浮 + 主题色阴影 */
 .rule-table :deep(.el-table__row) {
-  transition: all 0.2s ease;
+  /* 显式列属性而不是 `all`：这一行现在还要被 FLIP 归位动画驱动，`transition: all`
+     会把列宽变化、勾选框尺寸这类布局量一并卷进过渡，重排时表现为整行「软一下」 */
+  transition:
+    background-color var(--cop-duration-fast) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard),
+    transform var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .rule-table :deep(.el-table__row:hover) {
@@ -611,9 +713,9 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   content: '';
 }
 
-/* 新增行：下落淡入 + 绿色底边 */
+/* 新增行：下落淡入 + 绿色底边（方向与 `cop-rise-in` 相反——新行是从上面掉进队列的） */
 .rule-table :deep(.row-entering) {
-  animation: row-drop-in 0.4s ease;
+  animation: row-drop-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
 .rule-table :deep(.row-entering td) {
@@ -632,20 +734,25 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   }
 }
 
-/* 删除行：右滑出屏淡出 */
+/* 删除行：右滑出屏淡出。时长与 `leaveDurationMs()` 同源（令牌 slow 档），
+   那一边等这个点再真正移除，两边各写一个数就会出现「动画没放完行就没了」 */
 .rule-table :deep(.row-leaving) {
   opacity: 0;
   transform: translateX(60px);
-  transition: all 0.28s ease;
+  transition:
+    opacity var(--cop-duration-slow) var(--cop-ease-exit),
+    transform var(--cop-duration-slow) var(--cop-ease-exit);
 }
 
-/* 拖拽悬停目标行：主题色上边框提示 */
+/* 拖拽悬停目标行：主题色提示线。
+   画在 inset box-shadow 上而不是 border-top——边框会真的把行撑高 2px，
+   拖过几行的过程中下面每一行都跟着抖一次，看起来像拖不动 */
 .rule-table :deep(.row-drag-over) {
   background: var(--cop-primary-bg, #ecf5ff);
 }
 
 .rule-table :deep(.row-drag-over td) {
-  border-top: 2px solid var(--cop-primary, #409eff);
+  box-shadow: inset 0 2px 0 var(--cop-primary, #409eff);
 }
 
 @media (width <= 768px) {
@@ -674,7 +781,9 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   cursor: grab;
   user-select: none;
   border-radius: 4px;
-  transition: all 0.15s;
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    background-color var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
 .drag-handle:hover {

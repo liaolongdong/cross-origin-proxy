@@ -1205,10 +1205,12 @@ html.js .gallery-autoable .gallery-progress {
 
 .gallery-progress i {
   display: block;
-  width: 0;
+  width: 100%;
   height: 100%;
   background: var(--lp-primary);
   border-radius: inherit;
+  transform: scaleX(0);
+  transform-origin: left center;
 }
 
 .gallery.gallery-auto .gallery-progress i {
@@ -1219,13 +1221,16 @@ html.js .gallery-autoable .gallery-progress {
   animation-play-state: paused;
 }
 
+/* 进度条量的是「还剩多久翻页」，走 transform 而不是 width：每帧只让合成器重画，
+   不为一条 3px 的刻度重排整张轮播。起点必须是 `scaleX(0)` 而不是 `width: 0`——
+   元素本身占满整条轨道，缩放比例才是线性的时间刻度，填法与原来逐像素等价。 */
 @keyframes lp-gallery-auto {
   from {
-    width: 0;
+    transform: scaleX(0);
   }
 
   to {
-    width: 100%;
+    transform: scaleX(1);
   }
 }
 
@@ -1336,6 +1341,7 @@ html.js .gallery-bar {
 }
 
 .gallery-dots button {
+  position: relative;
   width: 8px;
   height: 8px;
   padding: 0;
@@ -1343,14 +1349,23 @@ html.js .gallery-bar {
   background: var(--lp-line-strong);
   border: 0;
   border-radius: 999px;
+  transform-origin: center;
   transition:
-    width 0.2s ease,
+    transform 0.2s ease,
+    border-radius 0.2s ease,
     background 0.2s ease;
 }
 
+/* 选中态是「圆点长成胶囊」，量的是横向缩放而不是 width：翻页时不再为一个小圆点
+   重排整条圆点栏（原先 active 那一格一宽，左右邻居各被推开 8px，看着就是在抖）。
+   缩放会连圆角一起放大，所以这一档把横半径预先收成 4/3 px——×3 之后正好落回 4px，
+   即高度的一半，画出来仍是两端半圆的胶囊，而不是一枚 24×8 的椭圆。
+   不占位就意味着两侧各压出 8px（间隙 7px），故抬高一层，免得胶囊两头被邻居啃掉 1px。 */
 .gallery-dots button[aria-current='true'] {
-  width: 24px;
+  z-index: 1;
   background: var(--lp-primary);
+  border-radius: 1.34px / 4px;
+  transform: scaleX(3);
 }
 
 /* ---------- 步骤卡 ---------- */
@@ -1472,6 +1487,9 @@ html.js.try-ready .try {
   border-radius: var(--lp-radius-sm);
 }
 
+/* 结论换档要看得出「刚刚那句话已经作废」：`data-try-state` 是脚本一次写定的，
+   底色与文字色没有过渡就是硬跳，读者的眼睛跟不上，容易把旧结论继续读下去。
+   只染颜色，不动尺寸——这一格下面就是改写结果，位移会让整块面板跳一下。 */
 .try-verdict {
   padding: 9px 12px;
   margin: 14px 0 0;
@@ -1479,6 +1497,9 @@ html.js.try-ready .try {
   font-weight: 600;
   background: var(--lp-bg-alt);
   border-radius: var(--lp-radius-sm);
+  transition:
+    color 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* 五种结论各配一档底色：这一笔到底有没有被接管、走哪条通道，读一眼就分得开。
@@ -1858,8 +1879,8 @@ details {
   border: 1px solid var(--lp-line);
   border-radius: var(--lp-radius-sm);
   transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+    border-color 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 details[open] {
@@ -1889,6 +1910,8 @@ summary::-webkit-details-marker {
   display: none;
 }
 
+/* 展开这件事的三处变化（加减号、卡片描边与投影、下面那段答案淡入）用同一条曲线、
+   同一个时长，读起来才是一个动作，而不是三件各转各的。悬停改色是反馈，留在 180ms。 */
 summary::before,
 summary::after {
   position: absolute;
@@ -1898,9 +1921,9 @@ summary::after {
   background: var(--lp-primary-strong);
   border-radius: 1px;
   transition:
-    transform 180ms ease,
-    opacity 180ms ease,
-    background-color 180ms ease;
+    transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.18s ease;
 }
 
 summary::before {
@@ -2385,9 +2408,11 @@ html.js .reveal.in {
 }
 
 /* 展开答案时内容淡入，配合卡片高度的变化说明「这段是新出现的」。
-   写在 `details[open]` 上，因此收起再展开会重播一次。 */
+   写在 `details[open]` 上，因此收起再展开会重播一次。
+   时长与曲线跟上面那枚加减号、卡片描边完全同一档（~240ms，签名曲线）：
+   符号转过去、卡边亮起来、答案落下来是同一个动作的三面，不是三件前后错位的事。 */
 details[open] > p {
-  animation: lp-answer 0.32s ease both;
+  animation: lp-answer 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes lp-answer {
@@ -2862,6 +2887,7 @@ html.js .tool-card:hover::before {
   details,
   summary,
   .copy-btn,
+  .try-verdict,
   .btn-primary::after,
   html.js .feature-card::before,
   html.js .tool-card::before,

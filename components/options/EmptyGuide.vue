@@ -233,13 +233,43 @@ function handleTemplateClick(tpl: TemplateItem) {
   background: var(--el-bg-color, #fff);
   border: 1px solid var(--el-border-color-lighter, #ebeef5);
   border-radius: 10px;
-  transition: all 0.2s ease;
+  transition:
+    border-color var(--cop-duration-fast) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard),
+    transform var(--cop-duration-fast) var(--cop-ease-enter);
 }
 
 .guide-card:hover {
   border-color: var(--cop-primary, #409eff);
   box-shadow: 0 2px 12px rgb(var(--cop-primary-rgb) / 15%);
   transform: translateY(-2px);
+}
+
+/* 首次进入时按 60ms 一档错峰落位：这一屏是用户装完扩展看到的第一页，几条建议同时出现
+   和先后出现，读起来是「一屏文案」与「几件可做的事」的差别。
+   每一级都写成 `n + k`（「第 k 张起」）而不是逐个点名：逐个点名时，将来从 `templates` 里
+   多加一张卡、或往 `.guide-cards` 里再插一张，那张没有规则命中它，延迟回落到 0、跟第一张
+   同时进场，阶梯走到末尾会倒着跳一次——而且没有任何报错。今天实算是 2 张引导卡 + 4 张模板卡
+   （`templates` 那份数组），`n + 4` 就是给第 5 张预留的那一级。
+   填充只用 `backwards`（延迟期间停在起始帧，播完就交还给样式）——用 `both` 会把
+   `transform` 冻结在动画的收尾值上，而动画的层叠优先级高于 `:hover`，
+   那张卡从此抬不起来。阶梯本身由 `tests/designTokens.test.ts` 按张数与写法双向钉住。 */
+.guide-card,
+.template-card {
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter) backwards;
+}
+
+.guide-card:nth-child(n + 2),
+.template-card:nth-child(n + 2) {
+  animation-delay: 60ms;
+}
+
+.template-card:nth-child(n + 3) {
+  animation-delay: 120ms;
+}
+
+.template-card:nth-child(n + 4) {
+  animation-delay: 180ms;
 }
 
 .guide-card-icon {
@@ -309,7 +339,10 @@ function handleTemplateClick(tpl: TemplateItem) {
   background: var(--el-bg-color, #fff);
   border: 1px solid var(--el-border-color-lighter, #ebeef5);
   border-radius: 10px;
-  transition: all 0.2s ease;
+  transition:
+    border-color var(--cop-duration-fast) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard),
+    transform var(--cop-duration-fast) var(--cop-ease-enter);
 }
 
 .template-card:hover {

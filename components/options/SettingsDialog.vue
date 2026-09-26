@@ -628,9 +628,12 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   outline: none;
   border: 2px solid transparent;
   border-radius: 50%;
+
+  /* 悬停抬升与描边：与空态卡片、档案卡同一档、同一对缓动——这一格正是触发整页换肤淡入的那个
+     按钮，它自己的反馈如果还停在 `0.2s ease`，就和这一屏其余走令牌的悬浮控件差着一档。 */
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+    transform var(--cop-duration-fast) var(--cop-ease-enter),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .theme-swatch:hover {

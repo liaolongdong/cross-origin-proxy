@@ -57,6 +57,28 @@
   /* ====== 语义层：表单 ====== */
   --cop-form-label-color: #2c3e50;
 
+  /* ====== 动效层：时长与缓动 ======
+   * 时长档按「这次变化离用户的手多近」分级，而不是按元素大小：按压反馈要跟手到像没延迟，
+   * 悬浮与聚焦只要不突兀，面板开合与行列进场才需要被看清。`components/` + `entrypoints/`
+   * 里原本有 25 条声明各自写着时长字面量（同一件事在 popup 150ms、在 options 280ms），
+   * 现在只剩 5 条刻意留着：错峰进场的三档 `animation-delay`（60 / 120 / 180ms 是节拍，
+   * 不是交互反馈时长）与两处闪光的 0.7s、0.5s（一次闪光从亮退回本色所需的时间，同理不进阶梯）。
+   *
+   * 缓动成对使用：进场用 enter（快起慢收，像被接住），离场用 exit（慢起快出，像被抽走）；
+   * standard 用在同一个 transition 同时承担进出两个方向的场合（折叠区、开关、悬浮）。
+   * spring 带轻微过冲，只留给「物体自己归位」的动作（拖拽落位、开关旋钮、状态点 ping），
+   * 给文字或大面积用会立刻显廉价。
+   */
+  --cop-duration-instant: 90ms;
+  --cop-duration-fast: 150ms;
+  --cop-duration-base: 220ms;
+  --cop-duration-slow: 320ms;
+  --cop-duration-recolour: 280ms;
+  --cop-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --cop-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --cop-ease-exit: cubic-bezier(0.4, 0, 0.9, 1);
+  --cop-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
   /* ====== 装饰层：规则列表的能力徽章 ======
    * 紫 / 青 / 琥珀三对。徽章的信息由「字母 + tooltip」两路承载，颜色只是第三层冗余，
    * 不参与任何判定；之所以仍要进令牌而不是留在组件里——暗色下这三对各自需要一档，
@@ -363,18 +385,65 @@
  * 默认蓝上；跟随系统暗色（没有 `data-mode`）时更是整族都覆盖不到——两处同罪的根因是
  * 「暗色品牌值写在了主题块之外」。 */
 
+/* ====== 共用关键帧 ======
+ * 只收「两个及以上入口真的在用」的动作。单点使用的留在组件里，各自的名字也说得更准：
+ * `RuleTable` 的 `row-drop-in`（方向与这里相反，新行是从上面掉进队列的）、
+ * `HeaderBar` 的 `dot-flare`（要叠那圈常驻白环）、popup 的 `dot-ping`、
+ * `LogDrawer` 的 `log-row-arrive` 与 `RuleFormDialog` 的 `url-diff-in`
+ * （同是「刷一次主色底再退回」，但起始浓度与时长各按那一屏的需要定，
+ * 而且浓度写成 `rgb(... / NN%)` 字面量是 `tests/designTokens.test.ts` 的斜杠写法契约，
+ * 抽成一个带 `var()` 浓度的公共关键帧会当场撞在那条守卫上）。
+ * 进场类只写 `from`：`to` 取元素自身的计算值，所以底色交替（奇偶行）、暗色档位都不用关心。
+ */
+
+/* 行列与卡片进场：淡入 + 6px 上浮。位移刻意小于一个行高，读起来是「落位」而不是「飞入」 */
+@keyframes cop-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* ==================== 换肤 / 换语言的整页过渡 ====================
+ * 配色与语言此前是「硬切」：一次点击让几十个 `--cop-*` 同时换值，整页在同一帧里翻过去，
+ * 观感上更像页面重新加载了一次，而不是「我刚刚换了个主题」。
+ *
+ * 用 View Transitions 而不是「临时给全站元素挂 color 过渡」，理由有两条：
+ * options 的页面底是 `linear-gradient()`，渐变属于 background-image、不可过渡；而全局
+ * `transition: color !important` 会顺带盖掉每个元素自己的过渡清单。VT 由浏览器对新旧画面
+ * 各出一张快照做交叉溶解，渐变、Element Plus 组件与滚动条一并覆盖，且不碰任何元素自身样式。
+ * 不支持该 API 的运行时（含没有 `document` 的 SW）根本不进这个分支，无需兜底样式。
+ */
+::view-transition-image-pair(root) {
+  animation-duration: var(--cop-duration-recolour, 280ms);
+  animation-timing-function: var(--cop-ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation-duration: var(--cop-duration-recolour, 280ms);
+  animation-timing-function: var(--cop-ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+
 /* ====== 动效降级 ======
  * 「减少动态效果」是用户在系统层面提出的诉求（前庭功能障碍者），扩展没有理由拒绝。
  * 时长取 0.01ms 而非 0：0s 不触发 transitionend，而 Element Plus 的折叠、弹窗与
  * 消息过渡靠该事件收尾，归零会把内容停在半开状态。
+ * delay 同样要归零——否则「时长压成 0.01ms、但仍等 60ms 才开始」的动效只是把闪一下
+ * 变成了延迟闪一下，而错峰进场（空态引导卡那三张就是按 `animation-delay` 排的档）。
+ * VT 那一层由 `utils/transitions.ts` 在 JS 侧直接跳过：它没有 CSS 开关可摘
+ * （`::view-transition-*` 的 animation 归零会留下一段白屏空档，比不淡入更糟）。
  */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     scroll-behavior: auto !important;
+    transition-delay: 0s !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
   }
 }

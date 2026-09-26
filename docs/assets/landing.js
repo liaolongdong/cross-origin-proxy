@@ -10,18 +10,21 @@
  * 3. 导航当前区块高亮；
  * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`，点选链接后收起下拉
  *    （`<details>` 本身无 JS 也能开合）；
- * 5. 回顶 / 到底导轨；
+ * 5. 回顶 / 到底导轨（与第 7 项共用一份按帧合流的滚动读数通道，整页只挂一次监听）；
  * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）；
  * 7. 页头下沿的滚动进度条，以及页头离顶后的投影（无 JS 时两者都不出现）；
  * 8. 首屏流程图的「数据包巡航」只在真正滚进视口后才放行（样式默认按住，循环动效不在没人看的地方跑）；
- * 9. 卡片的指针追光：把光斑坐标按帧写进 `--lp-x/--lp-y`，触摸设备与减弱动效下不绑定；
+ * 9. 卡片的指针追光：把光斑坐标按帧写进 `--lp-x/--lp-y`（卡片外框按悬停缓存，不逐事件量），
+ *    触摸设备与减弱动效下不绑定；
  * 10. 重写预演：把界面上四项输入交给 `assets/preview-engine.js`（`utils/urlMatcher.ts` 与
  *     `utils/dnrRules.ts` 的手工副本），当场说出这一笔命中与否、走哪条通道、两通道各改写成了什么。
  *     判据与措辞各归其位——引擎只回理由码，句子全部住在 HTML 里，脚本只负责挑出对应的那句；
  * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
- * 巡航与追光同样不启动。
+ * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
+ * 样式里的循环动画由媒体查询自己停，JS 这一半（轮播、巡航、追光、平滑滚动）由下面的
+ * `onMotionChange` 逐个停掉或续上——只在加载时取一次快照等于只兑现前半程。
  */
 
 (() => {
@@ -30,10 +33,34 @@
   const root = document.documentElement;
   root.classList.add('js');
 
-  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /* 保存 MediaQueryList 本身，而不是它「加载那一刻」的取值：偏好可以在系统设置里被改，
+     改完之后页面不该继续按旧的那一份跑。 */
+  const reduceMotionQuery = matchMedia('(prefers-reduced-motion: reduce)');
 
-  /** 用户声明减弱动效时，所有滚动都退化为瞬时滚动。 */
-  const behavior = reduceMotion ? 'auto' : 'smooth';
+  /** 当下是否要求减弱动效。所有 JS 侧的动效闸门都实时问它，不缓存答案。 */
+  const reduceMotion = () => reduceMotionQuery.matches;
+
+  /** 减弱动效开关翻转时要通知的回调，参数是「现在是否减弱」。 */
+  const motionHandlers = [];
+
+  /**
+   * 登记一个「偏好变了要停 / 要续」的回调；各段动效自己决定怎么停、怎么续。
+   * @param {(reduced: boolean) => void} handler 停与续的实现
+   */
+  const onMotionChange = handler => {
+    motionHandlers.push(handler);
+  };
+
+  /* 老引擎只有 `addListener`（已废弃）；这里没有需要兼容的构建步骤，
+     拿不到 `addEventListener` 就退回「按加载时的取值跑一整程」，与改之前的行为一致。 */
+  if (typeof reduceMotionQuery.addEventListener === 'function') {
+    reduceMotionQuery.addEventListener('change', event => {
+      motionHandlers.forEach(handler => handler(event.matches));
+    });
+  }
+
+  /** 用户声明减弱动效时，所有滚动都退化为瞬时滚动（每次调用现问，翻开关后下一次滚动就照着走）。 */
+  const scrollBehavior = () => (reduceMotion() ? 'auto' : 'smooth');
 
   /**
    * 查询一组元素。
@@ -41,6 +68,50 @@
    * @returns {HTMLElement[]} 命中元素数组
    */
   const all = selector => Array.from(document.querySelectorAll(selector));
+
+  /* ─────────────── 滚动读数：整页一份监听、一帧一次合流 ─────────────── */
+
+  /**
+   * 跟着滚动更新的读数（回顶导轨、页头进度条、追光的坐标缓存）共用这一条通道：
+   * `scroll` / `resize` 各只挂一次，回调合进同一个 `requestAnimationFrame`（一帧最多排一次），
+   * 几何量一次再分给所有读数。此前每个读数各自挂一份监听、各自读 `scrollHeight` 与
+   * `innerHeight`，滚轮惯性一下就是一百多次强制布局。
+   */
+  const scrollTasks = [];
+  let scrollFrame = null;
+  let scrollListening = false;
+
+  /** 一帧之内只量一次：滚动位置、视口高度、文档总高。 */
+  const readScroll = () => ({
+    y: window.scrollY || root.scrollTop || 0,
+    viewport: window.innerHeight,
+    height: root.scrollHeight,
+  });
+
+  const flushScroll = () => {
+    scrollFrame = null;
+    const metrics = readScroll();
+    scrollTasks.forEach(task => task(metrics));
+  };
+
+  /** 把这一帧的活儿排进 rAF；已有一帧在途就不重复排。 */
+  const queueScroll = () => {
+    if (scrollFrame === null) scrollFrame = requestAnimationFrame(flushScroll);
+  };
+
+  /**
+   * 注册一个「跟着滚动更新」的读数，并立刻按当前滚动位置落地一次。
+   * @param {(metrics: { y: number, viewport: number, height: number }) => void} task 读数回调
+   */
+  const watchScroll = task => {
+    if (!scrollListening) {
+      scrollListening = true;
+      window.addEventListener('scroll', queueScroll, { passive: true });
+      window.addEventListener('resize', queueScroll);
+    }
+    scrollTasks.push(task);
+    task(readScroll());
+  };
 
   /* ─────────────── 1. 截图廊 ─────────────── */
 
@@ -58,9 +129,14 @@
     let inView = false;
 
     /** 自动轮播与进度条共用 `.gallery-auto` 这一条时间线：填充动画播完即翻页。 */
-    const autoPossible = !reduceMotion && slides.length > 1 && Boolean(gallery && progress);
+    let autoPossible = !reduceMotion() && slides.length > 1 && Boolean(gallery && progress);
 
-    if (autoPossible) gallery.classList.add('gallery-autoable');
+    /** 进度条只在「真的会自动轮播」时占位；不会自动轮播时整条轨道不出现，不留一段空刻度。 */
+    const syncAutoable = () => {
+      if (gallery) gallery.classList.toggle('gallery-autoable', autoPossible);
+    };
+
+    syncAutoable();
 
     /** 同步圆点选中态（`aria-current` 同时驱动样式与辅助技术）。 */
     const mark = () => {
@@ -94,7 +170,7 @@
       const slide = slides[index];
       if (slide) {
         const left = slide.offsetLeft - (track.clientWidth - slide.clientWidth) / 2;
-        track.scrollTo({ left: Math.max(0, left), behavior });
+        track.scrollTo({ left: Math.max(0, left), behavior: scrollBehavior() });
       }
       mark();
       stop();
@@ -121,8 +197,10 @@
       });
     }
 
-    /* 指针在轮播上（或焦点落在控件里）时暂停：读完当前这张之前图不会翻走。 */
-    if (gallery && autoPossible) {
+    /* 指针在轮播上（或焦点落在控件里）时暂停：读完当前这张之前图不会翻走。
+       接线不看 `autoPossible`——`is-paused` 只有与 `.gallery-auto` 同时在场才有作用，
+       留着也不会画什么；反过来，按在场接线会让「中途关掉减弱动效」后没有暂停能力。 */
+    if (gallery) {
       ['pointerenter', 'focusin'].forEach(evt =>
         gallery.addEventListener(evt, () => gallery.classList.add('is-paused')),
       );
@@ -161,6 +239,16 @@
     viewObserver.observe(track);
 
     document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+
+    /* 减弱动效中途翻转：这半必须由脚本停/续。样式那份媒体查询只掐无限循环的动画，
+       进度条这条 5.2s 一次性填充没有对应的关闭项（它压根不靠样式启动），
+       不处理就会在用户要求减弱动效之后继续自动翻页。 */
+    onMotionChange(reduced => {
+      autoPossible = !reduced && slides.length > 1 && Boolean(gallery && progress);
+      syncAutoable();
+      if (autoPossible) start();
+      else stop();
+    });
   }
 
   /* ─────────────── 2. 滚动淡入 ─────────────── */
@@ -169,16 +257,16 @@
 
   /* 同一个父元素里的 .reveal 依次错开：十几张卡同时淡入时，读者的眼睛跟不上
      并列的变化，排个先后「一组」才像一组。样式侧是 `calc(var(--lp-rank) * 70ms)`，
-     这里只负责编号，并压到 6 档封顶，避免长网格的最后一张等太久。 */
-  if (!reduceMotion) {
-    const ranks = new Map();
-    reveals.forEach(el => {
-      const group = el.parentElement;
-      const rank = ranks.has(group) ? ranks.get(group) : 0;
-      ranks.set(group, rank + 1);
-      el.style.setProperty('--lp-rank', String(Math.min(rank, 6)));
-    });
-  }
+     这里只负责编号，并压到 6 档封顶，避免长网格的最后一张等太久。
+     编号无条件写：减弱动效下样式把那条 transition 整条关掉，这个变量压根不参与，
+     中途把开关翻回来时错峰还在（按偏好来决定「写不写」就只剩一个过期的快照可依据）。 */
+  const ranks = new Map();
+  reveals.forEach(el => {
+    const group = el.parentElement;
+    const rank = ranks.has(group) ? ranks.get(group) : 0;
+    ranks.set(group, rank + 1);
+    el.style.setProperty('--lp-rank', String(Math.min(rank, 6)));
+  });
 
   if (!reveals.length) {
     /* nothing to enhance */
@@ -254,17 +342,15 @@
     const top = rail.querySelector('.rail-top');
     const bottom = rail.querySelector('.rail-bottom');
 
-    const onScroll = () => {
-      const y = window.scrollY || root.scrollTop || 0;
+    /* 读数本身与原来逐字相同，只是不再自建监听：见顶部「滚动读数」那一节。 */
+    watchScroll(({ y, viewport, height }) => {
       rail.classList.toggle('at-top', y < 320);
-      rail.classList.toggle('at-bottom', y + window.innerHeight >= root.scrollHeight - 90);
-    };
+      rail.classList.toggle('at-bottom', y + viewport >= height - 90);
+    });
 
-    if (top) top.addEventListener('click', () => window.scrollTo({ top: 0, behavior }));
-    if (bottom) bottom.addEventListener('click', () => window.scrollTo({ top: root.scrollHeight, behavior }));
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    onScroll();
+    if (top) top.addEventListener('click', () => window.scrollTo({ top: 0, behavior: scrollBehavior() }));
+    if (bottom)
+      bottom.addEventListener('click', () => window.scrollTo({ top: root.scrollHeight, behavior: scrollBehavior() }));
   }
 
   /* ─────────────── 6. 微信号一键复制 ─────────────── */
@@ -334,20 +420,16 @@
     /**
      * 进度条改 `transform` 而不是 `width`：进度更新只走合成器，不触发重排。
      * 投影用 4px 死区，避免页面在亚像素滚动时来回擦边。
+     * 两个读数共用顶部那一条按帧合流的通道，几何量一次（与回顶导轨同一帧，值也一致）。
      */
-    const onScroll = () => {
-      const y = window.scrollY || root.scrollTop || 0;
+    watchScroll(({ y, viewport, height }) => {
       if (scrollBar) {
-        const scrollable = root.scrollHeight - window.innerHeight;
+        const scrollable = height - viewport;
         const ratio = scrollable > 0 ? y / scrollable : 0;
         scrollBar.style.transform = `scaleX(${Math.min(1, Math.max(0, ratio))})`;
       }
       if (header) header.classList.toggle('is-scrolled', y > 4);
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    onScroll();
+    });
   }
 
   /* ─────────────── 8. 首屏流程图：滚进视口才巡航 ─────────────── */
@@ -356,18 +438,30 @@
 
   /* 循环动效在视口外照样逐帧跑，所以样式默认按住（`html.js` 下的
      `animation-play-state: paused`），由这里加上 `.is-live` 才放行。
-     减弱动效下样式已把动画关掉，连观察器都不必建。 */
-  if (flow && !reduceMotion) {
-    if (!('IntersectionObserver' in window)) flow.classList.add('is-live');
-    else {
+     观察器无条件建：减弱动效下这一位不放行（画不出巡航），但偏好中途翻回来时
+     当场就能续上——样式那半的媒体查询只负责「关」，帮不上「重新开」。 */
+  if (flow) {
+    let flowInView = false;
+
+    const syncFlowLive = () => flow.classList.toggle('is-live', flowInView && !reduceMotion());
+
+    if (!('IntersectionObserver' in window)) {
+      flowInView = true;
+      syncFlowLive();
+    } else {
       const flowObserver = new IntersectionObserver(
         entries => {
-          entries.forEach(entry => flow.classList.toggle('is-live', entry.isIntersecting));
+          entries.forEach(entry => {
+            flowInView = entry.isIntersecting;
+            syncFlowLive();
+          });
         },
         { threshold: 0.3 },
       );
       flowObserver.observe(flow);
     }
+
+    onMotionChange(syncFlowLive);
   }
 
   /* ─────────────── 9. 卡片指针追光 ─────────────── */
@@ -375,12 +469,19 @@
   /* 光斑坐标交给样式的 `radial-gradient(... at var(--lp-x) var(--lp-y))`，脚本只写两个
      自定义属性，不碰 DOM 结构。指针事件可以比帧率更密，因此一帧只落地一次：
      最新一次位置攒进 `pending`，交给 `requestAnimationFrame` 里的 paint 统一写入。
+     卡片外框不再每次移动都量：悬停跨进卡片时量一次并缓存，滚动或缩放让缓存过期
+     （`getBoundingClientRect()` 会强制布局，指针事件的频率可以高过帧率）。
      触摸设备没有悬停态，也就没有可跟的光源，直接不绑定。 */
   const grids = all('.feature-grid, .tools-grid');
 
-  if (grids.length && !reduceMotion && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+  if (grids.length && matchMedia('(hover: hover) and (pointer: fine)').matches) {
     let frame = null;
     let pending = null;
+
+    /** 缓存的代次：每次滚动/缩放自增一次，跨代的那份缓存即视为过期。 */
+    let epoch = 0;
+    /** 最近一次量到的外框：`{ card, epoch, box }`，换卡或页面挪过才重新量。 */
+    let cached = null;
 
     const paint = () => {
       frame = null;
@@ -391,24 +492,68 @@
       card.style.setProperty('--lp-y', `${y}%`);
     };
 
-    grids.forEach(grid =>
-      grid.addEventListener(
-        'pointermove',
-        event => {
-          const card = event.target.closest('.feature-card, .tool-card');
-          if (!card) return;
-          const box = card.getBoundingClientRect();
-          if (!box.width || !box.height) return;
-          pending = {
-            card,
-            x: ((event.clientX - box.left) / box.width) * 100,
-            y: ((event.clientY - box.top) / box.height) * 100,
-          };
-          if (frame === null) frame = requestAnimationFrame(paint);
-        },
-        { passive: true },
-      ),
-    );
+    /* 「还是同一张卡、页面自量它以来没挪过」才复用，其余情况量一次。
+       剩下的那点误差只有一种来路：指针停在同一张卡里不动，而这张卡自己在脚下被
+       重新排了版（进场淡入那 18px）——下一次换卡、滚动或缩放就自愈，最多让光斑偏一点。 */
+    const rectOf = card => {
+      if (!cached || cached.card !== card || cached.epoch !== epoch) {
+        cached = { card, epoch, box: card.getBoundingClientRect() };
+      }
+      return cached.box;
+    };
+
+    /**
+     * 把指针位置攒成一次待写入的坐标（`pointermove`）。
+     * @param {PointerEvent} event 指针事件
+     */
+    const onPointerMove = event => {
+      const card = event.target.closest('.feature-card, .tool-card');
+      if (!card) return;
+      const box = rectOf(card);
+      if (!box.width || !box.height) return;
+      pending = {
+        card,
+        x: ((event.clientX - box.left) / box.width) * 100,
+        y: ((event.clientY - box.top) / box.height) * 100,
+      };
+      if (frame === null) frame = requestAnimationFrame(paint);
+    };
+
+    /* 跨进卡片（或卡片里的任意后代）时先把这一张的外框量好。`pointerover` 会随指针
+       跨边界反复冒泡，但缓存命中时它不做任何测量，正好当预热用。 */
+    const onPointerOver = event => {
+      const card = event.target.closest('.feature-card, .tool-card');
+      if (card) rectOf(card);
+    };
+
+    /* 这两类指针事件都不取消默认动作，注册成被动监听；`removeEventListener` 只需与
+       注册时的 capture 一致，共用同一个选项对象即可。 */
+    const POINTER_OPTIONS = { passive: true };
+    const pointerListeners = [
+      ['pointerover', onPointerOver],
+      ['pointermove', onPointerMove],
+    ];
+
+    const bindSpotlight = () =>
+      grids.forEach(grid =>
+        pointerListeners.forEach(([type, handler]) => grid.addEventListener(type, handler, POINTER_OPTIONS)),
+      );
+    const unbindSpotlight = () =>
+      grids.forEach(grid =>
+        pointerListeners.forEach(([type, handler]) => grid.removeEventListener(type, handler, POINTER_OPTIONS)),
+      );
+
+    if (!reduceMotion()) bindSpotlight();
+    /* 减弱动效中途翻转：追光是脚本绑出来的，媒体查询替不了它——样式那边在
+       `prefers-reduced-motion` 下把 `.feature-card::before` 整层 `display: none` 收掉，
+       这里则连事件都不再挂，省下每帧的写入。 */
+    onMotionChange(reduced => (reduced ? unbindSpotlight() : bindSpotlight()));
+
+    /* 位置一变缓存就作废（跟着那一条按帧合流的滚动通道走，不自建监听）：
+       下一次指针事件重新量一次，而不是每次事件都量。 */
+    watchScroll(() => {
+      epoch += 1;
+    });
   }
 
   /* ─────────────── 10. 重写预演 ─────────────── */

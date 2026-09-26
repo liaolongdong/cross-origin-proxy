@@ -68,11 +68,13 @@
           <ArrowDown />
         </el-icon>
       </div>
-      <Transition name="slide">
-        <div
-          v-show="rulesExpanded"
-          class="rules-section-body"
-        >
+      <!-- 折叠用 grid-template-rows: 0fr → 1fr，不再用 max-height 夹：
+           旧的 `max-height: 300px` 在规则多于约八条时先在动画里被裁一刀、过渡结束后又突然长全 -->
+      <div
+        class="rules-section-collapse"
+        :class="{ 'is-open': rulesExpanded }"
+      >
+        <div class="rules-section-body">
           <div
             v-if="rules.length === 0"
             class="rules-empty"
@@ -99,7 +101,7 @@
             </div>
           </template>
         </div>
-      </Transition>
+      </div>
     </div>
 
     <!-- 数据点：活跃规则 / 经扩展请求 / 本页网络层命中 + 拦截器自报活动 -->
@@ -364,8 +366,12 @@
       >
         {{ t('recentRequestsDnrHint') }}
       </p>
-      <ul
+      <!-- 新请求进来时：顶行淡入落位，下面的行被「挤」下去（move 过渡），而不是整列表换脸。
+           不加 appear——popup 每次打开都让八行重新演一遍进场，看起来像加载慢 -->
+      <TransitionGroup
         v-else-if="recentLogs.length > 0"
+        tag="ul"
+        name="log-row"
         class="recent-list"
       >
         <li
@@ -407,7 +413,7 @@
           </el-tag>
           <span class="recent-time">{{ formatTimeAgo(log.timestamp) }}</span>
         </li>
-      </ul>
+      </TransitionGroup>
     </div>
   </div>
 </template>
@@ -912,7 +918,9 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;
-  transition: all 0.2s ease;
+  transition:
+    background var(--cop-duration-base) var(--cop-ease-standard),
+    border-color var(--cop-duration-base) var(--cop-ease-standard);
 }
 
 .toggle-section.is-active {
@@ -947,11 +955,28 @@ async function openOptionsPage(hash = '') {
   height: 8px;
   background: var(--cop-text-color-placeholder);
   border-radius: 50%;
-  transition: background 0.2s ease;
+  transition: background var(--cop-duration-base) var(--cop-ease-standard);
 }
 
 .status-dot.active {
   background: var(--el-color-success);
+
+  /* 类是「拨开关」那一刻加上的，所以这一圈只在状态真的变了的那一次跑：
+     不用 JS 记时器、也不区分变化来自本页还是别的扩展页。
+     只有一处用，故关键帧就近放在这条规则下面，不进 `tokens.css` 的共用段。 */
+  animation: dot-ping var(--cop-duration-slow) var(--cop-ease-standard) 1;
+}
+
+/* 向外扩散并散掉的一圈主色：起始 0 扩散半径、收尾 6px 全透明，
+   所以动画结束后不必收回——它落回的就是「没有 box-shadow」这个静止态 */
+@keyframes dot-ping {
+  from {
+    box-shadow: 0 0 0 0 rgb(var(--cop-primary-rgb) / 40%);
+  }
+
+  to {
+    box-shadow: 0 0 0 6px rgb(var(--cop-primary-rgb) / 0%);
+  }
 }
 
 .toggle-text {
@@ -1036,6 +1061,10 @@ async function openOptionsPage(hash = '') {
   line-height: 1.4;
   color: var(--cop-text-color-secondary);
   cursor: default;
+
+  /* 它是 v-if 出来的：读数第一次攒够时整条凭空出现，不给一次进场就像界面抖了一下。
+     位移就是共用的那 6px——这一行是旁路观测，动效不该比它上面那三个数字更抢眼 */
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
 .interceptor-chip {
@@ -1050,6 +1079,9 @@ async function openOptionsPage(hash = '') {
 
 .interceptor-text {
   min-width: 0;
+
+  /* 状态换色（回退 / 超时 / 无读数 / 正常）此前是硬切，读的人分不清这是「新消息」还是「同一句换了语气」 */
+  transition: color var(--cop-duration-base) var(--cop-ease-standard);
 }
 
 /* 状态同时靠文字与颜色说话（颜色只是强化，不是唯一载体） */
@@ -1077,6 +1109,9 @@ async function openOptionsPage(hash = '') {
   line-height: 1.4;
   color: var(--el-color-warning, #e6a23c);
   cursor: default;
+
+  /* 与拦截器那一行同一种进场：两条提示都会在读数到位后突然出现，抖动的方式得一致 */
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
 /* 当前页命中预览 */
@@ -1217,7 +1252,11 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;
-  transition: all 0.2s ease;
+  transition:
+    background var(--cop-duration-fast) var(--cop-ease-standard),
+    border-color var(--cop-duration-fast) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard),
+    transform var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
 .action-card:hover {
@@ -1314,7 +1353,7 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-bg-color);
   border: 1px solid var(--cop-border-color);
   border-radius: 6px;
-  transition: border-color 0.2s ease;
+  transition: border-color var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .api-picker-row + .api-picker-row {
@@ -1400,7 +1439,9 @@ async function openOptionsPage(hash = '') {
   align-items: center;
   padding: 6px 8px;
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition:
+    background var(--cop-duration-fast) var(--cop-ease-standard),
+    transform var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .recent-item:nth-child(even) {
@@ -1458,7 +1499,7 @@ async function openOptionsPage(hash = '') {
   cursor: pointer;
   user-select: none;
   background: var(--cop-bg-color-secondary);
-  transition: background 0.2s ease;
+  transition: background var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .rules-section-header:hover {
@@ -1483,7 +1524,7 @@ async function openOptionsPage(hash = '') {
 .rules-section-arrow {
   font-size: 12px;
   color: var(--cop-text-color-secondary);
-  transition: transform 0.2s ease;
+  transition: transform var(--cop-duration-base) var(--cop-ease-standard);
 }
 
 .rules-section-arrow.is-expanded {
@@ -1491,7 +1532,36 @@ async function openOptionsPage(hash = '') {
 }
 
 .rules-section-body {
-  padding: 4px 10px 8px;
+  visibility: hidden;
+  min-height: 0;
+  padding: 0 10px;
+  overflow: hidden;
+  transition: visibility var(--cop-duration-base) var(--cop-ease-standard);
+}
+
+/* 原先由容器出的 4px / 8px 上下留白挪到这里：padding 计入元素高度，折叠时会在标题下面
+   留下一条 12px 的空缝；margin 连同内容一起被 0fr 压掉，展开时又原样回到那个位置 */
+.rules-section-body > :first-child {
+  margin-top: 4px;
+}
+
+.rules-section-body > :last-child {
+  margin-bottom: 8px;
+}
+
+/* 折叠动画：0fr → 1fr 让容器自己按内容长高，两端都不必猜高度 */
+.rules-section-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--cop-duration-base) var(--cop-ease-standard);
+}
+
+.rules-section-collapse.is-open {
+  grid-template-rows: 1fr;
+}
+
+.rules-section-collapse.is-open .rules-section-body {
+  visibility: visible;
 }
 
 .rules-empty {
@@ -1508,7 +1578,7 @@ async function openOptionsPage(hash = '') {
   justify-content: space-between;
   padding: 6px 4px;
   border-radius: 6px;
-  transition: background 0.15s ease;
+  transition: background var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .rule-toggle-item:hover {
@@ -1525,17 +1595,31 @@ async function openOptionsPage(hash = '') {
   white-space: nowrap;
 }
 
-/* 折叠动画 */
-.slide-enter-active,
-.slide-leave-active {
-  max-height: 300px;
-  overflow: hidden;
-  transition: all 0.2s ease;
+/* 最近请求进场：新行从顶部淡入落位，已被挤下去的行跟着移动。
+   move 那一档比进场略长一点——它是「别的东西在让位」，看慢一点反而说得清是谁挤的 */
+.log-row-enter-active {
+  transition:
+    opacity var(--cop-duration-base) var(--cop-ease-enter),
+    transform var(--cop-duration-base) var(--cop-ease-enter);
 }
 
-.slide-enter-from,
-.slide-leave-to {
-  max-height: 0;
+.log-row-enter-from {
   opacity: 0;
+  transform: translateY(-6px);
+}
+
+.log-row-leave-active {
+  transition:
+    opacity var(--cop-duration-fast) var(--cop-ease-exit),
+    transform var(--cop-duration-fast) var(--cop-ease-exit);
+}
+
+.log-row-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.log-row-move {
+  transition: transform var(--cop-duration-slow) var(--cop-ease-standard);
 }
 </style>

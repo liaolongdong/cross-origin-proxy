@@ -4,6 +4,10 @@
  * - 页面背景：主题 surface 135° 淡渐变
  * - Element Plus 全局深度定制：输入框主题描边 + 聚焦色环、按钮 hover 微上浮
  * - 弹窗规范：el-dialog 限高 + el-dialog__body 内部滚动 + 纤细滚动条
+ * - 动效：Element Plus 自带的弹窗 / 抽屉进场在此统一换成 `--cop-duration-*` 与 `--cop-ease-*`，
+ *   进场慢而减速、退场快而加速；所有覆盖只列要动的属性，不用 `transition: all`
+ *   （`all` 会把宽度、高度、位置一起纳入过渡，Element Plus 自己那几条就是这么写的，
+ *   抽屉因此会在改尺寸时滑一下、输入框会在换占位文案时抖一下）
  */
 
 /* 重置 body 默认 margin，防止页面内容未超长时出现垂直滚动条 */
@@ -24,7 +28,10 @@ body {
   border: 1px solid var(--cop-primary-border);
   border-radius: 6px;
   box-shadow: none;
-  transition: all 0.2s ease;
+  transition:
+    border-color var(--cop-duration-fast) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard),
+    background-color var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .el-input .el-input__wrapper:hover {
@@ -40,7 +47,9 @@ body {
   border: 1px solid var(--cop-primary-border);
   border-radius: 6px;
   box-shadow: none;
-  transition: all 0.2s ease;
+  transition:
+    border-color var(--cop-duration-fast) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .el-textarea .el-textarea__inner:hover {
@@ -52,11 +61,22 @@ body {
   box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 10%);
 }
 
-/* 按钮：统一 6px 圆角 + hover 轻上浮 */
-.el-button {
+/* 按钮：统一 6px 圆角 + hover 轻上浮
+   上浮走 `transform`、配色走三个颜色属性，显式列出来而不是 `all`：
+   `all` 会把 Element Plus 在 `.el-button` 上声明的 `width`/`padding` 变化（ loading 换图标、
+   文案随语言变长）也纳入过渡，按下瞬间看着像按钮在呼吸。
+   `body ` 前缀的理由见文件末尾「弹窗与抽屉的进场动效」那段：`.el-button` 与 Element Plus 的
+   `.el-button{transition:all .1s}` 同特异度，今天赢在「我这份是首屏最后一个 `<link>`」，
+   加了前缀才不依赖那个顺序。圆角与字重本来也是靠这个顺序赢的，前缀不改变现有观感。 */
+body .el-button {
   font-weight: 400;
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    background-color var(--cop-duration-instant) var(--cop-ease-standard),
+    border-color var(--cop-duration-instant) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard),
+    transform var(--cop-duration-instant) var(--cop-ease-enter);
 }
 
 .el-button:hover {
@@ -184,6 +204,84 @@ body {
 
 .el-drawer__body::-webkit-scrollbar-thumb:hover {
   background: var(--cop-scrollbar-thumb-hover);
+}
+
+/* ==================== 弹窗与抽屉的进场动效 ==================== */
+
+/* Element Plus 的弹窗进场是「外壳淡入 + 面板下落 20px，进出同一条 300ms ease-in-out」，
+   抽屉是「300ms all」。这里不换它的动画，只换节奏与曲线，并给面板补一层轻微放大：
+   进场用 `--cop-ease-enter`（末段长距离减速，落位像被接住），退场用 `--cop-ease-exit`
+   且更短（离开不需要观众，300ms 的退场会让下一次点击等太久）。
+   下落挂在外壳 `.el-overlay-dialog`、放大挂在面板 `.el-dialog`，父子两层各一个动画，
+   不覆盖也不改写 Element Plus 自带的 `dialog-fade-in` 关键帧。
+
+   每一条都以 `body ` 开头，这不是装饰：本文件编译进首屏最后一个 `<link>`，而 Element Plus
+   组件自己的样式跟着**异步 chunk**（`LogDrawer-*.css`、`css-*.css`）在运行时追加到 `<head>`
+   末尾——同特异度时后到者赢，`body` 那个元素选择器把特异度抬到 EP 之上，胜负就不再由加载顺序
+   决定。2026-09-26 按真实产物量过：加前缀之前，下面 8 条里只有 `.el-drawer-fade-leave-active .el-drawer`
+   和 `.dialog-fade-* .el-dialog`（本来就是两级 class）生效，抽屉面板/遮罩与弹窗外壳的节奏仍是 EP 的
+   `all 0.3s`；`.el-input` / `.el-textarea` 那两条不加前缀也因为两级 class 已经赢了，
+   而给它们加前缀会盖过 EP 的 `.el-input.is-disabled .el-input__wrapper`，所以刻意不加。
+   回归守卫见 `tests/designTokens.test.ts` 的「覆盖 EP 节奏的规则必须压过异步 chunk」。 */
+body .dialog-fade-enter-active,
+body .dialog-fade-enter-active .el-overlay-dialog {
+  animation-duration: var(--cop-duration-slow);
+  animation-timing-function: var(--cop-ease-enter);
+}
+
+body .dialog-fade-leave-active,
+body .dialog-fade-leave-active .el-overlay-dialog {
+  animation-duration: var(--cop-duration-fast);
+  animation-timing-function: var(--cop-ease-exit);
+}
+
+body .dialog-fade-enter-active .el-dialog {
+  animation: cop-dialog-in var(--cop-duration-slow) var(--cop-ease-enter) backwards;
+}
+
+body .dialog-fade-leave-active .el-dialog {
+  animation: cop-dialog-out var(--cop-duration-fast) var(--cop-ease-exit);
+}
+
+@keyframes cop-dialog-in {
+  from {
+    transform: scale(0.97);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes cop-dialog-out {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(0.98);
+  }
+}
+
+/* 抽屉：滑轨是面板的 `transform`，遮罩变亮是覆盖层的 `background-color`，两处各写各的。
+   `.el-drawer` 与覆盖层上原本那两条 `transition: all` 会把宽度、高度、内边距全纳入过渡——
+   抽屉里的日志列表一改筛选、面板尺寸跟着变，就会滑出一段并不存在的动画。
+   `body .el-drawer` 仍是 (0,1,1)，低于 Element Plus 自己的 `.el-drawer.is-dragging`（(0,2,0)），
+   拖拽调宽时那句 `transition: none` 照样生效。 */
+body .el-drawer {
+  transition: transform var(--cop-duration-slow) var(--cop-ease-enter);
+}
+
+body .el-drawer-fade-enter-active {
+  transition: background-color var(--cop-duration-slow) var(--cop-ease-enter);
+}
+
+body .el-drawer-fade-leave-active .el-drawer {
+  transition: transform var(--cop-duration-fast) var(--cop-ease-exit);
+}
+
+body .el-drawer-fade-leave-active {
+  transition: background-color var(--cop-duration-fast) var(--cop-ease-exit);
 }
 
 /* 表单提示 */
