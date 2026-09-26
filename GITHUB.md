@@ -32,7 +32,7 @@
 
 **§1–§3、§5 都已落库，GitHub 侧的一次性清单只剩 §4 社交预览（图片已有，只能手动传）与 §6 私密漏洞报告勾选，外加 §8 那条「关 wiki」的建议。**
 
-现在真正的曝光瓶颈不在设置页，而在**没有任何东西被推出去**：0 个 tag 意味着 Releases 空、`Release` 徽章画不出数、README 的「方式 B」是空口承诺、`docs/` 落地页的 HowTo 第一步指向一个空页面；18 个未推的提交又让产品站停在上一批内容。所以下面这些"再优化"都比不上把这一批推出去：按 [RELEASING.md](./RELEASING.md) §2 提一个 `chore(release): v1.1.0` 提交、打 tag、`git push origin main v1.1.0`，推完回头把 §12 那六处「尚无 tag」的句子翻正（清单在 `CHROMEWEBSTORE.md` §12 ①）。
+现在真正的曝光瓶颈不在设置页，而在**没有任何东西被推出去**：0 个 tag 意味着 Releases 空、`Release` 徽章画不出数、README 的「方式 B」是空口承诺、`docs/` 落地页的 HowTo 第一步指向一个空页面；本地领先远端的那批提交又让产品站停在上一批内容（这个数每提交一次就变，用上面 §0 那行的 `git rev-list --count origin/main..main` 复核）。所以下面这些"再优化"都比不上把这一批推出去：按 [RELEASING.md](./RELEASING.md) §2 把 `package.json` 里的那个版本提成 `chore(release): vX.Y.Z` 提交、打同名 tag、`git push origin main vX.Y.Z`，推完回头把 §12 那六处「尚无 tag」的句子翻正（清单在 `CHROMEWEBSTORE.md` §12 ①）。
 
 ## 1. About → Description
 

@@ -9,7 +9,7 @@ Category / 类别: Chrome extension (Manifest V3) · 开发者工具 / developer
 License / 协议: MIT
 Source / 源码: https://github.com/liaolongdong/cross-origin-proxy
 Store listing / 商店状态: 已上架 / Published on the Chrome Web Store — https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg（与 `CHROMEWEBSTORE.md` 第 8 节的提审记录一致）
-Last verified / 内容核对日期: 2026-09-20, against the store build users install today (v1.0.0) and its source. The repository's working version is 1.1.0 (`package.json`), not yet released — see CHANGELOG.md for what it adds.
+Last verified / 内容核对日期: 2026-09-20, against the store build users install today (v1.0.0) and its source. The repository's working version is 1.2.0 (`package.json`), not yet released — see CHANGELOG.md for what it adds.
 
 ## 1. One-paragraph definition / 一段话定义
 
@@ -178,4 +178,4 @@ Commands / 命令: `pnpm dev`, `pnpm build`, `pnpm build:zip`, `pnpm test`, `pnp
 Questions not answered here: ask in the repository's issue tracker, or read 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 Issue tracker: https://github.com/liaolongdong/cross-origin-proxy/issues
 
-Last updated / 最后更新: 2026-09-22 (documents the released v1.0.0; the repository is on 1.1.0, unreleased)
+Last updated / 最后更新: 2026-09-26 (documents the released v1.0.0; the repository is on 1.2.0, unreleased)

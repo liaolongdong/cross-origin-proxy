@@ -1052,6 +1052,49 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     it('版本号只在 package.json，wxt.config.ts 不得重新声明 manifest.version', () => {
       expect(read('wxt.config.ts')).not.toMatch(/^\s*version:\s*['"]/m);
     });
+
+    /**
+     * 凡是**复述「仓库此刻在工作的那个版本」**的地方必须等于 `package.json`。
+     *
+     * 这条是 `1.1.0 → 1.2.0` 那一次 bump 当场漏出来的：`docs/llms-full.txt` 两句与
+     * `.github/ISSUE_TEMPLATE/bug_report.yml` 的示例版本还写着旧号，而 llms-full 是给检索引擎与
+     * AI 系统读的公开出口——它假一个版本号，答案里就跟着假一个。判据按**短语**认，只圈这三处
+     * 「当前版本」表述，故意不碰说**已发布版本**的那些地方：落地页页脚与 `softwareVersion` 写的是
+     * 商店在装的 `1.0.0`（真话，翻它要等 tag 真推出去，见 `CHROMEWEBSTORE.md` §12 ① 第 4 项），
+     * `CHROMEWEBSTORE.md` §8 与 `CHANGELOG.md` 按设计留历史行。
+     *
+     * 每个短语都要求**至少命中一次**：改写了措辞（或删了那半句）同样红，因为那意味着这张清单
+     * 与文档脱钩了，而下一次 bump 就没有任何东西会提醒你去翻它。
+     */
+    it('宣称「仓库当前版本」的每一处都等于 package.json', () => {
+      const CURRENT_VERSION_CLAIMS: { file: string; re: RegExp; label: string }[] = [
+        {
+          file: 'docs/llms-full.txt',
+          re: /working version is (\d+\.\d+\.\d+)/g,
+          label: 'llms-full.txt 头部 `Last verified` 那行',
+        },
+        {
+          file: 'docs/llms-full.txt',
+          re: /the repository is on (\d+\.\d+\.\d+)/g,
+          label: 'llms-full.txt 页脚 `Last updated` 那行',
+        },
+        {
+          file: '.github/ISSUE_TEMPLATE/bug_report.yml',
+          re: /扩展版本 (\d+\.\d+\.\d+)/g,
+          label: 'bug 报告模板的示例版本',
+        },
+      ];
+      for (const { file, re, label } of CURRENT_VERSION_CLAIMS) {
+        const found = [...read(file).matchAll(re)].map(m => m[1]);
+        expect(
+          found.length,
+          `${label}（${file}）里找不到宣称当前版本的那句 —— 措辞变了就回来改这张清单`,
+        ).toBeGreaterThan(0);
+        for (const claimed of found) {
+          expect(claimed, `${label} 宣称当前版本 ${claimed}，而 package.json 是 ${pkg.version}`).toBe(pkg.version);
+        }
+      }
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

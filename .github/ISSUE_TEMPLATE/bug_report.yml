@@ -86,7 +86,7 @@ body:
       description: Chrome 版本、扩展版本（`chrome://extensions` 里「详情」可见，商店安装的用户也可在商店条目页看到）、操作系统。
       placeholder: |
         Chrome 141.0.7390.77（arm64）
-        扩展版本 1.1.0（chrome://extensions → 详情）
+        扩展版本 1.2.0（chrome://extensions → 详情）
         macOS 13.1
     validations:
       required: true

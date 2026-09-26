@@ -70,9 +70,11 @@ pnpm exec wxt submit --dry-run          # 读 .env.submit，只验鉴权
 ```bash
 # 1) 改版本号（不自动 commit/tag，便于先把 CHANGELOG 一起写进同一个提交）
 npm version minor --no-git-tag-version     # 有用户可感知的新功能用 minor，纯修复用 patch
+#    下面命令里的 X.Y.Z 就是这一步落进 package.json 的那个号，别照抄历史版本号
 
-# 2) 把 CHANGELOG.md 的 `## [Unreleased]` 整段提升为 `## [1.1.0] - YYYY-MM-DD`
+# 2) 把 CHANGELOG.md 的 `## [Unreleased]` 整段提升为 `## [X.Y.Z] - YYYY-MM-DD`
 #    它是版本历史的唯一事实源：Release 说明就是从这里切出来的
+#    顶部的 `## [Unreleased]` 标题要留着（tests/docs-consistency.test.ts 钉住它存在）
 
 pnpm exec prettier --check CHANGELOG.md package.json   # 只查改动文件
 
@@ -80,10 +82,17 @@ pnpm exec prettier --check CHANGELOG.md package.json   # 只查改动文件
 pnpm lint && pnpm typecheck && pnpm lint:style && pnpm test && pnpm build
 
 # 4) 提交、打 tag、推送（tag 一到即触发发布链路）
-git add -A && git commit -m "chore(release): v1.1.0"
-git tag v1.1.0
-git push origin main v1.1.0
+git add -A && git commit -m "chore(release): vX.Y.Z"
+git tag vX.Y.Z
+git push origin main vX.Y.Z
 ```
+
+**第 3 步里 `pnpm test` 会替你把「复述当前版本号」的那几处文档一起追着改**：
+`tests/docs-consistency.test.ts` 的「宣称「仓库当前版本」的每一处都等于 package.json」按短语认
+`docs/llms-full.txt` 的两行与 `.github/ISSUE_TEMPLATE/bug_report.yml` 的示例版本，改了版本号却没翻
+它们就直接红。这三处只描述「仓库此刻在工作的那个版本」，所以它们跟着 `package.json` 走；
+而落地页页脚、schema 的 `softwareVersion` 与 §8 表里的历史行说的是**商店在装的已发布版本**，
+不在这次 bump 的范围内——它们要到 tag 真的推出去那一刻才按第 12 节 ① 翻。
 
 可见文案或能力有变化时，按 `AGENTS.md` 的文档矩阵同步 `README.md`（中文主文档）/ `README.en.md` / `locales/` / `CHROMEWEBSTORE.md` / `docs/`（中英必须同事实）。商店 `name` ≤ 75、`description` ≤ 132 字符由 `pnpm test` 守卫。
 
@@ -133,5 +142,5 @@ pnpm exec wxt submit --chrome-zip .output/cross-origin-proxy-1.0.1-chrome.zip --
 - 不在 `wxt.config.ts` 里重新加回 `manifest.version`：双写必然漂移，而漂移的代价是一个版本号错乱的包进商店。
 - 不为了让发布变绿而跳过 `Verify`、降低断言或删测试。
 - 不手改 GitHub Release 的资产名去凑商店期望（包名由 `wxt zip` 按 `<package-name>-<version>-<browser>.zip` 生成，zip 里的版本号是 WXT 削去预发布后缀后的 `manifest.version`）。
-- 不用 `npm version prerelease`：WXT 会把 `1.1.0-beta.0` 削成 `1.1.0` 写进 manifest，与已发布的 `1.1.0` 正式版撞同号，商店会直接拒收更新。发版只用 `major` / `minor` / `patch`。
+- 不用 `npm version prerelease`：WXT 会把 `X.Y.Z-beta.0` 削成 `X.Y.Z` 写进 manifest，与商店里同号的正式版撞车，商店会直接拒收更新。发版只用 `major` / `minor` / `patch`。
 - 不擅自给 Firefox/Edge 配凭据：本项目声明不支持 Firefox（`declarativeNetRequest` 差异），要扩大目标平台先与产品决策对齐。

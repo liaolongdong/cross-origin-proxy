@@ -466,28 +466,87 @@ describe('EP 节奏覆盖必须靠特异度赢，而不是靠加载顺序', () =
  * `view-transition-name`，只有默认的 root 一层），所以只有 resolved timing 说得出这件事。
  * 同一轮还实测了「作者声明压得住这一层」（注入 333ms 哨兵后 `getAnimations()` 读回 333ms），
  * 因此这里钉的是写法，不是「反正盖不住」。
+ *
+ * 判据按**每一条点名这四层的顶层规则**逐条过，而不是「文件里某处提到过这一层」，因为三种写法
+ * 都能骗过后者（各插一次变异验证过）：把某一层挪进 `@media` 里、在后面追加一条把同一层改回
+ * 别的时长的规则、给第二个 `view-transition-name` 起个新名字。所以这里只扫**顶层**规则
+ * （`@media` / `@supports` / `@keyframes` 整块算一条，里面的嵌套规则不进判据），并要求：
+ * ① 凡点名 `::view-transition-*` 的选择器，括号里必须是 `root`；② 它所在的那条规则必须同时声明
+ * recolour 时长与 standard 缓动；③ 四层都被这样的规则点名到。
+ * 代价写在这里：把这两条属性等价改写成 `animation:` 简写会红——那是刻意让改的人回来对一次，
+ * 简写里的缓动默认值就是 `ease`，正是这一条要避免的那个值。
  */
 describe('换肤快照的四层同时长同缓动（漏一层就退回 UA 的 250ms/ease）', () => {
-  const LAYERS = [
-    '::view-transition-group(root)',
-    '::view-transition-image-pair(root)',
-    '::view-transition-old(root)',
-    '::view-transition-new(root)',
-  ];
+  /** 四个快照层，按 `::view-transition-<层>(<名字>)` 认 */
+  const LAYER_RE = /^::view-transition-(group|image-pair|old|new)\(([^)]*)\)$/;
+  const LAYERS = ['group', 'image-pair', 'old', 'new'].map(layer => `::view-transition-${layer}(root)`);
 
-  it('每一层都在同一条声明了 recolour 时长与 standard 缓动的规则里', () => {
-    const src = readFileSync(TOKENS_FILE, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, ' ');
-    const covered = new Set<string>();
-    for (const [, selectorList, body] of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!/animation-duration:\s*var\(--cop-duration-recolour/.test(body)) continue;
-      if (!/animation-timing-function:\s*var\(--cop-ease-standard/.test(body)) continue;
-      for (const selector of selectorList.split(',')) {
-        const trimmed = selector.trim();
-        if (LAYERS.includes(trimmed)) covered.add(trimmed);
+  /**
+   * 按大括号深度切出**顶层**规则：`{` 之前攒下的那段是选择器清单（或 at-rule 的前奏），
+   * 深度回到 0 时那一条才收进结果。at-rule 因此整块算一条——它的嵌套规则不在判据范围内。
+   */
+  const topLevelRules = (src: string): Array<{ selectorText: string; body: string }> => {
+    const rules: Array<{ selectorText: string; body: string }> = [];
+    let depth = 0;
+    let pending = '';
+    let selectorText = '';
+    let body = '';
+    for (const char of src) {
+      if (char === '{') {
+        if (depth === 0) {
+          selectorText = pending;
+          pending = '';
+          body = '';
+        } else {
+          body += char;
+        }
+        depth += 1;
+        continue;
       }
+      if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          rules.push({ selectorText, body });
+          selectorText = '';
+          body = '';
+        } else {
+          body += char;
+        }
+        continue;
+      }
+      if (depth === 0) pending += char;
+      else body += char;
+    }
+    return rules;
+  };
+
+  it('每一条点名快照层的顶层规则都同时声明 recolour 时长与 standard 缓动', () => {
+    const src = readFileSync(TOKENS_FILE, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const rules = topLevelRules(src);
+    // 解析自检：这份文件不可能只有个位数条顶层规则，切出来是空说明上面那套深度判断坏了
+    expect(rules.length, `只切出 ${rules.length} 条顶层规则，解析失效`).toBeGreaterThan(10);
+
+    const covered = new Set<string>();
+    for (const rule of rules) {
+      const layers = rule.selectorText
+        .split(',')
+        .map(selector => selector.trim())
+        .filter(selector => LAYER_RE.test(selector));
+      if (layers.length === 0) continue;
+      // 前提「只有 root 一层」被这份文件自己钉住：出现了别的名字，整页快照那段推理就不成立了
+      for (const selector of layers) {
+        expect(selector, `出现了预期的四个 root 层之外的快照层选择器：${selector}`).oneOf(LAYERS);
+      }
+      expect(rule.body, `${layers.join(', ')} 所在规则没有声明 var(--cop-duration-recolour) 时长`).toMatch(
+        /animation-duration:\s*var\(--cop-duration-recolour/,
+      );
+      expect(rule.body, `${layers.join(', ')} 所在规则没有声明 var(--cop-ease-standard) 缓动`).toMatch(
+        /animation-timing-function:\s*var\(--cop-ease-standard/,
+      );
+      for (const selector of layers) covered.add(selector);
     }
     const missing = LAYERS.filter(layer => !covered.has(layer));
     // 数量级守卫：一条都没匹配上就是解析失效（改了写法或块结构），不是「恰好都不需要」
-    expect(covered.size, `四层里没人接管的有：${missing.join(' ')}`).toBe(LAYERS.length);
+    expect(missing, `四层里没人按 recolour 那一档接管的有：${missing.join(' ')}`).toEqual([]);
   });
 });
