@@ -723,3 +723,136 @@ describe('字号下沿：扩展内不存在小于 11px 的 font-size', () => {
     expect(sites.some(s => s.px === FLOOR)).toBe(true);
   });
 });
+
+/**
+ * 落地页首屏的两叠错峰阶梯不许有「顶」（评审 L-16）。
+ *
+ * 与上面那节同一条契约，换到 `docs/assets/landing.css`：逐个点名的 `:nth-child(2/3/4)`
+ * 在今天完全正确，缺的是**尾档**。失效方式还是静默的——往 `.stat-strip` 里再塞一个数字，
+ * 它没有规则命中，延迟回落到基础那条 `animation` 简写里的值，跟第一个数同时弹出来。
+ * 而 HTML 与 CSS 分处两个文件、两套工具链（落地页不参与 WXT 构建），改图片那一格的人
+ * 不会去数 `:nth-child` 写到几。所以张数从**页面本身**读，不写死在断言里。
+ *
+ * 判据按「张数 + 1」那一格量：这一条说的不是「今天这四格排得开」，而是「第五格也一样」。
+ */
+describe('落地页首屏的错峰阶梯不许有「顶」', () => {
+  const CSS = stripComments(readFileSync('docs/assets/landing.css', 'utf-8'));
+  const ZH = readFileSync('docs/index.html', 'utf-8');
+  const EN = readFileSync('docs/en.html', 'utf-8');
+
+  /** 与 `docs/assets/landing.js` 无关的纯结构计数：数 `<div class="cls">` 的直接子元素个数 */
+  const VOID_TAGS = new Set([
+    'area',
+    'base',
+    'br',
+    'col',
+    'embed',
+    'hr',
+    'img',
+    'input',
+    'link',
+    'meta',
+    'source',
+    'track',
+    'wbr',
+  ]);
+  const childCount = (html: string, cls: string): number => {
+    const open = new RegExp(`<div class="${cls}">`).exec(html);
+    if (!open) return -1;
+    let depth = 0;
+    let count = 0;
+    for (const tag of html.slice(open.index + open[0].length).matchAll(/<(\/?)([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/g)) {
+      const [, closing, name, selfClosing] = tag;
+      if (closing) {
+        depth -= 1;
+        if (depth < 0) return count;
+        continue;
+      }
+      if (selfClosing || VOID_TAGS.has(name.toLowerCase())) {
+        if (depth === 0) count += 1;
+        continue;
+      }
+      if (depth === 0) count += 1;
+      depth += 1;
+    }
+    return count;
+  };
+
+  /** 把样式切成「选择器列表 + animation-delay」，与空态页那节同一套切法 */
+  const BLOCKS = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({
+    selectors: selectors
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean),
+    delay: /animation-delay:\s*(\d+)ms/.exec(body)?.[1],
+  }));
+
+  /**
+   * @param ladder 点名各级的写法前缀，如 `.hero-copy > ` → 认 `.hero-copy > :nth-child(3)`
+   * @param tail   这一叠的「张数从哪读」——落地页中英两页必须同数（新增页面必须成对）
+   */
+  const LADDERS = [
+    { label: '首屏文案', ladder: '.hero-copy > ', container: 'hero-copy', zh: ZH, en: EN },
+    { label: '统计条数字', ladder: '.hero-visual .stat', suffix: ' b', container: 'stat-strip', zh: ZH, en: EN },
+  ] as const;
+
+  const rungOf = (selector: string, prefix: string, suffix = ''): string | undefined => {
+    const spec = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:nth-child\\((.+)\\)${suffix}$`).exec(
+      selector.trim(),
+    )?.[1];
+    return spec?.replace(/\s+/g, '');
+  };
+
+  for (const item of LADDERS) {
+    const { label, ladder, container } = item;
+    const named: { index: number; delay: number }[] = [];
+    const tails: { from: number; delay: number }[] = [];
+    for (const block of BLOCKS) {
+      if (block.delay === undefined) continue;
+      for (const selector of block.selectors) {
+        const spec = rungOf(selector, ladder, 'suffix' in item ? item.suffix : '');
+        if (!spec) continue;
+        const span = /^n\+(\d+)$/.exec(spec);
+        if (span) tails.push({ from: Number(span[1]), delay: Number(block.delay) });
+        else if (/^\d+$/.test(spec)) named.push({ index: Number(spec), delay: Number(block.delay) });
+      }
+    }
+    const zh = childCount(item.zh, container);
+    const en = childCount(item.en, container);
+    // 解析自检：张数读成 -1/0 说明 HTML 形状变了，此时下面的断言全是空转
+    expect(zh, `${label}：中文页读不到 \`.${container}\` 的子元素个数`).toBeGreaterThanOrEqual(3);
+    expect(en, `${label}：中英两页的张数必须相同（新增内容成对）`).toBe(zh);
+    expect(named.length, `${label}：点名级少于 2 级，阶梯判据已失效`).toBeGreaterThanOrEqual(2);
+
+    it(`${label}：点名级之上还有尾档，第 2 张起延迟非 0、逐级不下降`, () => {
+      expect(
+        tails.length,
+        `${label}：阶梯只点名到第 ${Math.max(...named.map(n => n.index))} 张，没有尾档`,
+      ).toBeGreaterThan(0);
+      const lastNamed = Math.max(...named.map(n => n.index));
+      const tailFrom = Math.min(...tails.map(t => t.from));
+      expect(
+        tailFrom,
+        `${label}：尾档从第 ${tailFrom} 张起，而点名只到第 ${lastNamed} 张 —— 中间那张没人管`,
+      ).toBeLessThanOrEqual(lastNamed + 1);
+
+      const delayAt = (index: number): number => {
+        let delay = 0;
+        for (const n of named) if (n.index === index) delay = n.delay;
+        for (const t of tails) if (index >= t.from) delay = Math.max(delay, t.delay);
+        return delay;
+      };
+      const steps: number[] = [];
+      for (let index = 2; index <= zh + 1; index += 1) steps.push(delayAt(index));
+      expect(
+        steps.filter(d => d <= 0),
+        `${label}：有格子没被阶梯覆盖（共 ${zh} 格，量到第 ${zh + 1} 格）${JSON.stringify(steps)}`,
+      ).toEqual([]);
+      for (let i = 1; i < steps.length; i += 1) {
+        expect(steps[i], `${label}：阶梯在第 ${i + 2} 张倒回去了 ${JSON.stringify(steps)}`).toBeGreaterThanOrEqual(
+          steps[i - 1],
+        );
+      }
+    });
+  }
+});

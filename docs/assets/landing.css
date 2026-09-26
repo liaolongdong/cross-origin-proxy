@@ -2641,6 +2641,15 @@ html.js .tool-card:hover::before {
   animation-delay: 470ms;
 }
 
+/* 尾档：上一格 +70ms，写成 `n + 5` 而不是到此为止。逐个点名的阶梯「顶」在最后一格上，
+   失效方式是静默的——将来往 `.stat-strip` 里再塞一个数字，它没有规则命中、延迟回落到
+   基础那条的 260ms，跟第一个数同时弹出来，阶梯走到末尾倒着跳一次；而改 HTML 的人
+   数的是「今天这四格排得开」。`tests/designTokens.test.ts` 的「落地页首屏的错峰阶梯」
+   按这张叠卡的张数核对到这里（同文件 `.hero-copy` 那一叠就是这么收的尾）。 */
+.hero-visual .stat:nth-child(n + 5) b {
+  animation-delay: 540ms;
+}
+
 @keyframes lp-pop {
   0% {
     opacity: 0;
