@@ -158,11 +158,14 @@ function toBasicAuth(credentials: string): string | null {
 export function parseCurlCommand(text: string): ParsedCurl | null {
   if (typeof text !== 'string') return null;
 
-  // 去掉 shell 提示符残留与行续符
+  // 去掉 shell 提示符残留与行续符。续行符要吃掉其后一整段空白：
+  // DevTools「复制为 cURL」常见 `curl \` + 空格 + 换行的排版，只匹配 `\\\n` 会留下一个
+  // 反斜杠-空格转义，分词器据此产出一个内容为空格的 token——它在下面第 181 行那种
+  // 「第一个非 `-` token 就是 URL」的规则下会被抢注成 URL，整条命令解析失败。
   const normalized = text
     .trim()
     .replace(/^\$\s+/, '')
-    .replace(/\\\r?\n/g, ' ');
+    .replace(/\\[ \t]*\r?\n[ \t]*/g, ' ');
 
   const tokens = tokenizeCurl(normalized);
   if (tokens.length === 0) return null;
@@ -177,6 +180,7 @@ export function parseCurlCommand(text: string): ParsedCurl | null {
 
   for (let i = start; i < tokens.length; i++) {
     const token = tokens[i];
+    if (!token) continue; // 空白 token 不参与「第一个非选项即 URL」的判定
 
     if (!token.startsWith('-')) {
       if (!url) url = token;
@@ -256,11 +260,17 @@ export function parseCurlCommand(text: string): ParsedCurl | null {
   }
 
   if (!url) return null;
+  let parsedUrl: URL;
   try {
-    url = new URL(url).href;
+    parsedUrl = new URL(url);
   } catch {
     return null;
   }
+  // 只接受 http/https：`new URL` 同口径放行 `file:///etc/passwd` 与 `data:...`，
+  // 而这类地址既不是「前端调后端」的代理对象，又会把界面预填成一条永远命中不了的规则
+  // （与 HAR 侧 `harEntriesToRules` 的协议闸、`App.vue` 页面接口探测的协议闸同一条判据）
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') return null;
+  url = parsedUrl.href;
 
   const method = explicitMethod || (dataParts.length > 0 ? 'POST' : 'GET');
 

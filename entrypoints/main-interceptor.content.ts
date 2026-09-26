@@ -156,12 +156,25 @@ export default defineContentScript({
     let compiledRegexCache: Map<string, RegExp> = new Map();
 
     /**
+     * Cap on the URL length fed to the wildcard / regex scan (mirror of
+     * `utils/urlMatcher.ts`'s `MAX_MATCH_URL_LENGTH`). Backtracking cost grows with the input,
+     * and no real proxied URL is anywhere near this long. `prefix` stays exempt — `startsWith`
+     * is linear and very long `data:` URLs are a legitimate prefix target.
+     */
+    const MAX_MATCH_URL_LENGTH = 8192;
+
+    /**
      * Detect nested quantifiers that can cause catastrophic backtracking (ReDoS).
+     * Mirror of `utils/urlMatcher.ts` — the two lists must stay identical: a pattern the page
+     * accepts but the SW rejects (or the other way round) makes the two channels disagree on
+     * whether a request matches, and the failure is silent on both sides.
      */
     function isRegexSafe(pattern: string): boolean {
       const dangerousPatterns = [
         /\([^)]*[+*][^)]*\)[+*]/, // (a+)+ or (a*)+  etc.
         /\([^)]*[+*][^)]*\)\{/, // (a+){n} etc.
+        /\((?:[^()]*\|[^()]*)\)[+*{]/, // (a|aa)+ / (a|ab){2,} — quantified alternation group
+        /(?:\.\*){2,}/, // .*.* and friends
         /(\+|\*)\1/, // ++ or **
       ];
       return !dangerousPatterns.some(p => p.test(pattern));
@@ -257,6 +270,9 @@ export default defineContentScript({
       switch (rule.matchType) {
         case 'wildcard':
         case 'regex': {
+          // Same cap as `utils/urlMatcher.ts`: an over-long subject never enters the scan, so the
+          // two channels cannot disagree about a rule's hit set because of URL length.
+          if (url.length > MAX_MATCH_URL_LENGTH) return false;
           const regex = getCompiledRegex(rule);
           return regex ? regex.test(url) : false;
         }

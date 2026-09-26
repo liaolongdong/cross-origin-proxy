@@ -6,6 +6,10 @@ import {
   isSimpleRule,
   isWebSocketRule,
   applyQueryOverrides,
+  isRegexSafe,
+  isPatternUsable,
+  isUrlTooLongForScan,
+  MAX_MATCH_URL_LENGTH,
 } from '@/utils/urlMatcher';
 import type { ProxyRule } from '@/utils/types';
 
@@ -198,5 +202,84 @@ describe('applyQueryOverrides', () => {
     expect(applyQueryOverrides('https://a.com/api', {})).toBe('https://a.com/api');
     expect(applyQueryOverrides('https://a.com/api', undefined)).toBe('https://a.com/api');
     expect(applyQueryOverrides('not-a-url', { env: 'uat' })).toBe('not-a-url');
+  });
+});
+
+/**
+ * M-1（2026-09-26 评审轮）：ReDoS 的两道闸
+ *
+ * 第一道管形状。旧清单只有「量词套量词」三条，而 `[^)]*` 跨不过交替组里的那个 `|`，
+ * 于是 `(a|aa)+$` 被放行——它的回溯树比 `(a+)+` 更宽（n=32 实测过百毫秒，随长度指数增长）。
+ * 可达链是「导入文件里的一条模式 + 一笔页面可控的长 URL」，代价是单线程 SW 冻秒级。
+ * 第二道管输入规模：用户正则的形状不由我们决定，超限主题上的平方级回溯同样足以冻结 SW，
+ * 所以超限的 URL 在 wildcard/regex 两条通道上按「不匹配」处理（与非法模式同档降级）。
+ */
+describe('isRegexSafe — 量词化的交替组与相邻量词串', () => {
+  const dangerous = [
+    '(a+)+', // 旧清单就有
+    '(a*)*b',
+    'a++b',
+    '(a+){2}',
+    '(a|aa)+$', // 新增：组内含 | 时旧判据看不见
+    '(a|ab){2,}',
+    '(a|a?)+x',
+    '.*.*x', // 新增：相邻量词串
+    '^(https?|)://.*.*$',
+  ];
+  // 常规写法一律不许误伤——误伤的代价是用户去改一个根本没坏的模式
+  const benign = ['(a|b)$', '(a|aa)x', '/users/\\d+', '^(?:https?|ws)s?://', '^https://a\\.com/.*\\.js$'];
+
+  it.each(dangerous)('点名危险形状：%s', pattern => {
+    expect(isRegexSafe(pattern)).toBe(false);
+  });
+
+  it.each(benign)('放行常规写法：%s', pattern => {
+    expect(isRegexSafe(pattern)).toBe(true);
+  });
+
+  it('匹配与「模式可用性」同口径：不会出现拦下它却说它没坏', () => {
+    const rule = makeRule({ matchType: 'regex', matchPattern: '(a|aa)+$' });
+    expect(isPatternUsable(rule)).toBe(false);
+    expect(matchRule(`https://a.com/${'a'.repeat(30)}`, rule)).toBe(false);
+  });
+});
+
+describe('超限 URL 不进 wildcard/regex 扫描', () => {
+  const tail = 'a'.repeat(MAX_MATCH_URL_LENGTH);
+  const over = `https://a.com/${tail}`;
+
+  it('判据是「超过」而不是「达到」', () => {
+    expect(isUrlTooLongForScan('x'.repeat(MAX_MATCH_URL_LENGTH))).toBe(false);
+    expect(isUrlTooLongForScan('x'.repeat(MAX_MATCH_URL_LENGTH + 1))).toBe(true);
+  });
+
+  it('wildcard 与 regex 判不匹配，重写原样返回，findMatchingRule 因此选不出规则', () => {
+    const wildcard = makeRule({ matchPattern: 'https://a.com/*', targetUrl: 'https://b.com/' });
+    const regex = makeRule({
+      matchType: 'regex',
+      matchPattern: '^https://a\\.com/.*$',
+      targetUrl: 'https://b.com/',
+    });
+    expect(matchRule(over, wildcard)).toBe(false);
+    expect(matchRule(over, regex)).toBe(false);
+    expect(findMatchingRule(over, [wildcard, regex])).toBeNull();
+    expect(rewriteUrl(over, wildcard)).toBe(over);
+    expect(rewriteUrl(over, regex)).toBe(over);
+  });
+
+  it('prefix 不受此限：startsWith 线性，而页面上传的长 data: 地址命中的正是前缀规则', () => {
+    const prefix = makeRule({
+      matchType: 'prefix',
+      matchPattern: 'https://a.com/',
+      targetUrl: 'https://b.com/',
+    });
+    expect(matchRule(over, prefix)).toBe(true);
+    expect(rewriteUrl(over, prefix)).toBe(`https://b.com/${tail}`);
+  });
+
+  it('空目标本就跳过所有扫描，超限与否同一条答案', () => {
+    const noTarget = makeRule({ matchPattern: 'https://a.com/*' });
+    expect(rewriteUrl(over, noTarget)).toBe(over);
+    expect(rewriteUrl('https://a.com/x', noTarget)).toBe('https://a.com/x');
   });
 });

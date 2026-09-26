@@ -47,15 +47,25 @@ export function computeShadowedRuleIds(allRules: ProxyRule[]): Set<string> {
   return shadowed;
 }
 
+/** 合并键允许的规则形状（预览与写入都只需要这三格） */
+type RuleMergeSource = Pick<ProxyRule, 'name' | 'matchPattern' | 'matchType'>;
+
 /**
  * 合并导入时判定「同一条规则」的键
  *
  * 刻意不是 id：导入文件里的 id 在规范化阶段一律重生成，跨环境也不可比。判据只能是业务字段，
  * 因此「同一条规则改了目标地址」在合并语义下是**新增**而不是更新——导入预览必须演给用户看这件事。
  * 预览与真实写入共用这一个函数：两处各写一份键计算，迟早分叉成「预览说 3 条、实际进 2 条」。
+ *
+ * 用 `JSON.stringify` 而不是模板串拼接：分隔符不转义时键可被**内容注入**——
+ * `name:'x'` + `pattern:'https://a/::y'` 与 `name:'x::y'` + `pattern:'https://a/'` 撞成同一个键，
+ * 于是一份文件里的条目能精准顶掉本机另一条规则（去重把它当重复丢掉），预览里的
+ * `currentTargetUrl` 也会显示成另一条规则的目标地址。键现在编码了字段边界，注入面归零。
+ * `matchType` 一并入键：prefix / wildcard / regex 即使字面 pattern 相同也不是同一条规则
+ * （三条通道的命中集合本就不同），此前它们互相顶掉是同一类谎报。
  */
-export function ruleMergeKey(rule: Pick<ProxyRule, 'name' | 'matchPattern'>): string {
-  return `${rule.name}::${rule.matchPattern}`;
+export function ruleMergeKey(rule: RuleMergeSource): string {
+  return JSON.stringify([rule.name, rule.matchType, rule.matchPattern]);
 }
 
 /**

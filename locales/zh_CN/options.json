@@ -259,7 +259,7 @@
   "dnrSkippedTag": "未生效",
   "dnrSkippedIntro": "该规则走 DNR 通道，但浏览器不会应用它。",
   "dnrSkippedRe2": "正则表达式使用了 RE2 不支持的语法（如环视、反向引用）。",
-  "dnrSkippedSubstitution": "目标 URL 引用了不存在的捕获组。",
+  "dnrSkippedSubstitution": "目标 URL 的捕获组引用无法被应用（编号越界，或大于 9）。",
   "dnrSkippedHint": "改用通配符或前缀匹配，或为规则加上方法过滤、请求头覆盖等能力，让它改由代理通道执行。",
   "dnrSkippedSummary": "其中 $1 条规则不会被应用",
   "dnrSkippedMsg": "规则已保存，但浏览器不会应用它：$1",

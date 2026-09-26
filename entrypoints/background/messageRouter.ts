@@ -13,7 +13,7 @@ import { clearConfigUnsynced, isConfigUnsynced } from './configSyncState';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
 import {
   getProxyConfig,
-  saveProxyConfig,
+  replaceProxyConfig,
   importProxyConfig,
   addRule,
   batchAddRules,
@@ -39,7 +39,7 @@ import {
 import { logsToHar, harEntriesToRules } from '@/utils/har';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
-import { isValidRuleShape } from '@/utils/ruleValidation';
+import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
 import { planImport } from '@/utils/importPlan';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
@@ -70,6 +70,8 @@ function integerPriority(value: unknown): number {
  * 会整条拒绝（页面拿到 status 0），而导入文件不会回到表单让用户修正，等于静默坏规则。
  *
  * 结构判据与配置恢复点的读取侧共用 `utils/ruleValidation`：两处都是「把未知数据变成生效配置」的入口。
+ * 重试与延迟三项同处收口（`normalizeRuleTimings`）：它们决定代发循环的形状，越界值
+ * （`retryCount: 1e9` + `retryDelay: 0`）在界面上毫无痕迹，却把一次 5xx 变成热循环。
  */
 export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
   return rawRules.filter(isValidRuleShape).map(rule => {
@@ -84,7 +86,7 @@ export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
     const headerOverrides = sanitizeImportedHeaderMap(rule.headerOverrides);
     if (headerOverrides) normalized.headerOverrides = headerOverrides;
     else delete normalized.headerOverrides;
-    return normalized;
+    return normalizeRuleTimings(normalized);
   });
 }
 
@@ -279,14 +281,35 @@ export function setupMessageRouter(): void {
     }
 
     switch (message.type) {
-      case MessageType.PROXY_REQUEST:
+      case MessageType.PROXY_REQUEST: {
+        // 载荷判据排在**计数与解引用之前**，两件事一起收：
+        // 1. `countProxyRequestForTab` 是拦截器自报计数的交叉校验基线，而它只涨不回。同页脚本
+        //    循环发 `{ requestId: 'x' }`（`CANCEL_REQUEST` 有这道校验，这一格此前没有）就能把
+        //    本 frame 的基线抬到真实自报数永远追不上，`interceptorStats` 从此整包丢弃这一页的
+        //    诚实读数——弹窗那一行冻结在旧值，且现场看不出是被污染的。
+        // 2. 原来那句 `message.data.requestId` 在 `data` 缺失时当场抛 TypeError，抛在监听器里
+        //    （不走 `respondAsync` 的接手人），页面那一侧的通道就此无人应答。
+        // 拒绝时回的是「Proxy Bypass」那一份信封，与「没命中规则」同一个结局：页面回退原生请求。
+        const payload = message.data as { requestId?: unknown } | undefined;
+        if (!payload || typeof payload.requestId !== 'string' || !payload.requestId) {
+          sendResponse({
+            requestId: typeof payload?.requestId === 'string' ? payload.requestId : '',
+            status: 0,
+            statusText: 'Proxy Bypass',
+            headers: {},
+            body: 'Invalid request payload',
+            isBase64: false,
+          });
+          return false;
+        }
         // 顺手累加这个 frame 的代发数，作为拦截器自报计数的交叉校验基准（`sender.tab` 与
         // `sender.frameId` 都由 Chrome 写入，页面伪造不了；四个自报数字本身可以，见 `interceptorStats`）
         countProxyRequestForTab(sender.tab?.id, sender.frameId);
         return respondAsync(
           sendResponse,
-          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, sender.frameId, message.data.requestId)),
+          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId)),
         );
+      }
 
       case MessageType.CANCEL_REQUEST:
         // 刻意**不加** sender gate：这条消息存在的意义就是让页面取消自己那笔代发请求，
@@ -313,9 +336,11 @@ export function setupMessageRouter(): void {
       }
 
       case MessageType.UPDATE_PROXY_CONFIG:
+        // 走带锁的整包替换：裸 `saveProxyConfig` 能插进别的配置写「读 → 改 → 写」的中间，
+        // 被那笔随后落盘的旧快照抹掉，而两边都回 `{ success: true }`（见 `replaceProxyConfig`）
         return respondAsync(
           sendResponse,
-          saveProxyConfig(message.data).then(() => ({ success: true })),
+          replaceProxyConfig(message.data).then(() => ({ success: true })),
         );
 
       case MessageType.TOGGLE_PROXY:

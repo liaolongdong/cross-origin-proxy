@@ -108,8 +108,13 @@ export function countCaptureGroups(regexFilter: string): number {
 }
 
 /**
- * 提取 regexSubstitution 中最大的捕获组引用编号（`\0`-`\9`）
- * `\\` 为转义的字面量反斜杠，其后的数字不构成引用；无引用返回 -1
+ * 提取 regexSubstitution 中最大的捕获组引用编号（`\1`-`\99`，DNR 实际只接受 `\1`-`\9`）
+ * `\\` 为转义的字面量反斜杠，其后的数字不构成引用；无引用返回 -1。
+ *
+ * 数字必须**贪婪读取**：按单位读取时 `\12` 会被看成引用 `\1`，于是 10 个以上 `*` 的
+ * wildcard（`buildRegexSubstitution` 引用最后一个捕获组）在越界守卫这里被判绿后直接
+ * 交给 Chrome——而 DNR 只支持 `\1`-`\9`，越界引用的代价是**整批** `updateDynamicRules`
+ * 被拒（所有简单规则同时失效），守卫存在的唯一理由就是把这件事拦在同步之前。
  */
 export function maxSubstitutionRef(substitution: string): number {
   let max = -1;
@@ -117,22 +122,38 @@ export function maxSubstitutionRef(substitution: string): number {
     if (substitution[i] !== '\\') continue;
     const next = substitution[i + 1];
     if (next === undefined) break;
-    i++;
-    if (next >= '0' && next <= '9') {
-      max = Math.max(max, Number(next));
+    if (next < '0' || next > '9') {
+      i++; // `\\`：转义的字面量反斜杠，连同其后一字符一起跳过
+      continue;
     }
+    let j = i + 1;
+    while (j < substitution.length && substitution[j] >= '0' && substitution[j] <= '9') j++;
+    max = Math.max(max, Number(substitution.slice(i + 1, j)));
+    i = j - 1;
   }
   return max;
 }
 
 /**
- * 校验替换串的捕获引用是否越界（引用编号不得超过捕获组数量）
- * DNR 对越界引用会拒绝整批规则，需在同步前过滤
+ * DNR 替换语法能引用的最大捕获组编号。
+ *
+ * RE2 的替换语法按**单个数字**读取 `\n`（要引用第 12 组得写 `\g<12>`，而 DNR 的
+ * `regexSubstitution` 不提供这套写法），所以 `\10` 之后的引用即使编号没越界也拿不到
+ * 那一组的内容——最好情况是拼出「第 1 组 + 字面量 0」，把重定向地址写错且毫无报错。
+ */
+export const MAX_DNR_SUBSTITUTION_REF = 9;
+
+/**
+ * 校验替换串的捕获引用是否能被 DNR 实际应用
+ *
+ * 两条判据，代价不同：编号超过捕获组数量时 Chrome 拒收规则（本仓库口径是**整批**
+ * `updateDynamicRules` 被拒，所有简单规则同时失效），编号在组数内但大于
+ * `MAX_DNR_SUBSTITUTION_REF` 时则是静默改写错误。两者都必须在同步前过滤掉。
  */
 export function isSubstitutionValid(regexFilter: string, substitution: string): boolean {
   const maxRef = maxSubstitutionRef(substitution);
   if (maxRef < 0) return true;
-  return maxRef <= countCaptureGroups(regexFilter);
+  return maxRef <= countCaptureGroups(regexFilter) && maxRef <= MAX_DNR_SUBSTITUTION_REF;
 }
 
 /**

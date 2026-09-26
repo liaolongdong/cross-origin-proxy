@@ -71,6 +71,37 @@ describe('B2: DNR 替换引用越界校验', () => {
     expect(isSubstitutionValid('abc', 'plain')).toBe(true);
   });
 
+  /**
+   * M-2（2026-09-26 评审轮）：按单位读取数字时 `\12` 被看成「引用 1」，于是 10 个以上 `*`
+   * 的 wildcard（替换串引用最后一个捕获组）从这道守卫里假绿过去，直接交给 Chrome。
+   * 而 DNR 的 `\n` 替换语法只能引用到第 9 组——编号在组数内但大于 9 同样是拿不到那一组，
+   * 最好情况是拼出「第 1 组 + 字面量 2」这种看着正常的错地址。
+   */
+  it('maxSubstitutionRef 整段读取数字，不把 \\12 读成 \\1 加字面量 2', () => {
+    expect(maxSubstitutionRef('https://b.com/\\12')).toBe(12);
+    expect(maxSubstitutionRef('https://b.com/\\3/\\21/\\9')).toBe(21);
+    // `\\` 是字面量反斜杠，连同其后一字符一起跳过——那里的数字不得算引用
+    expect(maxSubstitutionRef('https://b.com/\\\\12/\\5')).toBe(5);
+  });
+
+  it('12 个 * 的 wildcard：组数够但引用大于 9，仍判不可应用', () => {
+    const wide = makeRule({ matchPattern: `https://a.com/${'*/'.repeat(12)}` });
+    const filter = buildRegexFilter(wide);
+    const substitution = buildRegexSubstitution(wide);
+    expect(countCaptureGroups(filter)).toBe(12);
+    expect(maxSubstitutionRef(substitution)).toBe(12);
+    expect(isSubstitutionValid(filter, substitution)).toBe(false);
+  });
+
+  it('上限收在 9 这一侧：恰好引用第 9 组的规则不得被误杀', () => {
+    const nine = makeRule({ matchPattern: `https://a.com/${'*/'.repeat(9)}` });
+    const filter = buildRegexFilter(nine);
+    const substitution = buildRegexSubstitution(nine);
+    expect(countCaptureGroups(filter)).toBe(9);
+    expect(maxSubstitutionRef(substitution)).toBe(9);
+    expect(isSubstitutionValid(filter, substitution)).toBe(true);
+  });
+
   it('regex 规则目标含 $1 但模式无捕获组 → 校验失败', () => {
     const rule = makeRule({
       matchType: 'regex',

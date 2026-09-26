@@ -259,7 +259,7 @@
   "dnrSkippedTag": "Not applied",
   "dnrSkippedIntro": "This rule goes through the DNR channel, but Chrome will not apply it.",
   "dnrSkippedRe2": "The regex uses syntax RE2 does not support (lookaround, backreferences).",
-  "dnrSkippedSubstitution": "The target URL references a capture group that does not exist.",
+  "dnrSkippedSubstitution": "The target URL's capture-group reference cannot be applied (out of range, or above 9).",
   "dnrSkippedHint": "Switch to wildcard or prefix matching, or give the rule a SW-only capability (method filter, header override, ...) so it runs through the proxy channel instead.",
   "dnrSkippedSummary": "$1 of them will not be applied by Chrome",
   "dnrSkippedMsg": "Rule saved, but Chrome will not apply it: $1",

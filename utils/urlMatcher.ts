@@ -112,6 +112,23 @@ function safeDecode(text: string): string {
 
 const MAX_REGEX_CACHE = 500;
 
+/**
+ * 参与 wildcard/regex 匹配与重写的 URL 长度上限（ReDoS 的第二道闸）
+ *
+ * 判据是回溯的输入规模：`isRegexSafe` 拦已知形状，但用户正则的形状不受我们控制，
+ * 一个 8KB 主题的平方级回溯也足以冻结单线程 SW 秒级。上限只收在「真正会被扫描」的
+ * 两条通道上——**prefix 不受此限**（`startsWith` 线性，且页面上传用的 data: URL
+ * 常以极长主题命中前缀规则，拒它就是把存量功能改坏）。超限按「不匹配」处理，
+ * 与非法 regex 的降级同档；`utils` 与 MAIN world 两份实现必须同判据，
+ * 否则两通道的命中集合会因长度分叉。
+ */
+export const MAX_MATCH_URL_LENGTH = 8192;
+
+/** 该 URL 是否长到不参与 wildcard/regex 扫描（prefix 与空目标改写不受此限） */
+export function isUrlTooLongForScan(url: string): boolean {
+  return url.length > MAX_MATCH_URL_LENGTH;
+}
+
 let cachedRules: ProxyRule[] = [];
 let cachedRulesKey = '';
 const compiledRegexCache = new Map<string, RegExp>();
@@ -150,15 +167,23 @@ function wildcardToRegex(pattern: string): RegExp {
 }
 
 /**
- * 检测可能导致灾难性回溯的嵌套量词（ReDoS）
+ * 检测可能导致灾难性回溯的模式（ReDoS）
  *
  * 导出供 SW 侧「条件化 Mock」的 `matchUrl` 复用：那条路径每个请求都 `new RegExp().test()`，
  * 而它此前绕过了 `getCompiledRegex` 里同一道筛查——导入文件带一条 `(a+)+$` 就能卡死单线程 SW。
+ *
+ * 判据分三类（都是「回溯代价随输入长度指数/平方增长」的形状）：
+ * - 嵌套量词：`(a+)+`、`(a*)*`、`(a+){n}`——量词套量词；
+ * - 量词化的交替组：`(a|aa)+`、`(a|ab){2,}`——**组内含 `|` 时旧判据看不见**，
+ *   因为 `[^)]*` 跨不过那个内层右括号，而它的回溯树比 `(a+)+` 更宽（n=32 实测已过百毫秒）；
+ * - 相邻量词串：`.*.*.*x`——多个 `*` 在同一点位反复重新分配。
  */
 export function isRegexSafe(pattern: string): boolean {
   const dangerousPatterns = [
     /\([^)]*[+*][^)]*\)[+*]/, // (a+)+ or (a*)+ 等
     /\([^)]*[+*][^)]*\)\{/, // (a+){n} 等
+    /\((?:[^()]*\|[^()]*)\)[+*{]/, // (a|aa)+ / (a|ab){2,} 等：量词化的交替组
+    /(?:\.\*){2,}/, // .*.* 及其变体
     /(\+|\*)\1/, // ++ 或 **
   ];
   return !dangerousPatterns.some(p => p.test(pattern));
@@ -209,12 +234,15 @@ export function matchRule(url: string, rule: ProxyRule, method?: string): boolea
 
   switch (rule.matchType) {
     case 'wildcard': {
+      // 超长主题不进 `.*` 扫描（见 MAX_MATCH_URL_LENGTH），prefix 保持线性、不受此限
+      if (isUrlTooLongForScan(url)) return false;
       const regex = wildcardToRegex(rule.matchPattern);
       return regex.test(url);
     }
     case 'prefix':
       return url.startsWith(rule.matchPattern);
     case 'regex': {
+      if (isUrlTooLongForScan(url)) return false;
       const regex = getCompiledRegex(rule.matchPattern);
       if (!regex) return false;
       return regex.test(url);
@@ -256,6 +284,7 @@ function wildcardTailRegex(pattern: string): RegExp | null {
 export function rewriteUrl(url: string, rule: ProxyRule): string {
   // 空目标表示不改写地址（如仅注入请求头的规则），直接代理原 URL
   if (!rule.targetUrl) return url;
+  if (rule.matchType !== 'prefix' && isUrlTooLongForScan(url)) return url;
   switch (rule.matchType) {
     case 'wildcard': {
       // 提取模式末尾 * 匹配到的部分，拼接到 targetUrl 后

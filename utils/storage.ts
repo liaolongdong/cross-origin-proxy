@@ -23,7 +23,7 @@ import {
 import { truncateForLog } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
-import { isValidRuleShape } from '@/utils/ruleValidation';
+import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
 import { sanitizeVariables } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 
@@ -109,6 +109,23 @@ export async function saveProxyConfig(config: ProxyConfig): Promise<void> {
     // 写入被拒（配额/异常）时若保留缓存，内存里就留下一份 storage 里并不存在的配置
     cachedConfig = null;
   }
+}
+
+/**
+ * 整包替换配置（带锁）
+ *
+ * 与 {@link saveProxyConfig} 的差别只有一件事：**排队**。载荷本身就是「一整套配置」，
+ * 不做读改写，看着像是不需要锁——但它可以插在一笔 `addRule` 的「读 → 改 → 写」中间，
+ * 那笔随后写回的旧快照会把这次替换整个抹掉，而两边都拿到了 `{ success: true }`。
+ * 入口是 `UPDATE_PROXY_CONFIG` 那条消息（当前全仓无发送方，属潜伏面：接上界面就是第一条
+ * 丢更新路径），走锁的代价只是一次排队，与它同为整包写的 `saveVariables` 因为
+ * 自己不在锁里读改配置，不需要这一层。
+ *
+ * `toggleProxy` 之类「先读出缓存对象、就地改、再写回」的调用链仍用 `saveProxyConfig`：
+ * 它们的锁在更外层，套两层会自锁。
+ */
+export async function replaceProxyConfig(config: ProxyConfig): Promise<void> {
+  return withStorageLock(() => saveProxyConfig(config));
 }
 
 /**
@@ -519,9 +536,14 @@ function capText(value: string | undefined, limit: number): string | undefined {
 }
 
 /**
- * 头表收口：超出条数上限的丢弃、值超长的截断。
+ * 头表收口：超出条数上限的丢弃、**头名与值**超长的截断。
  *
- * 头名不裁——它由浏览器的头解析器给出（超长名在建 `Headers` 时就抛错），进不到这里。
+ * 头名同样要裁：旧注释以为「它由浏览器的头解析器给出，进不到这里」，但那只对浏览器
+ * 解析出来的那份成立——日志里的头表还有一条来路是**规则配置**（`headerOverrides` 的键、
+ * 导入文件与手改 storage 都能给出十万字符的头名，`utils/headerValidation` 只判合法字符集、
+ * 不判长度）。而 {@link logEntrySize} 是按「名 + 值」计的：不裁名字时，一条 2000 个超长名
+ * 的头表在条数与值都合规的情况下仍能写进 1MB+，`MAX_LOG_TOTAL_SIZE` 只在落盘前的
+ * `trimLogsToBudget` 处收口——那时整份 4MB 早已序列化过一次了。
  */
 function capHeaderMap(headers: Record<string, string> | undefined): Record<string, string> | undefined {
   if (!headers) return headers;
@@ -530,9 +552,10 @@ function capHeaderMap(headers: Record<string, string> | undefined): Record<strin
   const capped: Record<string, string> = {};
   let trimmed = kept.length !== all.length;
   for (const [name, value] of kept) {
+    const cappedName = capText(name, MAX_LOG_FIELD_SIZE) ?? '';
     const nextValue = capText(value, MAX_LOG_FIELD_SIZE) ?? '';
-    if (nextValue !== value) trimmed = true;
-    capped[name] = nextValue;
+    if (cappedName !== name || nextValue !== value) trimmed = true;
+    capped[cappedName] = nextValue;
   }
   return trimmed ? capped : headers;
 }
@@ -727,7 +750,7 @@ export function sanitizeConfigHistory(raw: unknown): ConfigHistoryEntry[] {
     if (typeof e.id !== 'string' || !e.id) continue;
     const rawConfig = e.config as Record<string, unknown> | undefined;
     if (!rawConfig || typeof rawConfig !== 'object' || !Array.isArray(rawConfig.rules)) continue;
-    const rules = rawConfig.rules.filter(isValidRuleShape).map(r => ({ ...r }));
+    const rules = rawConfig.rules.filter(isValidRuleShape).map(r => normalizeRuleTimings({ ...r }));
     entries.push({
       id: e.id,
       savedAt: typeof e.savedAt === 'number' && Number.isFinite(e.savedAt) ? e.savedAt : 0,

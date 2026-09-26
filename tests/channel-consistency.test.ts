@@ -17,6 +17,7 @@ import {
   applyQueryOverrides,
   normalizePriority,
   invalidateMatcherCache,
+  MAX_MATCH_URL_LENGTH,
 } from '@/utils/urlMatcher';
 import { buildRegexFilter, buildRegexSubstitution, buildDnrRules, toDnrPriority } from '@/utils/dnrRules';
 import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
@@ -305,6 +306,45 @@ describe('MAIN world 镜像与 utils 侧同源', () => {
     expect(utilsBody, 'utils 侧 methodAllowed 函数体为空').not.toBe('');
     expect(mirrored, '页面侧 methodAllowed 函数体为空').not.toBe('');
     expect(mirrored).toBe(utilsBody);
+  });
+
+  /**
+   * ReDoS 的形状判据也是双份：SW 侧在 `getCompiledRegex` 里过一遍，页面侧在拦截器自己的
+   * `getCompiledRegex` / `matchUrl` 里过同一遍。两份清单不一致时，「一条规则在两条通道上
+   * 算不算命中」就分叉——页面拦下来交给后台、后台判不命中而回退原生，比两边都不拦更难查。
+   *
+   * 这里逐条比正则字面量，不比整段函数体：`bodyOf` 靠花括号配对取片段，而清单里那条
+   * `/\([^)]*[+*][^)]*\)\{/` 自己就带一个写在字面量里的 `\{`，配对会多吞一段。
+   * 两边的行尾注释本来就一个中文一个英文，所以先把注释剥掉再比。
+   */
+  function dangerListOf(text: string): string[] {
+    const at = text.indexOf('const dangerousPatterns = [');
+    expect(at, '源码里找不到 dangerousPatterns 清单').toBeGreaterThan(-1);
+    return text
+      .slice(at, text.indexOf('];', at))
+      .split('\n')
+      .map(line =>
+        line
+          .replace(/\/\/.*$/, '')
+          .trim()
+          .replace(/,$/, ''),
+      )
+      .filter(line => line.startsWith('/'));
+  }
+
+  it('ReDoS 清单的两份逐条同源，且不是空清单', () => {
+    const utilsList = dangerListOf(readFileSync('utils/urlMatcher.ts', 'utf-8'));
+    const mirrored = dangerListOf(source);
+    expect(utilsList.length).toBeGreaterThanOrEqual(5);
+    expect(mirrored).toEqual(utilsList);
+  });
+
+  it('URL 长度上限的两份字面量同值，且页面侧真的在扫描前用它', () => {
+    const mirrored = source.match(/const MAX_MATCH_URL_LENGTH = (\d+);/);
+    expect(mirrored, '拦截器缺少 MAX_MATCH_URL_LENGTH 镜像').not.toBeNull();
+    expect(Number(mirrored?.[1])).toBe(MAX_MATCH_URL_LENGTH);
+    // 光有常量没有判据 = 镜像形同虚设（超限的 URL 照旧进 `.*` 扫描）
+    expect(source).toMatch(/url\.length > MAX_MATCH_URL_LENGTH/);
   });
 });
 

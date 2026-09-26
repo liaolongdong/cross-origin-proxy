@@ -106,4 +106,37 @@ describe('parseCurlCommand', () => {
     expect(parseCurlCommand('curl -H "NoColonHere" https://a.com')).not.toBeNull();
     expect(parseCurlCommand(null as unknown as string)).toBeNull();
   });
+
+  /**
+   * L-6（2026-09-26 评审轮）：续行符后面带空白的排版
+   *
+   * 旧归一只吃「反斜杠 + 换行」，多出来的那个空格让分词器产出一个内容为空格的 token，
+   * 而下面那条「第一个非 `-` token 就是 URL」的规则会把它抢注成 URL —— 整条命令解析失败。
+   * 复制自文档、编辑器或带尾空白的终端历史的 cURL 恰好是这个形状。
+   */
+  it('续行符与换行之间夹空白（反斜杠 + 空格 + 换行）仍能解析', () => {
+    const cmd = 'curl https://a.com/x \\ \n  -X POST \\   \n  -H "content-type: application/json"';
+    const r = parseCurlCommand(cmd);
+    expect(r).not.toBeNull();
+    expect(r!.url).toBe('https://a.com/x');
+    expect(r!.method).toBe('POST');
+    expect(r!.headers['content-type']).toBe('application/json');
+  });
+
+  it('紧凑排版（反斜杠直接接换行）保持原样可用', () => {
+    const cmd = 'curl https://a.com/x \\\n  -X PUT';
+    expect(parseCurlCommand(cmd)!.url).toBe('https://a.com/x');
+    expect(parseCurlCommand(cmd)!.method).toBe('PUT');
+  });
+
+  /**
+   * L-5（同轮）：`new URL` 只保证「能解析」，不保证「是个能代理的地址」。
+   * `file:` / `data:` 过去同口径放行，界面于是被预填成一条永远命中不了的规则。
+   */
+  it('非 http(s) 协议不再产出预填内容', () => {
+    expect(parseCurlCommand('curl file:///etc/passwd')).toBeNull();
+    expect(parseCurlCommand('curl data:text/plain,hello')).toBeNull();
+    expect(parseCurlCommand('curl ftp://host/a.txt')).toBeNull();
+    expect(parseCurlCommand('curl https://a.com/x')).not.toBeNull();
+  });
 });

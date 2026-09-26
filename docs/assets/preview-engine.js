@@ -7,9 +7,10 @@
  * `tests/landingPreview.test.ts` 能用同一批输入把它和真实现**逐个答案比对**，
  * 而不是只 grep 一遍源码文本（文本 grep 拦不住「抄的时候改了个条件」这个方向）。
  *
- * 维护契约：改动 `utils/urlMatcher.ts` 的匹配与重写、`utils/dnrRules.ts` 的
- * `buildRegexFilter` / `buildRegexSubstitution` / `countCaptureGroups` / `maxSubstitutionRef`，
- * 或 `isSimpleRule` 中只依赖「匹配类型 + 模式 + 目标地址」的那三条分支
+ * 维护契约：改动 `utils/urlMatcher.ts` 的匹配与重写（含 `isRegexSafe` 的清单与
+ * `MAX_MATCH_URL_LENGTH` 的口径）、`utils/dnrRules.ts` 的
+ * `buildRegexFilter` / `buildRegexSubstitution` / `countCaptureGroups` / `maxSubstitutionRef` /
+ * `isSubstitutionValid`，或 `isSimpleRule` 中只依赖「匹配类型 + 模式 + 目标地址」的那三条分支
  * （空目标、通配符末尾非 `*`、WebSocket），必须回到这里镜像；两份答案不一致时以真实现为准。
  *
  * 已知做不到的那一半：网络层规则还要过 Chrome 的 RE2 校验（`isRegexSupported`），
@@ -28,14 +29,24 @@
   /**
    * 替换串展开之后还得是一个能跳转的地址。
    *
-   * 扩展侧没有这条判据（`isSubstitutionValid` 只看捕获引用越不越界），因为它要防的是
-   * 「一条非法规则让 `updateDynamicRules` 整批被拒」，而「换出来不是一个地址」是匹配那一刻
-   * 才不会跳转——两通道在这里给出的结论不同，正是要预演给人看的那件事。
+   * 扩展侧没有这条判据（`isSubstitutionValid` 只问捕获引用能不能被 DNR 应用：编号不越界、
+   * 且不大于 `MAX_DNR_SUBSTITUTION_REF`），因为它要防的是「一条非法规则让 `updateDynamicRules`
+   * 整批被拒」，而「换出来不是一个地址」是匹配那一刻才不会跳转——两通道在这里给出的结论不同，
+   * 正是要预演给人看的那件事。
    */
   const ABSOLUTE_URL = /^https?:\/\//i;
 
+  /** 镜像 `MAX_DNR_SUBSTITUTION_REF`：DNR 的 `\n` 替换语法只能引用到第 9 组 */
+  const MAX_DNR_SUBSTITUTION_REF = 9;
+
   /** 与 `isRegexSafe` 同一份嵌套量词清单——ReDoS 的判据不能有两份 */
-  const UNSAFE_REGEX = [/\([^)]*[+*][^)]*\)[+*]/, /\([^)]*[+*][^)]*\)\{/, /(\+|\*)\1/];
+  const UNSAFE_REGEX = [
+    /\([^)]*[+*][^)]*\)[+*]/,
+    /\([^)]*[+*][^)]*\)\{/,
+    /\((?:[^()]*\|[^()]*)\)[+*{]/, // 量词化的交替组：(a|aa)+ / (a|ab){2,}
+    /(?:\.\*){2,}/, // 相邻量词串：.*.*.*x
+    /(\+|\*)\1/,
+  ];
 
   const escapeSpecial = text => text.replace(SPECIAL, '\\$&');
 
@@ -82,15 +93,24 @@
     return count;
   };
 
-  /** 镜像 `maxSubstitutionRef`：`\\` 是字面量反斜杠，其后的数字不构成引用 */
+  /**
+   * 镜像 `maxSubstitutionRef`：`\\` 是字面量反斜杠，其后的数字不构成引用；
+   * 数字**整段读取**（`\12` 是引用 12，不是引用 1 加字面量 2）
+   */
   const maxRef = substitution => {
     let max = -1;
     for (let i = 0; i < substitution.length; i += 1) {
       if (substitution[i] !== '\\') continue;
       const next = substitution[i + 1];
       if (next === undefined) break;
-      i += 1;
-      if (next >= '0' && next <= '9') max = Math.max(max, Number(next));
+      if (next < '0' || next > '9') {
+        i += 1; // `\\`：连同其后一字符一起跳过
+        continue;
+      }
+      let j = i + 1;
+      while (j < substitution.length && substitution[j] >= '0' && substitution[j] <= '9') j += 1;
+      max = Math.max(max, Number(substitution.slice(i + 1, j)));
+      i = j - 1;
     }
     return max;
   };
@@ -142,7 +162,12 @@
       substitution = target.replace(/\$(\d)/g, '\\$1');
     }
 
-    if (maxRef(substitution) > countGroups(filter)) return { url: null, skip: 'substitutionInvalid' };
+    // 与 `isSubstitutionValid` 同两条判据：编号不得超过捕获组数量，也不得大于 DNR 的
+    // 替换语法能引用的最大编号（`\1`–`\9`）——后者不越界却也拿不到那一组，画出来是个
+    // 看起来正常的错地址。
+    const maxReference = maxRef(substitution);
+    if (maxReference > countGroups(filter) || maxReference > MAX_DNR_SUBSTITUTION_REF)
+      return { url: null, skip: 'substitutionInvalid' };
 
     // 能走到这一格的输入已在上面按同一套判据命中，filter 与那边是同一个式子；`|| ['']` 只是
     // 不让一次理论上的落差把预演面板抛成死控件，不承担判定。

@@ -13,13 +13,16 @@
  *   `docs/alternatives.html` 两份倒是都没提，别照着它以为这句只有一处。
  *   翻成 `true` 等于让一份在别的机器上抓的包当场接管这个 origin 的流量。
  * - 按 origin 去重、先到先得：Chrome DevTools 导出的 HAR 里同一个后端通常有几十条请求，
- *   不去重就是几十条同键规则（合并键 `name::matchPattern` 又恰好相同），一次导入把 200 条上限吃掉。
+ *   不去重就是几十条同键规则（合并键取 `name` + `matchType` + `matchPattern`，见
+ *   `utils/ruleConflicts.ts` 的 `ruleMergeKey`，而这里生成的名字与模式都由 origin 决定），
+ *   一次导入把 200 条上限吃掉。
  * - 认证头白名单与清洗：三枚头名以外的头一律不进规则；含换行的值逐条丢；全丢时整个字段不设
  *   （空对象会让界面显示一条「已配置请求头覆盖」的空规则）。另有一条跨文件契约钉住这几枚头名
  *   与「分享模式」脱敏表的同源关系——抄进来的都是别人机器上的真凭据，导出是它们唯一的出口。
  *
- * 有两条是**现状记录**，不是验收（各自点名了要收口得先拍的那件事），修的时候它们会红，
- * 请连同这段注释一起更新，别只删断言。
+ * 底下那两组「去重登记排在头清洗之前」与「不可代理的协议产出 null/\*」在 2026-09-26 之前是
+ * **现状记录**（各点名了一件要先拍的事），这一轮都拍板收口并升级成了断言；
+ * 再改这两格行为时会红，请连同那两段的说明一起更新，别只删断言。
  *
  * 刻意没断的两处：`name` 用的是 `url.hostname`，因此带端口的条目名字里没有端口（变异 M9 实测换成
  * `url.host` 不改变任何被钉的结果）——名字只是给人看的标签，端口的真正去处在 `matchPattern` 与
@@ -126,46 +129,63 @@ describe('harEntriesToRules — HAR 条目转代理规则', () => {
   });
 
   /**
-   * 现状记录（一）：`seenOrigins.add(origin)` 排在头的清洗**之前**，所以一条头形状坏掉的条目
-   * 虽然自己没成为规则，却已经把这个 origin 占住了 —— 同 origin 后面那条完好的条目跟着一起丢。
-   * DevTools 导出的文件里 `headers` 恒为数组，但这条路并非到不了：弹窗只 `JSON.parse` 并校
+   * 去重登记与「这条条目有没有成为规则」必须同步（2026-09-26 从「现状记录」升级为断言）。
+   *
+   * 旧实现把 `seenOrigins.add(origin)` 排在头清洗**之前**，于是头形状坏掉的那一条自己没成为规则，
+   * 却已经把 origin 占住，同 origin 后面那条完好的跟着一起丢。弹窗只 `JSON.parse` 并校
    * `log.entries` 是数组（`ImportExportDialog.vue`），条目内部长什么样它不看，
    * 「从界面选一个人手改过的 `.har`」正好就是这一格。
-   * 收口办法是把 `add` 挪到 `rules.push` 旁边（或给 `headers` 加 `Array.isArray`），那属于改导入语义，
-   * 先记不修。
    *
-   * 这条不是钻牛角尖：变异 M8b 实测「把去重键从 Set 换成比已生成的规则」这一眼看上去等价的写法
-   * 就会悄悄把它修掉（红的是下面那条用例的上半句 `toEqual([])`——坏条目不再占住 origin，
-   * 后面那条好的于是进了结果），所以这格行为今天没有任何东西挡着一次顺手重构。
+   * 收口后的口径：`headers` 只是规则的**参考信息**，它坏了不该连累由 URL 决定的那部分——
+   * 于是这一格条目自己照样成规则（只是不带 `headerOverrides`），而占位仍然只发生在真正生成之后。
+   *
+   * 变异 M8b 当年实测过：把去重键从 Set 换成「比已生成的规则」这种看上去等价的写法会悄悄把它修掉
+   * ——所以这格行为此前没有任何东西挡着一次顺手重构。现在由下面这四格挡着。
    */
-  it('现状记录：头不是数组的条目会顺手吃掉同 origin 后面那条好的', () => {
+  it('头不是数组的条目只丢它那部分参考信息，不吃掉同 origin 后面那条好的', () => {
     const broken = {
       request: { method: 'GET', url: 'https://a.com/x', headers: 'oops' },
       response: { status: 200 },
     };
-    expect(harEntriesToRules([broken, entry('https://a.com/y')] as unknown as HarEntry[])).toEqual([]);
-    // 换一个 origin 就不受影响：丢的是这一整批里那个被占住的 origin，不是整份文件
-    expect(harEntriesToRules([broken, entry('https://b.com/y')] as unknown as HarEntry[])).toHaveLength(1);
+    const rules = harEntriesToRules([broken, entry('https://a.com/y')] as unknown as HarEntry[]);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].matchPattern).toBe('https://a.com/*');
+    expect(rules[0].headerOverrides).toBeUndefined();
+    // 它自己照样进结果：URL 是这条规则的全部价值，头只是抄一份参考
+    expect(harEntriesToRules([broken] as unknown as HarEntry[])).toHaveLength(1);
+    expect(harEntriesToRules([broken, entry('https://b.com/y')] as unknown as HarEntry[])).toHaveLength(2);
+    // 头数组里混一条缺字段的：跳过的只是那一项头，规则本身照常生成
+    const mixed = {
+      request: {
+        method: 'GET',
+        url: 'https://c.com/x',
+        headers: [null, { name: 'Cookie' }, { name: 'Authorization', value: 'Bearer x' }],
+      },
+      response: { status: 200 },
+    };
+    const [withMixedHeaders] = harEntriesToRules([mixed] as unknown as HarEntry[]);
+    expect(withMixedHeaders.headerOverrides).toEqual({ Authorization: 'Bearer x' });
   });
 
   /**
-   * 现状记录（二）：`new URL()` 对 `file:` / `data:` / `chrome-extension:` 这类 URI 是成功的，
-   * 而它们的 `origin` 是字符串 `'null'`（前一格连 `hostname` 都是空串），于是产出一条
-   * `matchPattern: 'null/*'` 的规则。它永远匹配不到任何真实请求（`buildRegexFilter` 出来的
-   * `^null/(.*)$` 是合法 RE2，注册不报错，但没有真实 URL 长成 `null/…`），且默认停用，
-   * 所以是垃圾而不是漏洞；两条这样的条目因为 origin 相同还会塌成一条。
-   * 顺带一句没测的：它的替换串是 `null/\1`，不是绝对 URL —— 用户若手动启用这样一条，
-   * Chrome 的反应本机确证不了，今天挡住风险的是「匹配不到」而不是「构造合法」。
-   * 收口要加协议闸门（只收 http/https），那是改导入的结果条数，先记不修。
+   * 协议闸门（2026-09-26 从「现状记录」升级为拒绝）：`new URL()` 对 `file:` / `data:` / `blob:`
+   * 这类 URI 是成功的，而它们的 `origin` 是字符串 `'null'`，旧实现据此产出一条
+   * `matchPattern: 'null/*'`、`targetUrl: 'null'` 的规则——进列表、占 200 个名额之一，
+   * 却永远命中不了任何真实请求（`^null/(.*)$` 是合法 RE2，但没有真实 URL 长成 `null/…`）。
+   * 更值得在意的是它的替换串 `null/\1` 不是绝对 URL：用户手动启用这样一条，Chrome 的反应
+   * 本机确证不了——挡住风险的本来是「匹配不到」，而不是「构造合法」。
    *
-   * 但「非 http(s)」不等于「一律 null/*」：`ws` / `wss` 有自己像样的 origin，产出的是下一条
-   * 看上去完全可用的长连接自映射规则（实测 `new URL('wss://a.com/socket').origin === 'wss://a.com'`）。
-   * 那一格今天同样没有闸门，只是它坏了不会显得是垃圾，所以别拿这格当「非 http(s) 都这样」的依据。
+   * 「非 http(s)」不等于「一律 null/*」：`ws` / `wss` 有自己像样的 origin（实测
+   * `new URL('wss://a.com/socket').origin === 'wss://a.com'`），产出的是一条可改造成跨环境
+   * 长连接规则的起点，所以闸门是协议白名单而不是「只收 http(s)」——这一点与 `utils/curlParser.ts`
+   * 共用 {@link isProxyableProtocol}，口径差在哪由那两个函数各自的注释说明。
    */
-  it('现状记录：origin 读成字符串 null 的条目产出一条永不命中的 null/* 规则', () => {
-    const rules = harEntriesToRules([entry('file:///etc/passwd'), entry('data:text/html,x')] as HarEntry[]);
-    expect(rules).toHaveLength(1);
-    expect(rules[0]).toMatchObject({ matchPattern: 'null/*', targetUrl: 'null', name: 'Imported: ' });
+  it('不可代理的协议不再产出 null/* 规则，ws/wss 的像样 origin 留在可用范围内', () => {
+    expect(harEntriesToRules([entry('file:///etc/passwd'), entry('data:text/html,x')] as HarEntry[])).toEqual([]);
+    // 一条能代理的混在中间：闸门只拦坏的那两条，不连带影响这一批
+    expect(
+      harEntriesToRules([entry('file:///etc/passwd'), entry('https://a.com/x')] as HarEntry[]).map(r => r.matchPattern),
+    ).toEqual(['https://a.com/*']);
 
     const [ws] = harEntriesToRules([entry('wss://a.com/socket')] as HarEntry[]);
     expect(ws.matchPattern).toBe('wss://a.com/*');

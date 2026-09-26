@@ -687,6 +687,48 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
     expect(await stats.getInterceptorStats(9)).toMatchObject({ proxied: 1, fellBack: 4, swProxied: 1 });
   });
 
+  /**
+   * L-2（2026-09-26 评审轮）：载荷判据排在计数与解引用之前
+   *
+   * `swProxied` 基线是页面自报唯一追不上的那道校验，所以它自己得先被守住。旧写法把计数排在
+   * 解引用 `data.requestId` 之前且不校验形状：同页脚本反复发一条 `{ requestId: 'x' }`
+   * （连 `url` 都不带，`CANCEL_REQUEST` 有这道校验）就能把该 frame 的基线抬到任何诚实自报
+   * 都追不上的高度，`interceptorStats` 从此整包丢弃这一页的读数——弹窗那一行冻结在旧值，
+   * 现场还看不出是被污染的。另一头，缺 `data` 的消息会在监听器里当场抛 TypeError，
+   * 不走 `respondAsync` 的接手人，页面那一侧的通道无人应答。
+   */
+  it('PROXY_REQUEST 载荷不合法时回 Bypass 信封、不抬基线、也不留未处理拒绝', async () => {
+    const stats = await statsMod();
+
+    const noPayload = dispatchFromTab(MessageType.PROXY_REQUEST, undefined, 14, 0);
+    expect(noPayload.keepChannelOpen).toBe(false);
+    expect(lastResponse(noPayload.sendResponse)).toMatchObject({ requestId: '', status: 0, isBase64: false });
+
+    // 空串同样非法：requestId 是取消登记与回包配对的键，空串配不上任何东西
+    const emptyId = dispatchFromTab(MessageType.PROXY_REQUEST, { requestId: '', url: EXTERNAL_PAGE_URL }, 15, 0);
+    expect(lastResponse(emptyId.sendResponse)).toMatchObject({ requestId: '', status: 0 });
+
+    // 非字符串的 requestId（导入文件或手改的页面脚本能给）不得被当成合法配对键
+    const numberId = dispatchFromTab(MessageType.PROXY_REQUEST, { requestId: 7 }, 16, 0);
+    expect(lastResponse(numberId.sendResponse)).toMatchObject({ requestId: '', status: 0 });
+
+    await flush();
+    for (const tabId of [14, 15, 16]) {
+      expect(await stats.getInterceptorStats(tabId)).toBeNull(); // 一笔都没代发，基线不该存在
+    }
+
+    // 合法载荷照常走异步通道——这条是防「收口收过头把代理关掉」
+    const ok = dispatchFromTab(
+      MessageType.PROXY_REQUEST,
+      { requestId: 'r1', url: EXTERNAL_PAGE_URL, method: 'GET' },
+      17,
+      0,
+    );
+    expect(ok.keepChannelOpen).toBe(true);
+    await flush();
+    expect(await stats.getInterceptorStats(17)).toMatchObject({ swProxied: 1 });
+  });
+
   it('基准与自报两侧都带着 frameId：iframe 的诚实自报不被顶层的代发数误杀', async () => {
     const stats = await statsMod();
     // 顶层代发 3 笔、iframe 代发 1 笔（requestId 各自从 1 数起，跨 frame 会重名）

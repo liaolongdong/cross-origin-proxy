@@ -84,6 +84,7 @@ const {
   getRequestLogs,
   getVariables,
   invalidateConfigCache,
+  replaceProxyConfig,
   saveProfile,
   saveProxyConfig,
   saveVariables,
@@ -182,6 +183,30 @@ describe('互斥锁：并发读改写不丢更新', () => {
     await Promise.all([deleteRule('a'), addRule(makeRule('c'))]);
 
     expect(storedRules()).toEqual(['b', 'c']);
+  });
+
+  /**
+   * L-3（2026-09-26 评审轮）：整包替换配置的写同样排在锁里
+   *
+   * `replaceProxyConfig` 是 `UPDATE_PROXY_CONFIG` 与 `SAVE_PROFILE` 两条消息的落盘路径，
+   * 载荷本来就是「一整套配置」，不做读改写——所以裸用时它可以插在一笔 `addRule` 的
+   * 「读 → 改 → 写」中间，被那笔的旧快照整个盖回去：替换没落地，界面上却已经算成功了。
+   * 全仓目前没有该消息的发送方（潜伏面），但它是接上界面时的第一条丢更新路径。
+   */
+  it('整包替换排在一笔新增中间：替换照常落地，不会随旧快照被抹掉', async () => {
+    putConfig({ enabled: true, rules: [makeRule('a')] });
+
+    const added = addRule(makeRule('b'));
+    const replaced = replaceProxyConfig({ enabled: false, rules: [makeRule('x')] });
+    await Promise.all([added, replaced]);
+
+    // 串行 = 新增先读完并落盘，替换随后整份覆盖；不加锁时中间那次 set 会跑到 get 与 set 之间
+    expect(opLog).toEqual([
+      `get:${STORAGE_KEYS.PROXY_CONFIG}`,
+      `set:${STORAGE_KEYS.PROXY_CONFIG}`,
+      `set:${STORAGE_KEYS.PROXY_CONFIG}`,
+    ]);
+    expect(storedRules()).toEqual(['x']);
   });
 
   it('串行体现在读盘顺序上：第二笔的 get 发生在第一笔的 set 之后', async () => {

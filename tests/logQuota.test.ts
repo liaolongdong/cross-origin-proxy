@@ -156,6 +156,47 @@ describe('日志配额收口', () => {
     expect(capLogEntry(normal)).toBe(normal);
   });
 
+  /**
+   * L-7（2026-09-26 评审轮）：头名也得裁
+   *
+   * 旧注释写着「头名由浏览器的头解析器给出，进不到这里」，但那只对浏览器解析出来的那份成立
+   * ——日志里的头表还有一条来路是规则配置：`headerOverrides` 的键、导入文件、手改 storage 都能
+   * 给出十万字符的头名（`utils/headerValidation` 只判合法字符集，不判长度）。而 `logEntrySize`
+   * 按「名 + 值」计，不裁名字时一条 2000 个超长名的日志在条数与值都合规的情况下仍能写进 1MB+，
+   * `MAX_LOG_TOTAL_SIZE` 那道闸要到落盘前的 `trimLogsToBudget` 才收口——那时整份 4MB 已经序列化过一次了。
+   */
+  it('超长头名被截断：条数与值都合规的头表不再撑爆单条日志', async () => {
+    const { capLogEntry, logEntrySize } = await import('@/utils/storage');
+    const longName = 'n'.repeat(MAX_LOG_FIELD_SIZE * 2);
+
+    const single = capLogEntry(logEntry('names', { requestHeaders: { [longName]: 'v' } })).requestHeaders;
+    const keptName = Object.keys(single ?? {})[0];
+    expect(keptName.length).toBeLessThan(longName.length);
+    expect(keptName).toContain('original');
+
+    const many: Record<string, string> = {};
+    // 区分段放在开头：截断保留前缀，这 2000 个名字收口后仍然互不相同，
+    // 于是真正在收口的是**条数**那道闸（`MAX_LOG_HEADER_COUNT`）。
+    for (let i = 0; i < 2000; i++) many[`${i}-${longName}`] = 'v';
+    const entry = capLogEntry(logEntry('many-names', { requestHeaders: many }));
+    expect(Object.keys(entry.requestHeaders ?? {})).toHaveLength(MAX_LOG_HEADER_COUNT);
+    // 收口后整条日志的量级必须回到「上限 × 条数」这一侧，而不是原样的 1MB+
+    expect(logEntrySize(entry)).toBeLessThan(MAX_LOG_FIELD_SIZE * (MAX_LOG_HEADER_COUNT + 1) * 2);
+  });
+
+  it('现状记录：只在超出上限的那段里彼此不同的头名，收口后会并成一个键（后写者胜）', async () => {
+    const { capLogEntry } = await import('@/utils/storage');
+    // 这是裁名字**固有**的代价：两个十万字符的头名，前 8K 完全相同、只在尾巴上不同，
+    // 截断后成了同一个键。日志只有「这一笔带了哪些头」这一种用途，为它保留长名尾部
+    // 就要引入中间省略，而那会让界面上复制出去的头名变成假字符串——宁可并键。
+    const head = 'n'.repeat(MAX_LOG_FIELD_SIZE);
+    const merged = capLogEntry(
+      logEntry('collide', { requestHeaders: { [`${head}-a`]: '1', [`${head}-b`]: '2' } }),
+    ).requestHeaders;
+    expect(Object.keys(merged ?? {})).toHaveLength(1);
+    expect(Object.values(merged ?? {})).toEqual(['2']);
+  });
+
   it('总量预算算的是整条日志：正文之外（URL/头表）超量同样要丢旧条目', async () => {
     const { trimLogsToBudget, logEntrySize } = await import('@/utils/storage');
     const huge = 'u'.repeat(1000);

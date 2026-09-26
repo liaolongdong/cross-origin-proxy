@@ -25,9 +25,15 @@
  *   白名单之外还有类型联合、表单 radio、表格的 tag 类型与案名两套映射、筛选下拉的选项，再加中英两套
  *   案名键，末尾那三条契约把「少改一处」变成会红的改动。
  *
- * 两条**现状记录**，不是验收（各自点名了要收口得先拍的那件事），修的时候它们会红，
- * 请连同这段注释一起更新，别只删断言：空串过闸（表单要求 `name`/`matchPattern` 必填，文件通道不要，
- * 收口会把今天算作合法的那几条挪进「丢弃 N 条非法」）、未知字段原样进 storage。
+ * 两条**现状记录**与一道**已收口的洞**（2026-09-26 评审轮）：
+ * - 已收口：空白的 `matchPattern` 以前算合法。表单的 required 只拦得住界面那一次保存，文件通道
+ *   与手改进 storage 的快照照样能带进来一条；而它对 **prefix** 不是「匹配不到东西的垃圾」，
+ *   是 `url.startsWith('')` 恒真的**全流量改写**（DNR 侧 `resourceTypes` 含 `main_frame`）。
+ *   拦在数据入口的代价是「导入 N 条」的 N 会变小，远小于不拦的代价。同一轮把 `retryCount`
+ *   `retryDelay` `delayMs` 三项收进钳制（原来 1e9 次零间隔重试会原样落库并被代发采纳）。
+ * - 仍是现状：未知字段原样进 storage（下一条）；`targetUrl` 为空仍算合法，它表达的是
+ *   「不改写地址、只转发或注入头」。
+ * 修的时候相关断言会红，请连同这段注释一起更新，别只删断言。
  *
  * `if (!rule || typeof rule !== 'object')` 里那半**不承重**，且刻意不为它补断言：JSON.parse 与
  * `storage.local` 能产出的输入里，函数、symbol 与带齐那五个属性的原始值都不存在，摘掉那半（M6）
@@ -39,10 +45,9 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { isValidRuleShape } from '@/utils/ruleValidation';
-import { isSimpleRule, matchRule, rewriteUrl } from '@/utils/urlMatcher';
-import { buildDnrRules } from '@/utils/dnrRules';
-import { ruleMergeKey } from '@/utils/ruleConflicts';
+import { isValidRuleShape, normalizeRuleTimings, MAX_RULE_RETRY_COUNT, MAX_RULE_DELAY } from '@/utils/ruleValidation';
+import { isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
+import { ruleMergeKey, deduplicateRules } from '@/utils/ruleConflicts';
 import type { ProxyRule } from '@/utils/types';
 
 // 存储门面与被导入模块在加载时就挂 `chrome.storage.onChanged` 监听，桩必须先装（与 configHistory 同一写法）。
@@ -63,6 +68,14 @@ function shape(overrides: Record<string, unknown> = {}): Record<string, unknown>
     matchType: 'wildcard',
     ...overrides,
   };
+}
+
+/**
+ * 同一份夹具的 `ProxyRule` 版本：合并键与重试钳制那两处要的是**落库之后**的形状，
+ * 而 `shape()` 的字段值是 `unknown`，只够喂闸门。运行时字段齐全，所以这里是如实断言类型。
+ */
+function typedShape(overrides: Record<string, unknown> = {}): ProxyRule {
+  return shape(overrides) as unknown as ProxyRule;
 }
 
 /** 正则规则的原文：两个消费者吃的都是 `unknown[]`，所以这份夹具不必假装是 `ProxyRule` */
@@ -165,25 +178,84 @@ describe('isValidRuleShape — 拦下的是形状，不是它不认识的取值'
   });
 });
 
-describe('现状记录 — 这道闸只管形状，内容交给下游各自判断', () => {
-  it('空串过闸：落库以后是一条启用着、却什么都匹配不到的规则', () => {
-    // 表单侧 `name` 与 `matchPattern` 都是 required（`RuleFormDialog.vue` 的 formRules），文件通道不要求。
-    // 要收口得先拍：拦空串会让「导入 N 条」的 N 变小，属于改行为。
-    expect(isValidRuleShape(shape({ matchPattern: '', targetUrl: '' }))).toBe(true);
-    expect(normalizeImportedRules([shape({ matchPattern: '', targetUrl: '' })])).toHaveLength(1);
-
-    // 直接 cast 一份过闸后的规则：真实管道还会补 priority 与时间戳，那两格与本用例无关
-    const blank = { ...shape({ matchPattern: '' }), enabled: true } as ProxyRule;
-    expect(matchRule('https://whatever.com/x', blank)).toBe(false);
-    expect(rewriteUrl('https://whatever.com/x', blank)).toBe('https://whatever.com/x');
-    // 空 pattern 的 wildcard 判不成简单规则，于是 DNR 侧编译不出规则、后台通道的匹配判据也认不到它：
-    // 它占一个 200 名额、界面上像条规则，却什么都匹配不到。
-    expect(isSimpleRule(blank)).toBe(false);
-    expect(buildDnrRules([blank], true).rules).toEqual([]);
-    // 合并键取的是原文，所以两条空 pattern 的同名规则会被当成同一条
-    expect(ruleMergeKey(blank)).toBe('fat-to-uat::');
+describe('内容闸门 — 空白的 matchPattern 进不来（2026-09-26 从「现状记录」升级为拒绝）', () => {
+  /**
+   * 旧断言钉的是「空串过闸、落库后只是一条匹配不到东西的垃圾规则」——那句话对 **wildcard**
+   * 成立（`^$`），对 **prefix** 恰好反了：`url.startsWith('')` 恒真，而 DNR 侧
+   * `buildRegexFilter` 编译出 `^(.*)`、`resourceTypes` 含 `main_frame`，
+   * 于是启用着的空 prefix 规则是**全流量改写**（含顶层导航）。表单的 required 只拦得住
+   * 界面保存那一次，所以这一格只能在数据入口拦——代价（「导入 N 条」的 N 会变小）
+   * 明显小于不拦的代价。
+   */
+  it('空串与纯空白都被拒：三种 matchType 一起，导入与恢复点两条通道一起', () => {
+    for (const matchType of ['wildcard', 'prefix', 'regex'] as const) {
+      for (const blank of ['', '   ', '\t\n']) {
+        expect(
+          isValidRuleShape(shape({ matchType, matchPattern: blank })),
+          `${matchType}/${JSON.stringify(blank)}`,
+        ).toBe(false);
+      }
+    }
+    expect(normalizeImportedRules([shape({ matchPattern: '', targetUrl: '' })])).toHaveLength(0);
+    // 恢复点侧共用同一份判据：手改进 storage 的快照回退时同样不能把空 prefix 变成生效配置
+    const entry = snapshot([shape({ matchPattern: '', targetUrl: '' })]);
+    expect(sanitizeConfigHistory([entry])[0].config.rules).toEqual([]);
+    // 合法值不受牵连：只有「trim 后为空」这一格新被拦
+    expect(normalizeImportedRules([shape({ matchPattern: 'https://a/*' })])).toHaveLength(1);
   });
 
+  it('空 targetUrl 仍过闸：它表达的是「不改写地址、只转发/注入头」，不是坏数据', () => {
+    // 这一格旧断言与新断言同向，但拆开写清楚：拦的是 matchPattern，不是 targetUrl。
+    // 简单规则判据（`isSimpleRule`）本来就把空目标挡在 DNR 通道之外。
+    const [kept] = normalizeImportedRules([shape({ matchPattern: 'https://a/*', targetUrl: '' })]);
+    expect(kept).toBeDefined();
+    expect(isSimpleRule(kept)).toBe(false);
+    expect(rewriteUrl('https://whatever.com/x', { ...kept, enabled: true })).toBe('https://whatever.com/x');
+  });
+
+  it('合并键编码字段边界：内容里写 `::` 顶不掉别的规则，matchType 不同也不是同一条', () => {
+    // 旧键是 `${name}::${pattern}`，分隔符不转义 → 下面这两条撞键：本机那条会把文件里那条
+    // 当成重复丢掉，导入预览的 `currentTargetUrl` 还会显示成本机那条的目标地址。
+    // 名字里带 `::` 不是刁钻输入——它正是「规则名::环境」这类命名习惯的产物。
+    const local = typedShape({ name: 'x::y', matchPattern: 'https://a/', matchType: 'prefix' });
+    const fromFile = typedShape({ name: 'x', matchPattern: 'y::https://a/', matchType: 'prefix' });
+    expect(ruleMergeKey(local)).not.toBe(ruleMergeKey(fromFile));
+    expect(deduplicateRules([local], [fromFile])).toHaveLength(1);
+    // 同 pattern 不同 matchType：三条通道的命中集合本就不同（wildcard 要求末尾 `*` 才捕获，
+    // prefix 是 `startsWith`，regex 整条 pattern 当表达式），此前它们互相顶掉是同一类谎报
+    const samePatternOtherType = typedShape({ name: 'x', matchPattern: 'https://a/', matchType: 'wildcard' });
+    const prefixRule = typedShape({ name: 'x', matchPattern: 'https://a/', matchType: 'prefix' });
+    expect(ruleMergeKey(prefixRule)).not.toBe(ruleMergeKey(samePatternOtherType));
+    // 真正的「同一条」仍然只认那三格业务字段：换目标地址不改键，所以合并语义下是新增
+    // （两个都是完整的 `ProxyRule`，不是给合并键的实现递一份多余字段——它的入参刻意只收三格）
+    const targetB = typedShape({ name: 'x', matchPattern: 'https://a/', matchType: 'prefix', targetUrl: 'https://b' });
+    const targetC = typedShape({ name: 'x', matchPattern: 'https://a/', matchType: 'prefix', targetUrl: 'https://c' });
+    expect(ruleMergeKey(targetB)).toBe(ruleMergeKey(targetC));
+    expect(deduplicateRules([prefixRule], [{ ...prefixRule, id: 'dup' }])).toHaveLength(0);
+  });
+
+  it('重试与延迟三项只钳制不丢弃：1e9 次零间隔热循环进不来，正常值原样过', () => {
+    const [timed] = normalizeImportedRules([
+      shape({ matchPattern: 'https://a/*', retryCount: 1e9, retryDelay: 0, delayMs: 1e9 }),
+    ]);
+    expect(timed.retryCount).toBe(MAX_RULE_RETRY_COUNT);
+    expect(timed.retryDelay).toBe(0); // 0 是合法值（不额外等待），钳的是上界
+    expect(timed.delayMs).toBe(MAX_RULE_DELAY);
+    // 非有限数与负数同样收口：`typeof NaN === 'number'`，而 NaN 延迟会让 setTimeout 立刻触发
+    const [odd] = normalizeImportedRules([shape({ matchPattern: 'https://a/*', retryCount: NaN, delayMs: -5 })]);
+    expect(odd.retryCount).toBeUndefined();
+    expect(odd.delayMs).toBe(0);
+    // 恢复点侧共用同一份：手改进 storage 的快照回退时也会被钳
+    const [entry] = sanitizeConfigHistory([snapshot([shape({ matchPattern: 'https://a/*', retryCount: 999 })])]);
+    expect(entry.config.rules[0].retryCount).toBe(MAX_RULE_RETRY_COUNT);
+    // 就地不改入参：传进来的可能是缓存里那份规则对象，写脏它等于写脏 storage 的镜像
+    const source = typedShape({ matchPattern: 'https://a/*', retryCount: 999 });
+    normalizeRuleTimings(source);
+    expect(source.retryCount).toBe(999);
+  });
+});
+
+describe('现状记录 — 这道闸不认识的字段照旧放行', () => {
   it('判据不认识也不拒绝额外字段，它们跟着 `...rule` 一路进 storage', () => {
     const [imported] = normalizeImportedRules([shape({ fromANewerVersion: 7 })]);
     expect(imported).toHaveProperty('fromANewerVersion', 7);

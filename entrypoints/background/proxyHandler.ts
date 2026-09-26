@@ -4,6 +4,7 @@ import { configRules, getProxyConfig, addRequestLog, getRequestLogs, getVariable
 import { collectRuleVariableRefs, resolveVariableMap } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
+import { normalizeRuleTimings } from '@/utils/ruleValidation';
 import { logger } from '@/utils/logger';
 import type {
   ProxyStatus,
@@ -379,6 +380,12 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
   // 记录 SW 通道命中
   trackRuleHit(rule.id, rule.name);
 
+  // 时序三项（`delayMs` / `retryCount` / `retryDelay`）钳制一份：入口侧（导入与恢复点）已在
+  // `normalizeRuleTimings` 收口，这里挡的是**手改 storage 直接生效**那条路——`delayMs: 1e9`
+  // 会让这一笔在页侧超时前一直悬着，`retryCount: 1e9` + `retryDelay: 0` 会把一次 5xx 变成
+  // 零间隔热循环（循环体内不写日志，界面上完全看不出异常）。判据与入口共用同一份。
+  const { delayMs, retryCount, retryDelay } = normalizeRuleTimings(rule);
+
   // ─── 请求阻断 ─────────────────────────────────────────────────────────────
   if (rule.blocked) {
     logger.info(`Blocked: ${data.url} (rule: ${rule.name})`);
@@ -429,8 +436,10 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     const mockHeaders: Record<string, string> = { 'content-type': mockContentType };
     logger.info(`Mock: ${data.url} → ${mockStatus} (rule: ${rule.name})`);
 
-    if (rule.delayMs) {
-      await new Promise(resolve => setTimeout(resolve, rule.delayMs));
+    if (delayMs) {
+      // 必须用可取消的 `sleep`：这里换成裸 `setTimeout` 的话，Mock 的延迟期间收到页面取消
+      // 仍然会睡满才回包——与下方代发路径同一条契约
+      await sleep(delayMs, signal);
     }
 
     const logEntry: RequestLogEntry = {
@@ -564,13 +573,13 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     fetchOptions.body = outgoingBody;
   }
 
-  if (rule.delayMs) {
-    await sleep(rule.delayMs, signal);
+  if (delayMs) {
+    await sleep(delayMs, signal);
   }
 
   // ─── 重试循环 ─────────────────────────────────────────────────────────────
-  const maxRetries = rule.retryCount ?? 0;
-  const retryDelay = rule.retryDelay ?? 1000;
+  const maxRetries = retryCount ?? 0;
+  const attemptDelay = retryDelay ?? 1000;
   let lastError: string | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -581,7 +590,7 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     }
     if (attempt > 0) {
       logger.info(`Retry ${attempt}/${maxRetries}: ${data.url} (rule: ${rule.name})`);
-      await sleep(retryDelay, signal);
+      await sleep(attemptDelay, signal);
     }
 
     const controller = new AbortController();
