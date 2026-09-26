@@ -39,7 +39,16 @@
   --cop-text-color-regular: #606266;
   --cop-text-color-secondary: #909399;
   --cop-text-color-placeholder: #c0c4cc;
-  --cop-text-color-on-primary: #fff;
+
+  /* 「主色实底之上」那一张色板：文字、半透明薄膜、描边共用同一条通道。
+     之所以要是一条通道而不是一个颜色值——options 顶栏那一整块（品牌渐变底上的标题、版本标签、
+     毛玻璃按钮、总开关胶囊）里的每一件都是「白色系」的不同浓度，暗色下要换就得整套一起换，
+     只换文字会留下白边白膜配深墨字的拼接感。两个暗色基座只覆盖 `--cop-on-primary-rgb`，
+     上面这条 `--cop-text-color-on-primary` 走 var() 自动跟着变，不需要在暗色块里各写一遍。
+     亮色档维持纯白；暗色档换成深墨的理由是六个主题提亮后的主色（`--cop-dark-primary*`，
+     从 #66b3ff 到 #98a7c2）对白只有 1.97–2.43:1，而对深墨是 4.97–9.26:1。 */
+  --cop-on-primary-rgb: 255 255 255;
+  --cop-text-color-on-primary: rgb(var(--cop-on-primary-rgb) / 100%);
 
   /* ====== 语义层：边框 ====== */
   --cop-border-color: #ebeef5;
@@ -265,7 +274,10 @@
   --cop-text-color-regular: #d0d0e0;
   --cop-text-color-secondary: #a0a0b8;
   --cop-text-color-placeholder: #707088;
-  --cop-text-color-on-primary: #fff;
+
+  /* 主色实底那一套从白翻成深墨（亮色档见文件开头的语义层文字段）。
+     `--cop-text-color-on-primary` 不在这里重复声明：它住在 `:root`，按 var() 现取本条通道。 */
+  --cop-on-primary-rgb: 16 21 31;
   --cop-border-color: #3a3a50;
   --cop-border-color-light: #2d2d42;
   --cop-shadow-color: rgb(0 0 0 / 40%);
@@ -335,7 +347,9 @@
     --cop-text-color-regular: #d0d0e0;
     --cop-text-color-secondary: #a0a0b8;
     --cop-text-color-placeholder: #707088;
-    --cop-text-color-on-primary: #fff;
+
+    /* 与上面手动暗色那一档同值同理由：主色实底上的白字在暗色下只有 1.97–2.43:1 */
+    --cop-on-primary-rgb: 16 21 31;
     --cop-border-color: #3a3a50;
     --cop-border-color-light: #2d2d42;
     --cop-shadow-color: rgb(0 0 0 / 40%);

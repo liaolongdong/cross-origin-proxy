@@ -114,13 +114,16 @@ const { t } = useI18n();
 </script>
 
 <style scoped>
+/* 整块顶栏是「主色实底」，所以字色、薄膜、描边全走 on-primary 那一族令牌：
+   暗色下六个主题把主色提亮到 #66b3ff ~ #98a7c2，白字只剩 1.97–2.43:1，令牌换深墨后整块一起翻。
+   写死 `white` 就是绕过这次翻转——这也是以前只有按钮换了、顶栏没换的原因。 */
 .header {
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 24px 32px;
   margin-bottom: 24px;
-  color: white;
+  color: var(--cop-text-color-on-primary);
   background: linear-gradient(135deg, var(--cop-primary) 0%, var(--cop-primary-hover) 100%);
   box-shadow: 0 2px 12px rgb(var(--cop-primary-rgb) / 15%);
 }
@@ -136,7 +139,7 @@ const { t } = useI18n();
   margin: 0;
   font-size: 24px;
   font-weight: 500;
-  color: white;
+  color: var(--cop-text-color-on-primary);
 }
 
 .logo {
@@ -151,17 +154,18 @@ const { t } = useI18n();
   margin-left: 10px;
   font-size: 11px;
   line-height: 18px;
-  color: rgb(255 255 255 / 70%);
+  color: rgb(var(--cop-on-primary-rgb) / 70%);
   cursor: default;
   user-select: none;
-  background: rgb(255 255 255 / 15%);
-  border-color: rgb(255 255 255 / 20%);
+  background: rgb(var(--cop-on-primary-rgb) / 15%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 20%);
 }
 
 /* 代理状态信号灯：一眼可见的红绿小圆点
-   切换时除了换色，还在点亮的那一档跑一次白色光环（一次性，不循环）——
+   切换时除了换色，还在点亮的那一档跑一次光环（一次性，不循环）——
    总开关是这一页最要紧的结论，光环让「刚刚变了」这件事不必靠余光去发现。
-   光环叠在常驻的那圈白边上，收尾正好落回常驻值，动画结束没有跳变。 */
+   光环叠在常驻的那圈边上，收尾正好落回常驻值，动画结束没有跳变。
+   两圈都取 on-primary 通道：底色是主色实底，暗色下那一族翻成深墨，光环才始终与底相反。 */
 .status-dot {
   display: inline-block;
   width: 8px;
@@ -169,7 +173,7 @@ const { t } = useI18n();
   margin-left: 10px;
   background: var(--el-color-danger, #f56c6c);
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgb(255 255 255 / 35%);
+  box-shadow: 0 0 0 2px rgb(var(--cop-on-primary-rgb) / 35%);
   transition: background-color var(--cop-duration-base) var(--cop-ease-standard);
 }
 
@@ -181,14 +185,14 @@ const { t } = useI18n();
 @keyframes dot-flare {
   from {
     box-shadow:
-      0 0 0 2px rgb(255 255 255 / 35%),
-      0 0 0 0 rgb(255 255 255 / 65%);
+      0 0 0 2px rgb(var(--cop-on-primary-rgb) / 35%),
+      0 0 0 0 rgb(var(--cop-on-primary-rgb) / 65%);
   }
 
   to {
     box-shadow:
-      0 0 0 2px rgb(255 255 255 / 35%),
-      0 0 0 9px rgb(255 255 255 / 0%);
+      0 0 0 2px rgb(var(--cop-on-primary-rgb) / 35%),
+      0 0 0 9px rgb(var(--cop-on-primary-rgb) / 0%);
   }
 }
 
@@ -205,15 +209,15 @@ const { t } = useI18n();
   gap: 12px;
 }
 
-/* 毛玻璃半透明按钮（主按钮反白除外）
+/* 毛玻璃半透明按钮（「新增规则」那颗反色主按钮除外，它另走一张卡片底）
    颜色与投影走 90ms、上浮走同样的时长：悬停反馈要「立刻跟上指针」，
    200ms 以上就会觉得按钮比手慢。显式列属性而不是 `all`——`all` 会把
    按钮宽度（语言切换时文案变长）也纳入过渡。 */
 :deep(.header-actions .el-button) {
   font-weight: 400;
-  color: white;
-  background: rgb(255 255 255 / 15%);
-  border: 1px solid rgb(255 255 255 / 25%);
+  color: var(--cop-text-color-on-primary);
+  background: rgb(var(--cop-on-primary-rgb) / 15%);
+  border: 1px solid rgb(var(--cop-on-primary-rgb) / 25%);
   backdrop-filter: blur(10px);
   transition:
     color var(--cop-duration-instant) var(--cop-ease-standard),
@@ -224,8 +228,8 @@ const { t } = useI18n();
 }
 
 :deep(.header-actions .el-button:hover) {
-  background: rgb(255 255 255 / 20%);
-  border-color: rgb(255 255 255 / 40%);
+  background: rgb(var(--cop-on-primary-rgb) / 20%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 40%);
   box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
   transform: translateY(-1px);
 }
@@ -251,8 +255,8 @@ const { t } = useI18n();
   gap: 10px;
   align-items: center;
   padding: 6px 14px;
-  background: rgb(255 255 255 / 15%);
-  border: 1px solid rgb(255 255 255 / 25%);
+  background: rgb(var(--cop-on-primary-rgb) / 15%);
+  border: 1px solid rgb(var(--cop-on-primary-rgb) / 25%);
   border-radius: 999px;
   backdrop-filter: blur(10px);
 }
@@ -275,13 +279,13 @@ const { t } = useI18n();
 
 .proxy-toggle-label {
   font-size: 13px;
-  color: rgb(255 255 255 / 90%);
+  color: rgb(var(--cop-on-primary-rgb) / 90%);
   user-select: none;
 }
 
 :deep(.proxy-toggle-pill .el-switch.is-checked .el-switch__core) {
-  background: rgb(255 255 255 / 90%);
-  border-color: rgb(255 255 255 / 90%);
+  background: rgb(var(--cop-on-primary-rgb) / 90%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 90%);
 }
 
 :deep(.proxy-toggle-pill .el-switch.is-checked .el-switch__core .el-switch__action) {

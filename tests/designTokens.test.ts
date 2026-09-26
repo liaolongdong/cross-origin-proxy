@@ -64,12 +64,16 @@ describe('rgb() 通道令牌必须用斜杠 alpha 写法', () => {
   });
 
   it('每条用到 -rgb 通道的 rgb() 都是 rgb(var(--cop-*-rgb) / NN%) 形状', () => {
-    const CANONICAL = /^rgb\(var\(--cop-[a-z0-9-]+-rgb\) \/ \d+%\)$/;
+    const CANONICAL = /rgb\(var\(--cop-[a-z0-9-]+-rgb\) \/ \d+%\)/g;
     const offenders: string[] = [];
     for (const file of files) {
       const src = readFileSync(file, 'utf-8');
       for (const call of src.match(/rgb\([^;{}]*\)/g) ?? []) {
-        if (call.includes('-rgb') && !CANONICAL.test(call)) offenders.push(`${file}: ${call}`);
+        // 上面那个匹配是贪心的（`[^;{}]` 里含 `)`），一条声明里并排两个 `rgb()` 会被吞成一段——
+        // 状态点那圈「常驻边 + 扩散光环」的双层阴影就是这么撞上的，而它两处写法都合法。
+        // 所以判据落在残差上：把每一条规范写法摘掉，这一段里还留着 `-rgb` 才是真的走错了形状。
+        const residue = call.replace(CANONICAL, '');
+        if (residue.includes('-rgb')) offenders.push(`${file}: ${call}`);
       }
     }
     expect(offenders).toEqual([]);
@@ -548,5 +552,129 @@ describe('换肤快照的四层同时长同缓动（漏一层就退回 UA 的 25
     const missing = LAYERS.filter(layer => !covered.has(layer));
     // 数量级守卫：一条都没匹配上就是解析失效（改了写法或块结构），不是「恰好都不需要」
     expect(missing, `四层里没人按 recolour 那一档接管的有：${missing.join(' ')}`).toEqual([]);
+  });
+});
+
+/**
+ * on-primary 那一族在暗色下必须真的达标（评审 M-12）
+ *
+ * 六个主题在暗色档各自把主色**提亮**（`--cop-dark-primary*`，为了让「主色当文字/描边」在近黑底上
+ * 读得出来）。这个方向对当文字用的主色是对的，对当**实底**用的主色恰好相反：#66b3ff ~ #98a7c2
+ * 配白字只有 1.97–2.43:1，而界面里最大的两块实底就是 options 顶栏那一整块和主按钮。
+ * 修法是一条 `--cop-on-primary-rgb` 通道：亮色维持纯白，两个暗色基座换成深墨，文字与薄膜、
+ * 描边一起翻。这里钉四件事，缺一件都会退化成「改了但看不见」：
+ * ① 深墨对**每一档**主色变体都过 4.5:1（不只是 base——渐变实底用的是 base→hover，
+ *    tint/shade 也在同一族里被用掉）；
+ * ② 暗色块里不得重新声明 `--cop-text-color-on-primary`——它住在 `:root` 且走 `var()` 取通道，
+ *    暗色块再写一份白色就把 ① 当场作废，而两份都写时「两条暗色路径一字不差」那条守卫照样绿；
+ * ③ UI 里不得再出现裸的白色前景（写了就是绕过这条通道）；
+ * ④ 亮色档的水位不得继续往下走（见下面那条注释里记着的已知未达标项）。
+ */
+describe('on-primary 通道：暗色实底上的字要读得出来', () => {
+  const tokensSrc = readFileSync(TOKENS_FILE, 'utf-8');
+  const tokensNoComments = tokensSrc.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+  /** 相对亮度（WCAG 2.x 定义） */
+  const relLuminance = (hex: string): number => {
+    const digits = hex.replace('#', '');
+    const channels = [0, 2, 4].map(i => {
+      const raw = parseInt(digits.slice(i, i + 2), 16) / 255;
+      return raw <= 0.03928 ? raw / 12.92 : ((raw + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+  const contrast = (a: string, b: string): number => {
+    const [first, second] = [relLuminance(a), relLuminance(b)];
+    return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+  };
+
+  /** 主题块：默认主题住在 `:root`（刻意没有 `[data-theme='sky']`），其余五个各一块 */
+  const themeBlocks: Array<{ name: string; body: string }> = [
+    { name: '默认', body: tokensNoComments.match(/^:root\s*\{([\s\S]*?)\n\}/m)?.[1] ?? '' },
+    ...[...tokensNoComments.matchAll(/:root\[data-theme='(\w+)'\]\s*\{([\s\S]*?)\n\}/g)].map(m => ({
+      name: m[1],
+      body: m[2],
+    })),
+  ];
+  const decl = (body: string, token: string): string | undefined =>
+    body.match(new RegExp(`--${token}\\s*:\\s*([^;]+);`))?.[1].trim();
+
+  /** 两条暗色基座的声明表（同一份令牌表必须一字不差，这里只取通道值） */
+  const darkBodies = [...tokensNoComments.matchAll(/(?:^|\n)\s*([^\n{}]+)\s*\{([^{}]*)\}/g)]
+    .filter(m => /\[data-mode='dark'\]$/.test(m[1].trim()) || /\[data-mode\]\)$/.test(m[1].trim()))
+    .map(m => m[2]);
+  const inkHex = (rgbChannels: string | undefined): string | undefined => {
+    const parts = rgbChannels?.trim().split(/\s+/);
+    if (!parts || parts.length !== 3 || parts.some(p => !/^\d+$/.test(p))) return undefined;
+    return `#${parts.map(p => Number(p).toString(16).padStart(2, '0')).join('')}`;
+  };
+
+  it('解析自检：六个主题块、每块四档暗色主色、两条暗色路径（空集会让下面的判据假通过）', () => {
+    expect(themeBlocks).toHaveLength(6);
+    expect(darkBodies).toHaveLength(2);
+    for (const { name, body } of themeBlocks) {
+      for (const variant of ['', '-hover', '-tint', '-shade']) {
+        expect(decl(body, `cop-dark-primary${variant}`), `${name} 缺 --cop-dark-primary${variant}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('暗色档的 on-primary 通道对每一档主色变体都不低于 4.5:1', () => {
+    for (const [i, body] of darkBodies.entries()) {
+      const ink = inkHex(decl(body, 'cop-on-primary-rgb'));
+      expect(ink, `第 ${i + 1} 条暗色路径没有 --cop-on-primary-rgb 三元组`).toBeTruthy();
+      for (const { name, body: themeBody } of themeBlocks) {
+        for (const variant of ['', '-hover', '-tint', '-shade']) {
+          const bg = decl(themeBody, `cop-dark-primary${variant}`) as string;
+          expect(
+            contrast(bg, ink as string),
+            `${name} 暗色 ${variant || 'base'}（${bg}）配深墨 ${ink} 只有 ${contrast(bg, ink as string).toFixed(2)}:1`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  it('暗色块不得重新声明 --cop-text-color-on-primary（写回白色就绕过了通道）', () => {
+    for (const [i, body] of darkBodies.entries()) {
+      expect(body, `第 ${i + 1} 条暗色路径又声明了 --cop-text-color-on-primary，深墨不会再落到文字上`).not.toMatch(
+        /--cop-text-color-on-primary/,
+      );
+    }
+    // 反向自检：`:root` 里那一条必须是走通道的 var() 写法，否则暗色档无从跟随
+    expect(tokensNoComments).toMatch(/--cop-text-color-on-primary:\s*rgb\(var\(--cop-on-primary-rgb\) \/ 100%\)/);
+  });
+
+  it('UI 里没有裸的白色前景（走令牌，否则暗色下不翻）', () => {
+    const offenders: string[] = [];
+    for (const file of files) {
+      const src = readFileSync(file, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+      // `--cop-bg-color: #fff` 这类**背景**通道令牌不在本条范围；`-` 前缀排除掉自定义属性
+      for (const m of src.matchAll(/(?<![\w-])color:\s*(white|#fff|#ffffff)\s*;/gi)) {
+        offenders.push(`${file}: ${m[0].trim()}`);
+      }
+    }
+    // 唯一已知的例外，作为「未修的账」原样记在这里：`.shadowed-indicator` 那颗 16px 感叹号是
+    // 琥珀告警底（`--el-color-warning`）而不是主色底，白字形对它约 2.1:1，属同一类缺陷、
+    // 不同一套令牌。换令牌会连带改动这颗徽章的观感，超出本轮 M-12 的授权范围，故留档不动。
+    expect(offenders.filter(o => !o.includes('RuleTable.vue'))).toEqual([]);
+    expect(
+      offenders.some(o => o.includes('RuleTable.vue')),
+      '例外项已经不存在，本条守卫应当收紧',
+    ).toBe(true);
+  });
+
+  it('亮色档的白色前景不低于今天的水位（已知未达标项见注释）', () => {
+    // 亮色主色对纯白同样是 2.42–3.15:1，四个主题连大字号的 3:1 线都不过。这是**先于本轮存在**
+    // 的账，改它要把整个亮色界面的按钮/顶栏/徽章一起重排，远超「M-12 改暗色观感」的授权范围，
+    // 因此本轮只把它测出来、按现状钉住水位，不让它继续往下走（详见交付说明里的待拍板项）。
+    let min = Infinity;
+    for (const { name, body } of themeBlocks) {
+      const bg = decl(body, 'cop-primary');
+      expect(bg, `${name} 缺 --cop-primary`).toBeTruthy();
+      min = Math.min(min, contrast(bg as string, '#ffffff'));
+    }
+    expect(min).toBeLessThan(3.5); // 前提自检：真过了 3.5 就说明这条注释过期了
+    expect(min).toBeGreaterThanOrEqual(2.4);
   });
 });

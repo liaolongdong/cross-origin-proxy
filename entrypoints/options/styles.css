@@ -95,18 +95,24 @@ body .el-button {
   box-shadow: 0 4px 12px rgb(var(--cop-primary-rgb) / 30%);
 }
 
-/* 暗色模式下主按钮文字强制白色，避免主色文字在深色背景上不可见 */
+/* 暗色下的主按钮：这条与下面那条媒体查询里的同名规则，选带 `:root[...]` 前缀的那一份
+   才是真正生效的（单类名 `.el-button--primary` 与 Element Plus 自己那份同特异度，而 EP 的 CSS
+   跟着弹窗的异步 chunk 在运行时追加到 `<head>` 末尾，靠顺序赢不赢要看注入时机——见文件末尾
+   「弹窗与抽屉的进场动效」那段）。取 on-primary 令牌而不是写死白色：暗色基座把六个主题的主色
+   提亮到 #66b3ff ~ #98a7c2，白字对它们只有 1.97–2.43:1，令牌换深墨后这里跟着翻，才不会出现
+   「按钮换了、顶栏没换」的拼接感。 */
 :root[data-mode='dark'] .el-button--primary {
-  color: #fff;
+  color: var(--cop-text-color-on-primary);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-mode]) .el-button--primary {
-    color: #fff;
+    color: var(--cop-text-color-on-primary);
   }
 }
 
-/* 复选框暗色模式：提升边框与勾选标记对比度 */
+/* 复选框暗色模式：提升边框对比度；勾标记同样走 on-primary 令牌，
+   它落在 `--el-color-primary` 那块实底上，与主按钮是同一件事 */
 :root[data-mode='dark'] .el-checkbox__inner {
   background-color: var(--el-bg-color);
   border-color: var(--el-border-color);
@@ -118,7 +124,7 @@ body .el-button {
 }
 
 :root[data-mode='dark'] .el-checkbox__input.is-checked .el-checkbox__inner::after {
-  border-color: #fff;
+  border-color: var(--cop-text-color-on-primary);
   border-width: 2px;
 }
 
@@ -134,7 +140,7 @@ body .el-button {
   }
 
   :root:not([data-mode]) .el-checkbox__input.is-checked .el-checkbox__inner::after {
-    border-color: #fff;
+    border-color: var(--cop-text-color-on-primary);
     border-width: 2px;
   }
 }
