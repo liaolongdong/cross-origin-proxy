@@ -110,6 +110,7 @@
   "batchEnable": "Enable",
   "batchDisable": "Disable",
   "noMatch": "No matching rules",
+  "readFailed": "Saved rules can't be read right now, possibly because the background is restarting. It recovers on its own, or you can refresh manually.",
   "rulesCountInfo": "$1 rules in total, $2 enabled",
   "statsTotal": "Total",
   "statsSuccess": "Success",

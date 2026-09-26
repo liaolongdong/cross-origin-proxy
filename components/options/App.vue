@@ -47,6 +47,7 @@
       :rules="filteredRules"
       :loading="ruleLoading"
       :has-any-rules="rules.length > 0"
+      :read-failed="configReadFailed"
       :highlight-rule-id="highlightRuleId"
       :search-text="searchText"
       :hit-stats="hitStatsByRule"
@@ -62,6 +63,7 @@
       @selection-change="handleSelectionChange"
       @use-template="handleUseTemplate"
       @reorder="handleReorder"
+      @refresh="fetchConfig"
     />
 
     <!-- 弹窗与抽屉（全部异步组件，首屏不加载） -->
@@ -181,6 +183,7 @@ const {
   rules,
   enabled: proxyEnabled,
   loading: ruleLoading,
+  configReadFailed,
   shadowedRuleIds,
   fetchConfig,
   addRule,

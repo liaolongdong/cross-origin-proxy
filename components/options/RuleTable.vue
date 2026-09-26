@@ -1,14 +1,32 @@
 <template>
   <div class="rule-table-card">
-    <!-- 三块面板占同一个位置，换起来本来是一次硬切：空态 / 无匹配 / 表格之间给一次
+    <!-- 四块面板占同一个位置，换起来本来是一次硬切：空态 / 读不到 / 无匹配 / 表格之间给一次
          先退后换的交接（`mode="out-in"`），新面板不再叠在旧面板的高度上把卡片撑一下。 -->
     <Transition
       name="panel-swap"
       mode="out-in"
     >
-      <!-- 空状态引导（无任何规则时） -->
+      <!-- 读取失败：排在空态引导**之前**。首轮 `GET_PROXY_CONFIG` 失败时 `rules` 本来就是空的，
+           若不先问这一句，用户看到的就是一张「新增规则 / 导入配置」的引导卡——可他可能本来有
+           三十条，于是这张卡主动邀请他去重复创建或重新导入。口径与同页 DNR 那一格一致：
+           「不确定」绝不画成「没有」。 -->
+      <div
+        v-if="rules.length === 0 && readFailed"
+        key="read-failed"
+        class="read-failed"
+      >
+        <p class="read-failed-text">{{ t('readFailed') }}</p>
+        <el-button
+          size="small"
+          @click="$emit('refresh')"
+        >
+          {{ t('refresh') }}
+        </el-button>
+      </div>
+
+      <!-- 空状态引导（确认过存储里就是没有规则） -->
       <EmptyGuide
-        v-if="rules.length === 0 && !hasAnyRules"
+        v-else-if="rules.length === 0 && !hasAnyRules"
         key="empty-guide"
         @add-rule="$emit('add')"
         @import-config="$emit('importConfig')"
@@ -351,6 +369,13 @@ const props = defineProps<{
   rules: ProxyRule[];
   loading: boolean;
   hasAnyRules: boolean;
+  /**
+   * 上一次「读存储」失败（回包形状不对或消息抛错）
+   *
+   * 与 `hasAnyRules` 一起把「确实没有规则」和「读不到有没有规则」分开画：前者给空态引导卡，
+   * 后者给一句提示 + 刷新，见模板里排在引导卡之前的那一格。
+   */
+  readFailed?: boolean;
   /** 最近新增规则 id（进场动画用） */
   highlightRuleId?: string | null;
   /** 搜索关键字（用于高亮） */
@@ -375,6 +400,8 @@ const emit = defineEmits<{
   selectionChange: [selection: ProxyRule[]];
   useTemplate: [ruleData: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>];
   reorder: [fromId: string, toId: string];
+  /** 「读取失败」那一格里的刷新按钮 */
+  refresh: [];
 }>();
 
 const { t } = useI18n();
@@ -649,7 +676,25 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   text-align: center;
 }
 
-/* 空态 / 无匹配 / 表格三块面板的交接：旧的先退（90ms，只淡出不占时间），
+/* 读取失败那一格：占位高度与 .no-match 同级（同为 48px 上下留白），
+   换到表格时卡片不额外跳一次；措辞见 composable 里 `configReadFailed` 的注释。 */
+.read-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: 48px 0;
+  color: var(--cop-text-color-secondary);
+  text-align: center;
+}
+
+.read-failed-text {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* 空态 / 读不到 / 无匹配 / 表格四块面板的交接：旧的先退（90ms，只淡出不占时间），
    新的再进（150ms，淡入 + 4px 上浮）。`mode="out-in"` 让两者不重叠——
    重叠会让卡片高度在中间那一帧取两者的最大值，整页跟着往下弹一次。
    时长全部取自令牌，减弱动效下由 tokens.css 那条全局收口压成瞬时切换。 */

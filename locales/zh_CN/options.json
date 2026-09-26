@@ -110,6 +110,7 @@
   "batchEnable": "批量启用",
   "batchDisable": "批量禁用",
   "noMatch": "没有匹配的规则",
+  "readFailed": "暂时读不到已保存的规则，可能是后台正在重启。稍等会自动恢复，也可以手动刷新。",
   "rulesCountInfo": "共 $1 条规则，已启用 $2 条",
   "statsTotal": "总计",
   "statsSuccess": "成功",

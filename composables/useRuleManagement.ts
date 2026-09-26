@@ -12,6 +12,14 @@ export function useRuleManagement() {
   const loading = ref(true);
 
   /**
+   * 上一次读取「扩展自己的存储」有没有失败——与 `loading` 合起来表达三态：
+   * `!loading && configReadFailed` 才是读取失败（`loading` 初值为 `true`，首轮结束前不成立）。
+   * 失败时 `rules` 停留在上一次的值（首次失败就是空数组），界面据此说「暂时读不到已保存的规则」
+   * 而不是「还没有规则」——空态引导卡会诱导用户重新新增或重新导入一份本来就在的规则。
+   */
+  const configReadFailed = ref(false);
+
+  /**
    * 处于「删除可撤销」窗口（尚未提交到存储层）的规则 id
    *
    * 删除是乐观更新：UI 先移除，5 秒后才真正发 DELETE_RULE。这期间存储快照里规则还在，
@@ -48,17 +56,30 @@ export function useRuleManagement() {
   /** 计算被同模式更高优先级规则遮蔽的规则 ID 集合（见 utils/ruleConflicts） */
   const shadowedRuleIds = computed(() => computeShadowedRuleIds(rules.value));
 
+  /**
+   * 从后台重读整份配置。
+   *
+   * 三条出口：读到（写 `rules`/`enabled`、清 `configReadFailed`）、回包形状不对（只置失败旗标）、
+   * 消息抛错（同上）。后两条**都不动 `rules`**，所以界面要么留着上一次的读数、要么在首轮就落进
+   * 「读取失败」那一格，而不是画成空态引导卡。
+   */
   async function fetchConfig() {
     loading.value = true;
     try {
       const config: ProxyConfig | undefined = await chrome.runtime.sendMessage({
         type: MessageType.GET_PROXY_CONFIG,
       });
-      // SW 异常时响应可能为非标结构，仅接受含数组 rules 的配置
-      if (!config || !Array.isArray(config.rules)) return;
+      // SW 异常时响应可能为非标结构，仅接受含数组 rules 的配置。
+      // 判不成不写 `rules`：留着上一次读到的东西，界面因此不会把「读不到」画成「没有规则」。
+      if (!config || !Array.isArray(config.rules)) {
+        configReadFailed.value = true;
+        return;
+      }
+      configReadFailed.value = false;
       rules.value = pendingDeleteIds.size > 0 ? config.rules.filter(r => !pendingDeleteIds.has(r.id)) : config.rules;
       enabled.value = config.enabled;
     } catch (error) {
+      configReadFailed.value = true;
       logger.error('Failed to fetch config:', error);
     } finally {
       loading.value = false;
@@ -264,6 +285,7 @@ export function useRuleManagement() {
     rules,
     enabled,
     loading,
+    configReadFailed,
     shadowedRuleIds,
     fetchConfig,
     addRule,
