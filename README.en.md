@@ -314,7 +314,7 @@ Because it has a capability the network layer cannot express, or because it is a
 <details>
 <summary><strong>What are the limits?</strong></summary>
 
-200 rules, the last 500 log entries (each stored body capped at 32K characters, with the original length annotated; URLs, methods, rule names and header values at 8K characters, at most 64 headers per map, and a 4M-character budget across the whole log), 10 MB request body, 0–60000 ms delay, and mocked status codes clamped to 200–599 so the page can always build a valid `Response`.
+200 rules, the last 500 log entries (each stored body capped at 32K characters, with the original length annotated; URLs, methods, rule names and header values at 8K characters, at most 64 headers per map, and a 4M-character budget across the whole log), 10 MB request body, 0–60000 ms delay, and a 2 MB ceiling on imported files plus 5000 on HAR entries — over either limit the import is refused with the reason stated rather than partially read. Mocked and rewritten status codes are clamped to 200–599 so the page can always build a valid `Response`.
 
 </details>
 

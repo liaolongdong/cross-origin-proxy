@@ -153,7 +153,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-26"
+            "dateModified": "2026-09-27"
           },
           {
             "@type": "SoftwareApplication",
@@ -188,7 +188,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-26",
+            "dateModified": "2026-09-27",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -2378,6 +2378,27 @@ pnpm assets       # regenerate store and landing images</code></pre>
                   <td>200 maximum when adding, batch-adding or merging; a replace-mode import writes the file as-is</td>
                 </tr>
                 <tr>
+                  <td>Credential variables</td>
+                  <td>50 maximum (names ≤ 64 characters, values ≤ 4096 characters)</td>
+                </tr>
+                <tr>
+                  <td>Config restore points</td>
+                  <td>The last 5 whole-rule-set snapshots, kept within a budget of about 1M characters</td>
+                </tr>
+                <tr>
+                  <td>Import file</td>
+                  <td>
+                    2 MB maximum, refused before the file is read with the reason stated — never partially imported
+                  </td>
+                </tr>
+                <tr>
+                  <td>HAR entries</td>
+                  <td>
+                    5000 maximum per import, refused before anything becomes a rule (checked once on the page, once in
+                    the background)
+                  </td>
+                </tr>
+                <tr>
                   <td>Request log</td>
                   <td>Last 500 entries (ring buffer)</td>
                 </tr>
@@ -2881,7 +2902,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-26</span>
+            <span>Last updated 2026-09-27</span>
             <span
               ><a
                 href="./"
