@@ -18,7 +18,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MessageType } from '@/utils/types';
-import { SCHEMA_VERSION, STORAGE_KEYS } from '@/utils/constants';
+import { MAX_HAR_IMPORT_ENTRIES, SCHEMA_VERSION, STORAGE_KEYS } from '@/utils/constants';
 
 type RouterModule = typeof import('@/entrypoints/background/messageRouter');
 type RouterListener = (
@@ -442,6 +442,46 @@ describe('IMPORT_CONFIG — 实际写入结果带回界面', () => {
     await flush();
 
     expect(lastResponse(sendResponse)).toEqual({ success: true, added: 1, skipped: 0, invalid: 1 });
+  });
+});
+
+/**
+ * IMPORT_HAR 的条数闸门（M-10）——后台这一道是边界校验，不是界面的回声。
+ *
+ * 配置页在 `sendMessage` 之前先问一次（省掉那次整包结构化克隆），这里再问一次：消息体与文件
+ * 内容同属不可信输入，绕过界面不代表后台该照单全收。判据与界面共用 `utils/har.ts` 的
+ * `harEntriesOverLimit`，所以这两条用例钉的是「路由有没有真的问」，而不是阈值本身（阈值由
+ * `tests/harImport.test.ts` 按函数行为钉）。
+ */
+describe('IMPORT_HAR — 超上限的条目数组不回规则', () => {
+  const harEntry = { request: { method: 'GET', url: 'https://fat.example.com/api/user' }, response: { status: 200 } };
+
+  it('多一条即拒，且信封里没有规则', async () => {
+    const entries = new Array(MAX_HAR_IMPORT_ENTRIES + 1).fill(harEntry);
+    const { sendResponse } = dispatch(MessageType.IMPORT_HAR, TRUSTED_PAGE_URL, { log: { entries } });
+    await flush();
+
+    const res = lastResponse(sendResponse);
+    expect(res?.success).toBe(false);
+    expect(res).not.toHaveProperty('rules');
+  });
+
+  it('刚好到上限照常放行（闸门不是 off-by-one）', async () => {
+    const entries = new Array(MAX_HAR_IMPORT_ENTRIES).fill(harEntry);
+    const { sendResponse } = dispatch(MessageType.IMPORT_HAR, TRUSTED_PAGE_URL, { log: { entries } });
+    await flush();
+
+    const res = lastResponse(sendResponse) as { success?: boolean; rules?: unknown[] } | undefined;
+    expect(res?.success).toBe(true);
+    // 同一个 origin 的 5000 条折成 1 条规则：这是 `harEntriesToRules` 的去重，与闸门无关
+    expect(res?.rules).toHaveLength(1);
+  });
+
+  it('条目不是数组时仍是那句 Invalid HAR data，不与条数拒绝混成一句', async () => {
+    const { sendResponse } = dispatch(MessageType.IMPORT_HAR, TRUSTED_PAGE_URL, { log: { entries: 'x' } });
+    await flush();
+
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Invalid HAR data' });
   });
 });
 

@@ -2,6 +2,25 @@ import type { RequestLogEntry, HarEntry, ProxyRule } from '@/utils/types';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { isProxyableProtocol } from '@/utils/ruleValidation';
 import { generateId } from '@/utils/generateId';
+import { MAX_HAR_IMPORT_ENTRIES } from '@/utils/constants';
+
+/**
+ * HAR 条数闸门的判据：超出上限返回 `{ actual, limit }`，合规返回 `null`。
+ *
+ * 两侧都要问一次，所以判据只能有一份——界面在序列化与发消息之前先拒（不然那一次
+ * `sendMessage` 的结构化克隆与后台的整表遍历已经付过钱了），后台在把条目交给
+ * `harEntriesToRules` 之前复核（消息体与文件内容同样按不可信输入对待）。
+ * 两边各写一个 `> MAX_HAR_IMPORT_ENTRIES` 迟早会漂：界面上那句是给用户看的，
+ * 要报实际条数；后台那句回的是失败信封。它们对「多少算多」必须给同一个答案。
+ *
+ * 选「拒」而不是「悄悄截到上限」：截一半会让导入结果与被选的文件对不上，而 HAR 这条通道
+ * 没有去重可言（不像 JSON 导入会跳过同名同模式的既有条目），用户无从核对少了哪些。
+ *
+ * @param entries HAR 的 `log.entries`（调用方须已确认它是数组）
+ */
+export function harEntriesOverLimit(entries: readonly unknown[]): { actual: number; limit: number } | null {
+  return entries.length > MAX_HAR_IMPORT_ENTRIES ? { actual: entries.length, limit: MAX_HAR_IMPORT_ENTRIES } : null;
+}
 
 /**
  * 将请求日志转换为 HAR 格式（HTTP Archive）

@@ -31,7 +31,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { harEntriesToRules } from '@/utils/har';
+import { harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
+import { MAX_HAR_IMPORT_ENTRIES } from '@/utils/constants';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import type { HarEntry } from '@/utils/types';
 
@@ -210,6 +211,45 @@ describe('harEntriesToRules — HAR 条目转代理规则', () => {
     expect(whitelisted.length).toBeGreaterThanOrEqual(3);
     for (const name of whitelisted) {
       expect(isSensitiveHeaderName(name), `${name} 会被 HAR 导入写进规则，却不在导出脱敏表里`).toBe(true);
+    }
+  });
+});
+
+/**
+ * HAR 条数闸门（M-10）——判据只有一份，两侧各问一次。
+ *
+ * 界面在 `sendMessage` 之前问（省掉那次整包结构化克隆），后台在 `harEntriesToRules` 之前复核
+ * （消息体按不可信输入对待）。这两处一旦各写各的 `> MAX_HAR_IMPORT_ENTRIES`，就会出现
+ * 「界面放行的条数，后台悄悄拒掉」或反过来——所以这一格按**函数行为**测，而不是像上面那样按源码契约测：
+ * 源码契约钉不住「条件写反」和「永远为假」，而这两种恰恰是这条闸门最可能的失效方式。
+ */
+describe('harEntriesOverLimit — 多少条算超', () => {
+  it('上限本身放行、多一条即拒，且报出实际条数', () => {
+    expect(harEntriesOverLimit(new Array(MAX_HAR_IMPORT_ENTRIES).fill(null))).toBeNull();
+
+    const over = harEntriesOverLimit(new Array(MAX_HAR_IMPORT_ENTRIES + 1).fill(null));
+    // 界面那句要说的是「你有 5001 条，上限 5000 条」，不是把上限值当成实际值 repeat 一遍
+    expect(over).toEqual({ actual: MAX_HAR_IMPORT_ENTRIES + 1, limit: MAX_HAR_IMPORT_ENTRIES });
+  });
+
+  it('空表与一条都算合规，不把「没有」读成「超限」', () => {
+    expect(harEntriesOverLimit([])).toBeNull();
+    expect(harEntriesOverLimit([null])).toBeNull();
+  });
+
+  it('两份调用点共用这一个出口：界面与后台都不自己比大小', () => {
+    const dialog = readFileSync('components/options/ImportExportDialog.vue', 'utf-8');
+    const router = readFileSync('entrypoints/background/messageRouter.ts', 'utf-8');
+
+    for (const [label, src] of [
+      ['配置页', dialog],
+      ['后台路由', router],
+    ] as const) {
+      expect(src, `${label} 不再调用共用的判据`).toContain('harEntriesOverLimit(');
+      // 自己比大小 = 两份阈值判据，界面上那句与后台的拒绝从此可以各说各话
+      expect(src, `${label} 里又出现了一份自己的条数比较`).not.toMatch(
+        /entries\.length\s*[<>]=?\s*MAX_HAR_IMPORT_ENTRIES/,
+      );
     }
   });
 });

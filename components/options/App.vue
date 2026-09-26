@@ -211,6 +211,8 @@ const {
   fetchLogs,
   clearLogs,
   toggleAutoRefresh,
+  pauseAutoRefresh,
+  resumeAutoRefresh,
   setRefreshInterval,
   fetchDnrStats,
   fetchSwStats,
@@ -329,7 +331,13 @@ watch(showLogs, visible => {
     void fetchLogs();
     void fetchDnrStats();
     void fetchSwStats();
+    resumeAutoRefresh();
+    return;
   }
+  // 关抽屉只停表，不动 `autoRefresh` 那个开关：抽屉里的表格是 `v-show` 藏起来而不是卸载，
+  // 而配置页可以开上一整天——不停表就是每 5s 为一张看不见的表格回读整份日志（满表 500 条就是 MB 级的一次序列化）
+  // 并重算派生的过滤表与统计。用户既然开着自动刷新，重新打开抽屉时它应当接着跑（M-8）。
+  pauseAutoRefresh();
 });
 
 /**

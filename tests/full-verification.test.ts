@@ -1188,3 +1188,68 @@ describe('[Batch 3] 弹窗保存与快捷键的闸门（源码契约）', () => 
     expect(fnSource(importExportSrc, 'async function handleImportHar')).toContain('result?.success');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 批次四（2026-09-26 评审轮）：日志刷写的暂停、导入的两道闸门
+//
+// 同批次三：这一层的渲染与点击在本环境没有运行时对应物。`useRequestLog` 的暂停/恢复本身
+// 是**跑起来测**的（`tests/composablesReadouts.test.ts`），这里只钉「配置页有没有真的在抽屉
+// 关闭时叫它停」；导入那两道闸门的承重面是**顺序**（读之前判体积、发消息之前判条数），
+// 顺序反了代价照付，所以同样只能按源码契约钉。
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('[Batch 4] 抽屉暂停自动刷新与导入闸门（源码契约）', () => {
+  const optionsAppSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
+  const importExportSrc = fs.readFileSync('components/options/ImportExportDialog.vue', 'utf-8');
+
+  /** 取某个函数/块从声明到第一个顶格 `}` 的源码片段 */
+  function fnSource(src: string, signature: string): string {
+    const at = src.indexOf(signature);
+    expect(at, `找不到 ${signature}`).toBeGreaterThan(-1);
+    const end = src.indexOf('\n});', at);
+    expect(end, `${signature} 的结尾找不到`).toBeGreaterThan(at);
+    return src.slice(at, end);
+  }
+
+  it('抽屉开合各叫一次：开→resume、关→pause，且都不碰用户的开关（M-8）', () => {
+    const watcher = fnSource(optionsAppSrc, 'watch(showLogs, visible => {');
+    const resume = watcher.indexOf('resumeAutoRefresh();');
+    const pause = watcher.indexOf('pauseAutoRefresh();');
+    expect(resume, '打开抽屉不恢复：用户以为自动刷新还开着，其实表早就停了').toBeGreaterThan(-1);
+    expect(pause, '关抽屉不停表：看不见的表格每 5s 整份回读一次日志').toBeGreaterThan(-1);
+    // 两条分支各管一件事：关的那一句必须排在「开了就 return」之后，否则一次开合把表停掉
+    expect(resume).toBeLessThan(pause);
+    // 暂停不等于改配置：整个 watcher 里不许出现开关的赋值或 toggle
+    expect(watcher).not.toContain('toggleAutoRefresh');
+    expect(watcher).not.toContain('autoRefresh.value');
+  });
+
+  it('体积闸门排在读之前，且被拒时先清掉旧内容（M-10）', () => {
+    const reader = importExportSrc.slice(
+      importExportSrc.indexOf('function readFileAsText'),
+      importExportSrc.indexOf('function handleFileChange'),
+    );
+    const gate = reader.indexOf('MAX_IMPORT_FILE_SIZE');
+    const read = reader.indexOf('new FileReader()');
+    expect(gate, '没有体积闸门：几 MB 的文件照样整份读进主线程').toBeGreaterThan(-1);
+    expect(read).toBeGreaterThan(-1);
+    expect(gate, '判在读之后：代价已经付过了，拒的只是回执').toBeLessThan(read);
+    expect(reader.slice(gate, read), '被拒时留着旧内容：下一次按下导入的是上一个文件').toContain("apply('')");
+    expect(reader).toContain("t('fileTooLarge'");
+  });
+
+  it('HAR 条数闸门排在发消息之前（M-10）', () => {
+    const body = importExportSrc.slice(
+      importExportSrc.indexOf('async function handleImportHar'),
+      importExportSrc.indexOf('</script>'),
+    );
+    const gate = body.indexOf('harEntriesOverLimit(');
+    const send = body.indexOf('chrome.runtime.sendMessage');
+    expect(gate, '没有条数闸门：十万条也整包发给后台').toBeGreaterThan(-1);
+    expect(send).toBeGreaterThan(-1);
+    expect(gate, '判在发之后：序列化已经跑完，闸门只管回执').toBeLessThan(send);
+    // 判据本身（多少算超、条件写反、永远为假）由 `tests/harImport.test.ts` 按函数行为钉，
+    // 这里只钉「配置页有没有在花钱之前问它一次」。
+    expect(body).toContain("t('importHarTooManyEntries'");
+  });
+});

@@ -47,11 +47,52 @@ let cachedConfig: ProxyConfig | null = null;
 /** 凭据变量表缓存（真值只在后台侧落地，见 `utils/variables.ts` 的世界边界说明） */
 let cachedVariables: VariableStore | null = null;
 
+/**
+ * 请求日志读缓存（数组头 = 最新），命中时刷写不再回读整份 storage
+ *
+ * 与 {@link cachedConfig} 同一档，但**失效判据刻意不同**。Chrome 的 `storage.onChanged` 在
+ * 发起写入的那个上下文自己也会触发，配置缓存正是因此「每次写盘后作废、下一次整份读回」——
+ * 配置写少读多，那一次回读不划算到哪儿去。日志表反过来：它每一次刷写都是本模块自己写的，
+ * 照抄那条判据就成了「攒够一批 → 写盘 → 缓存立刻作废 → 下一批再整份读回」，优化的同时把它自己杀光。
+ * 所以这里只认**不是自己写的那一笔**：{@link saveRequestLogs} 每成功一次记下这份表的身份，
+ * 事件里的 `newValue` 身份对得上就沿用、对不上才作废（`remove`、`storage.local.clear()` 与
+ * devtools 手改都落在「对不上」那一侧，本模块还没写过的时候同样落在这一侧）。
+ *
+ * 前提是「本模块是 `REQUEST_LOGS` 的唯一写入方，且只被后台侧引用」——页面要日志走
+ * `GET_REQUEST_LOG` 消息，不 import 这里，所以「别的上下文改了这张表」没有正常路径。
+ * 真出现第二个写入方时，收回这块缓存就是把一行 `cachedLogs = null` 加回下面的监听器。
+ */
+let cachedLogs: RequestLogEntry[] | null = null;
+
+/** 最近一次由 {@link saveRequestLogs} 成功写进 storage 的那份表的身份；`null` = 还没写过 */
+let lastWrittenLogsIdentity: string | null = null;
+
+/**
+ * 日志表可廉价比对的身份：条数 + 最新一条的 id
+ *
+ * 事件里的 `newValue` 是反序列化副本，比不了对象身份，而这份表每 1s 就可能来一次事件——
+ * 整表比对（序列化或逐条比）等于把省下的那次回读原样还回去。这个身份挡得住增删、清空与整体改写；
+ * 只改某条日志正文那种手改挡不住，而它本来也不在受支持的路径上。
+ */
+function logsIdentity(logs: unknown): string | null {
+  if (!Array.isArray(logs)) return null;
+  const newest = logs[0] as RequestLogEntry | undefined;
+  return `${logs.length}\u0000${typeof newest?.id === 'string' ? newest.id : ''}`;
+}
+
 // 监听 storage 变化，跨上下文时使缓存失效
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
   if (STORAGE_KEYS.PROXY_CONFIG in changes) cachedConfig = null;
   if (STORAGE_KEYS.VARIABLES in changes) cachedVariables = null;
+  // 日志表这一份只挡「不是自己写的那一笔」，理由见 {@link cachedLogs}
+  if (STORAGE_KEYS.REQUEST_LOGS in changes) {
+    const incoming = logsIdentity(changes[STORAGE_KEYS.REQUEST_LOGS].newValue);
+    // 那一格还没写过时**谁都不算自己人**：`null === null` 会把「本模块刚读到表、外部紧接着
+    // 把它删掉」判成回声，缓存于是继续供出一份 storage 里已经不存在的表，下一次刷写还把它写回去。
+    const ours = lastWrittenLogsIdentity !== null && incoming === lastWrittenLogsIdentity;
+    if (!ours) cachedLogs = null;
+  }
 });
 
 /**
@@ -59,6 +100,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
  */
 export function invalidateConfigCache(): void {
   cachedConfig = null;
+}
+
+/**
+ * 手动使日志读缓存失效（测试与运维用的复位口，生产路径上没有调用方）
+ */
+export function invalidateLogsCache(): void {
+  cachedLogs = null;
+  lastWrittenLogsIdentity = null;
 }
 
 /**
@@ -358,14 +407,21 @@ export async function importProxyConfig(
  * 读取请求日志
  *
  * 与 {@link configRules} 同一档收口：手改或截断的旧数据能让这个键变成一个字符串或一个对象，
- * 而两处用法都只在数组上成立——flush 路径的 `logs.unshift(...)` 抛在接手人里被回灌成
- * 「从此每一笔都落不了盘」，抽屉的 `v-for` 则把字符串按字符画成一行行空记录。
+ * 而两处用法都只在数组上成立——flush 路径要把这份表与新日志合成一批发回去，`.unshift` / 展开
+ * 一个字符串抛在自己的接手人里就成了「从此每一笔都落不了盘」；抽屉的 `v-for` 则把字符串按字符画成一行行空记录。
  * 非数组当空：写回去的正是这一笔刚真实发生过的请求，坏数据本来就读不出任何日志。
+ *
+ * 命中缓存时不回读盘，见 {@link cachedLogs}。与 {@link getProxyConfig} 同一件事：**交出的就是缓存
+ * 那个对象本身**，就地改它等于改缓存，而缓存此刻代表的是「storage 里有什么」——所以唯一的
+ * 内部调用方（刷写路径）合并出新数组，绝不 `unshift` 这份。
  */
 export async function getRequestLogs(): Promise<RequestLogEntry[]> {
+  if (cachedLogs !== null) return cachedLogs;
   const result = await chrome.storage.local.get(STORAGE_KEYS.REQUEST_LOGS);
   const stored = result[STORAGE_KEYS.REQUEST_LOGS];
-  return Array.isArray(stored) ? (stored as RequestLogEntry[]) : [];
+  const logs = Array.isArray(stored) ? (stored as RequestLogEntry[]) : [];
+  cachedLogs = logs;
+  return logs;
 }
 
 /**
@@ -418,10 +474,22 @@ export function logEntrySize(log: RequestLogEntry): number {
 
 /**
  * 保存请求日志（环形缓冲，最大 MAX_LOG_ENTRIES 条，并按正文总量预算裁剪）
+ *
+ * 这张表的**唯一**写入口，所以缓存与 storage 的对账只在这一处发生：写成功就把裁好的这份
+ * 记下（缓存与身份同时更新），写失败一律作废缓存——内存里留一份 storage 中不存在的表，
+ * 下一次「读回来 → 合上新日志 → 写回去」会把它当真已经落盘，把用户看到的日志盖回一个已失败的状态
+ * （与 `saveProxyConfig` 的 `finally` 同一判据）。
  */
 export async function saveRequestLogs(logs: RequestLogEntry[]): Promise<void> {
   const trimmed = trimLogsToBudget(logs.slice(0, MAX_LOG_ENTRIES));
-  await chrome.storage.local.set({ [STORAGE_KEYS.REQUEST_LOGS]: trimmed });
+  let written = false;
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEYS.REQUEST_LOGS]: trimmed });
+    written = true;
+  } finally {
+    cachedLogs = written ? trimmed : null;
+    lastWrittenLogsIdentity = written ? logsIdentity(trimmed) : null;
+  }
 }
 
 // ─── Request Log Buffered Writes ─────────────────────────────────────────────
@@ -430,16 +498,45 @@ let logBuffer: RequestLogEntry[] = [];
 let logFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * 攒够多少条立即刷写；没攒够则等 {@link LOG_FLUSH_DEBOUNCE_MS} 的防抖
+ *
+ * 阈值从 10 抬到 20：一笔刷写的代价是**整份表读出来解析 + 整份表序列化写回**（按 `MAX_LOG_ENTRIES`
+ * 的满表形状——500 条、正文与响应各 2KB、序列化后 2.12MB——本机 node 22 一次 best-of-7 量到
+ * parse 3.7ms + stringify 3.6ms，Chrome 侧还要再加一次跨进程反序列化），条数只决定「要刷几次」。
+ * 突发流量的成本因此是「刷写次数 × 整包」，把阈值翻倍就把它砍掉一半，而日志的可见延迟本来就由
+ * 那条 1s 防抖定调（最多攒 1s，不是最多攒 20 条——`onSuspend` 与清空仍是立即刷写）。
+ */
+const LOG_FLUSH_THRESHOLD = 20;
+const LOG_FLUSH_DEBOUNCE_MS = 1000;
+
+/**
  * 刷写串行队列：阈值触发与防抖定时器可能交叠，若两个 flush 并发执行，
  * 各自读到旧日志后先后写入会互相覆盖导致日志丢失，因此串行化
  */
 let flushQueue: Promise<void> = Promise.resolve();
 
+/** 队列里已经排着一轮刷写（正在跑或等着跑）——`flushLogs()` 据此合并而不是继续追加整包写 */
+let flushTurnQueued = false;
+
+/**
+ * 本轮刷写取走快照之后又攒进了新日志
+ *
+ * 一次刷写的 `await` 期间页面照样在发请求，那些日志不进这一批（快照已经取走），
+ * 但也不能只靠「下一次阈值/防抖」——阈值可能永远够不到、定时器又可能被合并掉，
+ * 所以由这一格记着，本轮收尾时补跑一轮，直到 `flushLogs()` 落定时刻之前的都落了盘。
+ */
+let logBufferedDuringFlush = false;
+
 /**
  * 将缓冲区日志刷写到 storage（并发安全）
+ *
+ * 已有刷写在途时不追加第二轮整包写：同一批日志被连写两次是纯粹的写放大，
+ * 而在途那一轮会因为 {@link logBufferedDuringFlush} 自己补上收尾。
  */
 export function flushLogs(): Promise<void> {
-  const next = flushQueue.then(doFlushLogs, doFlushLogs);
+  if (flushTurnQueued) return flushQueue;
+  flushTurnQueued = true;
+  const next = flushQueue.then(runFlushTurn, runFlushTurn);
   flushQueue = next.then(
     () => {},
     () => {},
@@ -447,7 +544,20 @@ export function flushLogs(): Promise<void> {
   return next;
 }
 
+async function runFlushTurn(): Promise<void> {
+  try {
+    do {
+      await doFlushLogs();
+    } while (logBufferedDuringFlush);
+  } finally {
+    flushTurnQueued = false;
+  }
+}
+
 async function doFlushLogs(): Promise<void> {
+  // 复位排在取快照之前，且与它之间没有任何 `await`：这两句之间不可能挤进新日志，
+  // 于是「快照之后到的」恰好就是这一格要记的那些。写在早退之前，否则空批会把上一轮的账漏给下一轮。
+  logBufferedDuringFlush = false;
   if (logFlushTimer !== null) {
     clearTimeout(logFlushTimer);
     logFlushTimer = null;
@@ -458,12 +568,12 @@ async function doFlushLogs(): Promise<void> {
   logBuffer = [];
 
   try {
-    const logs = await getRequestLogs();
-    // 数组约定「头部是最新」，而缓冲区是追加序（最旧在前），故倒序插到头部：
-    // 直接 unshift 会让同批日志倒着展示，超上限时 `slice(0, MAX)` 丢掉的还正是刚发生的请求。
-    // 不改动 bufferSnapshot 本身——失败回滚那条路径要按时间顺序放回去。
-    logs.unshift(...bufferSnapshot.slice().reverse());
-    await saveRequestLogs(logs);
+    const stored = await getRequestLogs();
+    // 数组约定「头部是最新」，而缓冲区是追加序（最旧在前），故倒序接到头部：
+    // 正着接会让同批日志倒着展示，超上限时 `slice(0, MAX)` 丢掉的还正是刚发生的请求。
+    // 合成新数组而不是就地 `unshift`：`stored` 如今可能正是 {@link cachedLogs} 本身，
+    // 改完再写失败就留下一份 storage 里没有的表（失败回滚那条路径也还要按时间顺序放回去，故不动快照）。
+    await saveRequestLogs([...bufferSnapshot.slice().reverse(), ...stored]);
   } catch (error) {
     // 快照已从缓冲区取走，直接丢弃等于静默丢日志：按时间顺序放回去等下一次刷写重试。
     // 缓冲区是「最旧在前」的追加序，故收口时切掉头部——配额持续失败也要留下刚发生的请求。
@@ -474,7 +584,7 @@ async function doFlushLogs(): Promise<void> {
 
 function scheduleLogFlush(): void {
   // 达到阈值立即刷写
-  if (logBuffer.length >= 10) {
+  if (logBuffer.length >= LOG_FLUSH_THRESHOLD) {
     void flushLogs();
     return;
   }
@@ -485,7 +595,7 @@ function scheduleLogFlush(): void {
   logFlushTimer = setTimeout(() => {
     logFlushTimer = null;
     void flushLogs();
-  }, 1000);
+  }, LOG_FLUSH_DEBOUNCE_MS);
 }
 
 /** 日志里需要按长度收口的文本字段（`id`/`timestamp`/`status` 等由本扩展生成，天然有界） */
@@ -561,10 +671,12 @@ function capHeaderMap(headers: Record<string, string> | undefined): Record<strin
 }
 
 /**
- * 添加一条请求日志（缓冲写入，10 条或 1s 刷写一次）
+ * 添加一条请求日志（缓冲写入，攒够 {@link LOG_FLUSH_THRESHOLD} 条或 1s 防抖刷写一次）
  */
 export async function addRequestLog(entry: RequestLogEntry): Promise<void> {
   logBuffer.push(capLogEntry(entry));
+  // 在途那一轮已经取走快照了，这一笔只能由它补跑的那一轮落盘（见 {@link logBufferedDuringFlush}）
+  logBufferedDuringFlush = true;
   scheduleLogFlush();
 }
 
@@ -589,7 +701,8 @@ async function doClearLogs(): Promise<void> {
     clearTimeout(logFlushTimer);
     logFlushTimer = null;
   }
-  await chrome.storage.local.set({ [STORAGE_KEYS.REQUEST_LOGS]: [] });
+  // 走唯一的写入口而不是自己 `set`：那张表现在有读缓存，绕过去清的就是缓存里那份「复活」的日志
+  await saveRequestLogs([]);
 }
 
 // ─── Environment Profiles ────────────────────────────────────────────────────

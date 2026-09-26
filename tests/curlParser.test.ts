@@ -19,6 +19,21 @@ describe('tokenizeCurl', () => {
     expect(tokenizeCurl('')).toEqual([]);
     expect(tokenizeCurl(`curl ''`)).toEqual(['curl', '']);
   });
+
+  /**
+   * 分词器改成「整段 `slice` 收进当前 token」之后（M-10）新加的一格
+   *
+   * 改动前的 20 万条随机串差分（字母表 = `a b 空格 ' " \ 换行 tab - 1`，最长 14 字符，含抛错比对）
+   * 已经证明两版等价，那支脚手架不入库；这里留下它最容易咬人的三个形状：
+   * 「没有闭合的引号」与「结尾一个裸反斜杠」都落在**片段还没收进 parts 就遇到输入尽头**那条路上，
+   * 「裸字符紧跟引号对」则是同一个 token 内部换 mode——三种都得靠 `runStart` 记对位置。
+   */
+  it('未闭合引号、结尾裸反斜杠、裸段紧跟引号对', () => {
+    expect(tokenizeCurl(`-d '{"unclosed`)).toEqual(['-d', '{"unclosed']);
+    expect(tokenizeCurl('a\\')).toEqual(['a\\']);
+    expect(tokenizeCurl(`a"b" c`)).toEqual(['ab', 'c']);
+    expect(tokenizeCurl(`-d ""`)).toEqual(['-d', '']);
+  });
 });
 
 describe('parseCurlCommand', () => {

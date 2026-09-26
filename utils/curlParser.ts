@@ -67,17 +67,36 @@ const OPTIONS_WITH_ARG = new Set([
  * 将 cURL 命令分词（状态机）：
  * - 单引号内原样保留；双引号内支持反斜杠转义（\" \\ \$ \`）
  * - 引号外的反斜杠转义下一个字符；空白分词
+ *
+ * 片段用 `slice` 整段收进当前 token，而不是逐字 `current += ch`：V8 把 `+=` 建成绳串，
+ * 攒到一定长度后每次读取都要把整条绳摊一遍，于是 DevTools「复制为 cURL」那种
+ * **单个 token 就几 MB** 的 `--data-raw` 输入直接从线性掉到平方。
+ * 数字出自本机 Node 22 的一次新旧交替测量（同一进程内 A/B 各跑 best-of-5、取三轮平均）：
+ * 单 token 800KB 由 61ms 降到 4.4ms、3.2MB 由 278ms 降到 21ms；输入从 200KB 涨到 800KB（×4）
+ * 时旧实现的时间是 ×21，新实现是 ×4。整段都在配置页主线程上同步跑，卡的是用户点下去的那一下。
+ * 三种 mode 下的正文都是照抄，所以「未收片段」只需一个起点，引号／转义／空白才是切点。
  */
 export function tokenizeCurl(text: string): string[] {
   const tokens: string[] = [];
-  let current = '';
+  /** 当前 token 已定稿的片段（只在切点处整段收下，收尾一次 `join`） */
+  const parts: string[] = [];
+  /** 尚未收进 {@link parts} 的那一段的起点 */
+  let runStart = 0;
   let hasToken = false;
   let mode: 'normal' | 'single' | 'double' = 'normal';
 
+  /** 把 `[runStart, end)` 原样收进当前 token（空段什么都不收，起点停在原地） */
+  const collect = (end: number): void => {
+    if (end > runStart) {
+      parts.push(text.slice(runStart, end));
+      runStart = end;
+    }
+  };
+
   const push = () => {
     if (hasToken) {
-      tokens.push(current);
-      current = '';
+      tokens.push(parts.join(''));
+      parts.length = 0;
       hasToken = false;
     }
   };
@@ -85,41 +104,48 @@ export function tokenizeCurl(text: string): string[] {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (mode === 'single') {
+      // 单引号内一切照抄，只有收尾的那个 `'` 是切点
       if (ch === "'") {
+        collect(i);
+        runStart = i + 1;
         mode = 'normal';
-      } else {
-        current += ch;
       }
       continue;
     }
     if (mode === 'double') {
       if (ch === '\\' && i + 1 < text.length && '"\\$`'.includes(text[i + 1])) {
-        current += text[i + 1];
+        collect(i);
+        parts.push(text[i + 1]);
+        runStart = i + 2;
         i++;
       } else if (ch === '"') {
+        collect(i);
+        runStart = i + 1;
         mode = 'normal';
-      } else {
-        current += ch;
       }
       continue;
     }
-    if (ch === "'") {
-      mode = 'single';
-      hasToken = true;
-    } else if (ch === '"') {
-      mode = 'double';
+    if (ch === "'" || ch === '"') {
+      collect(i);
+      runStart = i + 1;
+      mode = ch === "'" ? 'single' : 'double';
+      // 空引号对也是一个 token：起点在引号上，`hasToken` 必须在这里就立起来
       hasToken = true;
     } else if (ch === '\\' && i + 1 < text.length) {
-      current += text[i + 1];
+      collect(i);
+      parts.push(text[i + 1]);
+      runStart = i + 2;
       hasToken = true;
       i++;
     } else if (/\s/.test(ch)) {
+      collect(i);
+      runStart = i + 1;
       push();
     } else {
-      current += ch;
       hasToken = true;
     }
   }
+  collect(text.length);
   push();
   return tokens;
 }

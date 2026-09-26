@@ -191,6 +191,8 @@
   "importHarFailed": "HAR import failed",
   "importHarInvalid": "Invalid HAR file",
   "fileReadFailed": "Could not read the file, please pick it again",
+  "fileTooLarge": "This file is $1, over the $2 limit — trim it down and import again",
+  "importHarTooManyEntries": "This HAR has $1 entries, over the $2-entry import limit — trim it down and import again",
   "enabled": "Enabled",
   "logDetail": "Request Detail",
   "copyAsCurl": "Copy as cURL",

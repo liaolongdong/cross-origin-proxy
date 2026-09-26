@@ -36,7 +36,7 @@ import {
   getConfigHistory,
   restoreConfigHistory,
 } from '@/utils/storage';
-import { logsToHar, harEntriesToRules } from '@/utils/har';
+import { logsToHar, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
@@ -554,6 +554,13 @@ export function setupMessageRouter(): void {
         const entries = message.data?.log?.entries;
         if (!Array.isArray(entries)) {
           sendResponse({ success: false, error: 'Invalid HAR data' });
+          return false;
+        }
+        // 条数复核与界面那道闸门共用 `harEntriesOverLimit`：配置页先拒是为了省掉那次整包序列化，
+        // 这里再拒一次是因为消息体同属不可信输入——绕过界面不代表后台该照单全收。
+        const overflow = harEntriesOverLimit(entries);
+        if (overflow) {
+          sendResponse({ success: false, error: 'HAR_TOO_MANY_ENTRIES' });
           return false;
         }
         const rules = harEntriesToRules(entries);

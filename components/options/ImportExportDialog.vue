@@ -191,7 +191,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadFile } from 'element-plus';
 import type { HarImportPayload, ImportMode, ImportPlan, ImportResultStats, ProxyRule } from '@/utils/types';
 import { MessageType } from '@/utils/types';
-import { MAX_RULES } from '@/utils/constants';
+import { MAX_IMPORT_FILE_SIZE, MAX_RULES } from '@/utils/constants';
+import { harEntriesOverLimit } from '@/utils/har';
 import { parseCurlCommand } from '@/utils/curlParser';
 import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
@@ -333,8 +334,17 @@ function handleExport() {
  * 而界面上那一行已经是刚选的新文件名——上一次的内容还留在 `fileContent` 里等着被导入。
  * 用户以为自己换了文件，实际按下的是旧那一份，且没有任何地方说过这件事。
  * 失败时清空目标（回到「请选择文件或粘贴 JSON」的口径）并点名，绝不让旧内容冒充新文件。
+ *
+ * 体积闸门排在读之前（M-10）：整份文本随后要 `JSON.parse`、要过 cURL 分词、还要序列化进
+ * `sendMessage`，全在配置页主线程上同步跑（本机 node 22 实测：24MB 的 HAR 文本 parse 51ms、parse 后再序列化 88ms）。
+ * 超上限的文件几乎不可能是用户想导的那份配置，所以是「拒 + 说清楚」，不是「读进来再说」。
  */
 function readFileAsText(file: File, apply: (text: string) => void): void {
+  if (file.size > MAX_IMPORT_FILE_SIZE) {
+    apply('');
+    ElMessage.error(t('fileTooLarge', [formatBytes(file.size), formatBytes(MAX_IMPORT_FILE_SIZE)]));
+    return;
+  }
   const reader = new FileReader();
   reader.onload = e => apply(typeof e.target?.result === 'string' ? e.target.result : '');
   reader.onerror = () => {
@@ -342,6 +352,11 @@ function readFileAsText(file: File, apply: (text: string) => void): void {
     ElMessage.error(t('fileReadFailed'));
   };
   reader.readAsText(file);
+}
+
+/** 提示里点名体积用的极简格式化（只有这一处要它，MB 一位小数、KB 取整） */
+function formatBytes(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)}MB` : `${Math.round(bytes / 1024)}KB`;
 }
 
 function handleFileChange(file: UploadFile) {
@@ -466,6 +481,13 @@ async function handleImportHar() {
     const harData: HarImportPayload = JSON.parse(harFileContent.value);
     if (!harData.log || !Array.isArray(harData.log.entries)) {
       throw new Error('Invalid HAR format');
+    }
+    // 条数闸门排在发消息之前（M-10）：`MAX_RULES=200` 挡得住最终写入，挡不住这一次整包序列化
+    // + 后台整表遍历。判据与后台那道复核共用 `harEntriesOverLimit`，两边不会给出不同的答案。
+    const overflow = harEntriesOverLimit(harData.log.entries);
+    if (overflow) {
+      ElMessage.error(t('importHarTooManyEntries', [String(overflow.actual), String(overflow.limit)]));
+      return;
     }
     const result = (await chrome.runtime.sendMessage({
       type: MessageType.IMPORT_HAR,

@@ -342,6 +342,40 @@ describe('useRequestLog — 自动刷新那把表', () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(typesSent()).toHaveLength(1);
   });
+
+  /**
+   * 抽屉开合暂停/恢复那把表（M-8）
+   *
+   * 配置页能开上一整天，而抽屉里那张表是 `v-show` 藏起来不是卸载——不停表就是每 5s 为一张
+   * 看不见的表格整份回读日志（满表 500 条就是 MB 级的一次序列化）并重算派生表。与「关掉自动刷新」的**区别**
+   * 是开关本身原样留着：暂停是界面可见性决定的，不是用户改的主意，重新打开抽屉时它必须接着跑。
+   * 谁把 `pauseAutoRefresh` 写成 `toggleAutoRefresh(false)`，第二格（恢复后还要能打）当场红。
+   */
+  it('暂停不动开关、恢复接着跑：抽屉关着期间一笔也不打', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: [] });
+    const log = useRequestLog();
+    log.toggleAutoRefresh(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(typesSent()).toHaveLength(1);
+
+    log.pauseAutoRefresh();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(typesSent()).toHaveLength(1);
+    expect(log.autoRefresh.value).toBe(true);
+
+    log.resumeAutoRefresh();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(typesSent()).toHaveLength(2);
+  });
+
+  it('用户没开自动刷新时，恢复不许顺手把表起起来', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: [] });
+    const log = useRequestLog();
+    log.resumeAutoRefresh();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(typesSent()).toEqual([]);
+    expect(log.autoRefresh.value).toBe(false);
+  });
 });
 
 describe('useRequestLog — 网络层命中数的五种状态不许塌成两句', () => {

@@ -103,12 +103,28 @@ export function useRequestLog() {
     }
   }
 
-  /** 修改刷新频率；若自动刷新已开启则重启定时器使变更即时生效 */
+  /**
+   * 停表但记住用户的开关（日志抽屉关闭时调用）
+   *
+   * 抽屉里的表格是 `v-show` 藏起来而不是卸载，配置页又能开上一整天：不停表就是每 5s
+   * 为一张看不见的表格回读整份日志（满表 500 条就是 MB 级的一次序列化）并重算派生表（M-8）。
+   * `autoRefresh` 原样留着——暂停是界面可见性决定的，不是用户改的主意。
+   */
+  function pauseAutoRefresh() {
+    stopTimer();
+  }
+
+  /** 恢复可见性暂停掉的自动刷新；用户本来就没开则什么都不起 */
+  function resumeAutoRefresh() {
+    if (autoRefresh.value) startTimer();
+  }
+
+  /** 修改刷新频率；定时器**在跑**才重启它，让停/起表只由开关与可见性这两处决定 */
   function setRefreshInterval(intervalMs: number) {
     if (!REFRESH_INTERVAL_PRESETS.some(p => p.value === intervalMs)) return;
     refreshInterval.value = intervalMs;
     saveInterval(intervalMs);
-    if (autoRefresh.value) {
+    if (refreshTimer !== null) {
       startTimer();
     }
   }
@@ -162,6 +178,8 @@ export function useRequestLog() {
     fetchLogs,
     clearLogs,
     toggleAutoRefresh,
+    pauseAutoRefresh,
+    resumeAutoRefresh,
     setRefreshInterval,
     fetchDnrStats,
     fetchSwStats,

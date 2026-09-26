@@ -1,13 +1,17 @@
 /**
  * 存储门面自己记的两本内存账：互斥锁与配置／凭据缓存
  *
- * `utils/storage.ts` 是全仓唯一的 `chrome.storage.local` 出口，而它自己在内存里另记了两件事：
- * 一条把「读 → 改 → 写」串起来的 Promise 锁，和两份可复用对象（配置表、凭据变量表）。
- * 两本账都没有界面，坏了也不抛错，表现分别是：
+ * `utils/storage.ts` 是全仓唯一的 `chrome.storage.local` 出口，而它自己在内存里另记了三件事：
+ * 一条把「读 → 改 → 写」串起来的 Promise 锁，和三份可复用对象（配置表、凭据变量表、请求日志表）。
+ * 三本账都没有界面，坏了也不抛错，表现分别是：
  * - **锁失效**：两次并发写各自读到旧快照，后写的整份盖掉先写的。用户看到「加了两条规则、
  *   列表里只有一条」，而 `addRule` 两次都正常返回，日志里一个字都没有。
  * - **缓存不失效**：另一个上下文（options 页、popup）改完 storage，本上下文还拿旧对象判断与写回，
  *   于是把别人刚写的整份覆盖回去；SW 被回收后它又「自己好了」，是最难复现的一类。
+ *
+ * 日志表那份的失效判据与前两份**刻意不同**（Chrome 的 `storage.onChanged` 在发起写入的上下文自己
+ * 也会触发，照抄前两份等于每刷一次日志就把缓存打回「下一次整份读盘」），下面那组用例把差异钉在
+ * 「自己写的不作废、别人改的要作废」这两格上，理由写在 `utils/storage.ts` 的 `cachedLogs` 上。
  *
  * 用到本模块的测试文件有一把：5 支直接 `vi.mock` 换掉它（其中 `badgeManager` 经 `importOriginal`
  * 只替掉 `getProxyConfig`），其余虽走真实现，测的也只是自己那条业务（新增上限、导入模式、
@@ -22,7 +26,7 @@
  * 失败回灌与总量预算）、恢复点的三份失败面（`configHistory`）、`importProxyConfig` 的两种模式
  * （`importConfig` / `importPlan`）、批量启停的落点与「只写一次」（`batchToggle`）、拖拽排序的
  * 顺序与「补到末尾」兜底（`reorderRules`）。
- * 本文件管锁、两份缓存，以及三个键在取值侧的形状收口。
+ * 本文件管锁、三份缓存（配置 / 凭据表 / 日志表），以及三个键在取值侧的形状收口。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProxyConfig, ProxyRule, RequestLogEntry } from '@/utils/types';
@@ -75,18 +79,23 @@ vi.stubGlobal('chrome', {
 });
 
 const {
+  addRequestLog,
   addRule,
   batchAddRules,
+  clearRequestLogs,
   configRules,
   deleteRule,
+  flushLogs,
   getProfiles,
   getProxyConfig,
   getRequestLogs,
   getVariables,
   invalidateConfigCache,
+  invalidateLogsCache,
   replaceProxyConfig,
   saveProfile,
   saveProxyConfig,
+  saveRequestLogs,
   saveVariables,
   toggleProxy,
   toggleRule,
@@ -136,6 +145,7 @@ beforeEach(() => {
   getSpy.mockClear();
   setSpy.mockClear();
   invalidateConfigCache();
+  invalidateLogsCache();
   // `getProxyConfig()` 在键缺失时交出的是 `DEFAULT_PROXY_CONFIG` 那个常量本身，就地改会写脏它，
   // 而模块常量在这支文件的用例之间不会自动复位。这条守卫让「谁写脏了常量」当场红，
   // 而不是让后面那条「缺键回落」用例为一个已经被改过的默认值保持绿色。
@@ -371,6 +381,9 @@ describe('日志表与 profile 表：非数组当空', () => {
     store[STORAGE_KEYS.REQUEST_LOGS] = 'oops';
     expect(await getRequestLogs()).toEqual([]);
 
+    // 这一次收口发生在**读盘**那一刻，而第二次读命中上一轮留下的缓存——两格之间必须冷启动一次，
+    // 否则这里断的其实是「上一次读过」，对象那一格永远测不到（字符串那格侥幸：它也走同一份缓存）。
+    invalidateLogsCache();
     store[STORAGE_KEYS.REQUEST_LOGS] = { 0: { id: 'x' } };
     expect(await getRequestLogs()).toEqual([]);
   });
@@ -439,5 +452,117 @@ describe('凭据表缓存：与配置同一套失效判据', () => {
     store[STORAGE_KEYS.VARIABLES] = 'not-a-table';
 
     expect(await getVariables()).toEqual({});
+  });
+});
+
+/**
+ * 日志表缓存：刷写不再整份回读（M-9）
+ *
+ * 一次刷写的代价是「整份读回来 + 整份写出去」——满表形状（500 条、正文与响应各 2KB、序列化后
+ * 2.12MB）在本机 node 22 量到 parse 3.7ms + stringify 3.6ms，而代理开足马力时它每 1s 就来一次。
+ * 这份缓存把前半段省掉，代价是**它自己成了那张表的读数来源**，
+ * 于是失效判据必须逐格钉住——尤其是这两件相反的事：
+ * - 自己刚写的那一笔**不许**作废缓存：Chrome 的 `storage.onChanged` 在发起写入的同一个上下文也会触发，
+ *   照抄配置缓存那套「见事件即作废」等于每刷一次就把缓存打回原形，优化的同时把它自己杀光；
+ * - 别人改的（`remove`、`storage.local.clear()`、devtools 手改）必须作废，否则下一次「读→合→写」
+ *   会把内存里这份 storage 中不存在的表当真相写回去。
+ * 认出「自己那一笔」靠的是条数 + 最新一条 id 的身份比对（`utils/storage.ts` 的 `logsIdentity`）。
+ */
+describe('日志表缓存：只挡不是自己写的那一笔', () => {
+  function log(id: string): RequestLogEntry {
+    return {
+      id,
+      timestamp: 1,
+      ruleId: 'r1',
+      ruleName: 'rule',
+      originalUrl: 'https://a.example.com/x',
+      proxiedUrl: 'https://b.example.com/x',
+      method: 'GET',
+      proxyType: 'sw',
+    };
+  }
+
+  it('第二次读命中缓存，不再回读整份表', async () => {
+    store[STORAGE_KEYS.REQUEST_LOGS] = [log('a')];
+    expect(await getRequestLogs()).toHaveLength(1);
+
+    getSpy.mockClear();
+    expect(await getRequestLogs()).toHaveLength(1);
+    expect(getSpy).not.toHaveBeenCalled();
+  });
+
+  it('自己写成功的那一笔不作废缓存（事件自触发是 Chrome 的真实行为）', async () => {
+    await saveRequestLogs([log('a'), log('b')]);
+    // 与真实浏览器一致地补一发事件：`newValue` 是刚写进去那份的反序列化副本
+    fireChange(STORAGE_KEYS.REQUEST_LOGS, clone(store[STORAGE_KEYS.REQUEST_LOGS]));
+    getSpy.mockClear();
+
+    expect(await getRequestLogs()).toHaveLength(2);
+    expect(getSpy).not.toHaveBeenCalled();
+  });
+
+  it('别人改了这张表就作废：下一次读回到盘上那份', async () => {
+    await saveRequestLogs([log('a')]);
+    store[STORAGE_KEYS.REQUEST_LOGS] = [log('x'), log('y'), log('z')];
+    fireChange(STORAGE_KEYS.REQUEST_LOGS, store[STORAGE_KEYS.REQUEST_LOGS]);
+
+    expect((await getRequestLogs()).map(l => l.id)).toEqual(['x', 'y', 'z']);
+  });
+
+  it('键被整个移除（`clear()` / devtools 手删）时同样作废，不把缓存里那份当成盘上有的', async () => {
+    await saveRequestLogs([log('a')]);
+    delete store[STORAGE_KEYS.REQUEST_LOGS];
+    fireChange(STORAGE_KEYS.REQUEST_LOGS, undefined);
+
+    expect(await getRequestLogs()).toEqual([]);
+  });
+
+  it('本模块还没写过：读回来的表遇到外部删键照样作废（两个 `null` 相等不算「自己写的」）', async () => {
+    // 身份比对里「还没写过」也是 `null`，删键事件的 `newValue` 同样是 `null` —— 只比 `incoming !== last`
+    // 就把这一对判成回声，缓存于是继续供出一份盘上已经没有的表，下一次刷写还把它整份写回去。
+    store[STORAGE_KEYS.REQUEST_LOGS] = [log('a'), log('b')];
+    expect(await getRequestLogs()).toHaveLength(2); // 这一份是读回来的，不是自己写的
+    getSpy.mockClear();
+
+    delete store[STORAGE_KEYS.REQUEST_LOGS];
+    fireChange(STORAGE_KEYS.REQUEST_LOGS, undefined);
+
+    expect(await getRequestLogs()).toEqual([]);
+    expect(getSpy, '不作废就不会回读，缓存里那两条仍然是「当前答案」').toHaveBeenCalled();
+  });
+
+  it('写失败不留一份 storage 里不存在的表在内存里', async () => {
+    await saveRequestLogs([log('a')]);
+    failNextSet = 'Quota exceeded';
+    await expect(saveRequestLogs([log('a'), log('b')])).rejects.toThrow();
+    // 盘上仍是上一份单条表
+    expect((store[STORAGE_KEYS.REQUEST_LOGS] as RequestLogEntry[]).map(l => l.id)).toEqual(['a']);
+
+    // 作废之后下一次读回到盘上那份，而不是内存里这份「两条」
+    expect((await getRequestLogs()).map(l => l.id)).toEqual(['a']);
+  });
+
+  it('刷写合出的是新数组：缓存那张表不被就地改，失败的这一笔不会污染下一次读', async () => {
+    await saveRequestLogs([log('old')]);
+    const before = await getRequestLogs();
+
+    await addRequestLog(log('new'));
+    await flushLogs();
+
+    expect(before).toHaveLength(1);
+    expect((await getRequestLogs()).map(l => l.id)).toEqual(['new', 'old']);
+    expect(store[STORAGE_KEYS.REQUEST_LOGS]).toHaveLength(2);
+  });
+
+  it('清空走同一个写入口：清完立刻读不到旧日志，下一次刷写也不会让它们复活', async () => {
+    await saveRequestLogs([log('a'), log('b')]);
+    await clearRequestLogs();
+
+    expect(store[STORAGE_KEYS.REQUEST_LOGS]).toEqual([]);
+    expect(await getRequestLogs()).toEqual([]);
+
+    await addRequestLog(log('c'));
+    await flushLogs();
+    expect((await getRequestLogs()).map(l => l.id)).toEqual(['c']);
   });
 });

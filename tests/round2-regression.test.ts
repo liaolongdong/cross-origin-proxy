@@ -194,7 +194,7 @@ describe('getProxyStatus — swRequestCount（原 todayRequestCount：只覆盖 
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// flushLogs — 串行化（修复：并发刷写互相覆盖丢日志）
+// flushLogs — 串行化（修复：并发刷写互相覆盖丢日志）与刷写节奏（M-9：阈值、在途合并）
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('flushLogs — 并发刷写不丢日志', () => {
@@ -278,6 +278,71 @@ describe('flushLogs — 并发刷写不丢日志', () => {
 
     const logs = await getRequestLogs();
     expect(logs.map(l => l.id).sort()).toEqual(['x1', 'x2', 'x3']);
+  });
+
+  /**
+   * 阈值从 10 抬到 20（M-9）
+   *
+   * 一笔刷写的代价是整份表的序列化，条数只决定「刷几次」——突发流量的成本是「写放大 × 整包」，
+   * 阈值翻倍就把它砍掉一半。日志可见延迟本来就由那条 1s 防抖定调（不是由条数定调）。
+   * 这一条钉的是「19 条绝不落盘、第 20 条立刻落一次」两格：只改回 10 会让第一格红，
+   * 把阈值判断整个摘掉（只靠防抖）会让第二格红。
+   */
+  it('攒够 20 条才立即刷写；19 条只交给 1s 防抖', async () => {
+    store['request_logs'] = [];
+    const { addRequestLog, getRequestLogs } = await import('@/utils/storage');
+    const setMock = vi.mocked(chrome.storage.local.set);
+    const now = Date.now();
+
+    for (let i = 0; i < 19; i++) {
+      await addRequestLog(logEntry(`t${i}`, now + i));
+    }
+    // 假定时器不走时间：防抖那一次还没到，整程一次写盘都不该发生
+    expect(setMock).not.toHaveBeenCalled();
+
+    await addRequestLog(logEntry('t19', now + 19));
+    await vi.advanceTimersByTimeAsync(0); // 只排空微任务，不越过 1s 的防抖
+
+    expect(setMock).toHaveBeenCalledTimes(1);
+    const ids = (await getRequestLogs()).map(l => l.id);
+    expect(ids).toHaveLength(20);
+    // 头部是最新：倒着接进去的那一批，最后一条才是刚发生的请求
+    expect(ids[0]).toBe('t19');
+  });
+
+  /**
+   * 刷写在途时入缓冲的那一条，由同一轮的收尾捞走（M-9 的合并）
+   *
+   * 一次刷写的 `await` 期间页面照样在发请求，那些日志不进已取走的快照。改动前它们靠「下一次
+   * `flushLogs()` 再排一轮」落盘——突发 100 条就是 10 轮整包写排队。现在队列里只允许有一轮，
+   * 于是这一条同时钉两件事：合并后**没有漏**（在途那条照样落盘），也**没有多**（只写两轮，不是三轮）。
+   * `set` 被挂住是为了把「第一轮正在写」这个瞬间钉住，不靠微任务计数碰运气。
+   */
+  it('刷写在途入缓冲的日志被同一轮补跑捞走，且不追加排队', async () => {
+    store['request_logs'] = [];
+    const { addRequestLog, flushLogs, getRequestLogs } = await import('@/utils/storage');
+    const setMock = vi.mocked(chrome.storage.local.set);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    setMock.mockImplementation(async (items: Record<string, unknown>) => {
+      await gate;
+      Object.assign(store, items);
+    });
+
+    await addRequestLog(logEntry('in1', Date.now()));
+    const p1 = flushLogs();
+    await vi.advanceTimersByTimeAsync(0); // 让第一轮跑到 `set` 里被挂住
+
+    await addRequestLog(logEntry('in2', Date.now() + 1));
+    const p2 = flushLogs();
+    release();
+    await Promise.all([p1, p2]);
+
+    expect((await getRequestLogs()).map(l => l.id)).toEqual(['in2', 'in1']);
+    // 两轮：第一轮带走在途之前那条，收尾补跑带走在途那条；排队的第三轮不该存在
+    expect(setMock).toHaveBeenCalledTimes(2);
   });
 });
 

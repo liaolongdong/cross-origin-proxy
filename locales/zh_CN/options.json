@@ -191,6 +191,8 @@
   "importHarFailed": "HAR 导入失败",
   "importHarInvalid": "无效的 HAR 文件",
   "fileReadFailed": "文件读取失败，请重新选择",
+  "fileTooLarge": "文件 $1 超过 $2 上限，请先裁剪后再导入",
+  "importHarTooManyEntries": "HAR 共 $1 条请求，超过单次导入 $2 条的上限，请先裁剪后再导入",
   "enabled": "启用",
   "logDetail": "请求详情",
   "copyAsCurl": "复制为 cURL",
