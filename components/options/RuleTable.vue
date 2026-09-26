@@ -861,13 +861,17 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   gap: 3px;
 }
 
+/* 徽章里的字母按本仓库那条「可见文字不低于 11px」的地线走（评审 L-15，其余 18 处小字都是 11px）。
+   宽度用 `min-width` 而不是 `width`：单字母时算出来的盒子与原来一模一样（11px 700 字重的
+   大写「H」约 8px，小于 18px 的下限），但哪一天某个字母在回退字体里宽过盒子，它会长大而不是
+   把字挤出去——固定宽度配居中的 flex，溢出是两像素一边地压到邻格上，看不出来也修不回来。 */
 .rule-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
+  min-width: 18px;
   height: 18px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   border-radius: 4px;
@@ -914,10 +918,11 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   background: var(--cop-badge-amber-bg);
 }
 
-/* 与 M 同色系：两者如今不会同屏出现（WS 规则不再画 M 那七枚），字母也各不一样 */
+/* 与 M 同色系：两者如今不会同屏出现（WS 规则不再画 M 那七枚），字母也各不一样。
+   两个字母按 11px 排出来约 17px，所以这一枚的下限比单字母那几枚宽 2px（17 + 2 × 1.5px 留白），
+   仍然是 `min-width`：中文字体回退下真变宽了，它自己长大。 */
 .rule-badge--ws {
-  width: 20px;
-  font-size: 8px;
+  min-width: 20px;
   color: var(--cop-badge-violet);
   background: var(--cop-badge-violet-bg);
 }
@@ -959,6 +964,9 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   color: var(--el-text-color-placeholder, #c0c4cc);
 }
 
+/* 「!」这颗按 11px 排（L-15 那条地线）：16px 圆里放一个约 4px 宽的感叹号，字号抬一档不会顶到边。
+   它的 `color: #fff` 是 designTokens 守卫里点名记着的那处例外（琥珀底配白字约 2.1:1），
+   本轮只动字号，不动颜色。 */
 .shadowed-indicator {
   display: inline-flex;
   flex-shrink: 0;
@@ -966,7 +974,7 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: #fff;
   cursor: help;
@@ -981,7 +989,7 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   align-items: center;
   height: 18px;
   padding: 0 5px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   color: var(--el-color-danger, #f56c6c);

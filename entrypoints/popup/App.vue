@@ -1048,9 +1048,13 @@ async function openOptionsPage(hash = '') {
   color: var(--cop-text-color-secondary);
 }
 
+/* 注释行抬到 11px（与 `.metric-label` 同一档，L-15）：这一格的中文最长那句是九个字，
+   10px 时刚好排在第三列那一行里，11px 会换行成两行——这是有意的取舍，
+   「读得清」优先于「少一行」，且换行只发生在带注释的那一档状态（采样过期 / 无网络层规则）。
+   `max-width` 保留：第三列的可用宽度由 `flex: 1` 定，这个上限只是防长词。 */
 .metric-note {
   max-width: 100px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.3;
   color: var(--cop-text-color-secondary);
 }
@@ -1082,10 +1086,12 @@ async function openOptionsPage(hash = '') {
   animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
+/* 「页面自报」这枚小标签按 11px 排（与它右边那句话同档，L-15）：它自己是 `flex: none` 的整块，
+   换行只会发生在右侧那句话上（它有 `min-width: 0`），所以抬字号不会把标签挤掉。 */
 .interceptor-chip {
   flex: none;
   padding: 0 4px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 16px;
   color: var(--cop-text-color-secondary);
   background: var(--cop-bg-color-tertiary);

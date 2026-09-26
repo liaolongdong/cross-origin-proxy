@@ -28,6 +28,13 @@ const definedTokens = new Set(
   [...readFileSync(TOKENS_FILE, 'utf-8').matchAll(/(--cop-[a-z0-9-]+)\s*:/g)].map(m => m[1]),
 );
 
+/**
+ * 去注释但**保持长度与换行位置不变**：直接 `replace(..., '')` 会让剥完的文本算出的行号与真实
+ * 行号错位（报出来的 `file:12` 指不到那一行），而更要紧的是它让逐行扫描看不见注释与被注释掉的
+ * 声明之间的差别——`transition: all` 那条守卫就是把历史写法留在注释里点名，靠这个性质排除。
+ */
+const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
+
 describe('令牌引用必须能在 tokens.css 里找到定义', () => {
   it('tokens.css 自身定义了整套 --cop-* 令牌', () => {
     // 数量级守卫：误删整个语义层时，下面的逐文件比对会因为「引用恰好为 0」而假通过
@@ -272,12 +279,6 @@ describe('a11y：扩展内 UI 尊重系统的减少动效偏好', () => {
  * 面板尺寸一变就滑出一段并不存在的动画，而这句「哪里怪怪的」极难归因到一行声明上。
  */
 describe('动效层：关键帧有名、过渡有清单、不用 all', () => {
-  /**
-   * 去注释但**保持长度与换行位置不变**：上一版直接 `replace(..., '')`，于是拿剥完的文本
-   * 算行号会与真实行号错位（报出来的 `file:12` 指不到那一行），而更要紧的是它让下面的
-   * 逐行扫描看不见注释与被注释掉的声明之间的差别。
-   */
-  const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
   /** 按「括号外的逗号」切分多组动画取值（`cubic-bezier(0.16, 1, 0.3, 1)` 里的逗号不算分隔符）。 */
   const splitTopLevel = (decl: string): string[] => {
     const groups: string[] = [];
@@ -676,5 +677,49 @@ describe('on-primary 通道：暗色实底上的字要读得出来', () => {
     }
     expect(min).toBeLessThan(3.5); // 前提自检：真过了 3.5 就说明这条注释过期了
     expect(min).toBeGreaterThanOrEqual(2.4);
+  });
+});
+
+/**
+ * 扩展内字号不得低于 11px（评审 L-15）。
+ *
+ * 11px 是这套界面在 320px 弹窗与 `el-table` 密度下「还读得清」的下沿，仓库其余字号全部站在
+ * 它上面。此前漏在下面的是六处：`RuleTable` 的规则徽章（8px 的 `WS` 认不出字母）、遮蔽标记与
+ * 「未生效」标记，popup 的指标注释行与「页面自报」标签（中文九个字在 10px 下笔画粘连）。
+ * 这类缺陷只有把字放大的人会发现——写的时候数的是「今天这块塞得下」，所以它一直活到这一轮。
+ *
+ * 按**整条声明**扫而不是按行：prettier 会把折行的值合成一行，而逐行匹配时属性名与值可能分处
+ * 两行（同文件 `transition: all` 那条守卫踩过这个坑）。非 px 字面量（`em` / `%` / `var()`）
+ * 今天在这些目录里为零，下面的数量守卫会把「解析失效」和「恰好没有」区分开。
+ */
+describe('字号下沿：扩展内不存在小于 11px 的 font-size', () => {
+  const FLOOR = 11;
+  const sites: { file: string; px: number; decl: string }[] = [];
+  let nonPx = 0;
+  for (const file of files) {
+    const src = stripComments(readFileSync(file, 'utf-8'));
+    for (const match of src.matchAll(/(?<![\w-])font-size\s*:\s*([^;{}]+)/g)) {
+      const decl = match[1].trim().replace(/\s+/g, ' ');
+      const px = /^(\d+(?:\.\d+)?)px$/.exec(decl);
+      if (!px) {
+        nonPx += 1;
+        continue;
+      }
+      sites.push({ file, px: Number(px[1]), decl });
+    }
+  }
+
+  it('确实读到了一批 px 字号（解析失效必须红，不能假通过）', () => {
+    expect(sites.length).toBeGreaterThanOrEqual(100);
+    expect(nonPx).toBe(0);
+  });
+
+  it('每一处都在下沿之上，且下沿本身被用到了（不是「全仓根本没有小字」）', () => {
+    const offenders = sites
+      .filter(s => s.px < FLOOR)
+      .map(s => `${s.file}: font-size: ${s.decl}`)
+      .sort();
+    expect(offenders).toEqual([]);
+    expect(sites.some(s => s.px === FLOOR)).toBe(true);
   });
 });
