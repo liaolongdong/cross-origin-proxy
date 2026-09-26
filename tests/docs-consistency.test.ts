@@ -1162,9 +1162,11 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     /**
      * 「弹窗真实宽度」在 AGENTS.md 里是三个数（内容宽 / 渲染宽 / 真机视口），此前只写了
      * 一个 352px，于是「CSS 里明明是 320px」看着就像文档过期。三个数其实彼此推得出来，
-     * 前提有三条：`width`、`padding` 各是多少，以及**没有全局 `box-sizing: border-box`**
-     * （仓库与 Element Plus 都只有按组件各自声明的那 117 处）。这里把算式与文档对账——
-     * 改任一头的数，另一头不跟着改就红。
+     * 前提有三条：`width`、`padding` 各是多少，以及**没有全局 `box-sizing: border-box`**——
+     * 扩展自己的 CSS 一条 `box-sizing` 都不写（下面那条逐文件断言钉住），Element Plus 只在
+     * 各组件自己的规则里逐条声明（`element-plus/theme-chalk/base.css` 里连一个全局重置都没有，
+     * 那份 117 处数的是它的整包 `dist/index.css`，本仓库按需引入、根本不加载整包）。
+     * 这里把算式与文档对账——改任一头的数，另一头不跟着改就红。
      */
     it('AGENTS.md 里那三个弹窗宽度彼此推得出来，不是三条独立断言', () => {
       const css = read('entrypoints/popup/App.vue');
@@ -1176,6 +1178,15 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(block, '本条成立的前提是 content-box；给这一格加 border-box 要连文档一起改').not.toMatch(
         /box-sizing:\s*border-box/,
       );
+      /**
+       * 只查 `.popup-container` 那一格是**不够**的：弹窗加载的是 `tokens.css` 整份，
+       * 那里若出现 `* { box-sizing: border-box }`，渲染宽就从 352 变回 320，而这一格
+       * 一个字都没改——三个数的算式当场失效，且界面上没有任何东西会说这件事。
+       * 所以按「popup 实际加载的那几份样式里根本不存在 box-sizing」逐文件过一遍。
+       */
+      for (const file of ['entrypoints/popup/index.html', 'entrypoints/popup/App.vue', 'assets/theme/tokens.css']) {
+        expect(read(file), `${file} 里出现了 box-sizing 声明，content-box 这个前提不再成立`).not.toMatch(/box-sizing/);
+      }
       // 真机视口再多 8px×2：popup 没有重置 body 默认边距（`entrypoints/popup/index.html` 里无 style）
       const rendered = width + padding * 2;
       const viewport = rendered + 16;
