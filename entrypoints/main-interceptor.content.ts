@@ -532,6 +532,22 @@ export default defineContentScript({
 
     const originalFetch = window.fetch;
 
+    /**
+     * 可以按文本跨 postMessage 转发的 body 类型
+     *
+     * `Request#text()` 是**不可逆**的 UTF-8 解码：multipart（上传文件）、octet-stream、图片这类
+     * body 被解码成字符串后连同原 `content-type` 交给后台代发，边界与二进制字节一起坏掉，
+     * 而 <10MB 连体积闸门都不触发——页面拿到 200、内容却是错的，这种静默损坏比「这一笔没走代理」
+     * 糟糕得多。因此只放行文本语义的类型：`multipart/form-data` 虽然本身是文本协议，但它的
+     * **分段内容**是二进制，必须留在白名单外。类型缺失或不认识同样不放行（宁可回退原生）。
+     *
+     * 判据取的是 **Request 自己**的 `content-type`——它是构造时由 body 的那堆字节决定的，
+     * 描述的正是「要解码的那部分内容」。`init.headers` 覆盖不改这个判断：页面把二进制 body 的
+     * 头写成 `application/json` 时，走原生也一样发不出可用的请求体，没必要由我们替它解码。
+     */
+    const TEXT_BODY_CONTENT_TYPE =
+      /^(?:text\/|application\/x-www-form-urlencoded|application\/json|application\/[a-z0-9.+-]*\+(?:json|xml))/i;
+
     window.fetch = async function patchedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       const request = input instanceof Request ? input : null;
       const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -560,13 +576,18 @@ export default defineContentScript({
         const headers = init?.headers ?? request?.headers;
         let body: unknown = init?.body;
         if (body === undefined && request && method !== 'GET' && method !== 'HEAD') {
-          body = await request.clone().text();
+          // 只有文本语义的 body 才允许被 `Request#text()` 取走（不可逆解码，见上面的白名单）。
+          // 其余类型把 Request 本身交给下面那条「非字符串 body」判据：阻断规则照样抛错，
+          // 非阻断规则回退原生——这一笔不走代理，但内容不会被改坏。
+          const bodyType = request.headers.get('content-type');
+          body = bodyType && TEXT_BODY_CONTENT_TYPE.test(bodyType) ? await request.clone().text() : request;
         }
         if (body instanceof URLSearchParams) {
           body = body.toString();
         }
-        // 非字符串 body（FormData / Blob / ArrayBuffer 等）无法跨 postMessage 序列化，
-        // 回退到原生 fetch，避免静默丢失请求体；但阻断规则不得回退，否则请求会实际发出
+        // 非字符串 body（FormData / Blob / ArrayBuffer，以及上面那些不能安全解码的 Request）
+        // 无法跨 postMessage 序列化，回退到原生 fetch，避免静默丢失请求体；
+        // 但阻断规则不得回退，否则请求会实际发出
         if (body !== undefined && body !== null && typeof body !== 'string') {
           if (rule.blocked) {
             throw new TypeError('Failed to fetch', { cause: new Error('Request blocked by proxy rule') });
@@ -604,7 +625,54 @@ export default defineContentScript({
     // 同步 XHR 回退只提示一次：这类请求常出现在循环里，逐条 warn 会淹掉控制台
     let warnedSyncXhr = false;
 
+    /**
+     * 代理响应会往实例上盖的那批 own 属性（`open()` 复用实例时逐一摘掉）
+     *
+     * 只列我们自己写过的：`status` 一类是 `defineProperty` 的数据属性，
+     * `getAllResponseHeaders` / `getResponseHeader` 是盖在实例上的方法，删掉之后原型的
+     * 只读访问器重新可见，页面读到的才是这一笔的真实结果。
+     */
+    const PROXY_RESPONSE_PROPS = [
+      'readyState',
+      'status',
+      'statusText',
+      'response',
+      'responseURL',
+      'responseText',
+      'getAllResponseHeaders',
+      'getResponseHeader',
+    ] as const;
+
+    /**
+     * 把上一笔代理结果从实例上摘干净
+     *
+     * 可达序列：第一笔走代理 → 关掉代理总开关 → 同一实例 `open()/send()` 走原生。原生确实
+     * 更新了实例，但页面读 `status`/`response` 命中的是我们盖上去的 own 属性，于是读到**上一笔**
+     * 的响应，`getAllResponseHeaders()` 恒返回旧串——比报错更难查。旗标保证只回收自己写的东西，
+     * 页面自己赋在实例上的值不动。
+     */
+    function clearProxyResponseSurface(xhr: XMLHttpRequest): void {
+      if (!(xhr as any).__proxyApplied) return;
+      (xhr as any).__proxyApplied = false;
+      for (const prop of PROXY_RESPONSE_PROPS) delete (xhr as any)[prop];
+    }
+
+    /** 取消页面 `xhr.timeout` 对应的定时器（幂等：句柄取用后即清，重复调用无副作用） */
+    function clearProxyXhrTimeout(xhr: XMLHttpRequest): void {
+      const timerId: ReturnType<typeof setTimeout> | undefined = (xhr as any).__proxyTimeoutId;
+      if (timerId === undefined) return;
+      (xhr as any).__proxyTimeoutId = undefined;
+      clearTimeout(timerId);
+    }
+
     XMLHttpRequest.prototype.open = function (method: string, url: string | URL, ...rest: any[]) {
+      // 实例会被复用（open → send → open → send）：三样脏状态逐一复位。
+      // ① 上一笔的 timeout 定时器——不掐掉的话它会在**这一笔**在途时到期，给新的请求派发
+      //    timeout、按上一笔的 id 发 CANCEL_REQUEST、并把 status 覆成 0（提前掐死在途请求）；
+      // ② 上一笔代理结果盖上去的 own 属性（见 `clearProxyResponseSurface`）；
+      // ③ 上一笔的 requestId / 取消与落定旗标（原有语义，保持在前）。
+      clearProxyXhrTimeout(this);
+      clearProxyResponseSurface(this);
       (this as any).__proxyMethod = method;
       (this as any).__proxyUrl = typeof url === 'string' ? url : url.href;
       (this as any).__proxyHeaders = {};
@@ -634,6 +702,7 @@ export default defineContentScript({
     XMLHttpRequest.prototype.abort = function (...args: any[]) {
       // 标记取消：迟到的代理响应不再写回该实例（否则会在 abort 后错误派发 load 事件）
       (this as any).__proxyCancel = true;
+      clearProxyXhrTimeout(this);
       cancelProxiedXhr(this);
       return originalXHRAbort.apply(this, args as any);
     };
@@ -682,6 +751,7 @@ export default defineContentScript({
             // eslint-disable-next-line @typescript-eslint/no-this-alias
             const xhr = this;
             setTimeout(() => {
+              (xhr as any).__proxyApplied = true;
               Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
               Object.defineProperty(xhr, 'status', { value: 0, writable: true, configurable: true });
               Object.defineProperty(xhr, 'statusText', { value: '', writable: true, configurable: true });
@@ -700,11 +770,15 @@ export default defineContentScript({
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         const xhr = this;
 
-        // 尊重页面设置的 xhr.timeout：到期派发 timeout 事件，此后迟到的响应一律丢弃
+        // 尊重页面设置的 xhr.timeout：到期派发 timeout 事件，此后迟到的响应一律丢弃。
+        // 句柄必须存在实例上供 `open()`/`abort()` 掐掉——复用实例时旧定时器会把**新一笔**
+        // 在途的请求按上一笔的落定处理掉（派发 timeout、发 CANCEL_REQUEST、status 覆 0）。
         if (xhr.timeout > 0) {
-          setTimeout(() => {
+          (xhr as any).__proxyTimeoutId = setTimeout(() => {
+            (xhr as any).__proxyTimeoutId = undefined;
             if ((xhr as any).__proxyCancel || (xhr as any).__proxySettled) return;
             (xhr as any).__proxyCancel = true;
+            (xhr as any).__proxyApplied = true;
             cancelProxiedXhr(xhr);
             Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
             Object.defineProperty(xhr, 'status', { value: 0, writable: true, configurable: true });
@@ -723,6 +797,8 @@ export default defineContentScript({
             // 已被 abort/timeout 的实例：迟到的响应一律丢弃
             if ((xhr as any).__proxyCancel) return;
             (xhr as any).__proxySettled = true;
+            // 已经落定，页面那个 timeout 定时器不再需要替谁说话（回收闭包与句柄，复用实例时也不误伤）
+            clearProxyXhrTimeout(xhr);
             // Honor responseType: '', text, json, blob, arraybuffer
             let responseValue: any;
             let responseTextValue: string | undefined;
@@ -757,7 +833,9 @@ export default defineContentScript({
             });
             const rawHeaders = headerLines.join('\r\n');
 
-            // Set readonly XHR properties（configurable 不可省：实例复用时要第二遍回填）
+            // Set readonly XHR properties（configurable 不可省：实例复用时要第二遍回填，
+            // 且 `open()` 回收上一笔结果靠的就是这批属性能被 delete）
+            (xhr as any).__proxyApplied = true;
             Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
             Object.defineProperty(xhr, 'status', {
               value: response.status,
@@ -794,7 +872,9 @@ export default defineContentScript({
           .catch(error => {
             if ((xhr as any).__proxyCancel) return;
             (xhr as any).__proxySettled = true;
+            clearProxyXhrTimeout(xhr);
             console.warn('[CrossOriginProxy] XHR proxy failed, dispatching error:', error);
+            (xhr as any).__proxyApplied = true;
             Object.defineProperty(xhr, 'readyState', { value: 4, writable: true, configurable: true });
             Object.defineProperty(xhr, 'status', { value: 0, writable: true, configurable: true });
             Object.defineProperty(xhr, 'statusText', { value: 'Proxy Error', writable: true, configurable: true });

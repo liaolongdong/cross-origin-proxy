@@ -24,8 +24,7 @@
  * 握手与帧语义本身仍然只有源码契约（`wsCapabilitySurface`），刻意没补。
  *
  * 同为 fetch 通道、这里刻意没碰的分支（要加先想清楚该不该由运行时用例守）：
- * `input` 是 `Request` 对象的那一半（`request?.method/signal/headers` 回退、`request.clone().text()`
- * 读体）、`new URL` 解析失败按原值匹配、`prefix` / `regex` 两种 `matchType`、单条规则 `enabled: false`、
+ * `new URL` 解析失败按原值匹配、`prefix` / `regex` 两种 `matchType`、单条规则 `enabled: false`、
  * `normalizePriority` 的非有限值回落、以及 `PROXY_RESPONSE` 带着无人认领的 `requestId` 进来时的空操作。
  * 假 `postMessage` 按引用记录载荷、不做结构化克隆——跨界的都是纯数据，没有克隆不上的东西，
  * 代价是「载荷能不能过 postMessage」这件事本身不在这里验证。
@@ -325,6 +324,86 @@ describe('代发载荷', () => {
     expect(proxiedRequests()).toEqual([]);
 
     expect(await (await pending).text()).toBe('NATIVE');
+  });
+});
+
+/**
+ * `input` 是 `Request` 对象的那一半（2026-09-26 评审轮 M-3：从「刻意没测」升级为运行时用例）
+ *
+ * 旧实现无条件 `request.clone().text()`。那是**不可逆**的 UTF-8 解码：multipart（上传文件）、
+ * octet-stream 这类 body 被解成字符串后，连同原 `content-type` 交给后台代发——边界与二进制字节
+ * 一起坏掉，而 <10MB 连体积闸门都不触发。页面拿到的是一个 200 和一份错数据，比「这一笔没走代理」
+ * 难查得多。现在只放行文本语义的类型，其余按「非字符串 body」同一件事处理：回退原生；
+ * 阻断规则照样抛错（回退等于把被阻断的请求真的发出去）。
+ *
+ * 夹具用 Node 真实的 `Request` / `FormData` / `Blob`，不造假：断言的都是**类型前缀**，两引擎一致。
+ * 唯一分歧是「Blob 不给 type 时有没有默认 content-type」（undici 不给、Chrome 给 `text/plain`），
+ * 那一格恰好落在判据的保守侧（读不出类型就不代发），刻意不钉，免得用例与引擎实现绑死。
+ */
+describe('input 是 Request 对象：只有文本语义的 body 才允许被解码代发', () => {
+  it('显式 JSON 与纯字符串的 Request body 照常代发，取到的是解码后的字符串', async () => {
+    armProxy([rule()]);
+
+    send(
+      new Request(API_URL, {
+        method: 'POST',
+        body: '{"q":1}',
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    // 解码 body 要等一个 microtask（`Request#text()` 本来就是异步的），所以这一格先看落定之后
+    await settle();
+    expect(lastRequest()?.body).toBe('{"q":1}');
+
+    send(new Request(API_URL, { method: 'POST', body: 'hello' }));
+    await settle();
+    expect(proxiedRequests().map(payload => payload.body)).toEqual(['{"q":1}', 'hello']);
+  });
+
+  it('multipart 与二进制的 Request body 回退原生，交回原生的是同一对实参', async () => {
+    armProxy([rule()]);
+    const form = new FormData();
+    form.append('file', 'x');
+    const upload = new Request(API_URL, { method: 'POST', body: form });
+    // 夹具自证：这一笔真的是 multipart（判据认的是类型，不是「它是 FormData」）
+    expect(upload.headers.get('content-type')).toMatch(/^multipart\/form-data/);
+
+    const pending = win.fetch(upload);
+    expect(nativeFetch.mock.calls).toEqual([[upload, undefined]]);
+    expect(proxiedRequests()).toEqual([]);
+    expect(await (await pending).text()).toBe('NATIVE');
+
+    send(
+      new Request(API_URL, {
+        method: 'POST',
+        body: new Blob([new Uint8Array([0, 255, 1])], { type: 'application/octet-stream' }),
+      }),
+    );
+    expect(nativeFetch).toHaveBeenCalledTimes(2);
+    expect(proxiedRequests()).toEqual([]);
+  });
+
+  it('init 把 content-type 改成文本也不为二进制 body 解码：判据跟的是 body 自己的类型', async () => {
+    armProxy([rule()]);
+    send(
+      new Request(API_URL, {
+        method: 'POST',
+        body: new Blob([new Uint8Array([0, 255, 1])], { type: 'application/octet-stream' }),
+      }),
+      { headers: { 'content-type': 'application/json' } },
+    );
+    expect(nativeFetch).toHaveBeenCalledTimes(1);
+    expect(proxiedRequests()).toEqual([]);
+  });
+
+  it('阻断规则遇到不能安全解码的 body 也不回退：请求根本没机会发出', async () => {
+    armProxy([rule({ blocked: true })]);
+    const form = new FormData();
+    form.append('file', 'x');
+
+    await expect(win.fetch(new Request(API_URL, { method: 'POST', body: form }))).rejects.toBeInstanceOf(TypeError);
+    expect(nativeFetch).not.toHaveBeenCalled();
+    expect(proxiedRequests()).toEqual([]);
   });
 });
 

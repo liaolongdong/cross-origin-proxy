@@ -801,6 +801,85 @@ describe('实例复用与自报计数', () => {
     ]);
   });
 
+  /**
+   * 复用实例的两处脏状态（2026-09-26 评审轮 M-4）
+   *
+   * 上一笔的 `xhr.timeout` 定时器句柄此前既不保存也不在 `open()` 里清：轮询库复用同一实例时，
+   * `__proxyCancel` / `__proxySettled` 已被 `open()` 复位成「这一笔还没落定」，旧定时器一到期就
+   * 把**新一笔**在途的请求按旧账处理——派发 `timeout`、按已经被覆盖成第二笔的 `__proxyRequestId`
+   * 发 `CANCEL_REQUEST`、把 status 覆成 0，等于提前掐死一个正常请求。
+   */
+  it('上一笔没落定的 timeout 定时器不会掐死在途的第二笔', async () => {
+    armProxy([rule()]);
+    const xhr = newXhr();
+    xhr.timeout = 10;
+    request(xhr); // 第一笔故意不回包
+    const firstId = lastRequestId();
+
+    // 第二笔页面不再设超时（`timeout = 0`），所以这一笔只有「上一笔留下的那只表」能伤害它
+    xhr.timeout = 0;
+    xhr.open('GET', API_URL);
+    xhr.send();
+    expect(lastRequestId()).not.toBe(firstId);
+    const secondId = lastRequestId();
+
+    await new Promise(resolve => setTimeout(resolve, 40)); // 越过上一笔的 10ms
+
+    expect(xhr.events, '旧定时器给第二笔派发了一记 timeout').toEqual([]);
+    expect(payloadOfType(CANCEL_REQUEST)).toEqual([]);
+    expect(shadowed(xhr, 'status'), '第二笔还在途就被覆写了 status').toBeUndefined();
+
+    respond(secondId, { status: 200, body: 'SECOND' });
+    await settle();
+    expect(xhr.responseText).toBe('SECOND');
+    expect(xhr.events).toEqual(['readystatechange', 'load', 'loadend']);
+  });
+
+  /**
+   * 代理响应往实例上盖的那批 own 属性此前永不解除（M-4 的另一半）
+   *
+   * 可达序列：第一笔走代理 → 关掉代理总开关 → 同一个实例 `open()/send()` 走原生。原生确实
+   * 更新了实例，但页面读 `status` / `responseText` 命中的是我们盖上去的数据属性，`getAllResponseHeaders`
+   * 更是恒返回上一笔那串——读到的是**上一笔**的结果，且没有任何报错。`open()` 只回收自己盖过的东西。
+   */
+  it('第一笔代理、第二笔原生：上一笔盖在实例上的结果被摘干净', async () => {
+    armProxy([rule()]);
+    const xhr = newXhr();
+    request(xhr);
+    respond(lastRequestId(), { status: 200, body: 'FIRST', headers: { 'x-from': 'proxy' } });
+    await settle();
+    expect(xhr.responseText).toBe('FIRST');
+    expect(shadowed(xhr, 'responseText')).toBeDefined();
+    expect(shadowed(xhr, 'getAllResponseHeaders')).toBeDefined();
+
+    armProxy([rule()], false); // 总开关关闭：第二笔同一个实例走原生 XHR
+    xhr.open('GET', API_URL);
+    xhr.send();
+    expect(xhr.nativeSends).toEqual([undefined]);
+
+    expect(shadowed(xhr, 'status'), 'status 还盖着上一笔的 200').toBeUndefined();
+    expect(shadowed(xhr, 'responseText')).toBeUndefined();
+    expect(shadowed(xhr, 'response')).toBeUndefined();
+    expect(shadowed(xhr, 'responseURL')).toBeUndefined();
+    expect(shadowed(xhr, 'getAllResponseHeaders')).toBeUndefined();
+    expect(shadowed(xhr, 'getResponseHeader')).toBeUndefined();
+    expect(xhr.status).toBe(0);
+    expect(xhr.responseText).toBe('');
+    expect(xhr.getAllResponseHeaders()).toBe('');
+    expect(xhr.getResponseHeader('x-from')).toBe(null);
+  });
+
+  it('没走过代理的实例，open() 不做回收：页面自己在实例上的同名属性原样留着', () => {
+    // 回收按「我们有没有盖过」的旗标走，不是无条件 delete。这一笔全程原生，我们一个字都没盖，
+    // 页面对 `status` 这类名字自己的赋值就必须活过 open()——否则「修脏状态」就变成了误伤页面数据。
+    armProxy([rule()], false);
+    const xhr = newXhr();
+    Object.defineProperty(xhr, 'status', { value: 418, writable: true, configurable: true });
+
+    xhr.open('GET', API_URL);
+    expect(xhr.status).toBe(418);
+  });
+
   it('命中即记 intercepted、交给后台记 proxied；自报只有这四个键，不带 URL 也不带头', async () => {
     armProxy([rule()]);
     vi.useFakeTimers();
