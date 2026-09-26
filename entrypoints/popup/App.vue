@@ -1048,10 +1048,12 @@ async function openOptionsPage(hash = '') {
   color: var(--cop-text-color-secondary);
 }
 
-/* 注释行抬到 11px（与 `.metric-label` 同一档，L-15）：这一格的中文最长那句是九个字，
-   10px 时刚好排在第三列那一行里，11px 会换行成两行——这是有意的取舍，
-   「读得清」优先于「少一行」，且换行只发生在带注释的那一档状态（采样过期 / 无网络层规则）。
-   `max-width` 保留：第三列的可用宽度由 `flex: 1` 定，这个上限只是防长词。 */
+/* 注释行抬到 11px（与 `.metric-label` 同一档，L-15）。
+   改之前在真机 320px 下量过一轮（`.test-tmp/probe/popup-320.cjs`，不入库）：中文最长那句
+   「无生效的网络层规则」90px → 99px，仍在 106px 的列宽里，一行不变；英文
+   「No network-layer rules」改前改后都是两行——那是 `max-width: 100px` 掐的，与字号无关。
+   也就是说这一格**没有因为抬字号多占一行**，之前的担心不成立。`max-width` 保留：
+   它管的是英文长句的换行点，第三列的可用宽度由 `.metrics-row` 的 `flex: 1` 定。 */
 .metric-note {
   max-width: 100px;
   font-size: 11px;
@@ -1086,8 +1088,10 @@ async function openOptionsPage(hash = '') {
   animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
-/* 「页面自报」这枚小标签按 11px 排（与它右边那句话同档，L-15）：它自己是 `flex: none` 的整块，
-   换行只会发生在右侧那句话上（它有 `min-width: 0`），所以抬字号不会把标签挤掉。 */
+/* 「页面自报」这枚小标签按 11px 排（与它右边那句话同档，L-15）。
+   它自己是 `flex: none` 的整块，撑不开的只会右边那句（它有 `min-width: 0`）——
+   真机 320px 量过：中文标签 48px → 52px、英文 78px → 85px，都是单行，
+   右侧那句话从 266px / 236px 让到 262px / 229px，行数不变、不裁切、不溢出容器。 */
 .interceptor-chip {
   flex: none;
   padding: 0 4px;

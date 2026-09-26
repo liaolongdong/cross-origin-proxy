@@ -1159,6 +1159,42 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(offenders, 'README/CONTRIBUTING 等应统一写 main').toEqual([]);
     });
 
+    /**
+     * 「弹窗真实宽度」在 AGENTS.md 里是三个数（内容宽 / 渲染宽 / 真机视口），此前只写了
+     * 一个 352px，于是「CSS 里明明是 320px」看着就像文档过期。三个数其实彼此推得出来，
+     * 前提有三条：`width`、`padding` 各是多少，以及**没有全局 `box-sizing: border-box`**
+     * （仓库与 Element Plus 都只有按组件各自声明的那 117 处）。这里把算式与文档对账——
+     * 改任一头的数，另一头不跟着改就红。
+     */
+    it('AGENTS.md 里那三个弹窗宽度彼此推得出来，不是三条独立断言', () => {
+      const css = read('entrypoints/popup/App.vue');
+      const block = /\.popup-container\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+      const width = Number(/(?<![\w-])width:\s*(\d+)px/.exec(block)?.[1]);
+      const padding = Number(/padding:\s*(\d+)px/.exec(block)?.[1]);
+      expect(width, '读不到 .popup-container 的 width（形状变了，本条要跟着改）').toBeGreaterThan(0);
+      expect(padding, '读不到 .popup-container 的 padding').toBeGreaterThan(0);
+      expect(block, '本条成立的前提是 content-box；给这一格加 border-box 要连文档一起改').not.toMatch(
+        /box-sizing:\s*border-box/,
+      );
+      // 真机视口再多 8px×2：popup 没有重置 body 默认边距（`entrypoints/popup/index.html` 里无 style）
+      const rendered = width + padding * 2;
+      const viewport = rendered + 16;
+      // 只认「元素选择器 body」：`\b` 在连字符后面也算词边界，`.rules-section-body {` 会被误伤
+      const noBodyReset = /(?<![\w.#-])body\s*\{[^}]*\bmargin/;
+      for (const file of ['entrypoints/popup/index.html', 'entrypoints/popup/App.vue', 'assets/theme/tokens.css']) {
+        expect(read(file), `${file} 里出现了 body 边距重置，视口那个数不再等于渲染宽 +16`).not.toMatch(noBodyReset);
+      }
+      // 按「内容 A / 渲染 B / 视口 C」这一句的**形状**对账，而不是「文档里出现过这个数字」：
+      // `toContain('320px')` 那种判法连 `px` 两个字都能过，等于没有判。
+      const sentence = /内容宽 (\d+)px、渲染宽 (\d+)px、真机视口 (\d+)px/.exec(read('AGENTS.md'));
+      expect(sentence, 'AGENTS.md 里那句「内容宽 / 渲染宽 / 视口」的形状变了，本条要跟着改').not.toBeNull();
+      expect([Number(sentence?.[1]), Number(sentence?.[2]), Number(sentence?.[3])], '三个数与 CSS 对不上').toEqual([
+        width,
+        rendered,
+        viewport,
+      ]);
+    });
+
     it('社区健康文件齐备（GitHub 靠它们渲染贡献与安全提示）', () => {
       for (const file of ['SECURITY.md', 'CONTRIBUTING.md', '.github/PULL_REQUEST_TEMPLATE.md']) {
         expect(exists(file), `缺少 ${file}`).toBe(true);
