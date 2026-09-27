@@ -2,22 +2,20 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "node",
   "include-component-in-tag": false,
+  "skip-github-release": true,
+  "changelog-type": "default",
+  "pull-request-header": "## 这个 PR 由机器人起草 / Automated release draft\n\n它做了三件事：按提交类型算出下一个版本号、把这个号写进 `package.json` 与 `.release-please-manifest.json`、在 `CHANGELOG.md` 里开一个 `## [x.y.z]` 小节并列出提交标题。\n\n**合并之前请补两步**（机器人都做不到）：\n\n1. 把 `CHANGELOG.md` 顶部「待发布」区的中文长文并进这个新小节，或自己重写——商店用户看到的 Release 说明就是这个小节的内容，只有提交标题列表是不够的。\n2. 按 `CHROMEWEBSTORE.md` §12 那份「翻牌清单」核对文档：落地页页脚的 `v1.0.0`、`softwareVersion`、`dateModified` 与 `docs/sitemap.xml` 的 `<lastmod>` 说的是**商店在装的那个版本**，它们只能在 tag 真推出去之后翻，不要在这个 PR 里改。\n\n合并**不会**发布任何东西：不打 tag、不建 Release、不碰商店。发布是那之后由人执行 `git tag vX.Y.Z && git push origin vX.Y.Z` 触发的（`RELEASING.md` §2）。\n",
+  "pull-request-footer": "版本号只有 `package.json` 一处；`wxt.config.ts` 不得重新声明 `manifest.version`。\n\n只有 `feat` / `fix` / `perf` / `refactor` / `revert` 会算进发版；`docs` / `test` / `chore` / `ci` / `build` / `style` 既不写进 CHANGELOG，也不会触发版本 bump。需要强制发某个号，在提交信息末尾加一行 `Release-As: 2.0.0`。\n",
+  "changelog-sections": [
+    { "type": "feat", "section": "Added" },
+    { "type": "fix", "section": "Fixed" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Changed" },
+    { "type": "revert", "section": "Reverted" }
+  ],
   "packages": {
     ".": {
       "release-type": "node"
     }
-  },
-  "changelog-sections": [
-    { "type": "feat", "section": "Features" },
-    { "type": "fix", "section": "Bug Fixes" },
-    { "type": "perf", "section": "Performance Improvements" },
-    { "type": "revert", "section": "Reverts" },
-    { "type": "refactor", "section": "Code Refactoring" },
-    { "type": "docs", "section": "Documentation" },
-    { "type": "style", "section": "Styles" },
-    { "type": "build", "section": "Build System" },
-    { "type": "ci", "section": "Continuous Integration" },
-    { "type": "test", "section": "Tests" },
-    { "type": "chore", "section": "Chores" }
-  ]
+  }
 }

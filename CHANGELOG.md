@@ -2,14 +2,14 @@
 
 所有值得用户感知的变更都记录在这里。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-cn/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-版本号的唯一事实源是 `package.json`：`wxt.config.ts` 不再声明 `manifest.version`，由 WXT 回落生成。发版时在本文件顶部补一个 `## [<新版本>] - YYYY-MM-DD` 小节，`.github/workflows/release.yml` 会把该小节原样切成 GitHub Release 的说明。流程见 [RELEASING.md](./RELEASING.md)。
+版本号的唯一事实源是 `package.json`，而现在写它的是机器人：`.github/workflows/release-please.yml` 在每次合进 main 之后按提交类型算出下一个版本，开一个待人工合并的 PR，把号同时写进 `package.json`、`.release-please-manifest.json` 和本文件顶部的 `## [x.y.z]` 小节。合并前把下面「待发布」区的长文并进那个小节——GitHub Release 与商店的更新说明就是这一节的内容，只有提交标题列表是不够的。`wxt.config.ts` 不声明 `manifest.version`，由 WXT 回落生成。**机器人不发版**：它被刻意配置成不建 tag、不建 GitHub Release，发版仍然是人推 `vX.Y.Z` 的那一下（`.github/workflows/release.yml` 据此打包并向 Chrome 应用商店提审）。流程见 [RELEASING.md](./RELEASING.md)。
 
-All user-visible changes are recorded here. Version numbers live in `package.json` only; add a `## [<new version>] - YYYY-MM-DD` section here when releasing, and the release workflow turns it into the GitHub Release notes.
+Version numbers still live in `package.json` only — but release-please now writes it. On every push to `main` it derives the next version from the commit types and opens a PR that updates `package.json`, `.release-please-manifest.json` and a new `## [x.y.z]` section here; before merging that PR, fold the draft block below into the new section, because the release notes are that section and a list of commit titles is not enough. The bot is configured **not** to release: it creates no tag and no GitHub Release. Releasing stays a human `git tag vX.Y.Z && git push origin vX.Y.Z`, which is what triggers the store submission (see [RELEASING.md](./RELEASING.md)).
 
-## [Unreleased]
+## 待发布（Unreleased，人工草稿区）
 
-待发布的变更先记在这里，发版时整段提升为 `## [x.y.z] - YYYY-MM-DD`（未提升的小节不会进入 Release 说明）。
-Collect unreleased changes here; promote the section to `## [x.y.z] - YYYY-MM-DD` when releasing.
+还没进版本的变更先记在这里，中英各一段。下一次 release-please 开出 `## [x.y.z]` 小节时，把这一段并进那个小节、然后清空这里：机器人只会列提交标题，而商店用户读到的说明需要这里的长文。**标题不要写成 `## [Unreleased]` 这种带方括号的形式**——release-please 找插入点用的正则（`\n###? v?[0-9[]`）会把那一行当成第一个版本小节，于是新生成的小节插在它**上面**，整份已发布历史被挪到「未发布」这个标题底下，读起来像上一版还没发。
+Collect changes that are not in a released version yet here, in Chinese and English, and fold the block into the new `## [x.y.z]` section when release-please opens it. Do not title this block `## [Unreleased]`: release-please locates its insertion point with a regex that matches a bracketed heading, so the generated section would land above it and push the entire released history under an "unreleased" heading.
 
 ### Changed
 

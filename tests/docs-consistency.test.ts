@@ -23,6 +23,27 @@ const read = (rel: string): string => fs.readFileSync(path.join(ROOT, rel), 'utf
 /** 仓库内路径是否存在。 */
 const exists = (rel: string): boolean => fs.existsSync(path.join(ROOT, rel));
 
+/**
+ * `git` 索引里的路径集合（NUL 分隔，避免文件名转义歧义），整轮只读一次
+ *
+ * 「磁盘上有」与「站点上有」不是一回事：Pages 部署的是**仓库**，所以一张只在开发机磁盘上、
+ * 忘了 `git add` 的图，本地 `fs.existsSync` 永远为真，线上却是 404。
+ * 2026-09 落地页新增的两张图（`config-import.jpg` / `credential-variables.jpg`）正是这样漏掉的。
+ * 同理，「全仓还有谁写着这个数」也只能按索引问，不能扫磁盘——本地留着的可再生文件多的是。
+ */
+let trackedCache: Set<string> | undefined;
+const trackedFiles = (): Set<string> => {
+  if (!trackedCache) {
+    const out = execFileSync('git', ['ls-files', '-z'], {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    trackedCache = new Set(out.split('\0').filter(Boolean));
+  }
+  return trackedCache;
+};
+
 const pkg = JSON.parse(read('package.json')) as {
   version: string;
   name: string;
@@ -147,24 +168,8 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     };
 
     /**
-     * `git` 索引里的路径集合（NUL 分隔，避免文件名转义歧义），整轮只读一次
-     *
-     * 「磁盘上有」与「站点上有」不是一回事：Pages 部署的是**仓库**，所以一张只在开发机磁盘上、
-     * 忘了 `git add` 的图，本地 `fs.existsSync` 永远为真，线上却是 404。
-     * 2026-09 落地页新增的两张图（`config-import.jpg` / `credential-variables.jpg`）正是这样漏掉的。
+     * `git` 索引里的路径集合见文件顶部的 `trackedFiles()`——Pages 部署的是仓库，不是开发机磁盘。
      */
-    let trackedCache: Set<string> | undefined;
-    const trackedFiles = (): Set<string> => {
-      if (!trackedCache) {
-        const out = execFileSync('git', ['ls-files', '-z'], {
-          cwd: ROOT,
-          encoding: 'utf-8',
-          maxBuffer: 32 * 1024 * 1024,
-        });
-        trackedCache = new Set(out.split('\0').filter(Boolean));
-      }
-      return trackedCache;
-    };
 
     it.each(['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'])(
       '%s 的本地资源全部存在',
@@ -1038,10 +1043,90 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('版本历史与发布契约', () => {
-    it('CHANGELOG.md 有当前版本小节（release 工作流靠它生成 Release 说明）', () => {
-      const changelog = read('CHANGELOG.md');
-      expect(changelog).toMatch(new RegExp(`^## \\[${pkg.version}\\]`, 'm'));
-      expect(changelog).toMatch(/^## \[Unreleased\]/m);
+    /**
+     * `release.yml` 用 awk 从 `CHANGELOG.md` 里切出 `## [<tag 版本>]` 那一小节当 GitHub Release
+     * 的说明，而 tag 版本来自 `package.json`——所以「顶部第一个版本小节 == `package.json`」就是
+     * 发布说明对不对的那条契约本身。release-please 在同一个 PR 里同时写这两处（版本号进
+     * `package.json` 与 `.release-please-manifest.json`，小节进 `CHANGELOG.md`），人在合并前
+     * 往那个小节里补中英长文。
+     *
+     * 从前这里的第二条断言是「必须存在 `## [Unreleased]`」，那是手工 bump 时代的暂存区约定。
+     * 换成机器人写小节之后它**有害**：release-please 找插入点用的正则是 `\n###? v?[0-9[]`，
+     * `## [Unreleased]` 里那个 `[` 恰好命中，于是新生成的 `## [1.4.0]` 会插在它**上面**，
+     * 整个已发布历史被推到「Unreleased」这个标题下面，读起来像上一版还没发布。
+     */
+    it('CHANGELOG.md 顶部版本小节等于 package.json', () => {
+      const sections = [...read('CHANGELOG.md').matchAll(/^## \[(\d+\.\d+\.\d+)\]/gm)].map(m => m[1]);
+      expect(sections.length, 'CHANGELOG.md 里找不到任何 `## [x.y.z]` 小节').toBeGreaterThan(0);
+      expect(sections[0], `顶部小节是 ${sections[0]}，而 package.json 是 ${pkg.version}`).toBe(pkg.version);
+      /**
+       * 与上面那条同一个正则事实的另一半：草稿区标题**行首**不得写成 `## [Unreleased]`。
+       * 行中出现是允许的（文件顶部那段说明就得把那个写法点名给后来的人看），
+       * 因为机器人的锚点要求 `\n` 紧贴 `#`，只有行首那一种写法会真的把插入点抢走。
+       */
+      expect(read('CHANGELOG.md'), '`## [Unreleased]` 写在行首会抢走 release-please 的插入点').not.toMatch(
+        /^## \[Unreleased\]/m,
+      );
+    });
+
+    /**
+     * 版本号只写在 `package.json` 与 `.release-please-manifest.json`（后者是机器人算 bump 的
+     * 基准，它假一个号，下一个号就算错）。其余任何被跟踪的文本文件都**不许复述**当前版本号。
+     *
+     * 这条以前是反过来的：`docs/llms-full.txt` 两句与 `.github/ISSUE_TEMPLATE/bug_report.yml`
+     * 的示例版本必须等于 `package.json`，于是每次 bump 都得人肉跟三处——`1.1.0 → 1.2.0`
+     * 那一次就当场漏了两处。更重要的是它在机器人时代必红：release-please 在同一个 PR 里把
+     * `package.json` 抬一级，那三处散文里的号它还写不了（写号要改正文，不是行内替换）。
+     * 判据因此换成「这些句子不许带号」：会假的地方从三处变成零处。
+     *
+     * 说**已发布版本**的地方不在范围内，它们是真话：落地页页脚与 `softwareVersion` 写的是
+     * 商店在装的 `1.0.0`（翻它要等 tag 真推出去，见 `CHROMEWEBSTORE.md` §12 ① 第 4 项），
+     * `CHROMEWEBSTORE.md` §8 与 `CHANGELOG.md` 按设计留历史行。
+     */
+    it('当前版本号只出现在 package.json 与机器人的 manifest 里', () => {
+      const VERSION_HOLDERS = [
+        'package.json',
+        '.release-please-manifest.json',
+        'CHANGELOG.md',
+        'CHROMEWEBSTORE.md',
+        'pnpm-lock.yaml',
+      ];
+      const TEXT_EXT = /\.(md|txt|json|ya?ml|ts|tsx|js|mjs|cjs|vue|css|html|xml)$/i;
+      const claimed = [...trackedFiles()]
+        .filter(file => exists(file) && TEXT_EXT.test(file) && !VERSION_HOLDERS.includes(file))
+        .filter(file => new RegExp(`(?<![\\d.])${pkg.version.split('.').join('\\.')}(?![\\d.])`).test(read(file)));
+      expect(
+        claimed,
+        `这些文件复述了开发中的版本号 ${pkg.version}——版本号由 release-please 维护，散文里写一次就假一次`,
+      ).toEqual([]);
+    });
+
+    /**
+     * 上面那条只说「不许写号」，容易被理解成「把那句删掉就干净了」——那会让面向 AI 的公开出口
+     * 从此不告诉读者去哪里看开发版本。所以这三处**指针式措辞**必须还在：改写措辞同样红，
+     * 因为那意味着这份清单与文档脱钩了。
+     */
+    it('不复述版本号的那三处仍然指向 CHANGELOG，而不是被整句删掉', () => {
+      const VERSION_POINTERS: { file: string; phrase: string; label: string }[] = [
+        {
+          file: 'docs/llms-full.txt',
+          phrase: 'The version under development is the newest section of CHANGELOG.md',
+          label: 'llms-full.txt 头部 `Last verified` 那行',
+        },
+        {
+          file: 'docs/llms-full.txt',
+          phrase: 'for the version under development see the newest section of CHANGELOG.md',
+          label: 'llms-full.txt 页脚 `Last updated` 那行',
+        },
+        {
+          file: '.github/ISSUE_TEMPLATE/bug_report.yml',
+          phrase: '扩展版本 X.Y.Z',
+          label: 'bug 报告模板里那行占位示例',
+        },
+      ];
+      for (const { file, phrase, label } of VERSION_POINTERS) {
+        expect(read(file), `${label}（${file}）里那句指向 CHANGELOG 的话不见了`).toContain(phrase);
+      }
     });
 
     it('商店文档里的包名模板与 wxt zip 的产物命名一致', () => {
@@ -1054,46 +1139,72 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
 
     /**
-     * 凡是**复述「仓库此刻在工作的那个版本」**的地方必须等于 `package.json`。
-     *
-     * 这条是 `1.1.0 → 1.2.0` 那一次 bump 当场漏出来的：`docs/llms-full.txt` 两句与
-     * `.github/ISSUE_TEMPLATE/bug_report.yml` 的示例版本还写着旧号，而 llms-full 是给检索引擎与
-     * AI 系统读的公开出口——它假一个版本号，答案里就跟着假一个。判据按**短语**认，只圈这三处
-     * 「当前版本」表述，故意不碰说**已发布版本**的那些地方：落地页页脚与 `softwareVersion` 写的是
-     * 商店在装的 `1.0.0`（真话，翻它要等 tag 真推出去，见 `CHROMEWEBSTORE.md` §12 ① 第 4 项），
-     * `CHROMEWEBSTORE.md` §8 与 `CHANGELOG.md` 按设计留历史行。
-     *
-     * 每个短语都要求**至少命中一次**：改写了措辞（或删了那半句）同样红，因为那意味着这张清单
-     * 与文档脱钩了，而下一次 bump 就没有任何东西会提醒你去翻它。
+     * `.release-please-manifest.json` 是机器人算下一个版本号的**基准**（`Manifest` 直接
+     * `Version.parse(manifest[path])`，格式是 `{"."： "<版本字符串>"}`，写成对象会当场抛）。
+     * 它落后于 `package.json` 时机器人会算出一个已经发过的号，领先时它会跳过本该发的那一级。
+     * 两者只在「合并 release PR」那一个提交里同时前进，所以对账是恒等式，不是「不得大于」。
      */
-    it('宣称「仓库当前版本」的每一处都等于 package.json', () => {
-      const CURRENT_VERSION_CLAIMS: { file: string; re: RegExp; label: string }[] = [
-        {
-          file: 'docs/llms-full.txt',
-          re: /working version is (\d+\.\d+\.\d+)/g,
-          label: 'llms-full.txt 头部 `Last verified` 那行',
-        },
-        {
-          file: 'docs/llms-full.txt',
-          re: /the repository is on (\d+\.\d+\.\d+)/g,
-          label: 'llms-full.txt 页脚 `Last updated` 那行',
-        },
-        {
-          file: '.github/ISSUE_TEMPLATE/bug_report.yml',
-          re: /扩展版本 (\d+\.\d+\.\d+)/g,
-          label: 'bug 报告模板的示例版本',
-        },
-      ];
-      for (const { file, re, label } of CURRENT_VERSION_CLAIMS) {
-        const found = [...read(file).matchAll(re)].map(m => m[1]);
-        expect(
-          found.length,
-          `${label}（${file}）里找不到宣称当前版本的那句 —— 措辞变了就回来改这张清单`,
-        ).toBeGreaterThan(0);
-        for (const claimed of found) {
-          expect(claimed, `${label} 宣称当前版本 ${claimed}，而 package.json 是 ${pkg.version}`).toBe(pkg.version);
-        }
-      }
+    it('release-please 的版本基准等于 package.json', () => {
+      const manifest = JSON.parse(read('.release-please-manifest.json')) as Record<string, unknown>;
+      expect(typeof manifest['.'], 'manifest 的 `.` 必须是版本字符串（v4 的格式，不是对象）').toBe('string');
+      expect(manifest['.'], `机器人以为已发布 ${String(manifest['.'])}，而 package.json 是 ${pkg.version}`).toBe(
+        pkg.version,
+      );
+    });
+
+    /**
+     * 配置文件里有四条是**装上去才知道错**的，每条都对应一个静默失效：
+     *
+     * - `include-component-in-tag` 必须为 `false`：单包仓库默认也是 `true` 的话 tag 会变成
+     *   `cross-origin-proxy-1.4.0`，而 `release.yml` 的触发条件是 `v*`，发布链路整个不响。
+     * - `skip-github-release` 必须为 `true`：发版是「人推 tag」那一下（推 tag 即向商店提审，
+     *   不可撤回且有配额），不能是「合并 PR」的副作用。而且机器人用默认 `GITHUB_TOKEN`
+     *   打的 tag 根本不会触发 `release.yml`——GitHub 不再由该令牌产生的事件起跑新工作流。
+     * - `changelog-sections` 不许收 `chore`：release-please 合并 PR 自己那一条就是
+     *   `chore: release 1.4.0`，收了它就是把机器人的提交写进用户看的 Release 说明。
+     *   顺带，未列出的类型既不进小节也**不参与 bump**（`changelogEmpty` 直接跳过整个 PR），
+     *   所以「只发文档」的那次合并不会挤出一个人人得看的空版本。
+     * - 小节名彼此唯一：`conventional-changelog-writer` 按 type 逐个渲染标题，两个 type 撞同名
+     *   标题会在小节里出现两次 `### Changed`。
+     */
+    it('release-please 配置守住发版链路的四个静默失效点', () => {
+      const config = JSON.parse(read('release-please-config.json')) as {
+        'release-type'?: string;
+        'include-component-in-tag'?: boolean;
+        'skip-github-release'?: boolean;
+        'changelog-sections'?: { type: string; section: string; hidden?: boolean }[];
+        'extra-files'?: unknown;
+        packages?: Record<string, unknown>;
+      };
+      expect(config['release-type'], 'release-type 必须是 node，才会写 package.json 的版本').toBe('node');
+      expect(config['include-component-in-tag']).toBe(false);
+      expect(config['skip-github-release']).toBe(true);
+      expect(config.packages?.['.'], '`.` 必须列在 packages 下，否则机器人找不到这个包').toBeTruthy();
+
+      const sections = config['changelog-sections'] ?? [];
+      expect(sections.length, 'changelog-sections 为空就是所有提交都不发版').toBeGreaterThan(0);
+      const types = sections.map(s => s.type);
+      expect(types, 'chore 会把机器人自己的合并提交写进 Release 说明').not.toContain('chore');
+      expect(
+        sections.some(s => s.type === 'feat' && s.section),
+        'feat 必须可见，否则加功能不发版',
+      ).toBe(true);
+      expect(
+        sections.some(s => s.type === 'fix' && s.section),
+        'fix 必须可见，否则修 bug 不发版',
+      ).toBe(true);
+      const headings = sections.map(s => s.section);
+      expect(new Set(headings).size, '两个 type 撞同名小节会渲染出两条一样的标题').toBe(headings.length);
+    });
+
+    /**
+     * `extra-files`（行内标记替换）留在这里的唯一理由是「把版本号抄进散文」。既然那三处
+     * 已经改成不带号，留着标记就是留着一条「机器人会悄悄改你的正文」的路——而它在 `.txt`
+     * 里只能写成看得见的 `<!-- -->`。所以这条守的是「别把这条通道再开回去」。
+     */
+    it('没有第二份需要机器人代抄的版本号', () => {
+      const config = JSON.parse(read('release-please-config.json')) as { 'extra-files'?: unknown[] };
+      expect(config['extra-files'] ?? [], 'extra-files 里的每一处都是一份手抄的版本号').toEqual([]);
     });
   });
 
@@ -1105,6 +1216,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     const ci = read('.github/workflows/ci.yml');
     const pages = read('.github/workflows/deploy-pages.yml');
     const release = read('.github/workflows/release.yml');
+    const releasePlease = read('.github/workflows/release-please.yml');
     const verify = read('.github/actions/verify/action.yml');
 
     it('CI 与发布共用同一个 verify 复合动作，避免两份清单漂移', () => {
@@ -1146,6 +1258,34 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(release).toContain("'v*'");
       expect(release).toContain('permissions:');
       expect(release).toContain('contents: write');
+    });
+
+    /**
+     * 起草版本的那条链路与发布的那条必须**互不越界**，这里的判据全是「越界会长什么样」：
+     *
+     * - 只在 main 上跑。在 PR 上跑会先给每个 PR 生成一份版本猜测，而机器人的对账基准
+     *   （`.release-please-manifest.json`）只在合并之后才为真。
+     * - 只要 `contents` 与 `pull-requests` 两个写权限。它要推自己的分支并开 PR，两样都够；
+     *   `pages` / `id-token` / `security-events` 出现即扩大权限面。
+     * - 不引用任何 `secrets.*`：它不碰商店凭据，也不该碰。**商店提审的入口只有 `release.yml`**，
+     *   而它由人推的 `v*` tag 触发。这条边界是「合并 PR 不会直接把包交到 Google 手上」的全部内容。
+     * - 它引用的两个文件名必须真实存在：改名只会在 GitHub 上红，本机跑不了工作流。
+     */
+    it('release-please 只起草版本、只在 main 跑、且拿不到商店凭据', () => {
+      expect(releasePlease).toContain('googleapis/release-please-action@v4');
+      expect(releasePlease).toMatch(/push:\s*\n\s*branches:\s*\[main\]/);
+      expect(releasePlease).toContain('contents: write');
+      expect(releasePlease).toContain('pull-requests: write');
+      for (const overreach of ['id-token', 'pages:', 'deploy-keys', 'security-events']) {
+        expect(releasePlease, `release-please.yml 出现了 ${overreach}，权限面被扩大`).not.toContain(overreach);
+      }
+      expect(releasePlease, '它不该拿到任何 secrets——发商店包只在 release.yml').not.toContain('secrets.');
+
+      for (const input of ['config-file', 'manifest-file']) {
+        const file = new RegExp(`${input}:\\s*(\\S+)`).exec(releasePlease)?.[1];
+        expect(file, `release-please.yml 缺少 ${input}`).toBeTruthy();
+        expect(exists(file!), `${input} 指向的 ${file} 不在仓库里`).toBe(true);
+      }
     });
   });
 

@@ -1,0 +1,30 @@
+name: Release Please
+
+# 版本与 CHANGELOG 的自动起草：合进 main 的代码由它决定下一个版本号，
+# 并把 `## [x.y.z]` 小节写进 CHANGELOG.md、把同一个号写进 package.json，
+# 以**一个待人工合并的 PR** 的形式交出来（配置在仓库根的 `release-please-config.json`）。
+#
+# 它被刻意配置成 `skip-github-release: true`：不打 tag、不建 GitHub Release。
+# 发版仍然是人推 `vX.Y.Z` tag 的那一下（见 `RELEASING.md` §2），因为对这个项目来说
+# 推 tag 等于向 Chrome 应用商店提交审核——一个不可撤回、且有配额的动作，
+# 不该是「合并 PR」这个动作的副作用。另一条理由更硬：release-please 用默认 `GITHUB_TOKEN`
+# 打的 tag 不会触发 `release.yml`（GitHub 的规则：由该令牌产生的事件不再起跑新工作流），
+# 而从本机推的 tag 会。
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: 起草版本发布 PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: 运行 release-please
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
