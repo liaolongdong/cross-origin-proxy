@@ -86,6 +86,13 @@ marketing/
 .qoder/*
 !.qoder/rules/
 
+# 反过来，根目录那九份仓库侧文档（中英 README、CONTRIBUTING、SECURITY、CHANGELOG、
+# CHROMEWEBSTORE、GITHUB、RELEASING、AGENTS）读着像「内部运营文档」，却一份都抽不掉：
+# `tests/docs-consistency.test.ts` 的 `HUMAN_DOCS` 清单会逐个 read 它们，而 CI 跑的就是
+# `pnpm test`；`release.yml` 把 RELEASING.md 的链接写进每一次 Release 说明；中英落地页与
+# `docs/llms*.txt` 把 CHROMEWEBSTORE.md 的 blob URL 当公开链接发出去。判据从来不是
+# 「它够不够对外」，而是「抽掉之后会不会有人读到 404、或者干净检出的 CI 读到红」。
+
 # 仅本地留证的 QA 截图（已从仓库解除跟踪，防止 git add -A 重新带回）。
 # 判据不是「我不想要图片」，而是**全仓零引用**：`scripts/generate-store-assets.mjs` 的输入清单
 # 只列 8 张 `opt-*.png`（`screenshots/en/` 那 7 张是它的语言回落项，同样留库），下面这 5 张
