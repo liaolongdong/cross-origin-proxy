@@ -11,6 +11,8 @@ All user-visible changes are recorded here. Version numbers live in `package.jso
 待发布的变更先记在这里，发版时整段提升为 `## [x.y.z] - YYYY-MM-DD`（未提升的小节不会进入 Release 说明）。
 Collect unreleased changes here; promote the section to `## [x.y.z] - YYYY-MM-DD` when releasing.
 
+## [1.3.0] - 2026-09-27
+
 本轮是一次针对存量代码的深度评审（功能、安全、体验、样式、性能五条线）落地后的收口，下面每条都对应评审报告里被点名的一个具体问题。
 
 This round is the close-out of a deep review of the existing code along five axes (function, security, experience, style, performance); each entry below answers one finding that review named.
