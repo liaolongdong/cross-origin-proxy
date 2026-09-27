@@ -57,6 +57,10 @@ logs
 # 本地端到端验证产物（含下载的 Chrome for Testing，约 558MB，曾因误提交把 .git 撑到 195MB）
 .test-tmp/
 
+# 本地门禁/量测的日志与截图落点。此前它只是**碰巧**被上面的 `*.log` 兜住——
+# 目录里今天全是 .log，放一张 png 进去就会冒出来变成待跟踪文件，所以写成显式规则。
+.test-screenshots/
+
 # 商店素材生成结果（由 `pnpm assets` 从 screenshots/ 派生，不入库；docs/assets/img 需入库供 Pages 使用）
 store-assets/
 
@@ -74,8 +78,27 @@ marketing/
 .qoder/plans/
 .qoder/specs/
 
-# 仅本地留证的 QA 截图（已从仓库解除跟踪，防止 git add -A 重新带回）
+# 仅本地留证的 QA 截图（已从仓库解除跟踪，防止 git add -A 重新带回）。
+# 判据不是「我不想要图片」，而是**全仓零引用**：`scripts/generate-store-assets.mjs` 的输入清单
+# 只列 8 张 `opt-*.png`（`screenshots/en/` 那 7 张是它的语言回落项，同样留库），下面这 5 张
+# 既不在那份清单里、也没被 README / CHROMEWEBSTORE.md / docs/ / 任何测试引用——
+# 它们是历轮暗色模式与消息提示修复的前后对比证据，任务已完成，留在库里只剩重量
+# （这 4 张的 git blob 合计 846KB，占 `screenshots/` 入库总量 3,148KB 的 27%）。
+# 新增截图前先按同一判据核一遍引用，别顺手 `git add screenshots/`。
 screenshots/dark-mode-issues.png
+screenshots/dark-mode-dialog.png
+screenshots/dark-mode-fixed.png
+screenshots/opt-message-toast.png
+screenshots/opt-messagebox.png
 
 # 早期脚本产物（无语言后缀、已无任何引用，现由 og-image-zh/en.png 取代）
 docs/assets/og-image.png
+
+# 被 RELEASING.md 取代的旧发布说明（已解除跟踪，本地留着当排查线索）。
+# 留库的代价不是体积而是**误导**：`RELEASE-SETUP.md` 描述的 release-please 工作流当时从未建立，
+# `CHROME-WEBSTORE-SETUP.md` 里那条 `redirect_uri=urn:ietf:wg:oauth:2.0:oob` Google 早已下线
+# （照它做换不到 refresh token）、OAuth 客户端类型写「桌面应用」而 Playground 路径要「Web 应用」、
+# Secrets 名字 `CWS_*` 与工作流实际读的 `CHROME_*` 对不上。
+# 有效内容已并入 RELEASING.md（中文，含这些坑的正确说法），发布链路的手动配置清单只认那一份。
+RELEASE-SETUP.md
+CHROME-WEBSTORE-SETUP.md
