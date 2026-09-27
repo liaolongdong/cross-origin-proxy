@@ -1070,8 +1070,9 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
 
     /**
-     * 版本号只写在 `package.json` 与 `.release-please-manifest.json`（后者是机器人算 bump 的
-     * 基准，它假一个号，下一个号就算错）。其余任何被跟踪的文本文件都**不许复述**当前版本号。
+     * 版本号写在 `package.json`，机器人算下一级的基准在 `.release-please-manifest.json`；
+     * 其余被跟踪的文本文件**不许复述当前那个号**——一次 bump 只动它自己那两份文件，
+     * 被抄进句子里的那些地方就从「真话」变成「没人会想起来改的假话」。
      *
      * 这条以前是反过来的：`docs/llms-full.txt` 两句与 `.github/ISSUE_TEMPLATE/bug_report.yml`
      * 的示例版本必须等于 `package.json`，于是每次 bump 都得人肉跟三处——`1.1.0 → 1.2.0`
@@ -1079,21 +1080,40 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * `package.json` 抬一级，那三处散文里的号它还写不了（写号要改正文，不是行内替换）。
      * 判据因此换成「这些句子不许带号」：会假的地方从三处变成零处。
      *
-     * 说**已发布版本**的地方不在范围内，它们是真话：落地页页脚与 `softwareVersion` 写的是
-     * 商店在装的 `1.0.0`（翻它要等 tag 真推出去，见 `CHROMEWEBSTORE.md` §12 ① 第 4 项），
-     * `CHROMEWEBSTORE.md` §8 与 `CHANGELOG.md` 按设计留历史行。
+     * 判据是「整仓减去一份清单」而不是「只查某几个文件」，因为想写号的地方事先不知道。
+     * 清单里每一项都得说得出它为什么必须写号：
+     *
+     * - `package.json`、`.release-please-manifest.json`：写号就是它们的职责。
+     * - `CHANGELOG.md`、`CHROMEWEBSTORE.md`：版本历史与商店文案台账，按设计一行一个号。
+     * - `docs/`（前缀匹配）：产品页说的是**商店在装的已发布版本**，而 `CHROMEWEBSTORE.md` §12
+     *   那份翻牌清单会把它翻成**刚发布的那个号**——那一刻它和 `package.json` 恰好相等。
+     *     这一项不是通融，是「整仓扫」这个前提本身的错：仓库里带过版本号的文件有十五个，
+     *     逐处改措辞改不完，而照着 §12 翻完牌的那一次提交必然让这条断言当场变红。
+     * - `utils/har.ts`、`tests/exportSanitize.test.ts`：那儿的 `1.0.0` 是 **HAR 规范的
+     *   `log.version`**，与产品版本无关，纯属两个号长一样的巧合。
+     * - 本测试文件：它得点名上面这些文件，写不出一份「不含自己的清单」。
+     * - `pnpm-lock.yaml`：包管理器生成的，人不编辑。
+     *
+     * 以后想在别处写号：先把句子改成指针（「见 `CHANGELOG.md` 顶部小节」），改不动再把那个
+     * 文件连同它必须写号的理由加进这份清单。
      */
-    it('当前版本号只出现在 package.json 与机器人的 manifest 里', () => {
-      const VERSION_HOLDERS = [
+    it('当前版本号只出现在职责所在的那几份文件里', () => {
+      const VERSION_EXEMPT = [
         'package.json',
         '.release-please-manifest.json',
         'CHANGELOG.md',
         'CHROMEWEBSTORE.md',
+        'docs/',
+        'utils/har.ts',
+        'tests/exportSanitize.test.ts',
+        'tests/docs-consistency.test.ts',
         'pnpm-lock.yaml',
       ];
+      const isExempt = (file: string): boolean =>
+        VERSION_EXEMPT.some(holder => (holder.endsWith('/') ? file.startsWith(holder) : file === holder));
       const TEXT_EXT = /\.(md|txt|json|ya?ml|ts|tsx|js|mjs|cjs|vue|css|html|xml)$/i;
       const claimed = [...trackedFiles()]
-        .filter(file => exists(file) && TEXT_EXT.test(file) && !VERSION_HOLDERS.includes(file))
+        .filter(file => exists(file) && TEXT_EXT.test(file) && !isExempt(file))
         .filter(file => new RegExp(`(?<![\\d.])${pkg.version.split('.').join('\\.')}(?![\\d.])`).test(read(file)));
       expect(
         claimed,
@@ -1198,6 +1218,43 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
 
     /**
+     * 机器人找「上一次发布在哪」的两步可能同时落空：本仓库一个 GitHub Release 都没有
+     * （`skip-github-release`），而 §2 那条「先推 tag、后推 main」没做到时远程也没有 tag。
+     * 那一刻它认定仓库需要 bootstrap，于是往回一路收提交，上限
+     * `DEFAULT_COMMIT_SEARCH_DEPTH = 500`——本仓库全部历史都不到这个数，结果是第一份发布 PR
+     * 把已经发布过的提交从头再列一遍。`bootstrap-sha` 就是给这条路径设的地板。
+     *
+     * 只校验形状（40 位十六进制），不校验「解析得到提交」：CI 的 `actions/checkout` 默认
+     * `fetch-depth: 1`，浅克隆里那个 sha 本来就查不到，按可解析判会把这条守卫变成只在
+     * 本机绿、在 CI 必红的东西。（本机核过它确实是一个存在的提交。）
+     */
+    it('release-please 配置钉了 bootstrap 地板', () => {
+      const config = JSON.parse(read('release-please-config.json')) as { 'bootstrap-sha'?: string };
+      expect(config['bootstrap-sha'], '缺 bootstrap-sha：tag 未落地的那一次首跑会把历史重新列一遍').toMatch(
+        /^[0-9a-f]{40}$/,
+      );
+    });
+
+    /**
+     * 「先推 tag、再推 main」写在两份文档里，而它对抗的是那条 bootstrap 陷阱：合成一条
+     * `git push origin main vX.Y.Z` 看着省事，GitHub 却不保证两个 ref 谁先落地。main 先落地、
+     * tag 还在途时，机器人按 `.release-please-manifest.json` 找的那个 tag 不存在，于是认定
+     * 仓库需要 bootstrap，把已经发布过的提交从头再列一遍（配置里的 `bootstrap-sha` 是那一幕
+     * 的兜底，不是拿来替代顺序的）。`--tags` 同罪：它推的是本机所有 tag，多打一个就多发一版。
+     */
+    it('发版文档分两条命令推：先 tag、后 main', () => {
+      // `(?:-u\s+)?` 不是装饰：`git push -u origin --tags` 是新手最顺手的那条命令，
+      // 而它推的是本机**所有** tag，多打一个就多发一版。少了这个可选段，正则只拦得住
+      // 不带 -u 的写法，这条恰好从缝里过去。
+      const combined = /git push\s+(?:-u\s+)?origin\s+(?:main\s+v|--tags)/;
+      for (const file of ['RELEASING.md', 'AGENTS.md', 'CONTRIBUTING.md', 'release-please-config.json']) {
+        expect(read(file), `${file} 里又出现了「一条命令同时推 main 与 tag」的写法`).not.toMatch(combined);
+      }
+      expect(read('RELEASING.md'), '§2 第 4 步那两条分开的 push 不见了').toContain('git push origin vX.Y.Z');
+      expect(read('AGENTS.md'), '速查表不再说顺序').toContain('先推 tag');
+    });
+
+    /**
      * `extra-files`（行内标记替换）留在这里的唯一理由是「把版本号抄进散文」。既然那三处
      * 已经改成不带号，留着标记就是留着一条「机器人会悄悄改你的正文」的路——而它在 `.txt`
      * 里只能写成看得见的 `<!-- -->`。所以这条守的是「别把这条通道再开回去」。
@@ -1286,6 +1343,41 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         expect(file, `release-please.yml 缺少 ${input}`).toBeTruthy();
         expect(exists(file!), `${input} 指向的 ${file} 不在仓库里`).toBe(true);
       }
+    });
+
+    /**
+     * 机器人给发布 PR 打的标签是 `autorelease: pending`，而把它换成 `tagged` 的那一步
+     * 只存在于它自己「建 GitHub Release + 打 tag」的流程里——本仓库刻意 `skip-github-release`，
+     * 那一换就**永远不发生**。后果不是报错而是从此安静：它下次起草时只要看到任何已合并、
+     * 仍带 pending 的 PR 就直接放弃开新 PR（日志那句是
+     * `There are untagged, merged release PRs outstanding - aborting`，而那条 run 全绿），
+     * 于是「没有新的发布 PR」看起来跟「没有要发的东西」一模一样。
+     *
+     * 所以换标签这件事必须有人在发版那一下替它做，做它的是 `release.yml` 里那一步。
+     * 这里守三样：那一步在、两个标签名写对了（拼错就是**摘掉了旧标签也没换上新标签**，
+     * 下一次起草照样 abort），以及 job 真有 `pull-requests: write`（没有它整步只是把
+     * 一条 403 打进日志）。那一步的失败分支刻意不 `exit 1`——Release 已经建成，
+     * 把发布判红只会让人以为商店包没出门；它失败时在 Job Summary 留一段手工指引。
+     */
+    it('release.yml 替机器人把 autorelease: pending 换成 tagged', () => {
+      expect(release).toContain('Clear release-please pending label');
+      expect(release).toContain("'autorelease: pending'");
+      expect(release).toContain('--add-label');
+      expect(release, '换标签那一步没有 pull-requests: write，只会拿到 403').toContain('pull-requests: write');
+    });
+
+    /**
+     * Release 说明是从 `CHANGELOG.md` 里切出来的，而小节标题有**两种**写法：机器人拿到了
+     * 上一个 tag 时写 `## [x.y.z](compare) (日期)`，拿不到（首跑、或 `bootstrap-sha` 那段之前）
+     * 时写裸的 `## x.y.z (日期)`——两种都发得出去，所以切片器必须两种都认。
+     * 只认带方括号那一种的后果是静默降级：切不到小节就退回 GitHub 自动生成的提交流水账，
+     * 而商店用户看到的那份说明里没有了人补的中英长文。
+     */
+    it('Release 说明的切片器认两种 CHANGELOG 小节标题', () => {
+      expect(release, '切片器不再按行首小节标题分割，改 awk 时这条要一起看').toContain('awk -v version=');
+      expect(release, '只认 `## [` 会漏掉机器人写的裸 `## x.y.z` 小节').toContain('/^## (\\[|[0-9])/');
+      expect(release).toContain('CHANGELOG.md > notes.md');
+      expect(release, '切不到小节时的兜底被删掉了，会发一份空说明的 Release').toContain('if [ -s notes.md ]');
     });
   });
 

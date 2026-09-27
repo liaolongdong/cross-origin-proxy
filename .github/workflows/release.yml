@@ -45,6 +45,8 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: write
+      # 只给下面那一步换标签用（`autorelease: pending` → `tagged`），见该步的注释。
+      pull-requests: write
     env:
       CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
       CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
@@ -112,11 +114,16 @@ jobs:
         env:
           VERSION: ${{ steps.guard.outputs.version }}
         run: |
+          # 小节标题有两种形状，都得认：release-please 在有上一个 tag 时写
+          # `## [x.y.z](…/compare/上号...本号) (日期)`，拿不到上一个 tag 时写裸的
+          # `## x.y.z (日期)`（模板见 conventional-changelog-conventionalcommits 的 header.hbs
+          # 里 `linkCompare` 那两个分支）。号必须锚在 `## ` 之后原位比对：拿整行做子串查找会把
+          # 上一个版本号的对比链接读成自己的小节。
           awk -v version="$VERSION" '
             BEGIN { printing = 0 }
-            /^## \[/ {
+            /^## (\[|[0-9])/ {
               if (printing) exit
-              printing = (index($0, "## [" version "]") > 0)
+              printing = ($0 ~ ("^## \\[" version "\\]") || $0 ~ ("^## " version "[ (]"))
               next
             }
             printing { print }
@@ -149,6 +156,69 @@ jobs:
             gh release create "$TAG" --title "$TITLE" --notes-file notes.md --verify-tag "$ZIP"
           else
             gh release create "$TAG" --title "$TITLE" --generate-notes --verify-tag "$ZIP"
+          fi
+
+      # 替机器人把账记上：release-please 给发布 PR 打的是 `autorelease: pending`，
+      # 通常由它自己「建 Release + 打 tag」那一步换成 `autorelease: tagged`。本仓库刻意
+      # `skip-github-release: true`（发版只能是人推 tag，见 RELEASING.md §0），于是那一换永远
+      # 不发生——而下一次起草时 `createPullRequests()` 只要看见任何「已合并且仍带 pending」的 PR
+      # 就直接放弃开新 PR（manifest.ts 里那句 "There are untagged, merged release PRs
+      # outstanding - aborting"）。表现是：合了 feat 却再也没有发布 PR，而那条 run 全绿。
+      #
+      # 所以 tag 一推出去、Release 一建好，这里就把它对应的那一个 PR 的标签换掉。不写 `if:
+      # always()`：上面任何一步失败（尤其 GitHub Release 没建成）就不该把账记成已发布。
+      # 换失败不翻发布（商店那边可能已经提审成功），但必须在 Job Summary 里说清楚，
+      # 否则下一次冻结无迹可循。
+      - name: Clear release-please pending label
+        env:
+          VERSION: ${{ steps.guard.outputs.version }}
+          TAG: ${{ steps.guard.outputs.tag }}
+        run: |
+          if [ -z "$VERSION" ]; then
+            echo "前面的步骤没定出版本号，跳过标签清理。"
+            exit 0
+          fi
+          # VERSION 已由 Guard 按 vMAJOR.MINOR.PATCH 的形状校验过（它等于本 tag 去掉 v 的部分），
+          # 且这里只经 process.env 读，不拼进脚本文本。筛的是「标题写着这个版本号、且仍带
+          # pending 标签」的那几个已合并 PR；gh 失败或输出不是 JSON 时按「没有要清理的」处理，
+          # 因为那种情况下本来就没有 PR 可换。
+          NUMS="$(node -e '
+            let raw = "";
+            process.stdin.on("data", (chunk) => (raw += chunk));
+            process.stdin.on("end", () => {
+              let prs;
+              try {
+                prs = JSON.parse(raw);
+              } catch {
+                prs = [];
+              }
+              const hits = (Array.isArray(prs) ? prs : [])
+                .filter((pr) => typeof pr.title === "string" && pr.title.includes(process.env.VERSION))
+                .filter((pr) => (Array.isArray(pr.labels) ? pr.labels : []).some((l) => l && l.name === "autorelease: pending"))
+                .map((pr) => pr.number);
+              console.log(hits.join("\n"));
+            });
+          ' < <(gh pr list --state merged --limit 100 --json number,title,labels 2>/dev/null || true))"
+          if [ -z "$NUMS" ]; then
+            echo "没有待清理的 release-please PR（可能这一版是 §2.3 的手工 bump）。"
+            exit 0
+          fi
+          FAILED=""
+          for NUM in $NUMS; do
+            if ! gh pr edit "$NUM" --remove-label 'autorelease: pending' --add-label 'autorelease: tagged'; then
+              FAILED="$FAILED #$NUM"
+            fi
+          done
+          if [ -n "$FAILED" ]; then
+            {
+              echo '### release-please 的标签没换掉'
+              echo
+              echo "版本 $VERSION（$TAG）已发布，但这些已合并的发布 PR 仍带着 \`autorelease: pending\`：$FAILED"
+              echo
+              echo '下一次起草会因此**静默不开**新的发布 PR（那条 run 仍然全绿）。'
+              echo "请到 GitHub 上把它们的标签改成 \`autorelease: tagged\`（或至少摘掉 pending）。"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::autorelease: pending 标签清理失败：$FAILED"
           fi
 
       - name: Detect Chrome Web Store credentials
