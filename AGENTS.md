@@ -13,19 +13,19 @@
 
 ### 常用命令
 
-| 用途     | 命令                                                                                                 |
-| -------- | ---------------------------------------------------------------------------------------------------- |
-| 开发     | `pnpm dev`（WXT HMR，端口 8899）                                                                     |
-| 构建     | `pnpm build`（输出 `.output/chrome-mv3`）                                                            |
-| 打包     | `pnpm build:zip`（产出 `.output/<name>-<version>-chrome.zip`，发布链路用的就是它）                   |
-| 商店素材 | `pnpm assets` / `pnpm assets:en`（生成商店图与落地页图）                                             |
-| 发版     | `npm version patch --no-git-tag-version` + `CHANGELOG.md` 小节 + `git tag vX.Y.Z && git push --tags` |
-| 鉴权预检 | `pnpm exec wxt submit --dry-run`（只验商店凭据，不上传不提审；需 `.env.submit`，已 gitignore）       |
-| 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                                                                   |
-| Lint     | `pnpm lint`（修复 `pnpm lint:fix`）                                                                  |
-| 样式检查 | `pnpm lint:style`                                                                                    |
-| 格式检查 | `pnpm format:check`（格式化 `pnpm format`，慎用）                                                    |
-| 测试     | `pnpm test`（`vitest run`）                                                                          |
+| 用途     | 命令                                                                                                                        |
+| -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 开发     | `pnpm dev`（WXT HMR，端口 8899）                                                                                            |
+| 构建     | `pnpm build`（输出 `.output/chrome-mv3`）                                                                                   |
+| 打包     | `pnpm build:zip`（产出 `.output/<name>-<version>-chrome.zip`，发布链路用的就是它）                                          |
+| 商店素材 | `pnpm assets` / `pnpm assets:en`（生成商店图与落地页图）                                                                    |
+| 发版     | release-please 开出待合并的 PR（写版本号与 CHANGELOG 小节）→ 人合并 → 人 `git tag vX.Y.Z`，**分两条命令**先推 tag 再推 main |
+| 鉴权预检 | `pnpm exec wxt submit --dry-run`（只验商店凭据，不上传不提审；需 `.env.submit`，已 gitignore）                              |
+| 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                                                                                          |
+| Lint     | `pnpm lint`（修复 `pnpm lint:fix`）                                                                                         |
+| 样式检查 | `pnpm lint:style`                                                                                                           |
+| 格式检查 | `pnpm format:check`（格式化 `pnpm format`，慎用）                                                                           |
+| 测试     | `pnpm test`（`vitest run`）                                                                                                 |
 
 > 本仓库未配置 husky/lint-staged；提交前需手动通过上述检查。CI 与发布共用的检查清单唯一收在 `.github/actions/verify`，加一项检查就改那里。
 
@@ -56,8 +56,8 @@
 | 商店文案与权限理由        | `CHROMEWEBSTORE.md`（上架唯一素材源，不在扩展包内）                                                                                                                                                                                                                                           |
 | 发版与商店提审 runbook    | `RELEASING.md`（一次性凭据、日常发版、失败排查）                                                                                                                                                                                                                                              |
 | GitHub 仓库展示信息       | `GITHUB.md`（About 描述 / website / topics / 社交预览 / Pages 源 / 私密漏洞报告入口，一次性手动清单）                                                                                                                                                                                         |
-| 版本历史                  | `CHANGELOG.md`（唯一事实源；release 工作流把对应小节切成 GitHub Release 说明）                                                                                                                                                                                                                |
-| 三条自动化链路            | `.github/workflows/{ci,deploy-pages,release}.yml`；共用校验 `.github/actions/verify`                                                                                                                                                                                                          |
+| 版本历史                  | `CHANGELOG.md`（唯一事实源；小节由 release-please 开出、release 工作流把对应小节切成 GitHub Release 说明；顶部「待发布」区是人工草稿）                                                                                                                                                        |
+| 四条自动化链路            | `.github/workflows/{ci,deploy-pages,release,release-please}.yml`；共用校验 `.github/actions/verify`；机器人只起草版本 PR、发版仍是人推 tag（`release-please-config.json` 里 `skip-github-release: true`）                                                                                     |
 | 产品落地页 / 隐私政策     | `docs/index.html`（中，站点根）、`docs/en.html`（英）、`docs/privacy.html`、`docs/llms.txt`（新增页面必须中英成对）                                                                                                                                                                           |
 | 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                                                                                                                                                                                             |
 | WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                                                                                                                                                                                                       |
@@ -93,7 +93,7 @@
 - `locales/`：应用内 i18n 文案；`public/_locales/`：仅 manifest 名称/描述。`assets/theme/tokens.css`：`--cop-*` 设计令牌。`tests/`：Vitest 单测（node 环境）。
 - `docs/`：GitHub Pages 产品站（静态 HTML/CSS + 两个零依赖、自托管的渐进增强脚本 `docs/assets/landing.js`（交互装配）与 `docs/assets/preview-engine.js`（落地页预演面板用的那份 `utils/urlMatcher.ts` + `utils/dnrRules.ts` 手工副本——它面向读者随手填的四个输入框，说错就是拿产品承诺开玩笑，所以 `tests/landingPreview.test.ts` 按「输入 → 答案」逐个核，抄错一遍就红；零外部 CDN、零远程字体；不参与 WXT 构建）。**中文是默认语言**：中文页占据站点根 `docs/index.html`，英文页带 `en` 前缀（`en.html`、`en-alternatives.html`），新增页面必须中英成对。装配脚本只加 `html.js` 类并接管截图廊控件、滚动淡入、导航高亮、回顶导轨、页头滚动进度条、微信号一键复制、首屏流程图巡航的入视闸门、卡片指针追光、重写预演面板与对比表整列高亮，**所有依赖 JS 的样式状态写在 `html.js` 选择器下**，因此禁用或删除 JS 时页面内容依旧完整可读、可导航（复制按钮不出现，号码本身是可选中文本，预演面板连同它的输入框整个不出现——`html.js.try-ready` 之外的 `.try` 是 `display: none`，措辞与理由码全在 HTML 的 `data-*` 里、脚本只挑属性名，追光与入视闸门不绑定，动画要么不出现要么照常运行，没有任何内容依赖它）；改页面结构时要维持这个降级前提。微信交流群模块（`docs/assets/img/wechat-qr.png` + 微信号 `lld_1025` + 备注关键词 `cxp`）**只出现在两份落地页**：对比页与隐私页保持中立叙述，`CHROMEWEBSTORE.md` 的商店文案里不得出现——详细描述里引导添加个人微信会被判为站外引流。`docs/assets/img/` 需入库供 Pages 访问。
 - `store-assets/`、`marketing/`：均为本地可再生/仅本地产物，已进 `.gitignore`；`.test-tmp/` 严禁入库（曾因误提交 Chrome for Testing 二进制把 `.git` 撑到 195MB，2026-09 已重写历史清除）。`.qoder/` 用白名单只入库 `rules/` 那一份铁律，其余（`plans/`、`specs/` 与 Agent 会话状态 `settings.local.json`——后者记的是本机绝对路径与逐条批准过的命令原文）一律只留本地，将来该目录再长出新的本地状态文件不需要回来补规则。
-- `.github/`：`workflows/{ci,deploy-pages,release}.yml` 三条链路 + `actions/verify/`（CI 与发布共用的唯一校验入口）+ `ISSUE_TEMPLATE/` 与 PR 模板；不参与扩展构建，也无法用 `act`/`docker` 在本机实跑。根目录的运维文档与它同属仓库侧：`GITHUB.md`（手动设置清单）、`RELEASING.md`（发版）、`CHANGELOG.md`（版本历史）、`SECURITY.md`（披露渠道）——均不入库到扩展包，也不放 `docs/`（那是公开站点根）。
+- `.github/`：`workflows/{ci,deploy-pages,release,release-please}.yml` 四条链路 + `actions/verify/`（CI 与发布共用的唯一校验入口）+ `ISSUE_TEMPLATE/` 与 PR 模板；不参与扩展构建，也无法用 `act`/`docker` 在本机实跑。根目录的运维文档与它同属仓库侧：`GITHUB.md`（手动设置清单）、`RELEASING.md`（发版）、`CHANGELOG.md`（版本历史）、`SECURITY.md`（披露渠道）——均不入库到扩展包，也不放 `docs/`（那是公开站点根）。版本号与 CHANGELOG 小节的**起草**在 `release-please.yml` + `release-please-config.json` + `.release-please-manifest.json`（三件套，配置与基准都在仓库里），**发布**仍然只由人推 `v*` tag 触发 `release.yml`。
 
 ## 代码改动与优化边界
 
@@ -195,7 +195,7 @@
   - `docs/` 落地页与隐私政策：除 prettier 外需 `pnpm lint:style`（`docs/assets/landing.css` 受 recess-order 约束），`docs/assets/landing.js` 需过 `pnpm lint`（浏览器全局已在 `eslint.config.js` 的 `docs/**` 覆盖块中声明），并在浏览器里目测渲染（含禁用 JS 的降级态）。中英两页的可见文案、FAQ 条目数与 `FAQPage` 结构化数据必须一一对应：`FAQPage` 的问答需与页面 `<details>` 文本一致，两页的条目顺序也需一致。微信交流群模块只允许出现在两份落地页（对比页/隐私页/商店文案出现即红），中英 README 的章节数、语言互链方向、微信号 `lld_1025`、备注关键词 `cxp` 与二维码路径可解析性由同一支测试守着——只改一边会直接红。改了落地页正文要手工把该页 `dateModified`、页脚「最后更新」与 `docs/sitemap.xml` 里那条的 `<lastmod>` 一起推到同一天（守卫只校验三者**彼此一致**，不校验具体值）。
   - 商店文案改动：`pnpm test`（含 `name`/`description` 字符上限守卫）+ 同步 `CHROMEWEBSTORE.md`。注意 `CHROMEWEBSTORE.md` §0 预算表里的中英详细描述码点数是从正文反算的，改正文必须同表更新（`toBeCloseTo(..., 1)`，即 ±50 码点内），并对该文件跑一次 prettier（表格列宽会随之重排）。
   - `.github/**`（工作流、复合动作、Issue/PR 模板）：`pnpm test`（`tests/docs-consistency.test.ts` 守卫关键契约与 YAML 可解析），并对改动文件跑 prettier；本机无 `act`/`docker`，**工作流无法本地实跑，必须把这一点作为未验证项写进交付说明**。
-  - 发版：按 `RELEASING.md` §2（`npm version` + `CHANGELOG.md` 小节 + 全量校验 + `git tag`），推 tag 即触发发布链路。
+  - 发版：按 `RELEASING.md` §2（合进 main → 机器人开 `chore: release X.Y.Z` PR → 人把「待发布」区的长文并进新小节 → 合并 → 全量校验 → `git tag` + 推 tag），推 tag 即触发发布链路。手工 bump（§2.3）必须同改 `.release-please-manifest.json`。
 - 不用会改写整个仓库的 `pnpm format` 处理局部任务；需要自动修复时只作用于本次修改文件。
 - 不为通过测试而弱化断言、删除、跳过测试或隐藏错误；命令因既有问题或环境限制无法运行时，交付时如实说明未验证项与原因。
 
@@ -273,6 +273,8 @@
 ### 发布与 CI
 
 - **版本号只在 `package.json`**。`wxt.config.ts` 刻意不声明 `manifest.version`（WXT 回落并削去预发布后缀），加回去就是双份事实源；`tests/build-verification.test.ts` 故意拒绝两者不一致。
+- **版本号由机器人起草、由人发布**。`release-please.yml` 只改 `package.json`、`CHANGELOG.md` 与 `.release-please-manifest.json` 三处，成果以一个待人工合并的 PR 交出来；它**不打 tag**（`release-please-config.json` 的 `skip-github-release: true`），而就算让它打也白发——GitHub 规定由默认 `GITHUB_TOKEN` 产生的事件不再起跑新工作流，机器人推的 tag 触发不了 `release.yml`（同一条规则也使它自己的 PR 不带任何 CI 检查，处置见 `RELEASING.md` §1.5）。发版那一下仍然是人 `git tag vX.Y.Z && git push`。绕过机器人手工 bump 时**必须同改 `.release-please-manifest.json`**，否则机器人基准落后一级，下一次开出的号就是刚刚发过的那个。
+- **CHANGELOG 顶部草稿区的标题不能写成 `## [Unreleased]`**。release-please 找插入点的锚是 `\n###? v?[0-9[]`，`[Unreleased]` 里那个 `[` 也算命中，于是整份历史被挪到草稿区下面；本项目用不带方括号的 `## 待发布（Unreleased，人工草稿区）`，由 `tests/docs-consistency.test.ts` 钉住。
 - **首次商店条目必须手动建**。`publish-extension`（`wxt submit` 的底层）不提供新建能力，必须先在 Dashboard 上传一次 zip 拿 Extension ID；之后才能由 `release.yml` 上传+提审。
 - **GitHub Pages 的 Source 必须是「GitHub Actions」**，否则 `deploy-pages` 报 "Pages not enabled"；而 `docs/` 就是站点根，`/privacy.html` 已写进商店详细描述与 `llms.txt`，改路径基、目录布局或仓库名都会打断隐私政策。
 - **仓库展示信息（About 描述 / website / topics / Pages 源 / 社交预览图）不能靠 `GITHUB_TOKEN` 改**，只能仓库所有者在 UI 手动填（逐项值见 `GITHUB.md`）。

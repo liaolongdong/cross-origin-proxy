@@ -44,7 +44,7 @@
 - [ ] manifest 名称/描述变化时同步了 `public/_locales/{zh_CN,en}/messages.json`（≤75 / ≤132 字符由测试守卫）
 - [ ] 用户可见功能变化时同步了 `README.md`（中文主文档）与 `README.en.md`
 - [ ] 涉及权限 / 配置 / 商店文案时同步了 `wxt.config.ts`、`CHROMEWEBSTORE.md`、`docs/` 落地页（中英一一对应）
-- [ ] 值得用户感知的变化已在 `CHANGELOG.md` 顶部补条目（发版时该小节会变成 Release 说明）
+- [ ] 用户可见功能变化已在 `CHANGELOG.md` 顶部「待发布」区补条目（中英各一段；版本号与 `## [x.y.z]` 小节由 release-please 的 PR 写，合并前把这一段并进那个小节，它就是 Release 说明）
 
 ## 测试 / Tests
 
