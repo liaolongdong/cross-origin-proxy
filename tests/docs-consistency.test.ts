@@ -925,6 +925,66 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  describe('落地页菜单顺序跟随正文', () => {
+    /**
+     * 菜单是滚动的目录，不是「动作项收尾」的排版偏好：读者照着菜单往下走，
+     * 顺序反了就会被从最后一节拽回上面一节。2026-09-27 中英两页都把「常见问题」
+     * 写在「安装」之前，而正文里 `#install` 本来就在 `#faq` 前面。
+     *
+     * 这条判据在实现侧没有任何运行时对应物——`landing.js` 的区块高亮按 DOM 现算、
+     * 不认菜单顺序，所以排反了界面照样亮得起来，只有读者察觉得到。
+     */
+    const LANDING_PAGES = ['docs/index.html', 'docs/en.html'];
+
+    /** 桌面横条 `.site-nav` 里的锚点，按出现顺序。 */
+    const desktopNav = (html: string): string[] => {
+      const block = /<nav[^>]*class="site-nav"[^>]*>([\s\S]*?)<\/nav>/.exec(html);
+      return [...(block?.[1] ?? '').matchAll(/href="#([a-z0-9-]+)"/g)].map(m => m[1]);
+    };
+    /** ≤760px 汉堡面板里的锚点（同批锚点的第二簇），排掉面板尾部的站外出口。 */
+    const panelNav = (html: string, known: Set<string>): string[] => {
+      const block = /<div class="nav-menu-panel">([\s\S]*?)<\/details>/.exec(html);
+      return [...(block?.[1] ?? '').matchAll(/href="#([a-z0-9-]+)"/g)].map(m => m[1]).filter(id => known.has(id));
+    };
+    /** 正文里带 id 的顶层小节，按文档顺序——也就是滚动顺序。 */
+    const documentOrder = (html: string): string[] =>
+      [...html.matchAll(/<section[^>]*\bid="([a-z0-9-]+)"/g)].map(m => m[1]);
+    /** `wanted` 是否按序嵌在 `order` 里（允许正文里有菜单没列的小节）。 */
+    const isSubsequence = (wanted: string[], order: string[]): boolean => {
+      let i = 0;
+      for (const id of order) if (i < wanted.length && wanted[i] === id) i += 1;
+      return i === wanted.length;
+    };
+
+    it('阳性对照：判据真的认得出反序', () => {
+      const order = ['problem', 'features', 'install', 'faq'];
+      expect(isSubsequence(['install', 'faq'], order), '按正文顺序应当放行').toBe(true);
+      expect(isSubsequence(['faq', 'install'], order), '把相邻两枚调个位必须判红').toBe(false);
+      expect(isSubsequence(['features', 'problem'], order), '跨枚调序同样必须判红').toBe(false);
+    });
+
+    it('两簇菜单同序，且顺序等于正文小节的滚动顺序', () => {
+      for (const file of LANDING_PAGES) {
+        const html = read(file);
+        const nav = desktopNav(html);
+        expect(nav.length, `${file} 的 .site-nav 一条锚点都没解析到，守卫失效`).toBeGreaterThanOrEqual(6);
+        const sections = documentOrder(html);
+        expect(sections.length, `${file} 解析不到带 id 的小节，守卫失效`).toBeGreaterThan(nav.length);
+
+        const panel = panelNav(html, new Set(nav));
+        expect(panel, `${file} 的汉堡面板一条锚点都没解析到，守卫失效`).not.toHaveLength(0);
+        expect(panel, `${file} 汉堡面板与桌面横条不同序`).toEqual(nav);
+
+        const missing = nav.filter(id => !sections.includes(id));
+        expect(missing, `${file} 菜单指向了正文里不存在的小节：${missing.join(', ')}`).toEqual([]);
+        expect(
+          isSubsequence(nav, sections),
+          `${file} 菜单顺序与正文滚动顺序不符：菜单 ${nav.join(' → ')}｜正文 ${sections.join(' → ')}`,
+        ).toBe(true);
+      }
+    });
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 商店提审素材：CHROMEWEBSTORE.md 是商店表单的唯一素材源
   // ═══════════════════════════════════════════════════════════════════════════
