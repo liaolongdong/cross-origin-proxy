@@ -38,9 +38,9 @@ pnpm format:check # prettier (format: pnpm format — repo-wide, use sparingly)
 pnpm assets       # regenerate store + landing images from screenshots/
 ```
 
-Load `.output/chrome-mv3` unpacked at `chrome://extensions` to try it. Run `pnpm assets` (and `pnpm assets:en` for the English store captions) only when you want to regenerate the store and landing-page images from `screenshots/`. Two commands matter only when releasing: `pnpm exec wxt submit --dry-run` (check store credentials without uploading) and `pnpm build:zip` (what the release workflow publishes) — see [RELEASING.md](./RELEASING.md).
+Load `.output/chrome-mv3` unpacked at `chrome://extensions` to try it. Run `pnpm assets` (and `pnpm assets:en` for the English store captions) only when you want to regenerate the store and landing-page images from `screenshots/`. Two commands matter only when releasing: `pnpm exec wxt submit --dry-run` (check store credentials without uploading) and `pnpm build:zip` (what the release workflow publishes) — see [RELEASING.md](./.github/docs/RELEASING.md).
 
-CI runs lint, stylelint, Prettier, typecheck, a production build and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./GITHUB.md).
+CI runs lint, stylelint, Prettier, typecheck, a production build and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./.github/docs/GITHUB.md).
 
 ## Repository layout
 
@@ -56,6 +56,7 @@ locales/                In-app UI strings (zh_CN / en, split into common/options
 public/_locales/        Manifest name and description only
 docs/                   GitHub Pages product site (Chinese is the default language): index.html (zh, site root) · en.html · alternatives.html (zh) · en-alternatives.html · privacy.html · llms.txt · llms-full.txt
 .github/                ci.yml · release.yml · deploy-pages.yml · actions/verify · ISSUE_TEMPLATE · PR template
+  docs/                   repo-side runbooks (moved out of the root on 2026-09-28): CHROMEWEBSTORE.md (store listing copy) · GITHUB.md (one-time GitHub settings) · RELEASING.md (release & review submission)
 tests/                  Vitest suites (node environment)
 ```
 
@@ -97,11 +98,11 @@ You normally do not need any of this to send a patch — the maintainers cut rel
 - **The version lives in `package.json` only.** `wxt.config.ts` deliberately does not declare `manifest.version`; WXT derives it (and strips pre-release suffixes). Re-adding it creates a second source of truth that will drift, and [tests/build-verification.test.ts](./tests/build-verification.test.ts) fails on drift on purpose.
 - **User-visible changes need a `CHANGELOG.md` entry — in the draft block.** Write it under the `## 待发布（Unreleased，人工草稿区）` heading at the top of the file, in Chinese and English. Do **not** retitle that heading `## [Unreleased]`: release-please finds its insertion point with the regex `\n###? v?[0-9[]`, so a bracketed heading matches, the generated `## [x.y.z]` section lands _above_ it and the whole released history ends up filed under an "unreleased" heading.
 - **You do not pick the version number.** After each push to `main`, release-please derives the next version from commit types (`feat` → minor, `fix` / `perf` / `refactor` / `revert` → patch, `BREAKING CHANGE` → major) and opens a PR that writes `package.json`, `.release-please-manifest.json` and a new `## [x.y.z]` section here. A maintainer folds the draft block into that section before merging — those merged bullets are what store users read as the release notes, and a list of commit titles alone is not enough. `docs` / `test` / `chore` / `ci` / `build` / `style` neither appear in the changelog nor trigger a bump, so a docs-only merge does not force everyone a release.
-- **Pushing a `v*` tag is the release** — merging the release PR is not. The bot is configured with `skip-github-release`, so it creates no tag and no Release (and a tag it pushed with the default `GITHUB_TOKEN` would not start the workflow anyway: GitHub does not run new workflows for events created by that token). Pushing the tag runs [`.github/workflows/release.yml`](./.github/workflows/release.yml): full verify, build + zip, GitHub Release, then Chrome Web Store upload and review submission when the store secrets are configured. Never tag a commit you have not run the checks on, and push the tag _before_ the branch it belongs to (see [RELEASING.md](./RELEASING.md) §1.5).
+- **Pushing a `v*` tag is the release** — merging the release PR is not. The bot is configured with `skip-github-release`, so it creates no tag and no Release (and a tag it pushed with the default `GITHUB_TOKEN` would not start the workflow anyway: GitHub does not run new workflows for events created by that token). Pushing the tag runs [`.github/workflows/release.yml`](./.github/workflows/release.yml): full verify, build + zip, GitHub Release, then Chrome Web Store upload and review submission when the store secrets are configured. Never tag a commit you have not run the checks on, and push the tag _before_ the branch it belongs to (see [RELEASING.md](./.github/docs/RELEASING.md) §1.5).
 - **Docs under `docs/` are the product site.** Chinese is the default language and owns the site root (`docs/index.html`); the English page of each pair carries an `en` prefix (`en.html`, `en-alternatives.html`). A new page has to ship both languages together — [tests/docs-consistency.test.ts](./tests/docs-consistency.test.ts) fails when the FAQ counts, hreflang triads or freshness stamps drift between the two. Pushing to `main` deploys the site via `.github/workflows/deploy-pages.yml`, and that is where the privacy-policy URL the store requires is served — so a broken link in `docs/` is a store-review blocker, not a cosmetic issue.
-- Repository display settings (About, topics, Pages source) are operator-only and listed in [GITHUB.md](./GITHUB.md).
+- Repository display settings (About, topics, Pages source) are operator-only and listed in [GITHUB.md](./.github/docs/GITHUB.md).
 
-The full release runbook, including the one-time store credentials, is [RELEASING.md](./RELEASING.md).
+The full release runbook, including the one-time store credentials, is [RELEASING.md](./.github/docs/RELEASING.md).
 
 ## 贡献要点（中文）
 

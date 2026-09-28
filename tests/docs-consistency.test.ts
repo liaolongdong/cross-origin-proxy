@@ -51,12 +51,27 @@ const pkg = JSON.parse(read('package.json')) as {
   scripts: Record<string, string>;
 };
 
+/**
+ * 三份仓库侧运维文档的落点（2026-09-28 从仓库根移入 `.github/docs/`）
+ *
+ * 搬家的判据是「谁在根上找不到它」：`README`/`CHANGELOG`/`LICENSE`/`AGENTS` 由 GitHub、
+ * release-please 与 agent 工具按根路径取用，动不了；这三份只被仓内 prose 与工作流引用，
+ * 放到所描述的自动化旁边更贴合职责，也不再把 87KB 的商店文案台账堆在仓库首页。
+ *
+ * 路径在这里写一次：下面四份清单与各处 `read()` 都取这些常量，将来再搬家只改这一处。
+ * 注意 `docs/` 是 Pages 站点根，所以这三份**不能**放进去——放进去就是往公开产品站上
+ * 挂运维手册，还会让 `deploy-pages.yml` 的 `paths: docs/**` 白白起跑一次站点部署。
+ */
+const STORE_DOC = '.github/docs/CHROMEWEBSTORE.md';
+const GITHUB_DOC = '.github/docs/GITHUB.md';
+const RELEASING_DOC = '.github/docs/RELEASING.md';
+
 /** 会引用 Pages URL 的文档；新增此类文档时要加进来看得到守卫。 */
 const PAGES_URL_SOURCES = [
   'README.md',
   'README.en.md',
-  'CHROMEWEBSTORE.md',
-  'GITHUB.md',
+  STORE_DOC,
+  GITHUB_DOC,
   'docs/index.html',
   'docs/en.html',
   'docs/alternatives.html',
@@ -68,16 +83,16 @@ const PAGES_URL_SOURCES = [
   'docs/robots.txt',
 ];
 
-/** 面向读者的仓库根文档；用于「过期结论」扫描。 */
+/** 面向读者的仓库文档（含 `.github/docs/` 那三份）；用于「过期结论」扫描。 */
 const HUMAN_DOCS = [
   'README.md',
   'README.en.md',
   'CONTRIBUTING.md',
-  'CHROMEWEBSTORE.md',
+  STORE_DOC,
   'SECURITY.md',
   'CHANGELOG.md',
-  'RELEASING.md',
-  'GITHUB.md',
+  RELEASING_DOC,
+  GITHUB_DOC,
   'AGENTS.md',
 ];
 
@@ -99,7 +114,7 @@ const BILINGUAL_PAIRS: Array<[string, string]> = [
 const STORE_URL_SOURCES = [
   'README.md',
   'README.en.md',
-  'CHROMEWEBSTORE.md',
+  STORE_DOC,
   'docs/index.html',
   'docs/en.html',
   'docs/alternatives.html',
@@ -140,7 +155,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
     it('llms.txt / README / 落地页的站点地址与 package.json homepage 完全一致', () => {
       expect(pkg.homepage, 'package.json 需要 homepage').toBe(`${PAGES_BASE}/`);
-      expect(read('GITHUB.md')).toContain(PAGES_BASE);
+      expect(read(GITHUB_DOC)).toContain(PAGES_BASE);
     });
 
     it('GitHub Releases 入口在中英 README 都指向 /releases（发版链路的产物落点）', () => {
@@ -438,12 +453,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
           /data-copy="lld_1025"[\s\S]*class="copy-status"/,
         );
       }
-      for (const file of [
-        'docs/alternatives.html',
-        'docs/en-alternatives.html',
-        'docs/privacy.html',
-        'CHROMEWEBSTORE.md',
-      ]) {
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html', 'docs/privacy.html', STORE_DOC]) {
         expect(read(file), `${file} 不该出现微信交流群`).not.toContain('wechat-qr');
       }
     });
@@ -524,12 +534,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         ).toBe(items);
       }
 
-      for (const file of [
-        'docs/alternatives.html',
-        'docs/en-alternatives.html',
-        'docs/privacy.html',
-        'CHROMEWEBSTORE.md',
-      ]) {
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html', 'docs/privacy.html', STORE_DOC]) {
         expect(read(file), `${file} 不该出现「作者的其他插件」模块`).not.toContain('author-tools');
       }
     });
@@ -990,7 +995,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('Chrome 商店提审素材', () => {
-    const doc = read('CHROMEWEBSTORE.md');
+    const doc = read(STORE_DOC);
 
     /**
      * 全仓库的商店链接必须共用同一个扩展 ID，真值取 `CHROMEWEBSTORE.md` 的 Store URL 行。
@@ -1144,7 +1149,9 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * 清单里每一项都得说得出它为什么必须写号：
      *
      * - `package.json`、`.release-please-manifest.json`：写号就是它们的职责。
-     * - `CHANGELOG.md`、`CHROMEWEBSTORE.md`：版本历史与商店文案台账，按设计一行一个号。
+     * - `CHANGELOG.md`、`.github/docs/CHROMEWEBSTORE.md`：版本历史与商店文案台账，按设计一行一个号。
+     *   后者按**整条路径**匹配，不是按目录：`.github/docs/` 里的另两份（GITHUB、RELEASING）
+     *   本来就不该写开发中的版本号，把整个目录放进清单等于悄悄放弃对它们的扫描。
      * - `docs/`（前缀匹配）：产品页说的是**商店在装的已发布版本**，而 `CHROMEWEBSTORE.md` §12
      *   那份翻牌清单会把它翻成**刚发布的那个号**——那一刻它和 `package.json` 恰好相等。
      *     这一项不是通融，是「整仓扫」这个前提本身的错：仓库里带过版本号的文件有十五个，
@@ -1162,7 +1169,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         'package.json',
         '.release-please-manifest.json',
         'CHANGELOG.md',
-        'CHROMEWEBSTORE.md',
+        STORE_DOC,
         'docs/',
         'utils/har.ts',
         'tests/exportSanitize.test.ts',
@@ -1211,7 +1218,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
     it('商店文档里的包名模板与 wxt zip 的产物命名一致', () => {
       // wxt 默认产物：`<package-name>-<version>-<browser>.zip`
-      expect(read('CHROMEWEBSTORE.md')).toContain(`${pkg.name}-<version>-chrome.zip`);
+      expect(read(STORE_DOC)).toContain(`${pkg.name}-<version>-chrome.zip`);
     });
 
     it('版本号只在 package.json，wxt.config.ts 不得重新声明 manifest.version', () => {
@@ -1307,10 +1314,10 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       // 而它推的是本机**所有** tag，多打一个就多发一版。少了这个可选段，正则只拦得住
       // 不带 -u 的写法，这条恰好从缝里过去。
       const combined = /git push\s+(?:-u\s+)?origin\s+(?:main\s+v|--tags)/;
-      for (const file of ['RELEASING.md', 'AGENTS.md', 'CONTRIBUTING.md', 'release-please-config.json']) {
+      for (const file of [RELEASING_DOC, 'AGENTS.md', 'CONTRIBUTING.md', 'release-please-config.json']) {
         expect(read(file), `${file} 里又出现了「一条命令同时推 main 与 tag」的写法`).not.toMatch(combined);
       }
-      expect(read('RELEASING.md'), '§2 第 4 步那两条分开的 push 不见了').toContain('git push origin vX.Y.Z');
+      expect(read(RELEASING_DOC), '§2 第 4 步那两条分开的 push 不见了').toContain('git push origin vX.Y.Z');
       expect(read('AGENTS.md'), '速查表不再说顺序').toContain('先推 tag');
     });
 
@@ -1508,7 +1515,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
 
     it('GitHub 仓库展示信息清单给出的值本身合法', () => {
-      const doc = read('GITHUB.md');
+      const doc = read(GITHUB_DOC);
       const description = doc.match(/```[a-z]*\nChrome extension:[^\n]+/)?.[0].replace(/^```[a-z]*\n/, '');
       expect(description, 'GITHUB.md 应包含 About 描述的可粘贴值').toBeTruthy();
       // GitHub About 描述上限 350 个码点

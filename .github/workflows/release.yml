@@ -262,5 +262,5 @@ jobs:
             echo '- `CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`'
             echo
             echo '补齐后在本工作流页面点 **Run workflow** 并填入同一个 tag 即可继续发布；Release 已存在会被复用，不会重复创建。'
-            echo '获取步骤见仓库根目录的 [RELEASING.md](https://github.com/liaolongdong/cross-origin-proxy/blob/main/RELEASING.md)。'
+            echo '获取步骤见 [.github/docs/RELEASING.md](https://github.com/liaolongdong/cross-origin-proxy/blob/main/.github/docs/RELEASING.md)。'
           } >> "$GITHUB_STEP_SUMMARY"

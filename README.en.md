@@ -335,11 +335,11 @@ Built and tested for Chrome (MV3). Edge runs Chromium extensions so the same bui
 | `alarms`                        | Service-worker keepalive and the auto-off countdown                     |
 | `<all_urls>` (host permission)  | Proxying must work on any frontend origin; targets are your own domains |
 
-Every permission also has a store-facing justification in [CHROMEWEBSTORE.md](./CHROMEWEBSTORE.md).
+Every permission also has a store-facing justification in [CHROMEWEBSTORE.md](./.github/docs/CHROMEWEBSTORE.md).
 
 ## 🤝 Contributing
 
-Built with WXT + Vue 3 + TypeScript + Element Plus (Manifest V3); requires Node.js 20+ and pnpm 10 — `pnpm dev` for HMR development, `pnpm build` for `.output/chrome-mv3`, `pnpm test` for unit tests. Small fixes are welcome. The full command list, repository layout, CI and release conventions are in [CONTRIBUTING.md](./CONTRIBUTING.md); the store runbook is [RELEASING.md](./RELEASING.md) and the one-time GitHub repo checklist is [GITHUB.md](./GITHUB.md).
+Built with WXT + Vue 3 + TypeScript + Element Plus (Manifest V3); requires Node.js 20+ and pnpm 10 — `pnpm dev` for HMR development, `pnpm build` for `.output/chrome-mv3`, `pnpm test` for unit tests. Small fixes are welcome. The full command list, repository layout, CI and release conventions are in [CONTRIBUTING.md](./CONTRIBUTING.md); the store runbook is [RELEASING.md](./.github/docs/RELEASING.md) and the one-time GitHub repo checklist is [GITHUB.md](./.github/docs/GITHUB.md).
 
 ## 💬 Community & feedback
 

@@ -25,7 +25,7 @@ Last verified / 内容核对日期: 2026-09-20, against the store build users in
 - 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - 源码仓库 / Source: https://github.com/liaolongdong/cross-origin-proxy
 - 预构建 zip / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases (attached per tag / 每个 tag 自动附带；尚未发布第一个 tag / no tag published yet)
-- 商店文案与权限理由 / Store copy and permission justifications: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CHROMEWEBSTORE.md
+- 商店文案与权限理由 / Store copy and permission justifications: https://github.com/liaolongdong/cross-origin-proxy/blob/main/.github/docs/CHROMEWEBSTORE.md
 - 贡献指南 / Contributing: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md
 
 ## 3. The problem it removes / 它解决的那件事

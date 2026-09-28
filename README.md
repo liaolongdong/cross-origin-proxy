@@ -335,11 +335,11 @@ flowchart TD
 | `alarms`                        | 后台脚本保活与自动关闭倒计时                       |
 | `<all_urls>`（站点权限）        | 代理必须能在任意前端来源上工作，目标域名由你自己配 |
 
-每项权限面向商店审核的说明文案在 [CHROMEWEBSTORE.md](./CHROMEWEBSTORE.md)。
+每项权限面向商店审核的说明文案在 [CHROMEWEBSTORE.md](./.github/docs/CHROMEWEBSTORE.md)。
 
 ## 🤝 参与贡献
 
-技术栈为 WXT + Vue 3 + TypeScript + Element Plus（Manifest V3），需要 Node.js 20+ 与 pnpm 10；`pnpm dev` 起 HMR 开发、`pnpm build` 产出 `.output/chrome-mv3`、`pnpm test` 跑单测。小修复也欢迎——完整命令清单、目录结构、CI 与发版约定请先读 [CONTRIBUTING.md](./CONTRIBUTING.md)，商店发布流程见 [RELEASING.md](./RELEASING.md)，GitHub 仓库设置清单见 [GITHUB.md](./GITHUB.md)。
+技术栈为 WXT + Vue 3 + TypeScript + Element Plus（Manifest V3），需要 Node.js 20+ 与 pnpm 10；`pnpm dev` 起 HMR 开发、`pnpm build` 产出 `.output/chrome-mv3`、`pnpm test` 跑单测。小修复也欢迎——完整命令清单、目录结构、CI 与发版约定请先读 [CONTRIBUTING.md](./CONTRIBUTING.md)，商店发布流程见 [RELEASING.md](./.github/docs/RELEASING.md)，GitHub 仓库设置清单见 [GITHUB.md](./.github/docs/GITHUB.md)。
 
 ## 💬 交流与反馈
 

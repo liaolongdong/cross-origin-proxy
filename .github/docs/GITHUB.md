@@ -4,7 +4,7 @@
 >
 > 这些字段全部位于 GitHub 仓库设置里，只有仓库所有者能改。本仓库刻意**不**收录自动改设置的脚本、也**不**建会动仓库设置的工作流；§3.1 给的是一条你自愿手动跑的 `gh` 命令，值仍然从本文读，不另建事实源。填完之后用 §7 的命令自检。
 >
-> 本文位于仓库根目录，不在 `docs/`（Pages 站点根）内，也不会被打进扩展包。
+> 本文位于 `.github/docs/`（仓库侧运维文档），既不在 `docs/`（Pages 站点根，公开产品站）内，也不会被打进扩展包。
 
 ## 0. 为什么要填：每个字段的受众
 
@@ -165,7 +165,7 @@ pnpm assets:en
 
 ## 6. 开启私密漏洞报告（`SECURITY.md` 的前提）
 
-仓库 **Settings → General**，滚到 **Advanced** 区，勾选 **Privately report a security vulnerability**。不勾就没有 `Security → Report a vulnerability` 入口，而 [`SECURITY.md`](./SECURITY.md) 把隐私报漏洞作为首选项——这个扩展拿的是 `<all_urls>`，公开 Issue 里贴复现等于公开利用方式。
+仓库 **Settings → General**，滚到 **Advanced** 区，勾选 **Privately report a security vulnerability**。不勾就没有 `Security → Report a vulnerability` 入口，而 [`SECURITY.md`](../../SECURITY.md) 把隐私报漏洞作为首选项——这个扩展拿的是 `<all_urls>`，公开 Issue 里贴复现等于公开利用方式。
 
 勾选后仓库首页 Security 标签页会出现 **Report a vulnerability** 按钮，可在里面验证一下入口真能用。
 

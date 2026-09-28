@@ -86,12 +86,20 @@ marketing/
 .qoder/*
 !.qoder/rules/
 
-# 反过来，根目录那九份仓库侧文档（中英 README、CONTRIBUTING、SECURITY、CHANGELOG、
-# CHROMEWEBSTORE、GITHUB、RELEASING、AGENTS）读着像「内部运营文档」，却一份都抽不掉：
+# 剩下这七份根目录文档（中英 README、CONTRIBUTING、SECURITY、CHANGELOG、AGENTS、CLAUDE
+# 与 LICENSE 边的工程约定）读着像「内部运营文档」，却一份都不能忽略：
 # `tests/docs-consistency.test.ts` 的 `HUMAN_DOCS` 清单会逐个 read 它们，而 CI 跑的就是
-# `pnpm test`；`release.yml` 把 RELEASING.md 的链接写进每一次 Release 说明；中英落地页与
-# `docs/llms*.txt` 把 CHROMEWEBSTORE.md 的 blob URL 当公开链接发出去。判据从来不是
-# 「它够不够对外」，而是「抽掉之后会不会有人读到 404、或者干净检出的 CI 读到红」。
+# `pnpm test`；`release-please` 按根路径写 `CHANGELOG.md`；GitHub 按根路径认 CONTRIBUTING、
+# SECURITY 与 LICENSE。判据从来不是「它够不够对外」，而是「抽掉之后会不会有人读到 404、
+# 或者干净检出的 CI 读到红」。
+#
+# 2026-09-28：另外三份（CHROMEWEBSTORE、GITHUB、RELEASING）从根目录**搬进 `.github/docs/`**，
+# 但一份都没有解除跟踪。搬家和忽略是两件事：搬家改的是「协作者去哪儿找它」，仓库与
+# `pnpm test` 里它照样在场；忽略改的是「干净检出根本没有它」，那三份各自有一条会红的守卫
+# （商店文案台账进 `VERSION_EXEMPT`、GITHUB.md 的值进「展示信息合法性」、RELEASING.md 的
+# 「两条 push」判据），而且 `release.yml` 与中英落地页/`docs/llms*.txt` 把它们的路径写进了
+# 对外发布的文本。为什么不放进 `docs/`：那是 Pages 站点根，进去就是往公开产品站上挂运维手册，
+# 还会让 `deploy-pages.yml` 的 `paths: docs/**` 白白起跑一次部署。
 
 # 仅本地留证的 QA 截图（已从仓库解除跟踪，防止 git add -A 重新带回）。
 # 判据不是「我不想要图片」，而是**全仓零引用**：`scripts/generate-store-assets.mjs` 的输入清单
@@ -117,3 +125,45 @@ docs/assets/og-image.png
 # 有效内容已并入 RELEASING.md（中文，含这些坑的正确说法），发布链路的手动配置清单只认那一份。
 RELEASE-SETUP.md
 CHROME-WEBSTORE-SETUP.md
+
+# ── 本地残留：编辑器与 Agent 的机器状态 ──────────────────────────────────────────
+# 判据与 `.qoder/` 那条白名单同源：这类文件记的是**这台机器**上的绝对路径、调试配置与逐条
+# 批准过的命令原文，对协作者零价值，对公开仓库却是一次不必要的信息外泄。
+# `.vscode/settings.json` 是例外——它只有一条 `liveServer.settings.port`，是刻意共享的约定，
+# 已入库；所以这里只收 `.idea/`（JetBrains 全目录都是本地状态）和 `.cursor/`、
+# `.claude/settings.local.json` 这类「文件名里带 .local 就是判据」的会话状态，
+# 不收 `.claude/` 整目录——将来真要共享 commands/ 或 settings.json 时不该被一行历史规则挡住。
+.idea/
+.cursor/
+.claude/settings.local.json
+# 多根工作区文件：记的是本机目录布局，换一台机器就是废的。
+*.code-workspace
+
+# ── 本地残留：工具与合并的临时产物 ──────────────────────────────────────────────
+# 这些全都可能在一次 `git add -A` 里被顺手带回库，而它们没有一刻是别人需要的。
+# `*.orig` / `*.rej`：`git mergetool`、`git checkout -p`、`git apply --3way` 的残留。
+# 本仓库历史上真出过一次误提交（Chrome for Testing 二进制把 `.git` 撑到 195MB），
+# 靠人记得「别 add」不如直接排掉。
+*.orig
+*.rej
+*.bak
+# `*.local.*`：Vite/WXT 生态约定的「本机覆盖配置」（`wxt.config.local.ts`、`vite.config.local.mjs`
+# 这一类），按定义不该入库。写成带后缀的形式而不是 `*.local`——后者只匹配**以** `.local`
+# 结尾的文件名，`wxt.config.local.ts` 恰好从缝里过去（实测过）。
+# `.env*` 上面已单独收口，这里管的是非 `.env` 前缀的那一份。
+*.local.*
+# Vite 加载配置时会临时编译出一个带时间戳的 `.mjs`；进程被中断时它就留在仓库根。
+*.timestamp-*.mjs
+# vitest --coverage 的产物；stylelint 的增量缓存（ESLint 的 `.eslintcache` 在上面已收）。
+coverage/
+.stylelintcache
+
+# ── 抓包与流量素材：本项目的日常产物，也是隐私风险最高的那一类 ──────────────────
+# 这个扩展每天在做的事就是导出 HAR / 抓 cURL。实测那份里带真实内网域名、cookie 与
+# `Authorization` 头，一旦入库就进 git 历史、删不干净（AGENTS「仓库体积」一节记过一次）。
+# 目前全仓没有 `.har` 夹具——`tests/harImport.test.ts` 用的是内联构造的 HAR 对象，
+# 所以这三条不会挡住任何测试。将来确实要提交一份脱敏夹具时，用 `git add -f` 并在那份文件
+# 旁边说明它已经洗过，别把这里的规则改宽。
+*.har
+*.pcap
+*.pcapng

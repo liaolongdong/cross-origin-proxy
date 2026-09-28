@@ -18,7 +18,7 @@ It holds the `<all_urls>` host permission, can issue requests on behalf of any p
 
 ## 如何报告 · How to report
 
-1. **首选**：仓库首页 **Security → Report a vulnerability**（私密漏洞报告），填写复现步骤即可，只有你与维护者能看到。该入口需要仓库所有者先在 `Settings → General → Advanced` 勾选 **Privately report a security vulnerability**（见 [GITHUB.md](./GITHUB.md) §6）。
+1. **首选**：仓库首页 **Security → Report a vulnerability**（私密漏洞报告），填写复现步骤即可，只有你与维护者能看到。该入口需要仓库所有者先在 `Settings → General → Advanced` 勾选 **Privately report a security vulnerability**（见 [GITHUB.md](./.github/docs/GITHUB.md) §6）。
    **Preferred**: use **Security → Report a vulnerability** on the repository home page. It is private to you and the maintainers. The owner must first enable _Privately report a security vulnerability_ under `Settings → General → Advanced`.
 2. 入口未开启时，开一个标题只写 `security` 的最小 Issue 并@维护者，**不要在正文里贴漏洞细节**，约到私密渠道再展开。
    If that entry point is off, open a minimal issue titled only `security` without any details and ask for a private channel.
@@ -29,7 +29,7 @@ It holds the `<all_urls>` host permission, can issue requests on behalf of any p
 
 - 收到后先确认并给出是否复现的结论与临时规避手段（单人维护，不承诺固定 SLA）。
   We acknowledge first and come back with reproduction status plus a workaround; it is a solo-maintained project, so no fixed SLA is promised.
-- 确认的问题优先出补丁版本并按 [RELEASING.md](./RELEASING.md) 走商店提审；商店审核时长不受本仓库控制，会在补丁发布时一并说明。
+- 确认的问题优先出补丁版本并按 [RELEASING.md](./.github/docs/RELEASING.md) 走商店提审；商店审核时长不受本仓库控制，会在补丁发布时一并说明。
   Confirmed issues ship as a patch release through the store; store review latency is outside our control and gets called out in the release notes.
 - 修复会写进 [CHANGELOG.md](./CHANGELOG.md)；是否署名致谢完全尊重报告者意愿，不公开未修复的细节。
   Fixes are listed in `CHANGELOG.md`; attribution follows the reporter's preference, and unpatched details stay undisclosed.
