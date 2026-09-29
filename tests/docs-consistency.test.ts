@@ -520,6 +520,34 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         ).toBe(zhCards[0][0]);
       }
 
+      /**
+       * 每张卡左上角必须是**那款产品自己的**品牌图标，而不是首字母占位：读者在 Chrome 工具栏、
+       * `chrome://extensions` 与商店列表里认的就是这张脸，「AP / TF」是个哪里都见不到的第二形象。
+       * 判据从卡片自己的主链接里取出产品站 slug，再要求 `src` 的文件名与它对齐——两张贴反、
+       * 或有人退回字母占位，当场红；而这两种错在浏览器里都只是「看着挺正常」。
+       * `alt=""` 与页脚那张品牌图标同一口径：产品名就写在下面一行的标题里，给了 alt 等于让
+       * 读屏机把同一个名字念两遍。`width`/`height` 挡住图标加载前后那一下跳动。
+       */
+      for (const [file, cards] of [
+        [landingZh, zhCards],
+        [landingEn, enCards],
+      ] as const) {
+        const section = sectionOf(file);
+        const marks = [...section.matchAll(/<img\b(?=[^>]*class="tool-mark")[^>]*>/g)].map(m => m[0]);
+        expect(marks.length, `${file} 的品牌图标张数与互链卡片数不一致`).toBe(cards.length);
+        for (const [index, mark] of marks.entries()) {
+          const slug = new URL(cards[index][0]).pathname.split('/').filter(Boolean)[0];
+          expect(mark, `${file} 第 ${index + 1} 张卡的图标与它指向的产品不是同一款`).toContain(
+            `src="assets/img/tool-${slug}.svg"`,
+          );
+          expect(mark, `${file} 第 ${index + 1} 张卡的图标缺了空 alt（读屏机会把产品名念两遍）`).toContain('alt=""');
+          expect(mark, `${file} 第 ${index + 1} 张卡的图标缺 width/height（加载时会顶一下版面）`).toMatch(
+            /width="40"[\s\S]*height="40"/,
+          );
+        }
+        expect(section, `${file} 不该再有字母占位形式的 tool-mark`).not.toMatch(/<span\b[^>]*class="tool-mark"/);
+      }
+
       for (const file of [landingEn, landingZh]) {
         const list =
           [...read(file).matchAll(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g)]

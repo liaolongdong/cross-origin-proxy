@@ -2022,22 +2022,16 @@ details p + p {
   outline-offset: 5px;
 }
 
+/* 卡片左上角是那款产品自己的品牌图标，不是首字母占位：读者在 Chrome 工具栏、
+   扩展管理页和商店列表里认的就是这张脸，换成「AP / TF」等于让导流卡指向一个
+   哪里都见不到的形象。SVG 副本住在 assets/img/，源文件在各自仓库的图标目录。
+   圆角交给 SVG 自己（rx 20/128 与 28/128）——CSS 再剪一刀就是把品牌的形状改窄，
+   而图标本身是不透明的圆角色块，也就不需要那层按语言着色的底色了。 */
 .tool-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 40px;
   height: 40px;
   margin-bottom: 12px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--lp-primary-strong);
-  background: var(--lp-primary-soft);
-  border-radius: 11px;
-}
-
-.tool-card--green .tool-mark {
-  color: var(--lp-accent);
-  background: var(--lp-accent-soft);
 }
 
 /* 这组里主推的那张：边框提到主色一档，右上角钉一枚角标。
