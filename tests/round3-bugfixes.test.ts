@@ -4,7 +4,9 @@ import {
   buildRegexFilter,
   buildRegexSubstitution,
   buildDnrRules,
+  captureGroupOffsets,
   countCaptureGroups,
+  substitutionRefs,
   maxSubstitutionRef,
   isSubstitutionValid,
 } from '@/utils/dnrRules';
@@ -100,6 +102,47 @@ describe('B2: DNR 替换引用越界校验', () => {
     expect(countCaptureGroups(filter)).toBe(9);
     expect(maxSubstitutionRef(substitution)).toBe(9);
     expect(isSubstitutionValid(filter, substitution)).toBe(true);
+  });
+
+  /**
+   * 表单上那条「捕获组 ↔ `$n` 引用」对照条（`RuleFormDialog.vue` 的 `regexRefs`）逐个数引用，
+   * 而 `maxSubstitutionRef` 只看最大值。两者共用同一份扫描（`substitutionRefs`），
+   * 所以这里按「每个引用各自的落点」测，而不是测一个聚合数。
+   */
+  it('substitutionRefs 按出现顺序逐个列出引用，重复保留', () => {
+    expect(substitutionRefs('https://b.com/\\1')).toEqual([1]);
+    expect(substitutionRefs('https://b.com/\\3/\\21/\\9')).toEqual([3, 21, 9]);
+    // 重复的引用不折叠：界面上那一行要说的是「这个数出现了几次、每次都指向第几组」
+    expect(substitutionRefs('\\1\\1/\\2')).toEqual([1, 1, 2]);
+    expect(substitutionRefs('https://b.com/path')).toEqual([]);
+    // 末尾单独一个反斜杠没有后继数字：不算引用，也不能因为越界而抛
+    expect(substitutionRefs('\\')).toEqual([]);
+    expect(substitutionRefs('')).toEqual([]);
+  });
+
+  it('substitutionRefs 的转义口径与 maxSubstitutionRef 完全一致', () => {
+    const cases = ['https://b.com/\\12', 'https://b.com/\\\\12/\\5', 'https://b.com/\\g<12>', '\\\\', '\\'];
+    for (const substitution of cases) {
+      const refs = substitutionRefs(substitution);
+      const max = refs.length ? Math.max(...refs) : -1;
+      expect(maxSubstitutionRef(substitution)).toBe(max);
+    }
+    // `\\12`：两个反斜杠是字面量反斜杠，其后的数字属于原文
+    expect(substitutionRefs('https://b.com/\\\\12')).toEqual([]);
+    // RE2 的 `\g<12>` 写法在 DNR 的 regexSubstitution 里不存在，也不该被读成引用
+    expect(substitutionRefs('https://b.com/\\g<12>')).toEqual([]);
+  });
+
+  it('captureGroupOffsets 给出开括号落点，且与组数同一份扫描', () => {
+    // 偏移指向的是 '(' 本身：界面要用它把编号配回那一小段子模式，长度就是组数
+    expect(captureGroupOffsets('^https://a\\.com/(.*)$')).toEqual([16]);
+    expect(captureGroupOffsets('(a)(b)(c)')).toEqual([0, 3, 6]);
+    expect(captureGroupOffsets('(?:abc)(?=x)(?!y)(?<=z)(?<!w)')).toEqual([]);
+    expect(captureGroupOffsets('(?<name>x)(?:y)')).toEqual([0]);
+    expect(captureGroupOffsets('\\((\\d+)\\)')).toEqual([2]);
+    for (const filter of ['(a)(b)(c)', '^https://a\\.com/(.*)$', '\\((\\d+)\\)', '(?<name>x)(?:y)']) {
+      expect(captureGroupOffsets(filter)).toHaveLength(countCaptureGroups(filter));
+    }
   });
 
   it('regex 规则目标含 $1 但模式无捕获组 → 校验失败', () => {

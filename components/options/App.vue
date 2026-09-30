@@ -128,9 +128,9 @@
 import { ref, computed, watch, onMounted, onUnmounted, h, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { ImportResultStats, ProxyRule } from '@/utils/types';
-import { MessageType } from '@/utils/types';
-import { MAX_RULES } from '@/utils/constants';
+import { MAX_RULES, DELETE_UNDO_WINDOW_MS } from '@/utils/constants';
 import { useRuleManagement } from '@/composables/useRuleManagement';
+import { useDeleteUndo } from '@/composables/useDeleteUndo';
 import { useDnrSupport, useDnrSkipText } from '@/composables/useDnrSupport';
 import { checkDnrRule } from '@/utils/dnrSupport';
 import { useRequestLog } from '@/composables/useRequestLog';
@@ -148,7 +148,6 @@ import {
 import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import { groupHitStatsByRule } from '@/utils/ruleStats';
-import { cloneRule } from '@/utils/ruleClone';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
@@ -189,6 +188,7 @@ const {
   addRule,
   batchAddRules,
   updateRule,
+  deleteRule,
   toggleRule,
   batchToggleRules,
   toggleAllRules,
@@ -200,6 +200,9 @@ const {
   beginPendingDelete,
   endPendingDelete,
 } = useRuleManagement();
+
+/** 单条与批量删除共用的撤销窗口（乐观移除 → 5 秒后落库 → 期间可撤销），见 `composables/useDeleteUndo.ts` */
+const { openDeleteUndo } = useDeleteUndo({ rules, beginPendingDelete, endPendingDelete });
 
 // 请求日志 + DNR 命中统计
 const {
@@ -571,83 +574,84 @@ function flashHighlight(ruleId: string) {
 }
 
 /**
- * 删除规则（带 5 秒撤销窗口）
+ * 「撤销」画成原生 button 而不是 a：没有 href 的 a 拿不到焦点，鼠标点得动、键盘走不到。
+ * 下面这串样式把它按原来链接的样子画回去（下划线 + 品牌色，`font: inherit` 对齐基线）。
+ */
+const UNDO_BUTTON_STYLE =
+  'padding: 0; border: none; background: none; font: inherit; vertical-align: baseline;' +
+  'color: var(--cop-primary, #409EFF); cursor: pointer; text-decoration: underline;';
+
+/** 一次删除的三条措辞：单条不提条数，批量必须把条数说出来，读者才核得对自己选了哪些行。 */
+interface DeleteUndoTexts {
+  deleted: (count: number) => string;
+  expired: (count: number) => string;
+  restored: (count: number) => string;
+}
+
+/**
+ * 删除规则（带 5 秒撤销窗口）——单条与批量共用这一份时序
  *
  * 点击删除后立即从 UI 移除（乐观更新），同时显示含"撤销"操作的提示；
  * 5 秒后才真正向 background 发送删除消息，期间点击撤销可恢复规则。
- * 每次删除用独立闭包持有规则与定时器，连续删除多条时互不干扰
- * （单例状态会被后续删除覆盖，导致规则漏删或误删）。
- *
- * `committed` 是唯一的提交点标志：定时器触发即置位并先关闭提示，之后的撤销
- * 一律拒绝（存储已删，本地插回只会得到一行随后被 storage.onChanged 抹掉的幽灵数据）。
+ * 每次删除用独立闭包持有快照与定时器（`composables/useDeleteUndo.ts`），连续删除多条、
+ * 或单条与批量交错进行都互不干扰——单例状态会被后续删除覆盖，导致漏删或误删。
  *
  * 窗口期内规则仍存在于 `storage.local`，因此 id 会登记到 `pendingDeleteIds`，
  * 由 fetchConfig 过滤掉——否则其他标签页的改动、导入或加载环境配置会把这行捞回来，
  * 用户再点撤销就 splice 出第二份重复行。撤销与提交两条出口都要注销登记。
+ *
+ * 提交失败（后台回 `success: false` 或消息抛错）时行会放回列表并明确报错：
+ * 从前这一路只写日志，于是界面说「已删除」而存储里那条仍在代理流量。
+ *
+ * @returns 窗口有没有真的开起来（一个 id 都没抓到时不会画提示、也不会落库），
+ *   批量删除据此决定要不要清空勾选。
  */
-function handleDeleteRule(ruleId: string) {
-  const index = rules.value.findIndex(r => r.id === ruleId);
-  if (index === -1) return;
-  // cloneRule：嵌套的 headerOverrides / queryOverrides / mockResponse 等
-  // 不能与原规则共享引用，否则撤销回来的会是被人改过的对象。
-  // 这里不能直接 structuredClone——rules.value 里取出来的是响应式 Proxy，克隆它会抛 DataCloneError。
-  const capturedRule = cloneRule(rules.value[index]);
-  const originalIndex = index;
+function runDeleteUndo(ruleIds: string[], send: () => Promise<unknown>, texts: DeleteUndoTexts): boolean {
+  // 窗口先开（定时器随之起），提示后画；提交时收起提示的手段由这里交给窗口。
+  // 显式写 `= undefined` 而不是省略初值：这里的句柄是「窗口开成之后才拿到」的晚绑定，
+  // 省略初值在 prefer-const 眼里等于「本可以写成 const」，而真写成 const 就得把提示挪到开窗之前画。
+  let prompt: { close: () => void } | undefined = undefined;
+  const win = openDeleteUndo(ruleIds, {
+    send,
+    close: () => prompt?.close(),
+    failed: count => ElMessage.error(count > 1 ? t('batchDeleteFailed') : t('deleteUndoFailed')),
+  });
+  if (!win) return false;
 
-  // 乐观更新：立即从 UI 移除，并登记进撤销窗口，
-  // 避免窗口内的 fetchConfig（其他标签页改动、导入、加载环境配置）把这行捞回来
-  beginPendingDelete(ruleId);
-  rules.value = rules.value.filter(r => r.id !== ruleId);
-
-  let committed = false;
-  let deleteTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
-    committed = true;
-    deleteTimer = null;
-    // 先收起撤销入口，再发出删除：两者之间不留可点击的窗口
-    message.close();
-    chrome.runtime
-      .sendMessage({
-        type: MessageType.DELETE_RULE,
-        data: { ruleId: capturedRule.id },
-      })
-      .catch(err => logger.error('Delete rule failed:', err))
-      .finally(() => endPendingDelete(capturedRule.id));
-  }, 5000);
-
-  // 「撤销」画成原生 button 而不是 a：没有 href 的 a 拿不到焦点，鼠标点得动、键盘走不到。
-  // 下面那串样式把它按原来链接的样子画回去（下划线 + 品牌色，font: inherit 对齐基线）。
-  const message = ElMessage({
+  prompt = ElMessage({
     message: h('div', [
-      h('span', t('ruleDeleted') + ' '),
+      h('span', `${texts.deleted(win.count)} `),
       h(
         'button',
         {
           type: 'button',
-          style:
-            'padding: 0; border: none; background: none; font: inherit; vertical-align: baseline;' +
-            'color: var(--cop-primary, #409EFF); cursor: pointer; text-decoration: underline;',
+          style: UNDO_BUTTON_STYLE,
           onClick: () => {
             // 提示的离场动画期间按钮仍可能被点到，此时删除已落库，不能再假装恢复
-            if (committed) {
-              ElMessage.warning(t('undoExpired'));
+            if (!win.undo()) {
+              ElMessage.warning(texts.expired(win.count));
               return;
             }
-            // 撤销：取消定时器，恢复规则到原位置
-            if (deleteTimer) {
-              clearTimeout(deleteTimer);
-              deleteTimer = null;
-            }
-            message.close();
-            endPendingDelete(capturedRule.id);
-            rules.value.splice(Math.min(originalIndex, rules.value.length), 0, capturedRule);
-            ElMessage.success(t('undoSuccess'));
+            prompt?.close();
+            ElMessage.success(texts.restored(win.count));
           },
         },
         t('undo'),
       ),
     ]),
-    duration: 5000,
+    // 存续时长与撤销窗口是同一个常量：提示先没而窗口还开着，读者就再也找不到那个入口
+    duration: DELETE_UNDO_WINDOW_MS,
     showClose: false,
+  });
+  return true;
+}
+
+/** 单条删除：措辞沿用既有的「规则已删除 / 规则已恢复」，不提条数。 */
+function handleDeleteRule(ruleId: string) {
+  runDeleteUndo([ruleId], () => deleteRule(ruleId), {
+    deleted: () => t('ruleDeleted'),
+    expired: () => t('undoExpired'),
+    restored: () => t('undoSuccess'),
   });
 }
 
@@ -727,14 +731,15 @@ async function handleBatchDelete() {
   } catch {
     return; // 用户取消
   }
-  try {
-    await batchDeleteRules(ids);
-    ElMessage.success(t('batchDeleteSuccess', [count]));
-    clearRuleSelection();
-  } catch (error) {
-    ElMessage.error(t('batchDeleteFailed'));
-    logger.error('Batch delete failed:', error);
-  }
+  // 二次确认之外再给 5 秒撤销：一次带走的就是选中的全部规则，而手速比判断快。
+  // 两条退路各管一段——窗口内点撤销不写存储；窗口结束后还有 `batch-delete` 那份配置恢复点。
+  const opened = runDeleteUndo(ids, () => batchDeleteRules(ids), {
+    deleted: n => t('batchDeleteSuccess', [n]),
+    expired: n => t('batchUndoExpired', [n]),
+    restored: n => t('batchUndoSuccess', [n]),
+  });
+  if (!opened) return;
+  clearRuleSelection();
 }
 
 /** 批量迁移目标 URL：接收弹窗预览的变更集，一次写入并提示结果 */

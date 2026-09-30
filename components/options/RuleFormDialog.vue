@@ -55,6 +55,65 @@
           <div class="field-hint">
             {{ t('targetUrlHint') }}
           </div>
+          <!-- 正则的「捕获组 ↔ 引用」对照条
+               判据全部取自 `utils/dnrRules.ts`（`captureGroupOffsets` / `buildRegexSubstitution` /
+               `MAX_DNR_SUBSTITUTION_REF`），这里不写第二份括号语法：规则列表里那个「未生效」标记
+               走的也是同一条 `isSubstitutionValid`，两处一旦各算各的，表单说「没问题」而列表标红的
+               就是本条铁律里最贵的那类分歧。只诊断、不改分流，也不拦保存。 -->
+          <div
+            v-if="regexRefs"
+            class="regex-refs"
+          >
+            <div class="regex-refs-head">
+              <span class="regex-refs-title">{{ t('regexRefsTitle') }}</span>
+              <span
+                v-if="regexRefs.groupCount > 0"
+                class="regex-refs-count"
+                >{{ t('regexRefCount', [regexRefs.groupCount]) }}</span
+              >
+              <span
+                v-else
+                class="regex-refs-count"
+                >{{ t('regexRefCountNone') }}</span
+              >
+            </div>
+            <div
+              v-if="regexRefs.groups.length"
+              class="capture-chips"
+            >
+              <span
+                v-for="group in regexRefs.groups"
+                :key="group.number"
+                :class="group.className"
+              >
+                <b>{{ group.label }}</b>
+                <code>{{ group.snippet }}</code>
+              </span>
+            </div>
+            <p
+              v-for="item in regexRefs.refChecks"
+              :key="item.text"
+              :class="item.className"
+            >
+              <code>{{ item.text }}</code>
+              <span>{{ item.message }}</span>
+            </p>
+            <p
+              v-if="regexRefs.unusedMessage"
+              class="capture-ref is-warn"
+            >
+              {{ regexRefs.unusedMessage }}
+            </p>
+            <p :class="regexRefs.summary.className">
+              {{ regexRefs.summary.message }}
+            </p>
+            <p class="regex-refs-note">
+              {{ regexRefs.syntaxNote }}
+            </p>
+            <p class="regex-refs-note">
+              {{ regexRefs.channelNote }}
+            </p>
+          </div>
         </el-form-item>
 
         <el-form-item
@@ -216,6 +275,27 @@
                 />
               </div>
               <div class="response-field">
+                <label class="response-field-label">{{ t('responseStatusTextOverride') }}</label>
+                <el-input
+                  v-model="form.responseStatusText"
+                  :placeholder="t('responseStatusTextPlaceholder')"
+                  maxlength="120"
+                  show-word-limit
+                />
+                <!-- 状态行必须是一段 ByteString：`utils/proxyResponse.ts` 会在构造 Response 前
+                     把码点 > 255 的字符与换行剔除（不剔除的话 `new Response` 当场抛 TypeError，
+                     抛出点在拦截器的 resolve 回调里，页面从此永久 pending）。这里不拦保存，
+                     只把「实际发出去的是哪一句」摆在眼前——存量导入规则里那种中文状态行
+                     不该反过来把无关的编辑（改优先级、改名）顶在门外。 -->
+                <div
+                  v-if="statusTextEffective !== null"
+                  class="field-hint field-hint-warning"
+                >
+                  {{ t('responseStatusTextStripped') }}
+                  <code class="field-hint-value">{{ statusTextEffective || t('responseStatusTextEmpty') }}</code>
+                </div>
+              </div>
+              <div class="response-field">
                 <label class="response-field-label">{{ t('responseHeadersOverride') }}</label>
                 <div
                   v-for="(header, index) in responseHeaderList"
@@ -282,6 +362,29 @@
                   <el-icon><Plus /></el-icon>
                   {{ t('addReplacement') }}
                 </el-button>
+                <!-- 整段替换与逐项替换是同一格「响应正文」的两种写法，引擎只认前者
+                     （`entrypoints/background/proxyHandler.ts` 的 `applyResponseOverrides` 里
+                     `bodyRaw` 命中后，逐项替换那一段在 `else if` 分支里根本不执行）。
+                     两份都留在表单里是为了「把整段清空就回到逐项替换」这条退路，
+                     但那一刻必须说出来，否则用户看到的是「路径替换填了却没生效」。 -->
+                <div
+                  v-if="bodyRawShadowsReplacements"
+                  class="field-hint field-hint-warning"
+                >
+                  {{ t('responseBodyRawShadowsReplacements') }}
+                </div>
+              </div>
+              <div class="response-field">
+                <label class="response-field-label">{{ t('responseBodyRawLabel') }}</label>
+                <el-input
+                  v-model="form.responseBodyRaw"
+                  type="textarea"
+                  :rows="4"
+                  :placeholder="t('responseBodyRawPlaceholder')"
+                />
+                <div class="field-hint">
+                  {{ t('responseBodyRawHint') }}
+                </div>
               </div>
             </div>
           </div>
@@ -652,6 +755,15 @@ import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { findInvalidHeaderNames } from '@/utils/headerValidation';
 import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule } from '@/utils/urlMatcher';
+import {
+  captureGroupOffsets,
+  substitutionRefs,
+  buildRegexFilter,
+  buildRegexSubstitution,
+  isSubstitutionValid,
+  MAX_DNR_SUBSTITUTION_REF,
+} from '@/utils/dnrRules';
+import { toLatin1StatusText } from '@/utils/proxyResponse';
 import { diffRewrite } from '@/utils/rewriteDiff';
 import { collectRuleVariableRefs, findUndefinedVariableRefs, newlyIntroducedRefs } from '@/utils/variables';
 import { useVariables } from '@/composables/useVariables';
@@ -712,6 +824,15 @@ const defaultForm = {
   enabled: true,
   requestBodyOverride: '',
   responseStatus: undefined as number | undefined,
+  /**
+   * 状态行文本（`responseOverrides.statusText`）
+   *
+   * 空串按「不覆盖」处理，见 `submitRule` 里那句 `!== ''` 判据——`new Response` 允许空状态行，
+   * 但把用户没填的字段写成「覆盖为空」会让上游那句 `OK` 凭空消失。
+   */
+  responseStatusText: '',
+  /** 整段替换的响应体，优先级高于 JSON 路径替换（`entrypoints/background/proxyHandler.ts` 的 `applyResponseOverrides`） */
+  responseBodyRaw: '',
   mockStatus: 200,
   mockContentType: 'application/json',
   mockBody: '',
@@ -808,7 +929,116 @@ const rewriteSegments = computed(() => {
   ].filter(segment => segment.text !== '');
 });
 
-// computed 保证语言切换后校验消息实时更新（一次性求值会把 t() 结果固化）
+/**
+ * 状态行文本填了会被改掉时，给出「浏览器实际收到的那一句」
+ *
+ * 只在内容确实会被收敛时开口（其余情况 `null`，那时无话可说）。判据借运行时那一份
+ * `toLatin1StatusText`，而不是照注释重述一遍「Latin-1、不含换行」——两处一旦分叉，
+ * 这里承诺的收敛就是假的。
+ */
+const statusTextEffective = computed<string | null>(() => {
+  const raw = form.responseStatusText;
+  if (raw === '') return null;
+  const kept = toLatin1StatusText(raw);
+  return kept === raw ? null : kept;
+});
+
+/**
+ * 整段替换正文是否压住了下面的 JSON 路径替换
+ *
+ * 引擎侧是 `bodyRaw !== undefined` 先命中、逐项替换那一段根本不执行（`proxyHandler.ts` 的
+ * `applyResponseOverrides`），所以两份都在时「填了却没生效」是必然结果而不是故障。
+ * 判据用 `trim()`：一整框空白看着像填了，落盘时却被当成没填，提示跟着落盘判据走才不会自相矛盾。
+ */
+const bodyRawShadowsReplacements = computed(
+  () => form.responseBodyRaw.trim() !== '' && bodyReplacementList.value.some(row => row.path.trim() !== ''),
+);
+
+/** 对照条里每个捕获组从模式原文截取的最大字符数（够认出是哪一段，又不至于撑出新滚动区） */
+const CAPTURE_SNIPPET_LIMIT = 28;
+
+/**
+ * 正则模式的「捕获组 ↔ 替换引用」对照
+ *
+ * 这是本表单最容易「填对了但结果不对」的一组字段：模式里的括号、目标地址里的 `$1`、
+ * 网络层替换串里的 `\1`，三者对不对得上一句报错都不会说，只在浏览器里表现为
+ * 「代理好像没生效」（引用越界更是整批 `updateDynamicRules` 被拒，连累所有简单规则）。
+ *
+ * 所有判据一律借 `utils/dnrRules.ts`：`captureGroupOffsets` 数括号、`substitutionRefs` 按
+ * DNR 的贪婪法读引用、`isSubstitutionValid` 给总结句——同一条判据也住在规则列表那个
+ * 「未生效」标记背后（`utils/dnrSupport.ts`），这里另写一份就会长出两个答案。
+ * **只对照、不拦保存**：语法错误由 `invalidRegex` 那条校验负责，越界引用由列表标记负责，
+ * 表单不新增第三道拒绝（存量导入的规则照样能改名字、改优先级）。
+ */
+const regexRefs = computed(() => {
+  if (form.matchType !== 'regex') return null;
+  const pattern = form.matchPattern;
+  const target = form.targetUrl;
+  // 空目标是合法语义（不改写地址，见 `targetUrlHint`），此刻没有替换串可对照
+  if (!pattern || !target) return null;
+  try {
+    new RegExp(pattern);
+  } catch {
+    return null;
+  }
+
+  const offsets = captureGroupOffsets(pattern);
+  const groupCount = offsets.length;
+  // 引用按「网络层实际读到的那一份」来数：`buildRegexSubstitution` 把 `$n` 换成 `\n`，
+  // `substitutionRefs` 再按 DNR 的读法整段取数字（`\12` 是一个引用，不是 `\1` 加个 `2`）。
+  const dnrSubstitution = buildRegexSubstitution({
+    matchType: 'regex',
+    matchPattern: pattern,
+    targetUrl: target,
+  });
+  const refs = [...new Set(substitutionRefs(dnrSubstitution))].sort((a, b) => a - b);
+  const usedIndexes = new Set(refs.filter(reference => reference >= 1));
+
+  return {
+    groupCount,
+    groups: offsets.map((offset, index) => {
+      const number = index + 1;
+      const snippet = pattern.slice(offset, offset + CAPTURE_SNIPPET_LIMIT);
+      return {
+        number,
+        label: `$${number}`,
+        snippet: offset + CAPTURE_SNIPPET_LIMIT < pattern.length ? `${snippet}…` : snippet,
+        // 编号 10 起只有转发通道拿得到（网络层按单个数字读替换串），所以「被引用」不等于「没问题」
+        className:
+          number > MAX_DNR_SUBSTITUTION_REF
+            ? 'capture-chip is-warn'
+            : usedIndexes.has(number)
+              ? 'capture-chip is-used'
+              : 'capture-chip',
+      };
+    }),
+    refChecks: refs.map(reference => {
+      const text = `$${reference}`;
+      // `<code>` 里已经是那串引用本身，措辞接在它后面读，所以消息里不再复述编号
+      if (reference === 0) {
+        return { text, className: 'capture-ref', message: t('regexRefWholeMatch') };
+      }
+      if (reference > groupCount) {
+        return {
+          text,
+          className: 'capture-ref is-danger',
+          message: groupCount === 0 ? t('regexRefNoGroupAtAll') : t('regexRefOutOfRange', [groupCount]),
+        };
+      }
+      if (reference > MAX_DNR_SUBSTITUTION_REF) {
+        return { text, className: 'capture-ref is-warn', message: t('regexRefBeyondNine') };
+      }
+      return { text, className: 'capture-ref is-ok', message: t('regexRefOk') };
+    }),
+    unusedMessage: groupCount > 0 && refs.length === 0 ? t('regexRefUnused') : null,
+    summary: isSubstitutionValid(buildRegexFilter({ matchType: 'regex', matchPattern: pattern }), dnrSubstitution)
+      ? { className: 'capture-summary is-ok', message: t('regexSummaryOk') }
+      : { className: 'capture-summary is-danger', message: t('regexSummaryRejected') },
+    syntaxNote: t('regexRefSyntaxNote'),
+    channelNote: t('regexRefChannelNote'),
+  };
+});
+
 const formRules = computed<FormRules>(() => ({
   name: [{ required: true, message: t('ruleNameRequired'), trigger: 'blur' }],
   matchPattern: [
@@ -874,6 +1104,8 @@ watch(
           enabled: props.rule.enabled,
           requestBodyOverride: props.rule.requestBodyOverride ?? '',
           responseStatus: props.rule.responseOverrides?.status,
+          responseStatusText: props.rule.responseOverrides?.statusText ?? '',
+          responseBodyRaw: props.rule.responseOverrides?.bodyRaw ?? '',
           mockStatus: props.rule.mockResponse?.status ?? 200,
           mockContentType: props.rule.mockResponse?.contentType ?? 'application/json',
           mockBody: props.rule.mockResponse?.body ?? '',
@@ -937,6 +1169,13 @@ watch(
         // 需显式清除上一条规则遗留的拦截与凭据状态
         form.blocked = false;
         form.sendCredentials = false;
+        // 同一件事也适用于这一组响应覆盖字段：`initialData` 里只有 `responseOverrides` 整个对象，
+        // 没有这三格（状态码、状态行文本、整段正文），于是 Object.assign 不会覆盖上一次的残留。
+        // 开关下面已经置 false，所以残留值进不了规则——但它会在用户这一次把开关打开时
+        // 直接显现在输入框里，看起来像是新建规则自带的默认值。
+        form.responseStatus = undefined;
+        form.responseStatusText = '';
+        form.responseBodyRaw = '';
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
         mockConditions.value = [];
@@ -1222,6 +1461,13 @@ async function submitRule() {
     if (form.responseStatus !== undefined) {
       responseOverrides.status = form.responseStatus;
     }
+    // trim 只用来判「有没有填」，存下去的是原值去掉首尾空白：状态行是 ByteString 的一段文本，
+    // 首尾空白在这里没有语义，而留着一格空白会让下一次打开表单看到一条看不见的覆盖。
+    // 空值整体不写键——写 `statusText: ''` 是一道覆盖，会把上游那句 `OK` 抹成空串。
+    const statusText = form.responseStatusText.trim();
+    if (statusText !== '') {
+      responseOverrides.statusText = statusText;
+    }
     const respHeaders: Record<string, string> = {};
     responseHeaderList.value.forEach(({ key, value }) => {
       if (key.trim()) respHeaders[key.trim()] = value;
@@ -1241,6 +1487,12 @@ async function submitRule() {
     });
     if (Object.keys(bodyReplacements).length > 0) {
       responseOverrides.bodyReplacements = bodyReplacements;
+    }
+    // 整段替换按**原值**存（正文里的换行与缩进是内容的一部分，不能 trim），只在全空白时不写键。
+    // 两份都在时仍然都存：`applyResponseOverrides` 里 bodyRaw 排在前面，路径替换那一段不执行，
+    // 用户把整段正文清空就能立刻回到逐项替换——这正是那行互斥提示要说的事。
+    if (form.responseBodyRaw.trim() !== '') {
+      responseOverrides.bodyRaw = form.responseBodyRaw;
     }
     if (Object.keys(responseOverrides).length > 0) {
       result.responseOverrides = responseOverrides;
@@ -1351,6 +1603,137 @@ function runTest() {
   font-size: 12px;
   font-weight: 500;
   color: var(--el-text-color-regular, #606266);
+}
+
+/* ─── 正则「捕获组 ↔ 引用」对照条 ─────────────────────────────────────────── */
+
+/* 覆盖区里那些「你填的这串会被改掉 / 被压住」的提醒：跟着那一格一起在场，
+   而不是弹一条会自己飘走的 toast——用户当时正在看的就是这一格。 */
+.field-hint-warning {
+  color: var(--el-color-warning, #e6a23c);
+}
+
+.field-hint-value {
+  padding: 1px 5px;
+  background: var(--el-bg-color, #fff);
+  border: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-radius: 3px;
+}
+
+.regex-refs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
+  border: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-left: 3px solid var(--cop-primary, #409eff);
+  border-radius: 6px;
+}
+
+.regex-refs-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+.regex-refs-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-regular, #606266);
+}
+
+.regex-refs-count {
+  color: var(--el-text-color-secondary, #909399);
+}
+
+.capture-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 每颗 chip 带一小截模式原文，为的是「$1 到底是哪一段」这件事不用回去数括号。
+   原文只截不折：折行会把括号拆成两截，比不加更难读，所以超长走省略号。 */
+.capture-chip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 8px;
+  background: var(--el-bg-color, #fff);
+  border: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-radius: 999px;
+}
+
+.capture-chip b {
+  color: var(--cop-primary, #409eff);
+}
+
+.capture-chip code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--el-text-color-secondary, #909399);
+  white-space: nowrap;
+}
+
+/* 「被引用」用底色与边框区分，不只靠文字颜色：这一排本来就有两种颜色（编号 / 原文） */
+.capture-chip.is-used {
+  background: rgb(var(--cop-primary-rgb) / 10%);
+  border-color: var(--cop-primary-border, #d9ecff);
+}
+
+.capture-chip.is-warn b,
+.capture-chip.is-warn code {
+  color: var(--el-color-warning, #e6a23c);
+}
+
+.capture-ref {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0;
+  color: var(--el-text-color-secondary, #909399);
+}
+
+.capture-ref code {
+  flex-shrink: 0;
+  color: var(--cop-primary, #409eff);
+}
+
+.capture-ref.is-ok code {
+  color: var(--el-color-success, #67c23a);
+}
+
+.capture-ref.is-warn code {
+  color: var(--el-color-warning, #e6a23c);
+}
+
+.capture-ref.is-danger,
+.capture-ref.is-danger code {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.capture-summary {
+  margin: 0;
+  font-weight: 500;
+}
+
+.capture-summary.is-ok {
+  color: var(--el-color-success, #67c23a);
+}
+
+.capture-summary.is-danger {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.regex-refs-note {
+  margin: 0;
+  color: var(--el-text-color-secondary, #909399);
 }
 
 /* ─── Test Panel ─────────────────────────────────────────────────────────── */

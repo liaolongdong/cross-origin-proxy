@@ -191,6 +191,29 @@ curl -s -H "Accept: application/vnd.github.mercy-preview+json" \
 
 还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（因为还没有任何 Release，2026-09-22 实测仍是 0 个 tag），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。`CWS` 那枚已改成 shields 的商店版本端点，**不需要每次发版手改**：它显示的是商店在线版本，本轮之前一直是 `v1.0.0`。
 
+### 7.1 搜索收录与 AI 检索的提交动作（一次性的站外清单）
+
+§7 那三条命令证明的是**站内**东西是干净的：`robots.txt` 放行、`sitemap.xml` 200、hreflang 成对、canonical 自指。这些只回答「爬虫来了能不能读懂」，不回答「它来没来过」。`docs/robots.txt` 逐个放行 GPTBot / OAI-SearchBot / Perplexity / Claude 系同理是**允许**而非**已收录**——放行之后没有任何一次提交动作，索引里就是没有。所以这一步只能在网页界面做，没有 API 可代跑（`GITHUB_TOKEN` 也管不到站外服务）。
+
+按这个顺序做，做完各留一条实测记录在下面：
+
+1. **Google Search Console**：`google-site-verification` 的值已经写在五页的 `<head>` 里（`unD6BHVEHRxOhyZ353oO_77V8GXyLInc8gvbrh_ARbI`），如果属性还没建过，用「网址前缀」建 `https://liaolongdong.github.io/cross-origin-proxy/` 即可直接命中这条 meta。建好后左侧 **Sitemaps** 提交 `sitemap.xml`，再用 **网址检查** 逐个走 `index.html`（站点根）、`en.html`、`alternatives.html`、`en-alternatives.html`、`privacy.html` 请求索引进索引。
+2. **Bing Webmaster Tools**：用 **导入 Google Search Console 属性** 起步（比重新验证站点省事），然后提交同一份 `sitemap.xml`。这一条是本轮新增的**唯一实质动作**，理由是 ChatGPT 的 search 结果与 Copilot 的网页来源走的是 Bing 索引——`robots.txt` 里放行 GPTBot 只覆盖「用户主动让 ChatGPT 读某条链接」那一半，答案引擎要**主动**引本站，前提是本站在 Bing 的索引里。
+3. **提交后各量一次收录面**，不要凭感觉：Google 用 `site:liaolongdong.github.io/cross-origin-proxy` 数结果页，Bing 用同样的语法。期望值 5（五个 HTML 页）；`llms.txt` 与 `llms-full.txt` 不算 HTML 页，被不计入是正常的。
+4. 之后**每次改动落地页正文**都要回来看一眼 GSC 的「网页索引」报告里有没有新增排除项——Pages 是纯静态目录、没有 301 能力，历史已经吃过一次「旧 `/zh.html` 永久 404」的代价（见 §7 末段）。
+
+```bash
+# sitemap 与 robots 必须是 200，且 sitemap 的条数与页面数对得上
+for p in robots.txt sitemap.xml; do
+  printf '%-14s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "https://liaolongdong.github.io/cross-origin-proxy/$p")"
+done
+curl -s https://liaolongdong.github.io/cross-origin-proxy/sitemap.xml | grep -c '<url>'
+```
+
+期望 `5`（五个 URL）。改页数或中英配对时这条会跟着动，`tests/docs-consistency.test.ts` 里守 sitemap 的那两条按「每个中英页面对补齐 `en` / `zh` / `x-default`」断言，漏一条直接红。
+
+一句实话作为投入判断的依据：**中文开发者找这类工具的主路径不是百度搜 github.io**，而是 Chrome 应用商店搜索与掘金/CSDN/V2EX/公众号的帖子。落地页在这里的职责是「规范来源与被引用锚点」（隐私政策 URL 是商店审核项、`llms.txt` 是 AI 引用面），把它当 CWS 详情页的后盾来分工，不值得为百度搜索单独做一轮投入。
+
 ## 8. 本文刻意没有做的事（需要时另行确认）
 
 | 项                            | 为什么先不做                                                                                                                                                                             |

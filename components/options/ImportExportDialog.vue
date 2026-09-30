@@ -555,14 +555,37 @@ async function handleImportHar() {
 
 .preview-info {
   color: var(--cop-text-color-regular);
+  animation: preview-slide-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
 .preview-warn {
   color: var(--el-color-warning, #e6a23c);
+  animation: preview-drop-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
 .preview-error {
   color: var(--el-color-danger, #f56c6c);
+  animation: preview-drop-in var(--cop-duration-base) var(--cop-ease-enter);
+}
+
+/* 入场方向按「这一条说的是哪一家」分开，而不是只靠颜色分家：
+   `info` 是这次的净结果（预计新增几条、被折叠的冲突还有一批），自左侧滑进栏位；
+   `warn` / `error` 全都在说「现网要被改动」或「这次做不成」（跳过、同键条目算新增、
+   冲突明细、超出上限），从上往下压进来。合并模式下最容易读错的那件事恰好是
+   「改了 targetUrl 的同名规则是新增、不是更新」，它属于下面那一族，方向替它先站好队。
+   进场只写 `from`：`to` 取元素自身的计算值，暗色档位与奇偶行都不用关心。 */
+@keyframes preview-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+@keyframes preview-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 
 .preview-actions {

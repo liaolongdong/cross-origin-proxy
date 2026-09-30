@@ -69,24 +69,10 @@
           @update:model-value="handleAutoOffChange"
         >
           <el-option
-            :label="t('autoOffNever')"
-            :value="0"
-          />
-          <el-option
-            :label="t('autoOff30m')"
-            :value="30"
-          />
-          <el-option
-            :label="t('autoOff1h')"
-            :value="60"
-          />
-          <el-option
-            :label="t('autoOff2h')"
-            :value="120"
-          />
-          <el-option
-            :label="t('autoOff4h')"
-            :value="240"
+            v-for="preset in AUTO_OFF_PRESETS"
+            :key="preset.minutes"
+            :label="t(preset.labelKey)"
+            :value="preset.minutes"
           />
         </el-select>
       </div>
@@ -228,18 +214,17 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { THEME_OPTIONS, THEME_MODE_OPTIONS, type ThemeName } from '@/utils/theme';
 import {
   type ThemeMode,
-  STORAGE_KEYS,
   MAX_RULES,
   MAX_VARIABLES,
   MAX_VARIABLE_NAME_LENGTH,
   MAX_VARIABLE_VALUE_LENGTH,
   MAX_CONFIG_HISTORY,
 } from '@/utils/constants';
+import { AUTO_OFF_PRESETS, readAutoOffMinutes, writeAutoOffMinutes } from '@/utils/autoOff';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
 import type { ConfigHistoryEntry, ConfigHistoryReason, ProxyRule, VariableStore } from '@/utils/types';
 import { collectRuleVariableRefs, findUndefinedVariableRefs, isVariableName } from '@/utils/variables';
 import { formatLocaleDateTime } from '@/utils/formatters';
-import { logger } from '@/utils/logger';
 import { useVariables } from '@/composables/useVariables';
 import { useConfigHistory } from '@/composables/useConfigHistory';
 import { useI18n } from '@/composables/useI18n';
@@ -408,9 +393,7 @@ watch(
   async val => {
     if (!val) return;
     try {
-      const result = await chrome.storage.local.get(STORAGE_KEYS.AUTO_OFF_MINUTES);
-      const minutes = result[STORAGE_KEYS.AUTO_OFF_MINUTES];
-      autoOffMinutes.value = typeof minutes === 'number' ? minutes : 0;
+      autoOffMinutes.value = await readAutoOffMinutes();
     } catch {
       autoOffMinutes.value = 0;
     }
@@ -492,14 +475,20 @@ async function removeVariable(index: number) {
   await commitVariables();
 }
 
+/**
+ * 下拉换档：只写 storage，重建倒计时由后台的 `storage.onChanged` 接手（`utils/autoOff.ts` 文件头）。
+ * 这一屏没有倒计时读数，所以不必像弹窗那样把落点轮询回来。
+ *
+ * 从前这里写失败只记日志——用户看见下拉停在新值上，存储里却还是旧的时长，到期时间照旧。
+ * 现在回滚选中项并报错，与本页凭据表那一份「失败就说失败」同一条规矩。
+ */
 async function handleAutoOffChange(val: string | number) {
   const minutes = Number(val) || 0;
+  const previous = autoOffMinutes.value;
   autoOffMinutes.value = minutes;
-  try {
-    await chrome.storage.local.set({ [STORAGE_KEYS.AUTO_OFF_MINUTES]: minutes });
-  } catch (error) {
-    logger.error('Failed to save auto-off setting:', error);
-  }
+  if (await writeAutoOffMinutes(minutes)) return;
+  autoOffMinutes.value = previous;
+  ElMessage.error(t('autoOffSaveFailed'));
 }
 
 function handleModeChange(val: string | number | boolean | undefined) {

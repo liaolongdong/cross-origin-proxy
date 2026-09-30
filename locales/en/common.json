@@ -6,6 +6,7 @@
   "edit": "Edit",
   "delete": "Delete",
   "operationFailed": "Operation failed",
+  "autoOffSaveFailed": "Could not set auto-off",
   "justNow": "just now",
   "minutesAgo": "$1 min ago",
   "hoursAgo": "$1 hr ago",

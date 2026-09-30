@@ -856,3 +856,123 @@ describe('落地页首屏的错峰阶梯不许有「顶」', () => {
     });
   }
 });
+
+/**
+ * 落地页减弱动效段落必须**逐字**点到每条动画规则的选择器。
+ *
+ * 这一条说的不是「reduce 段落存不存在」（上面已有守卫），而是「写了覆盖」与「覆盖生效」
+ * 是两件事。正文里那条光晕写的是 `html.js .compare.us-flagged .col-us`（0-4-1），
+ * reduce 段落只抄了后半截 `.compare.us-flagged .col-us`（0-3-0）——媒体查询排在文件末尾
+ * 也赢不了，特异性先输；于是减弱档下那一圈照样刷一遍，而这件事既不报错、肉眼也难确认。
+ * 同一条陷阱在 Element Plus 那侧踩过一次（见本文件「覆盖 .el-* 的那几条」），这里是第二次。
+ *
+ * 判据因此按**完整选择器逐字对齐**，而不是按「reduce 段落提到过这个类名」——后者会被
+ * `html.js` 前缀、`:hover` 后缀、伪元素任一处不一致静默放过。
+ * 只有 JS 侧自己关掉机制的动画可以进例外清单，且每一项必须写明凭什么是安全的。
+ */
+describe('落地页 reduce 段落逐字点到每条动画', () => {
+  const CSS = stripComments(readFileSync('docs/assets/landing.css', 'utf-8'));
+  const REDUCE_RE = /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{/;
+  const match = REDUCE_RE.exec(CSS);
+  if (!match) throw new Error('landing.css 的减弱动效段落不见了');
+
+  /** 按大括号配对切顶层块（嵌套块整体算一条），解析失效时后续断言先红而不是空转 */
+  const blocks = (src: string) => {
+    const out: { prelude: string; body: string }[] = [];
+    let i = 0;
+    while (i < src.length) {
+      const brace = src.indexOf('{', i);
+      if (brace === -1) break;
+      let depth = 1;
+      let j = brace + 1;
+      while (j < src.length && depth > 0) {
+        if (src[j] === '{') depth += 1;
+        else if (src[j] === '}') depth -= 1;
+        j += 1;
+      }
+      out.push({ prelude: src.slice(i, brace).trim(), body: src.slice(brace + 1, j - 1) });
+      i = j;
+    }
+    return out;
+  };
+
+  /**
+   * 把块摊平成「选择器 + 声明」，`@media` / `@supports` 往里钻（正文那半也躲得过响应式段落），
+   * `@keyframes` 整块跳过——那是关键帧本身，不是「谁在用这个动画」。
+   */
+  const flatRules = (src: string): { selector: string; body: string }[] => {
+    const rules: { selector: string; body: string }[] = [];
+    for (const { prelude, body } of blocks(src)) {
+      if (/^@keyframes\b/.test(prelude)) continue;
+      if (/^@(media|supports)\b/.test(prelude)) {
+        rules.push(...flatRules(body));
+        continue;
+      }
+      if (/^@/.test(prelude)) continue;
+      rules.push({ selector: prelude, body });
+    }
+    return rules;
+  };
+
+  const norm = (sel: string) => sel.replace(/\s+/g, ' ').trim();
+  const KEYFRAMES = new Set([...CSS.matchAll(/@keyframes\s+([\w-]+)/g)].map(m => m[1]));
+  const declaredRules = flatRules(CSS.slice(0, match.index));
+  // reduce 段落自己：取它那个块的内容摊平，不含正文
+  const reduceBlock = blocks(CSS.slice(match.index))[0];
+  if (!reduceBlock || !/^@media\b/.test(reduceBlock.prelude)) throw new Error('reduce 段落形状变了');
+  const reduceRules = flatRules(reduceBlock.body);
+
+  /**
+   * 例外：动画的触发条件本身被 JS 关在 reduce 之外，所以 CSS 无需再点一次。
+   * 每一项都必须是「删掉那段 JS 判据就会当场复现」的形状，否则这条就是漏网。
+   */
+  const JS_GATED = new Map([
+    [
+      '.gallery.gallery-auto .gallery-progress i',
+      '进度条动画只在 `.gallery-auto` 在场时跑，而 `landing.js` 的 `autoPossible = !reduced && …` ' +
+        '在减弱档下永远不加那个类（`onMotionChange` 那两条分支），因此这一条不需要 CSS 侧的兜底。',
+    ],
+  ]);
+
+  const declared: { selector: string; names: string[] }[] = [];
+  for (const rule of declaredRules) {
+    const anim = /(?:^|[;{\s])animation(?:-name)?:\s*([^;}]+)/.exec(rule.body);
+    if (!anim) continue;
+    const names = anim[1]
+      .split(/[,;]/)
+      .flatMap(part => part.split(/\s+/))
+      .filter(tok => KEYFRAMES.has(tok));
+    if (!names.length) continue;
+    for (const selector of rule.selector.split(',')) {
+      if (norm(selector)) declared.push({ selector: norm(selector), names });
+    }
+  }
+
+  const stopped = new Set<string>();
+  for (const rule of reduceRules) {
+    if (!/(?:^|[;{\s])animation:\s*none/.test(rule.body)) continue;
+    for (const selector of rule.selector.split(',')) {
+      if (norm(selector)) stopped.add(norm(selector));
+    }
+  }
+
+  it('判据本身仍有牙（正文动画规则与 reduce 覆盖都不是空集）', () => {
+    expect(declared.length, '正文里一条动画规则都没解析出来——判据已空转').toBeGreaterThanOrEqual(10);
+    expect(stopped.size, 'reduce 段落里一条 `animation: none` 都没解析出来——判据已空转').toBeGreaterThanOrEqual(8);
+  });
+
+  it('每条动画规则的完整选择器都在 reduce 段落被逐字点名', () => {
+    const missing = declared
+      .filter(d => !stopped.has(d.selector) && !JS_GATED.has(d.selector))
+      .map(d => `${d.selector}（${d.names.join('/')}）`);
+    expect(missing, '减弱动效下这些动画仍会播：' + missing.join('、')).toEqual([]);
+  });
+
+  it('例外清单里的每一条确实还对应一条正文动画，且写明由谁关掉', () => {
+    const declaredSet = new Set(declared.map(d => d.selector));
+    for (const [selector, reason] of JS_GATED) {
+      expect(declaredSet.has(selector), `例外清单里的 ${selector} 已不对应任何正文动画，该删掉`).toBe(true);
+      expect(reason.length, `${selector} 的例外理由必须写清楚`).toBeGreaterThan(40);
+    }
+  });
+});

@@ -6,6 +6,7 @@
   "edit": "编辑",
   "delete": "删除",
   "operationFailed": "操作失败",
+  "autoOffSaveFailed": "设置自动关闭失败",
   "justNow": "刚刚",
   "minutesAgo": "$1分钟前",
   "hoursAgo": "$1小时前",

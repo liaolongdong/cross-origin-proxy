@@ -107,6 +107,7 @@ import { formatLocaleDateTime } from '@/utils/formatters';
 import { isFailureEnvelope } from '@/utils/messageResult';
 import { logger } from '@/utils/logger';
 import { useI18n } from '@/composables/useI18n';
+import { useProfiles } from '@/composables/useProfiles';
 
 /**
  * 环境配置管理弹窗
@@ -126,8 +127,9 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n();
 
-const profiles = ref<EnvironmentProfile[]>([]);
-const loading = ref(false);
+// 快照列表的读取与载入走 `useProfiles()`，与 popup 的切换卡共用同一份 IO 判据；
+// 这里只额外取一次「当前规则条数」，它只服务于保存按钮那道禁用闸门，popup 用不到。
+const { profiles, loadingProfiles: loading, loadProfiles, loadProfile } = useProfiles();
 const saving = ref(false);
 const newProfileName = ref('');
 const rulesCount = ref(0);
@@ -136,20 +138,19 @@ function formatTime(ts: number): string {
   return formatLocaleDateTime(ts, locale.value);
 }
 
-async function fetchProfiles() {
-  loading.value = true;
+/** 当前规则条数：读失败时维持上一次读数，不把「没读到」画成「一条规则都没有」 */
+async function fetchRulesCount() {
   try {
-    const [list, config] = await Promise.all([
-      chrome.runtime.sendMessage({ type: MessageType.GET_PROFILES }) as Promise<EnvironmentProfile[]>,
-      chrome.runtime.sendMessage({ type: MessageType.GET_PROXY_CONFIG }) as Promise<ProxyConfig>,
-    ]);
-    profiles.value = Array.isArray(list) ? list : [];
+    const config: ProxyConfig = await chrome.runtime.sendMessage({ type: MessageType.GET_PROXY_CONFIG });
     rulesCount.value = config?.rules?.length ?? 0;
   } catch (error) {
-    logger.error('Failed to fetch profiles:', error);
-  } finally {
-    loading.value = false;
+    logger.error('Failed to fetch proxy config:', error);
   }
+}
+
+async function fetchProfiles() {
+  // 两笔各自兜错：恢复点写坏、SW 刚回收这类事不该让列表和按钮闸门一起空白
+  await Promise.all([loadProfiles(), fetchRulesCount()]);
 }
 
 // 打开即拉取。不走 el-dialog 的 `open` 事件：它只在 modelValue 的 watcher 里 emit，
@@ -220,22 +221,16 @@ async function handleLoadProfile(profile: EnvironmentProfile) {
   } catch {
     return; // 用户取消
   }
-  try {
-    const result = await chrome.runtime.sendMessage({
-      type: MessageType.LOAD_PROFILE,
-      data: { profileId: profile.id },
-    });
-    if (!result?.success) {
-      ElMessage.error(result?.error || t('operationFailed'));
-      return;
-    }
-    ElMessage.success(t('profileLoaded', profile.name));
-    emit('loaded');
-    emit('update:visible', false);
-  } catch (error) {
-    ElMessage.error(t('operationFailed'));
-    logger.error('Load profile failed:', error);
+  const result = await loadProfile(profile.id);
+  if (!result.success) {
+    // 后台写明原因时照旧回显（如 Profile not found）；没原因的两条路径（抛错 / 空回包）
+    // 由 composable 留空，落回通用失败文案，不把内部码抛给用户
+    ElMessage.error(result.error || t('operationFailed'));
+    return;
   }
+  ElMessage.success(t('profileLoaded', profile.name));
+  emit('loaded');
+  emit('update:visible', false);
 }
 
 async function handleDeleteProfile(profile: EnvironmentProfile) {

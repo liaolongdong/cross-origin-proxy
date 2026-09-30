@@ -16,39 +16,83 @@
       >
     </div>
 
-    <!-- 代理开关状态行 -->
+    <!-- 代理开关状态行 + 自动关闭档位 -->
     <div
       class="toggle-section"
       :class="{ 'is-active': enabled }"
     >
-      <div class="toggle-label-col">
-        <div class="toggle-label">
-          <span
-            class="status-dot"
-            :class="{ active: enabled }"
-          ></span>
-          <span class="toggle-text">{{ t('proxySwitch') }}</span>
-          <span
-            class="toggle-status"
-            :class="{ 'is-active': enabled }"
+      <div class="toggle-row">
+        <div class="toggle-label-col">
+          <div class="toggle-label">
+            <span
+              class="status-dot"
+              :class="{ active: enabled }"
+            ></span>
+            <span class="toggle-text">{{ t('proxySwitch') }}</span>
+            <span
+              class="toggle-status"
+              :class="{ 'is-active': enabled }"
+            >
+              {{ enabled ? t('statusEnabled') : t('statusDisabled') }}
+            </span>
+          </div>
+          <div
+            v-if="autoOffText"
+            class="auto-off-countdown"
           >
-            {{ enabled ? t('statusEnabled') : t('statusDisabled') }}
-          </span>
+            <el-icon><Timer /></el-icon>
+            {{ autoOffText }}
+          </div>
         </div>
-        <div
-          v-if="autoOffText"
-          class="auto-off-countdown"
-        >
-          <el-icon><Timer /></el-icon>
-          {{ autoOffText }}
+        <el-switch
+          v-model="enabled"
+          :loading="loading"
+          :aria-label="t('proxySwitch')"
+          @change="handleToggleProxy"
+        />
+      </div>
+      <!--
+        自动关闭的档位条：倒计时的用途是「别忘了关代理」，而做这个决定的时刻就在拨开关这一下，
+        不该为它开一个标签页。整条只在读到位（`autoOffMinutes !== null`）时画——读失败时画成
+        「从不」是把「不知道」说成一句结论，与这一屏其余「读不到就画 —」同一条规矩。
+        每一格是原生 `<button>` + `aria-pressed`（不是 radiogroup：方向键在 radio 里是「选中即生效」，
+        而这里的生效会重启一次倒计时，走五格箭头就等于连写五次存储）。
+      -->
+      <div
+        v-if="autoOffMinutes !== null"
+        class="auto-off-picker"
+        role="group"
+        :aria-label="t('autoOffPickTitle')"
+      >
+        <div class="auto-off-picker-head">
+          <span class="auto-off-picker-label">{{ t('autoOffPickTitle') }}</span>
+          <span
+            v-if="!enabled && autoOffMinutes > 0"
+            class="auto-off-picker-note"
+            >{{ t('autoOffPickStartsOnEnable') }}</span
+          >
+          <span
+            v-else-if="autoOffIsCustom"
+            class="auto-off-picker-note"
+            >{{ t('autoOffPickCustom', String(autoOffMinutes)) }}</span
+          >
+        </div>
+        <div class="auto-off-chips">
+          <button
+            v-for="preset in AUTO_OFF_PRESETS"
+            :key="preset.minutes"
+            type="button"
+            class="auto-off-chip"
+            :class="{ 'is-selected': autoOffMinutes === preset.minutes }"
+            :aria-pressed="autoOffMinutes === preset.minutes"
+            :aria-label="t('autoOffPickA11y', t(preset.shortKey))"
+            :disabled="autoOffPending"
+            @click="chooseAutoOff(preset)"
+          >
+            {{ t(preset.shortKey) }}
+          </button>
         </div>
       </div>
-      <el-switch
-        v-model="enabled"
-        :loading="loading"
-        :aria-label="t('proxySwitch')"
-        @change="handleToggleProxy"
-      />
     </div>
 
     <!-- 可折叠规则列表 -->
@@ -116,7 +160,13 @@
     <div class="metrics-block">
       <div class="metrics-row">
         <div class="metric">
-          <span class="metric-value">{{ activeRuleCount }}</span>
+          <span class="metric-value"
+            ><span
+              :key="activeRuleCount"
+              class="metric-value-digit"
+              >{{ activeRuleCount }}</span
+            ></span
+          >
           <span class="metric-label">{{ t('activeRules') }}</span>
         </div>
         <div class="metric-divider"></div>
@@ -349,8 +399,9 @@
         class="action-card"
         role="button"
         tabindex="0"
-        @click="openOptionsPage('#profiles')"
-        @keydown.enter.space.prevent="openOptionsPage('#profiles')"
+        :aria-expanded="profilePicker ? 'true' : 'false'"
+        @click="handleProfilesCard"
+        @keydown.enter.space.prevent="handleProfilesCard"
       >
         <div class="action-card__icon action-card__icon--tint">
           <el-icon><Collection /></el-icon>
@@ -359,6 +410,73 @@
           <div class="action-card__title">{{ t('actionProfiles') }}</div>
           <div class="action-card__desc">{{ t('actionProfilesDesc') }}</div>
         </div>
+      </div>
+
+      <!--
+        环境快照面板：切环境是这个扩展最勤的动作，不值得为它开一次标签页。
+        复用「这一页在调谁」那套面板样式与真按钮行——同一层交互不该有两种键盘路径。
+        确认这一步做在面板里而不是 `ElMessageBox`：弹窗模块一旦进 popup 首屏就是白涨的体积，
+        而这里要的只是「把后果说清楚 + 再点一下」。措辞必须点名两件副作用（整套替换、总开关被打开），
+        这是 `utils/storage.ts` 的 `loadProfile` 既有语义，本轮刻意不改。
+      -->
+      <div
+        v-if="profilePicker"
+        class="api-picker"
+        role="group"
+        :aria-label="t('profilePickerTitle')"
+      >
+        <p class="api-picker-title">{{ t('profilePickerTitle') }}</p>
+        <template
+          v-for="profile in profiles"
+          :key="profile.id"
+        >
+          <button
+            type="button"
+            class="api-picker-row"
+            :class="{ 'is-pending': pendingProfileId === profile.id }"
+            :aria-expanded="pendingProfileId === profile.id ? 'true' : 'false'"
+            :disabled="switchingProfile"
+            @click="chooseProfile(profile.id)"
+          >
+            <span
+              class="api-picker-origin"
+              :title="profile.name"
+              >{{ profile.name }}</span
+            >
+            <span class="api-picker-count">{{ t('profilePickerRuleCount', String(profile.rules.length)) }}</span>
+          </button>
+          <div
+            v-if="pendingProfileId === profile.id"
+            class="profile-confirm"
+          >
+            <p class="profile-confirm-text">{{ t('profilePickerConfirm', [profile.name, profile.rules.length]) }}</p>
+            <div class="profile-confirm-actions">
+              <button
+                type="button"
+                class="profile-confirm-btn profile-confirm-btn--apply"
+                :disabled="switchingProfile"
+                @click="applyProfile(profile)"
+              >
+                {{ switchingProfile ? t('profilePickerApplying') : t('profilePickerApply') }}
+              </button>
+              <button
+                type="button"
+                class="profile-confirm-btn"
+                :disabled="switchingProfile"
+                @click="pendingProfileId = ''"
+              >
+                {{ t('cancel') }}
+              </button>
+            </div>
+          </div>
+        </template>
+        <button
+          type="button"
+          class="api-picker-row api-picker-row--muted"
+          @click="openOptionsPage('#profiles')"
+        >
+          <span class="api-picker-origin">{{ t('profilePickerManage') }}</span>
+        </button>
       </div>
     </div>
 
@@ -446,6 +564,7 @@ import {
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 import { useDiagnosisText } from '@/composables/useDiagnosis';
+import { useProfiles } from '@/composables/useProfiles';
 import { MessageType } from '@/utils/types';
 import { type PageApiOrigin } from '@/utils/pageApiOrigins';
 import { probePageApiOrigins } from '@/utils/pageApiProbe';
@@ -455,6 +574,14 @@ import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
 import { describeInterceptorStats, isInterceptorStatsEntry } from '@/utils/interceptorStats';
 import { isConfigSyncStatus } from '@/utils/configSync';
+import {
+  AUTO_OFF_PRESETS,
+  AUTO_OFF_PRESET_MINUTES,
+  applyAutoOffMinutes,
+  readAutoOffMinutes,
+  writeAutoOffMinutes,
+} from '@/utils/autoOff';
+import type { AutoOffApplyResult } from '@/utils/autoOff';
 import { formatClock } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@/utils/types';
@@ -776,10 +903,88 @@ function tickAutoOff() {
 
 let autoOffTimer: ReturnType<typeof setInterval> | null = null;
 
+// ─── 自动关闭档位：就在开关下面改，不必为它开一次配置页 ──────────────────────
+
+/**
+ * 当前档位；`null` = 还没读到或读失败。
+ *
+ * 读失败时整条不画（模板的 `v-if`）。把它当 `0` 画就是指着用户说「你没设自动关闭」，
+ * 而事实是我们不知道——与这一屏「读不到就画 —」同一条规矩。
+ */
+const autoOffMinutes = ref<number | null>(null);
+
+/** 一次设置在途：整条禁用，避免两份「预期落点」互相顶掉（`applyAutoOffMinutes` 靠它自己那次预期判断） */
+const autoOffPending = ref(false);
+
+/**
+ * 存的值不在档位表里（手改过 storage、或旧版本留下的 15 分钟）。
+ * 这时五格没有一格是亮的，光秃秃的一排比一个假选中更让人困惑，所以补一句「当前 N 分钟」。
+ */
+const autoOffIsCustom = computed(
+  () =>
+    autoOffMinutes.value !== null &&
+    autoOffMinutes.value > 0 &&
+    !AUTO_OFF_PRESET_MINUTES.includes(autoOffMinutes.value),
+);
+
+/** 挂载时读一份：点下去不该有等待，读不到则整条不出现（失败不弹提示，与快照列表那处一致） */
+async function loadAutoOffMinutes() {
+  try {
+    autoOffMinutes.value = await readAutoOffMinutes();
+  } catch (error) {
+    logger.debug('Read auto-off minutes failed:', error);
+  }
+}
+
+/**
+ * 选一格：写进 storage，后台的 `storage.onChanged` 是唯一重建倒计时的人，这里只负责把新落点读回来。
+ *
+ * 三档结果各有说法（`utils/autoOff.ts`）：写入失败要回滚那一格的选中态并报错；
+ * 读到落点就直接写给倒计时，省掉一次整份状态拉取；落点没读到（预算 600ms 用尽）时设置本身已经生效，
+ * 于是重拉一次状态、按后台真正给出的那个值画——绝不拿 `Date.now() + 时长` 造一个没观测到的时刻。
+ * 选中的就是当前那格时一个字都不写：不然每点一次就重启一次倒计时，还白写一次存储。
+ */
+async function chooseAutoOff(preset: (typeof AUTO_OFF_PRESETS)[number]) {
+  if (autoOffPending.value || autoOffMinutes.value === preset.minutes) return;
+  const previous = autoOffMinutes.value;
+  autoOffPending.value = true;
+  autoOffMinutes.value = preset.minutes;
+  try {
+    // 总开关关着时后台压根不会挂那枚 alarm（它只在 enabled 且有时长时建），轮询六趟只会白等 600ms
+    // 然后诚实报「读不到落点」。所以那一趟只在代理开着时跑；关着就只写字面值，落点本来就是「无」。
+    const result: AutoOffApplyResult = enabled.value
+      ? await applyAutoOffMinutes(preset.minutes)
+      : (await writeAutoOffMinutes(preset.minutes))
+        ? { status: 'applied', autoOffAt: undefined }
+        : { status: 'failed' };
+    if (result.status === 'failed') {
+      autoOffMinutes.value = previous;
+      ElMessage.error(t('autoOffSaveFailed'));
+      return;
+    }
+    if (result.status === 'applied') {
+      autoOffAt.value = result.autoOffAt;
+      tickAutoOff();
+    } else {
+      void fetchStatus();
+    }
+    ElMessage.success(preset.minutes > 0 ? t('autoOffSet', t(preset.shortKey)) : t('autoOffCancelled'));
+  } catch (error) {
+    logger.error('Set auto-off failed:', error);
+    autoOffMinutes.value = previous;
+    ElMessage.error(t('autoOffSaveFailed'));
+  } finally {
+    autoOffPending.value = false;
+  }
+}
+
 onMounted(() => {
   tickAutoOff();
   autoOffTimer = setInterval(tickAutoOff, 1000);
+  void loadAutoOffMinutes();
   void computePageHit();
+  // 快照列表先读一份：点卡片时不该有等待。失败不在这里报，留给下一次点击重试
+  void refreshProfiles();
 });
 
 onUnmounted(() => {
@@ -850,6 +1055,77 @@ async function handleCreateRuleFromTab() {
     logger.error('Create rule from tab failed:', error);
     ElMessage.error(t('createRuleFromTabFailed'));
   }
+}
+
+// ─── 环境快照一键切换 ─────────────────────────────────────────────────────
+
+/** 快照面板展开状态；`null` 语义与 `apiPicker` 同一套——收起时面板整个不在 DOM 里 */
+const profilePicker = ref(false);
+/** 等待确认的那一条；只有它下面展开后果说明 */
+const pendingProfileId = ref('');
+/** 列表是否真读到过：没读到就不许说「你还没有快照」，点卡片照旧直达 Options 管理弹窗 */
+const profilesReadOk = ref(false);
+
+const { profiles, loadingProfiles, switchingProfile, loadProfiles, loadProfile } = useProfiles();
+
+/**
+ * 拉一次快照列表并记下「读到过」这件事。
+ *
+ * 挂载时先拉（点开卡片不该有等待），读失败时留给下一次点击重试一次——
+ * SW 冷启动的第一笔消息最容易空回，而「没读到」和「一条都没有」在界面上必须是两回事。
+ */
+async function refreshProfiles(): Promise<boolean> {
+  const ok = await loadProfiles();
+  if (ok) profilesReadOk.value = true;
+  return ok;
+}
+
+/**
+ * 快照卡片：有快照就地展开面板，没有（或读不到）照旧跳 Options 的管理弹窗。
+ *
+ * 判据顺序是「读得到 + 非空」而不是 `profiles.length > 0`：读取失败时列表停在空数组，
+ * 只看长度就等于把一次 IO 失败说成「用户一份快照都没存」。
+ */
+async function handleProfilesCard() {
+  if (profilePicker.value) {
+    profilePicker.value = false;
+    pendingProfileId.value = '';
+    return;
+  }
+  if (loadingProfiles.value) return;
+  const ok = profilesReadOk.value || (await refreshProfiles());
+  if (!ok || profiles.value.length === 0) {
+    await openOptionsPage('#profiles');
+    return;
+  }
+  pendingProfileId.value = '';
+  profilePicker.value = true;
+}
+
+/** 点某一条：先把它自己的后果说明摊开，确认按钮出现在它正下方 */
+function chooseProfile(profileId: string) {
+  pendingProfileId.value = pendingProfileId.value === profileId ? '' : profileId;
+}
+
+/**
+ * 确认切换：整套替换当前规则集，成功后刷新这一屏能看见的三处读数。
+ *
+ * 成功判据只认 composable 的 `success`（后台失败回的是 resolved 的 `{success:false}`，
+ * `catch` 拦不到）；失败时面板留在原地、说明文字仍在，用户不需要重走一遍。
+ * 之后 `fetchStatus()` 与 `computePageHit()` 各跑一次：规则集换了，
+ * 「活跃规则 / 快捷开关列表」与「本页命中」都是它的派生值，不重算就是拿旧账回答新问题。
+ */
+async function applyProfile(profile: { id: string; name: string }) {
+  const result = await loadProfile(profile.id);
+  if (!result.success) {
+    ElMessage.error(result.error || t('operationFailed'));
+    return;
+  }
+  ElMessage.success(t('profileSwitched', profile.name));
+  profilePicker.value = false;
+  pendingProfileId.value = '';
+  void fetchStatus();
+  void computePageHit();
 }
 
 /**
@@ -926,8 +1202,8 @@ async function openOptionsPage(hash = '') {
 /* 开关状态行 */
 .toggle-section {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 10px;
   padding: 12px 14px;
   margin-bottom: 12px;
   background: var(--cop-bg-color-secondary);
@@ -941,6 +1217,86 @@ async function openOptionsPage(hash = '') {
 .toggle-section.is-active {
   background: var(--cop-primary-bg);
   border-color: var(--cop-primary-border);
+}
+
+/* 开关那一行自己回到原来的横向布局：整张卡改成列之后，档位条要占满宽度 */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auto-off-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auto-off-picker-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.auto-off-picker-label {
+  font-size: 11px;
+  color: var(--cop-text-color-secondary);
+  user-select: none;
+}
+
+.auto-off-picker-note {
+  font-size: 11px;
+  color: var(--cop-text-color-placeholder);
+}
+
+.auto-off-chips {
+  display: flex;
+  gap: 6px;
+}
+
+/*
+  五格等宽：内容宽 320px 减去这一行左右的 14px 内边距与四段 6px 间隙，
+  中英文最长的「4小时 / 4h」都放得下（2026-09-30 用一次性探针在 320px 下逐个量过，见交付说明）。
+  选中态不只靠颜色：字重与边框同时变，`aria-pressed` 再说给读屏。
+*/
+.auto-off-chip {
+  flex: 1;
+  padding: 4px 0;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cop-text-color-regular);
+  text-align: center;
+  cursor: pointer;
+  background: var(--cop-bg-color);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 6px;
+  transition:
+    color var(--cop-duration-fast) var(--cop-ease-standard),
+    background var(--cop-duration-fast) var(--cop-ease-standard),
+    border-color var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+.auto-off-chip:hover {
+  border-color: var(--cop-primary-border);
+}
+
+.auto-off-chip.is-selected {
+  font-weight: 600;
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg);
+  border-color: var(--cop-primary);
+}
+
+.auto-off-chip:focus-visible {
+  outline: none;
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 25%);
+}
+
+.auto-off-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .toggle-label-col {
@@ -1039,6 +1395,18 @@ async function openOptionsPage(hash = '') {
   font-weight: 700;
   line-height: 1.2;
   color: var(--cop-primary);
+}
+
+/* 「活跃规则」这一格说的就是工具栏徽章上那个数（两者同源于 `activeRuleCount`，
+   见 `entrypoints/background/badgeManager.ts`）。用户拨完开关最常问的一句是「徽章数字变没变」，
+   所以数字每换一次读数就向外散一圈——开关那一侧的 `dot-ping` 是同一个动作的同一个语言。
+   动画挂在**按读数 key 化的内层**：值没变就不会重挂载，也就不会响；周期性的状态刷新因此是安静的。
+   `to` 落回「没有 box-shadow」这个静止态，动画散场后不必收回（与状态点那份同一写法）。
+   圆角是给这一圈的形状：20px 粗体字的方框外面套一圈硬边矩形会显脏。 */
+.metric-value-digit {
+  display: inline-block;
+  border-radius: 4px;
+  animation: dot-ping var(--cop-duration-slow) var(--cop-ease-standard) 1;
 }
 
 .metric-label {
@@ -1420,6 +1788,83 @@ async function openOptionsPage(hash = '') {
   font-size: 11px;
   line-height: 1.4;
   color: var(--cop-text-color-secondary);
+}
+
+/* 快照面板特有：确认块紧跟在被点的那一行下面，焦点仍留在原行，Tab 一步就落到「切换」 */
+.api-picker-row.is-pending {
+  border-color: var(--cop-primary);
+}
+
+.api-picker-row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 确认说明挤开了 `.api-picker-row + .api-picker-row` 的相邻关系，间距在这里补回来 */
+.profile-confirm + .api-picker-row {
+  margin-top: 6px;
+}
+
+.profile-confirm {
+  padding: 8px;
+  margin-top: 6px;
+  background: var(--cop-primary-bg);
+  border: 1px solid var(--cop-primary-border);
+  border-radius: 6px;
+}
+
+.profile-confirm-text {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--cop-text-color-regular);
+}
+
+.profile-confirm-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.profile-confirm-btn {
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--cop-text-color-regular);
+  cursor: pointer;
+  background: var(--cop-bg-color);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 6px;
+  transition:
+    border-color var(--cop-duration-fast) var(--cop-ease-standard),
+    color var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+.profile-confirm-btn--apply {
+  color: var(--cop-text-color-on-primary);
+  background: var(--cop-primary);
+  border-color: var(--cop-primary);
+}
+
+.profile-confirm-btn:hover:not(:disabled) {
+  border-color: var(--cop-primary-border);
+}
+
+.profile-confirm-btn--apply:hover:not(:disabled) {
+  background: var(--cop-primary-hover);
+  border-color: var(--cop-primary-hover);
+}
+
+.profile-confirm-btn:focus-visible {
+  outline: none;
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 25%);
+}
+
+.profile-confirm-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* 最近请求 */

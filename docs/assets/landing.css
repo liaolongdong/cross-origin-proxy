@@ -704,6 +704,109 @@ html.js .nav-menu-panel a[aria-current] {
   color: var(--lp-ink-faint);
 }
 
+/* ---------- Hero 首屏静态示例 ----------
+ * 这一格是「下面那块预演面板的默认输入，按扩展自己的判据算出来的那一个答案」，写成静态文字：
+ * 禁用脚本也读得出来，而 `tests/landingPreview.test.ts` 拿同一份判据逐字核对——抄错一个字符就红。
+ * 长地址不许折行（折了就看不出 `/api/user/list` 是整段搬过去的），所以沿用面板那套办法：
+ * 标签列按内容定宽，值列写成 `minmax(0, 1fr)` 让自己横向滚——默认的 min-content 起算会让
+ * 一条不折行的 URL 把整列撑到一千多像素，而这一格正好处在最容易被读成「产品承诺」的位置。 */
+
+.hero-example {
+  padding: 16px 18px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+}
+
+/* 标题与「试试」入口同行：这张卡是 hero 右栏的最后一块，链接写在卡尾时它的位置——
+   在 1440×900 窗口（`innerHeight` 757）下按 headless Chrome 量的卡体是中文页 616→860、
+   英文页 665→910，也就是说那个入口整个落在折叠线以下。而它是全页**唯一**一处指向 `#try`
+   的链接（预演面板要脚本才出现，禁用 JS 时那一格根本没有别的门）。
+   挪到卡头之后同一把量具读到：中文页 633→655、英文页 682→705，两页都进了折叠线，
+   1280×800 同值；再窄一档就不成立（1152×720 下上面那条 .stat-strip 折成两行，79px 变 168px，
+   整张卡让到 705 / 727 起，入口又掉回折叠线以下）。卡本身也从 244px 高收到 209px（那一行不再占一次 12px 上边距 + 22px 行高）。
+   四行正文、卡的位置与禁用 JS 的降级态一概未动；`display` 在计算值上是 `block`
+   而不是我写的 `inline-block`——它是 flex 子项，被块化了，这不是回归。
+   `flex-wrap: wrap` 是给窄屏与英文长标题留的：挤不下就整行换到下一行，
+   而不是把 12.5px 的标题压成两行小字。 */
+.hero-example-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.hero-example-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lp-ink-faint);
+}
+
+.hero-example-rows {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.hero-example-rows dt {
+  color: var(--lp-ink-faint);
+}
+
+.hero-example-rows dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.hero-example-rows code {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* 最后一行是答案，不是第四格输入：只靠颜色与字重分出来——这一行是网格的两个格子，
+   画一条上边框会在两列之间断成两截，反而像渲染坏了。 */
+.hero-example-final {
+  padding-top: 6px;
+  color: var(--lp-ink-soft);
+}
+
+.hero-example-final code {
+  font-weight: 600;
+  color: var(--lp-primary-strong);
+}
+
+.hero-example-channel {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--lp-ink-faint);
+}
+
+/* 「改试试」指的是下面那块面板，而面板要脚本才出现：链接跟着它同进同退，
+   否则禁用脚本的读者会点到一个空位——这一格正文照旧读得完，少的只是那个入口。
+   它现在住在 `.hero-example-head` 那一行里（卡头，折叠线之内），不再需要与正文隔开的
+   `margin-top`：那一行自己带 `gap`。 */
+.hero-example-cta {
+  display: none;
+}
+
+html.js.try-ready .hero-example-cta {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lp-primary);
+}
+
+html.js.try-ready .hero-example-cta:hover {
+  color: var(--lp-primary-strong);
+}
+
 /* ---------- Hero 双通道流程示意 ----------
  * 用普通 HTML 文本而不是 SVG <text>：文字不会溢出裁切，
  * 可被搜索引擎与 AI 爬虫直接抽取，也自动跟随字号与主题。 */
@@ -1112,6 +1215,39 @@ tbody tr:last-child td {
   background: color-mix(in srgb, var(--lp-primary) 18%, var(--lp-surface));
 }
 
+/* 第一次进视野时给「本扩展」整列刷一次主色底。这张表要回答的问题就是「凭什么选它」，
+   而那一列今天只靠一层淡底色与邻居分开；六列的表还要横向拖，拖到第 4 列再回来时，
+   眼睛得重新确认一遍哪一列才是本页在推荐的那个。类名由 `landing.js` 的相交检测挂一次，
+   离开再回来不重播（反复刷就是广告），不支持 IntersectionObserver 的运行时压根不加类，
+   这一圈因此是纯装饰——没有一格的可读性依赖它。
+   阴影必须是 `inset` 的：底色那一层由 hover、`data-col` 高亮与暗色档位共用，
+   外圈阴影会盖到邻居格子上，等于把「比的是哪一列」这件事又搅浑一次。 */
+html.js .compare.us-flagged .col-us {
+  animation: lp-col-flag 0.9s cubic-bezier(0.16, 1, 0.3, 1) 1;
+}
+
+@keyframes lp-col-flag {
+  0% {
+    box-shadow: inset 0 0 0 60px color-mix(in srgb, var(--lp-primary) 0%, transparent);
+  }
+
+  45% {
+    box-shadow: inset 0 0 0 60px color-mix(in srgb, var(--lp-primary) 22%, transparent);
+  }
+
+  100% {
+    box-shadow: inset 0 0 0 60px color-mix(in srgb, var(--lp-primary) 0%, transparent);
+  }
+}
+
+/* 行依次落位：走的是 `.reveal` 那套（`--lp-rank` 由脚本按同组序号写入，相交才放行）。
+   但表格行只淡不移——`.table-scroll` 的 `overflow-x: auto` 会把 `overflow-y` 一并算成
+   `auto`（visible 与非 visible 不同时存在），18px 的位移会在进场那一瞬给表格挤出一条
+   纵向滚动条，看着像表格在抖。位移交还给不透明度的先后。 */
+html.js .compare tbody tr.reveal {
+  transform: none;
+}
+
 .mark-yes {
   font-weight: 700;
   color: var(--lp-accent);
@@ -1265,6 +1401,7 @@ html.js .slide {
 .slide figure {
   padding: 14px;
   margin: 0;
+  overflow: hidden;
   background: var(--lp-surface);
   border: 1px solid var(--lp-line);
   border-radius: var(--lp-radius-lg);
@@ -1277,10 +1414,26 @@ html.js .slide {
   aspect-ratio: 16 / 10;
   object-fit: contain;
   border-radius: var(--lp-radius-sm);
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 悬停放大：廊里的截图按 1200×750 拍，缩进 720px 宽的卡面后界面文字读不动，
+   而静态页没有「点开看大图」的去处（那要一层 lightbox 与一组焦点管理）。
+   就地放大 1.9 倍、以图框中心为锚点，出界的部分由上面那条 `figure { overflow }` 裁掉，
+   看的是「这一块到底写了什么」。锚点取中心是不跟指针的选法：跟指针要往每张图里
+   塞一个包裹层再加一份 pointermove，两处都比这一条规则贵，而收益只是把中心换成边角。
+   只给能悬停的设备——触屏上 `:hover` 会粘在最后一次点击的那张图上收不回去。 */
+@media (hover: hover) and (pointer: fine) {
+  .slide:hover img {
+    transform: scale(1.9);
+  }
 }
 
 .slide figcaption {
+  position: relative;
+  z-index: 1;
   padding: 12px 4px 2px;
+  background: var(--lp-surface);
 }
 
 .slide figcaption b {
@@ -1418,6 +1571,10 @@ html.js .gallery-bar {
   display: none;
   padding: 20px 22px;
   margin-top: 16px;
+
+  /* 首屏那一格「改试试」跳的就是这里，而页头是 sticky 的：不留出与 `section[aria-labelledby]`
+     同一段，落点会把面板的标题压进页头底下——跳对了地址、读不到那一格在说什么。 */
+  scroll-margin-top: 72px;
   background: var(--lp-surface);
   border: 1px solid var(--lp-line);
   border-left: 3px solid var(--lp-primary);
@@ -2878,6 +3035,17 @@ html.js .tool-card:hover::before {
     display: none;
   }
 
+  /* 「本扩展」那一列的一次性光晕：停的只是那一下刷白。格子本身的底色由 `.col-us` 那条规则给，
+     绝不能跟着一起收掉——那一列是本页论证的落点，减弱动效下更要看得见。
+     （写在 `display: none` 那一组里就会把六个格子整个抹没，这里要的是 `animation: none`。）
+     `html.js` 这一层必须照抄：正文那条规则带它（0-4-1），这里少写一层就只剩 0-3-0，
+     特异性直接落败——于是减弱档照样刷一遍光晕，而这件事在界面上看不出来也无人报错。
+     2026-09-30 用 headless Chrome 的 `--force-prefers-reduced-motion` 量过：少一层时
+     `.col-us` 的计算值仍是 `animation-name: lp-col-flag`，补上才是 `none`。 */
+  html.js .compare.us-flagged .col-us {
+    animation: none;
+  }
+
   .btn,
   .feature-card,
   .feature-icon,
@@ -2886,6 +3054,7 @@ html.js .tool-card:hover::before {
   .scroll-rail button,
   .site-nav a,
   .nav-actions a,
+  .slide img,
   .tool-card,
   details,
   summary,

@@ -494,37 +494,49 @@ describe('[Empty target] 空目标规则在表单侧是合法输入', () => {
   });
 });
 
-describe('[Undo delete] 5 秒窗口与提交定时器不再各自为政', () => {
+describe('[Undo delete] 单条与批量共用同一份撤销时序', () => {
   const appSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
-  const start = appSrc.indexOf('function handleDeleteRule');
-  const body = appSrc.slice(start, appSrc.indexOf('\n}\n', start));
+  const helperStart = appSrc.indexOf('function runDeleteUndo');
+  const helper = appSrc.slice(helperStart, appSrc.indexOf('\n}\n', helperStart));
+  const singleStart = appSrc.indexOf('function handleDeleteRule');
+  const single = appSrc.slice(singleStart, appSrc.indexOf('\n}\n', singleStart));
+  const batchStart = appSrc.indexOf('async function handleBatchDelete');
+  const batch = appSrc.slice(batchStart, appSrc.indexOf('\n}\n', batchStart));
 
-  it('捕获规则走深拷贝，避免与原对象共享嵌套覆盖配置', () => {
-    // cloneRule 而不是裸 structuredClone：从 rules.value 取出的那一条是响应式 Proxy
-    expect(body).toContain('const capturedRule = cloneRule(rules.value[index])');
+  // 时序本身（提交标志、两条出口注销登记、按原位置放回、失败退回）现在跑在
+  // `tests/deleteUndo.test.ts` 里，这里只钉那份运行时测不到的两件事：
+  // 两条删除路确实共用同一份时序，以及界面措辞在中英成对。
+
+  it('单条与批量都走 runDeleteUndo，App.vue 里不再各写一份删除时序', () => {
+    expect(helperStart, 'App.vue 里找不到 runDeleteUndo').toBeGreaterThan(-1);
+    expect(single).toContain('runDeleteUndo([ruleId], () => deleteRule(ruleId)');
+    expect(batch).toContain('runDeleteUndo(ids, () => batchDeleteRules(ids)');
+    // 自己发消息、自己起定时器就是第二份时序，两份会各自漂移
+    expect(single).not.toContain('chrome.runtime.sendMessage');
+    expect(batch).not.toContain('setTimeout(');
+    expect(helper).toContain('openDeleteUndo(ruleIds');
   });
 
-  it('定时器先置提交标志并收起撤销入口，再发出删除', () => {
-    expect(body).toMatch(/committed = true;[\s\S]*?message\.close\(\);[\s\S]*?chrome\.runtime/);
+  it('清空勾选排在窗口真的开起来之后（没开起来就别抹掉用户的选中态）', () => {
+    const guard = batch.indexOf('if (!opened');
+    expect(guard, '批量删除不再判断窗口有没有开起来').toBeGreaterThan(-1);
+    const clear = batch.indexOf('clearRuleSelection()');
+    expect(clear, '批量删除不再清空勾选').toBeGreaterThan(guard);
   });
 
-  it('提交后的撤销必须直接返回，不能走到本地插回的假恢复', () => {
-    const guard = body.slice(body.indexOf('if (committed)'));
-    expect(guard.slice(0, guard.indexOf('rules.value.splice'))).toContain('return');
+  it('提示时长与撤销窗口是同一个常量（键盘入口不能看得见却点不动）', () => {
+    expect(helper).toContain('duration: DELETE_UNDO_WINDOW_MS');
+    expect(fs.readFileSync('utils/constants.ts', 'utf-8')).toContain('export const DELETE_UNDO_WINDOW_MS = 5000;');
   });
 
-  it('过期撤销有对应文案，且中英同时具备', () => {
-    expect(appSrc).toContain("t('undoExpired')");
-    for (const dict of [zhOptions, enOptions]) {
-      expect(dict).toHaveProperty('undoExpired');
+  it('过期撤销与批量撤销的措辞中英同时具备', () => {
+    for (const key of ['undoExpired', 'batchUndoExpired', 'batchUndoSuccess', 'deleteUndoFailed']) {
+      // 带占位符的那几条写作 `t('key', [n])`，所以只按 `t('key'` 前缀对
+      expect(appSrc, `界面不再引用 ${key}`).toContain(`t('${key}'`);
+      for (const dict of [zhOptions, enOptions]) {
+        expect(dict, `${key} 缺了一边`).toHaveProperty(key);
+      }
     }
-  });
-
-  it('乐观移除前登记撤销窗口，两条出口都注销（漏注销=删除成功后该行被永久屏蔽）', () => {
-    expect(body).toMatch(/beginPendingDelete\(ruleId\);[\s\S]*?rules\.value = rules\.value\.filter/);
-    const undoBranch = body.slice(body.indexOf('if (committed)'), body.indexOf('rules.value.splice'));
-    expect(undoBranch).toContain('endPendingDelete(capturedRule.id)');
-    expect(body).toMatch(/\.finally\(\(\) => endPendingDelete\(capturedRule\.id\)\)/);
   });
 });
 
