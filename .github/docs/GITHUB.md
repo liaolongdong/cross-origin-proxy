@@ -189,7 +189,7 @@ curl -s -H "Accept: application/vnd.github.mercy-preview+json" \
 
 期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 都应返回 200——2026-09-22 实测七个全绿，另外 `sitemap.xml` 与 `robots.txt` 也是 200。中文页在站点根、英文页带 `en` 前缀这次搬迁**已经在远端生效**，`/en.html` 与 `/en-alternatives.html` 不再是 404。旧的 `/zh.html` 与 `/zh-alternatives.html` 已下线且**没有 301**（Pages 是纯静态目录，没有重写规则），所以仓库内任何文档都不许再引用它们——`tests/docs-consistency.test.ts` 已把这条钉死。
 
-还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（它读 `img.shields.io/github/v/release/…`，没有 Release 就没有数），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。**2026-10-01 实测两枚都已变色有数**：`Release` 跟着远端最新的 tag，`CWS` = v1.3.0——这两个数**故意不一样**（最新那一包只到了 GitHub Release、没进商店，原因见 §0 那张表的 `v*` tag / Release 行），别把它们「对齐」成同一个号。`CWS` 那枚已改成 shields 的商店版本端点，**不需要每次发版手改**：它显示的是商店在线版本，2026-10-01 实测是 `v1.3.0`（更早写这一句时是 `v1.0.0`）。
+还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（它读 `img.shields.io/github/v/release/…`，没有 Release 就没有数），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。**2026-10-01 实测两枚都已变色有数**：`Release` 跟着远端最新的 tag，`CWS` = v1.3.0——这两个数**故意不一样**（最新那一包只到了 GitHub Release、没进商店，原因见 §0 那张表的 `v*` tag / Release 行），别把它们「对齐」成同一个号。`CWS` 那枚已改成 shields 的商店版本端点，**不需要每次发版手改**：它显示的是商店在线版本，2026-10-01 实测是 `v1.3.0`（更早写这一句时是 `v1.0.0`）。**它偶尔报 `not found`**——2026-10-01 连着量七次遇到一次，那是 shields 自己抓商店页失败，不是下架信号；判下架要看 Developer Dashboard，或带 `?cacheSeconds=30` 绕开它的缓存重试几次。文档里写「商店在装的版本号」之前，先按这个方法重试确认它稳定。
 
 ### 7.1 搜索收录与 AI 检索的提交动作（一次性的站外清单）
 
