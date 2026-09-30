@@ -40,10 +40,9 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
 ## [1.3.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.3.0...v1.3.1) (2026-09-29)
 
-
 ### Fixed
 
-* **docs:** 落地页菜单把「安装」排回「常见问题」前面，中英两页 × 两簇四处一起对 ([d006ee5](https://github.com/liaolongdong/cross-origin-proxy/commit/d006ee5a5c85e6d8587e8be241684a1c84e59ebe))
+- **docs:** 落地页菜单把「安装」排回「常见问题」前面，中英两页 × 两簇四处一起对 ([d006ee5](https://github.com/liaolongdong/cross-origin-proxy/commit/d006ee5a5c85e6d8587e8be241684a1c84e59ebe))
 
 ## [1.3.0] - 2026-09-27
 
