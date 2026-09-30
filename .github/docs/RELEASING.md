@@ -186,20 +186,21 @@ pnpm exec wxt submit --chrome-zip .output/cross-origin-proxy-1.0.1-chrome.zip --
 
 ## 4. 失败排查
 
-| 现象                                            | 原因与处置                                                                                                                                                          |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 合了代码但机器人没开发布 PR                     | 大概率正常：这一批只有 `docs` / `chore` / `test` / `ci` / `build` / `style` 类型，它们不进 CHANGELOG 也不 bump。否则看那条 run 是不是 pending（§1.5 第 1 条）或报错 |
-| 机器人的发布 PR 上一个检查都没有                | `GITHUB_TOKEN` 开的 PR 不触发 CI（§1.5 第 2 条），不是链路坏了                                                                                                      |
-| 机器人把版本号抬错级别                          | 它只读提交类型，不懂业务风险：在 PR 里同时改 `package.json` 与 `.release-please-manifest.json`，或用 `Release-As: X.Y.Z` 脚注强制                                   |
-| 机器人的 PR 里 CHANGELOG 小节只有一行行提交标题 | 正常，那是它写得出来的全部；中英长文由人在合并前并进那一节（§2 第 2 步 b）                                                                                          |
-| 下一次机器人开出的号等于刚发过的那个号          | 手工 bump（§2.3）后没同步 `.release-please-manifest.json`，两个号脱钩了                                                                                             |
-| `标签 v1.0.1 与 package.json 的 1.0.0 不一致`   | 先 `npm version` 再打 tag，别改 tag 迁就文件                                                                                                                        |
-| Release 说明变成自动生成的流水账                | `CHANGELOG.md` 里那一节的小节号与版本对不上；补上后手动补跑即可覆盖                                                                                                 |
-| Job Summary 显示"Chrome Web Store 发布已跳过"   | Secrets 缺失，按 §1.3 补齐后用 §3 补跑                                                                                                                              |
-| `invalid_grant` / 401                           | refresh token 过期或 OAuth consent screen 还在 Testing 模式（改成 Published 或加测试用户）                                                                          |
-| `The requested profile could not be found`      | `CHROME_EXTENSION_ID` 拼错，或该条目不属于这个开发者账号                                                                                                            |
-| 上传成功但商店里版本没变                        | 只上传未提审：确认 `skip-review` 是否为 true，去 Dashboard 手动提交                                                                                                 |
-| `Pages not enabled`（另一条 deploy-pages 链路） | `GITHUB.md` §5 的 Source 开关没切到 GitHub Actions，与商店发布无关                                                                                                  |
+| 现象                                            | 原因与处置                                                                                                                                                                                                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 合了代码但机器人没开发布 PR                     | 大概率正常：这一批只有 `docs` / `chore` / `test` / `ci` / `build` / `style` 类型，它们不进 CHANGELOG 也不 bump。否则看那条 run 是不是 pending（§1.5 第 1 条）或报错                                                                                 |
+| 机器人的发布 PR 上一个检查都没有                | `GITHUB_TOKEN` 开的 PR 不触发 CI（§1.5 第 2 条），不是链路坏了                                                                                                                                                                                      |
+| 机器人把版本号抬错级别                          | 它只读提交类型，不懂业务风险：在 PR 里同时改 `package.json` 与 `.release-please-manifest.json`，或用 `Release-As: X.Y.Z` 脚注强制                                                                                                                   |
+| 机器人的 PR 里 CHANGELOG 小节只有一行行提交标题 | 正常，那是它写得出来的全部；中英长文由人在合并前并进那一节（§2 第 2 步 b）                                                                                                                                                                          |
+| 下一次机器人开出的号等于刚发过的那个号          | 手工 bump（§2.3）后没同步 `.release-please-manifest.json`，两个号脱钩了                                                                                                                                                                             |
+| `标签 v1.0.1 与 package.json 的 1.0.0 不一致`   | 先 `npm version` 再打 tag，别改 tag 迁就文件                                                                                                                                                                                                        |
+| Release 说明变成自动生成的流水账                | `CHANGELOG.md` 里那一节的小节号与版本对不上；补上后手动补跑即可覆盖                                                                                                                                                                                 |
+| `gh: ... set the GH_TOKEN environment variable` | 用 `gh` 的那一步没声明 `GH_TOKEN`。GitHub **不把 `GITHUB_TOKEN` 注入 `run` 步骤**，而 `gh` 在 Actions 里只认前者；`release.yml` 里 Publish 与清标签两个步骤各写一份，缺哪个红哪个（首次于 2026-09-30 真发生过，症状是 Release 没建成、下游全 skip） |
+| Job Summary 显示"Chrome Web Store 发布已跳过"   | Secrets 缺失，按 §1.3 补齐后用 §3 补跑                                                                                                                                                                                                              |
+| `invalid_grant` / 401                           | refresh token 过期或 OAuth consent screen 还在 Testing 模式（改成 Published 或加测试用户）                                                                                                                                                          |
+| `The requested profile could not be found`      | `CHROME_EXTENSION_ID` 拼错，或该条目不属于这个开发者账号                                                                                                                                                                                            |
+| 上传成功但商店里版本没变                        | 只上传未提审：确认 `skip-review` 是否为 true，去 Dashboard 手动提交                                                                                                                                                                                 |
+| `Pages not enabled`（另一条 deploy-pages 链路） | `GITHUB.md` §5 的 Source 开关没切到 GitHub Actions，与商店发布无关                                                                                                                                                                                  |
 
 ## 5. 没有配 Secrets 时仓库会怎样
 

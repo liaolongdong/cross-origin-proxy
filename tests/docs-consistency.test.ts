@@ -1441,6 +1441,27 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
 
     /**
+     * `gh` 在 Actions 里只认显式声明的 `GH_TOKEN`——GitHub 不会把 `GITHUB_TOKEN` 注入 `run`
+     * 步骤的环境。2026-09-30 首次发版就是在这里红的：Verify / Guard / Locate zip / Notes
+     * 四步全绿，Publish 那步报 `gh: To use GitHub CLI in a GitHub Actions workflow, set the
+     * GH_TOKEN environment variable`（exit 4），Release 没建成，下游「清标签」与商店提审
+     * 一起被 skip——看起来只差最后一步，实际什么都没发出去。
+     *
+     * 判据必须按**步骤**绑而不是全文 grep 一次：漏在哪个步骤上，就正好是那个步骤红。
+     */
+    it('release.yml 每个调用 gh 的步骤都自己声明 GH_TOKEN', () => {
+      const steps = release.split(/^ {6}- name:/m).slice(1);
+      const ghSteps = steps.filter(step => /(?:^|\s)gh\s+(?:release|pr|api)\b/m.test(step));
+      expect(
+        ghSteps.length,
+        '一个调用 gh 的步骤都没匹配到——判据已失效，gh 的用法或本用例的正则变了',
+      ).toBeGreaterThanOrEqual(2);
+      for (const step of ghSteps) {
+        expect(step, '有步骤在用 gh 却没声明 GH_TOKEN，发版会停在 Publish 那一步').toContain('GH_TOKEN:');
+      }
+    });
+
+    /**
      * 起草版本的那条链路与发布的那条必须**互不越界**，这里的判据全是「越界会长什么样」：
      *
      * - 只在 main 上跑。在 PR 上跑会先给每个 PR 生成一份版本猜测，而机器人的对账基准

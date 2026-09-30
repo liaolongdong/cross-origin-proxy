@@ -136,9 +136,17 @@ jobs:
           fi
 
       # 手动重跑是文档里的恢复路径，所以这里必须幂等：已存在就改说明并覆盖资产。
-      # run 步骤自带 GITHUB_TOKEN（本 job 已声明 contents: write）。
+      #
+      # `GH_TOKEN` 必须逐步显式给：GitHub 并不会把 `GITHUB_TOKEN` 作为环境变量注入 `run`
+      # 步骤，而 `gh` 在 Actions 里只认 `GH_TOKEN`（2026-09-30 首次发版就是在这里失败的，
+      # 日志原文是「To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN
+      # environment variable」，exit 4）。少了这一行，前面 Verify/Guard/Locate zip/Notes
+      # 四步全绿、Release 却没建成，而下游「清标签」与商店提审一起被 skip——链路看起来
+      # 只差最后一步，实际什么都没发出去。`github.token` 是本 job 已声明的
+      # contents: write + pull-requests: write，不额外扩权。
       - name: Publish GitHub Release
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.guard.outputs.tag }}
           TITLE: v${{ steps.guard.outputs.version }}
           ZIP: ${{ steps.package.outputs.zip }}
@@ -171,6 +179,7 @@ jobs:
       # 否则下一次冻结无迹可循。
       - name: Clear release-please pending label
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.guard.outputs.version }}
           TAG: ${{ steps.guard.outputs.tag }}
         run: |
