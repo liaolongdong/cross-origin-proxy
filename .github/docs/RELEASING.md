@@ -134,9 +134,13 @@ git push origin main    # 本地分支不叫 main 时写 `git push origin <你�
 
 **跑的那份 workflow 来自你推出去的那个 ref，不是来自 main**。`on: push: tags` 用的是 tag 所指那个提交里的 `.github/workflows/release.yml`——所以如果你刚刚在 main 上改了发布链路、而 tag 打在一个更早的提交上，这一次跑的还是旧文件（改动画像常在这里丢）。要么把 tag 打到包含那些改动的那个提交（未推送过的 tag 用 `git tag -f vX.Y.Z <sha>` 挪位即可，远程不需要重写），要么接受这一次跑旧逻辑、下一次才生效。
 
+**§3 的 `workflow_dispatch` 是第三条路**：它跑的是你选的那个分支（默认 main）上的那份 `release.yml`，而 `tag` 输入只决定 checkout 哪个提交的内容。2026-09-30 那次就是这么救回来的——tag 指的 `6798385` 里 `release.yml` 还缺 `GH_TOKEN`（推 tag 那一次停在 Publish），从 main 补跑用的已经是修好的文件，Release 与 zip 照样按 tag 那个提交的内容产出，refs 一个都没动。
+
 **小节标题的两种写法都发得出去**：`release.yml` 从 `CHANGELOG.md` 切 Release 说明时，认机器人带对比链接的 `## [X.Y.Z](…/compare/vA...vB) (日期)`，也认它拿不到上一个 tag 时写的裸 `## X.Y.Z (日期)`——所以 §2 第 4 步推 tag 前不必先确认标题长什么样。切不到小节时会退回 GitHub 自动生成的流水账并在日志里留一条 warning，不会发一个空说明的 Release。
 
 **推完 tag 之后机器人那本账由 `release.yml` 替它换**。release-please 给发布 PR 打的标签是 `autorelease: pending`，通常由它自己「建 Release + 打 tag」那一步换成 `autorelease: tagged`；这一仓库刻意让它 `skip-github-release`，那一换就永远不发生，而它下次起草时只要看到任何**已合并、仍带 pending** 的 PR 就直接放弃开新 PR（日志里那句是 `There are untagged, merged release PRs outstanding - aborting`，而那条 run 全绿）。所以 `release.yml` 在 GitHub Release 建成之后紧跟着一步 `Clear release-please pending label`，把标题写着这个版本号的那一个 PR 的标签换掉。**它失败不会翻发布**，只会在 Job Summary 里留一段指引——看到那段就去 GitHub 上手工把标签改成 `autorelease: tagged`，否则下一次发版的 PR 不会来。
+
+**走过 §2.3 手工 bump，上面那一步会扫不到东西，得人工换**。清扫按**标题里写着本版本号**来筛已合并的发布 PR，而手工 bump 意味着发出去的号不是机器人 PR 标题上那一个（2026-09-30 那一次：PR #1 的标题写的是 `chore(main): release 1.3.1`，推出去的 tag 比它高一级）。日志会老实说一句「没有待清理的 release-please PR（可能这一版是 §2.3 的手工 bump）」然后正常退出——**这不是失败**，但那个 PR 仍带 `pending`，机器人下次起草时看到它就当场放弃。所以手工发版后要自己去看一眼有没有已合并却仍带 `pending` 的发布 PR，人工换成 `tagged`（症状与处置见 §4「机器人不再开新的发布 PR」那一行）。
 
 **`pnpm test` 不再要求你去翻「复述当前版本号」的文档**：那三处（`docs/llms-full.txt` 两句与 `.github/ISSUE_TEMPLATE/bug_report.yml` 的示例版本）已经改成不带号的指针，指向 CHANGELOG 的最新小节。改带号的守卫反而会把机器人自己的发布 PR 判红——它在同一个 PR 里抬 `package.json`，却写不了散文。取而代之的是一条按文件清单放的断言：**除「写号是它的职责」的那几处**（`package.json`、`.release-please-manifest.json`、`CHANGELOG.md`、`CHROMEWEBSTORE.md`、`docs/**` 说的商店在装版本、HAR 规范字段、锁文件）**以外，任何被跟踪的文本文件都不许复述开发中的版本号**；新地方想写号，要么改措辞成指针，要么把那个文件连理由一起加进清单。
 
@@ -150,7 +154,7 @@ git push origin main    # 本地分支不叫 main 时写 `git push origin <你�
 
 ### 2.2 tag 推出去之后那批「此刻为真、推完就为假」的句子
 
-落地页页脚版本与日期、`llms*.txt` 的「尚未发布 tag」、README 方式 B 的空 Releases 提示、`CHROMEWEBSTORE.md` §8 的提审状态——清单只有一个出口：[`CHROMEWEBSTORE.md` §12](./CHROMEWEBSTORE.md)，它按文件逐行写明了每处现在写着什么、要改成什么。翻完跑 `pnpm test` 与本次改动文件的 `pnpm exec prettier --check`。
+落地页页脚版本与日期、`llms*.txt` 里关于 tag 的句子、README 方式 B 的 Releases 提示、`CHROMEWEBSTORE.md` §8 的提审状态——清单只有一个出口：[`CHROMEWEBSTORE.md` §12](./CHROMEWEBSTORE.md)。它现在是一张**翻牌记录**：八行已经全部翻过（2026-10-01 那一次），最后一列写着每处当前的措辞；其中第 4、5、7、8 行说的是**商店在装的版本**，所以商店每真正吃到一个新包就要回来再翻一次，而行 1、2、3、6 讲的是 tag 的存在性，翻了就不再回来。翻完跑 `pnpm test` 与本次改动文件的 `pnpm exec prettier --check`。
 
 ### 2.3 不用机器人的那条路（紧急修复、或机器人没跑）
 
@@ -193,6 +197,7 @@ pnpm exec wxt submit --chrome-zip .output/cross-origin-proxy-1.0.1-chrome.zip --
 | 机器人把版本号抬错级别                          | 它只读提交类型，不懂业务风险：在 PR 里同时改 `package.json` 与 `.release-please-manifest.json`，或用 `Release-As: X.Y.Z` 脚注强制                                                                                                                   |
 | 机器人的 PR 里 CHANGELOG 小节只有一行行提交标题 | 正常，那是它写得出来的全部；中英长文由人在合并前并进那一节（§2 第 2 步 b）                                                                                                                                                                          |
 | 下一次机器人开出的号等于刚发过的那个号          | 手工 bump（§2.3）后没同步 `.release-please-manifest.json`，两个号脱钩了                                                                                                                                                                             |
+| 机器人不再开新的发布 PR，可那条 run 全绿        | 有一个**已合并却仍带 `autorelease: pending`** 的发布 PR 卡着它（`There are untagged, merged release PRs outstanding`）。走过 §2.3 手工 bump 时 `release.yml` 的按标题清扫会扫不到它（见 §2），去 PR 页面把标签手工换成 `autorelease: tagged`        |
 | `标签 v1.0.1 与 package.json 的 1.0.0 不一致`   | 先 `npm version` 再打 tag，别改 tag 迁就文件                                                                                                                                                                                                        |
 | Release 说明变成自动生成的流水账                | `CHANGELOG.md` 里那一节的小节号与版本对不上；补上后手动补跑即可覆盖                                                                                                                                                                                 |
 | `gh: ... set the GH_TOKEN environment variable` | 用 `gh` 的那一步没声明 `GH_TOKEN`。GitHub **不把 `GITHUB_TOKEN` 注入 `run` 步骤**，而 `gh` 在 Actions 里只认前者；`release.yml` 里 Publish 与清标签两个步骤各写一份，缺哪个红哪个（首次于 2026-09-30 真发生过，症状是 Release 没建成、下游全 skip） |
@@ -204,11 +209,14 @@ pnpm exec wxt submit --chrome-zip .output/cross-origin-proxy-1.0.1-chrome.zip --
 
 ## 5. 没有配 Secrets 时仓库会怎样
 
-发版链路照常走完校验、构建与 GitHub Release，只是商店那一步被跳过并在 Run 页面留一段指引。**"预构建 zip"从第一个 tag 起就永久可下载**，`README.md`、`docs/` 落地页与 `llms.txt` 指向 Releases 的入口也都因此成立。**在这种状态下，商店里装的还是上一个成功提审的版本**——落地页页脚、schema 的 `softwareVersion` 与 `CHROMEWEBSTORE.md` §8 说的是那个号，不是 `package.json` 里这个，§2.2 那份清单也因此先别翻。
+发版链路照常走完校验、构建与 GitHub Release，只是商店那一步被跳过并在 Run 页面留一段指引。**「预构建 zip」从第一支远端 tag 起就永久可下载**，`README.md`、`docs/` 落地页与 `llms.txt` 指向 Releases 的入口也都因此成立。**在这种状态下，商店里装的还是上一个成功提审的版本**——落地页页脚、schema 的 `softwareVersion` 与 `CHROMEWEBSTORE.md` §8 说的是那个号，不是 `package.json` 里这个。
+
+于是 §2.2 那份清单要**拆成两次翻**，不要合并：讲 tag 存在性的那几句（`llms*.txt` 的「尚未发布 tag」、README 方式 B 的提示）随推 tag 就翻；讲**商店在装版本**的那几处（落地页页脚与 `softwareVersion`、`llms*.txt` 的核对行、§8 的状态列、`GITHUB.md` 的 `CWS` 徽章）只随商店真的吃到新包才翻，而且翻成的是商店那个号——按 `curl -s https://img.shields.io/chrome-web-store/v/dednngakllblfilbndkaggphohmpgcbg.json` 现量，不是 `package.json` 里那个（2026-10-01 写这一句时两边差一级：GitHub 已经发出去的号比商店在装的高一级）。把它们一次翻成 `package.json` 里那个号，就是把「下载 GitHub 的 zip」与「从商店安装」这两条不同的路径写成同一条。
 
 ## 6. 不要做的事
 
 - 不把 `.env.submit` 或任何 token 提交进仓库（`.gitignore` 已宽泛排除 `.env*`，别用 `git add -f` 绕过）。
+- 不补推本机遗留的旧 tag。仓库里现在躺着一个**从未推送**的 `v1.3.0`（轻量 tag，指向 `72ba96a`，那一包是人工上传进商店的、从没走过后端链路）：推上去它会凭空长出一个 GitHub Release，而商店里那个号早已存在，两边对不上。发版前用 `git tag -n99 -l` 与 `curl -s https://api.github.com/repos/<owner>/<repo>/tags` 各列一遍，只对远端那份动手。
 - 不在 `wxt.config.ts` 里重新加回 `manifest.version`：双写必然漂移，而漂移的代价是一个版本号错乱的包进商店。
 - 不让机器人自己发版：`release-please-config.json` 的 `skip-github-release` 不是冗余配置，删掉它就得到一个「合 PR 即向 Google 提审」的链路，而且它用 `GITHUB_TOKEN` 打的 tag 根本触发不了 `release.yml`（§0 末尾）——两件事叠加的结果是版本号涨了、GitHub Release 与商店包却没有，看起来像成功。
 - 不在机器人的发布 PR 里顺手翻 §2.2 那批文档：那一句句要在 tag 真的推出去之后才为真，而机器人的 PR 可能因审查改期合并。

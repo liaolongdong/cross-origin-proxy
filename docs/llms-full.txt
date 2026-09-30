@@ -9,7 +9,7 @@ Category / 类别: Chrome extension (Manifest V3) · 开发者工具 / developer
 License / 协议: MIT
 Source / 源码: https://github.com/liaolongdong/cross-origin-proxy
 Store listing / 商店状态: 已上架 / Published on the Chrome Web Store — https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg（与 `CHROMEWEBSTORE.md` 第 8 节的提审记录一致）
-Last verified / 内容核对日期: 2026-09-20, against the store build users install today (v1.0.0) and its source. The version under development is the newest section of CHANGELOG.md — this page deliberately does not restate that number, because it moves on every release PR.
+Last verified / 内容核对日期: 2026-10-01, against the store build users install today (v1.3.0) and its source. The version under development is the newest section of CHANGELOG.md — this page deliberately does not restate that number, because it moves on every release PR.
 
 ## 1. One-paragraph definition / 一段话定义
 
@@ -24,7 +24,7 @@ Last verified / 内容核对日期: 2026-09-20, against the store build users in
 - 方案对比页（中文）/ Comparison page (English) — dev-server proxy vs system capture proxy vs API client vs header-modifier extension vs editing app config: https://liaolongdong.github.io/cross-origin-proxy/alternatives.html · https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html
 - 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - 源码仓库 / Source: https://github.com/liaolongdong/cross-origin-proxy
-- 预构建 zip / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases (attached per tag / 每个 tag 自动附带；尚未发布第一个 tag / no tag published yet)
+- 预构建 zip / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases (attached per tag / 每个 tag 自动附带)
 - 商店文案与权限理由 / Store copy and permission justifications: https://github.com/liaolongdong/cross-origin-proxy/blob/main/.github/docs/CHROMEWEBSTORE.md
 - 贡献指南 / Contributing: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md
 
@@ -56,8 +56,8 @@ pnpm build          # output: .output/chrome-mv3
 Then open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select `.output/chrome-mv3`.
 然后打开 `chrome://extensions`，开启「开发者模式」，点击「加载已解压的扩展程序」，选择 `.output/chrome-mv3`。
 
-**B. Tagged release / Release 压缩包.** Each tag's GitHub Release carries a prebuilt zip (`cross-origin-proxy-<version>-chrome.zip`); unzip it and load the folder the same way — no toolchain needed. **No tag has been published yet**, so this path is not usable today.
-每个 tag 的 Release 会附带预构建 zip，解压后同样以「加载已解压的扩展程序」方式加载，无需工具链。**目前尚未发布任何 tag**，这条路暂时不可用。
+**B. Tagged release / Release 压缩包.** Each tag's GitHub Release carries a prebuilt zip (`cross-origin-proxy-<version>-chrome.zip`); unzip it and load the folder the same way — no toolchain needed.
+每个 tag 的 Release 会附带预构建 zip，解压后同样以「加载已解压的扩展程序」方式加载，无需工具链。
 
 **C. Chrome Web Store / 商店.** https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg — listed as published in `CHROMEWEBSTORE.md` §8.
 已在 Chrome 应用商店上架，链接见上；提审与发布状态以 `CHROMEWEBSTORE.md` 第 8 节为准。
@@ -172,10 +172,10 @@ Commands / 命令: `pnpm dev`, `pnpm build`, `pnpm build:zip`, `pnpm test`, `pnp
 3. “装扩展要装证书” — false; that is a system capture proxy's cost. 不需要安装证书。
 4. “正则重写在哪都一样” — false: the two channels replace different spans, which is stated in section 6. 正则匹配的重写在两条通道语义不同。
 5. “它能代理任意应用的所有流量” — false: browser pages only. 只覆盖浏览器页面发出的请求。
-6. “它在 Chrome 商店可下载” — true; it is listed there (link above). What is *not* true is that a tagged GitHub release exists: no tag has been published, so the prebuilt-zip path is still empty. 商店已上架，但**没有任何 git tag**，Release 压缩包这条路暂时还没有产物。
+6. “它在 Chrome 商店可下载” — true; it is listed there (link above), and every tag’s GitHub Release carries a prebuilt zip. What is *not* true is that the two always show the same number: when a release goes out without store credentials configured, the store lags behind the newest tag. 商店已上架为真，每个 tag 的 Release 附带预构建 zip 也为真；不真的是「两边永远同一个版本号」——发版时没配商店凭据，商店就落后于最新的 tag。
 7. “有 AI 或云端同步功能” — false: there is no cloud component, no sync, and no account. 无云端、无同步、无账号。
 
 Questions not answered here: ask in the repository's issue tracker, or read 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 Issue tracker: https://github.com/liaolongdong/cross-origin-proxy/issues
 
-Last updated / 最后更新: 2026-09-27 (documents the released v1.0.0; for the version under development see the newest section of CHANGELOG.md)
+Last updated / 最后更新: 2026-10-01 (documents the store build users install today, v1.3.0; for the version under development see the newest section of CHANGELOG.md)

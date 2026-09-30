@@ -99,8 +99,6 @@
 
 每个 `v*` tag 的 [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) 都附带构建好的 zip：
 
-> 仓库还没有打出第一个 tag，所以**此刻 Releases 是空的**——这条路径要等首个 tag 跑完发布链路才有产物。想马上用上请走 A（商店），或按 C 从源码构建。
-
 1. 下载并解压 zip。
 2. 打开 `chrome://extensions`。
 3. 开启右上角「开发者模式」。

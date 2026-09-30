@@ -99,8 +99,6 @@ Install directly from [Chrome Web Store](https://chromewebstore.google.com/detai
 
 Every `v*` tag on [Releases](https://github.com/liaolongdong/cross-origin-proxy/releases) includes a built zip:
 
-> No tag has been cut yet, so **Releases is empty right now** — this path has an artifact only after the first tag goes through the release workflow. Use A (the store) or C (build from source) in the meantime.
-
 1. Download and unzip the file.
 2. Open `chrome://extensions`.
 3. Enable **Developer mode** (top right).

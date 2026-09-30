@@ -16,23 +16,23 @@
 | Social preview      | 所有聊天工具、Twitter/X、Slack、掘金/知乎链接卡（1280×640） | 分享时只显示灰底仓库名，点击率显著下降                  |
 | Pages Source        | 产品站与隐私政策的托管开关                                  | `privacy.html` 打不开是 Chrome 商店首审最常见的拒审理由 |
 
-## 0.1 当前实测状态（2026-09-22，用 §7 的命令可复核）
+## 0.1 当前实测状态（配置类字段量于 2026-09-22，tag/徽章类量于 2026-10-01，用 §7 的命令可复核）
 
-| 字段               | 实测值                                                                                                               | 结论                                                                      |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `description`      | **已填**，214 码点，与 §1 的代码块逐字节相同（含结尾那句中文检索词）                                                 | §1 已完成                                                                 |
-| `homepage`         | **已填**，就是 §2 那条产品站 URL                                                                                     | §2 已完成                                                                 |
-| topics             | **20 个，已用满上限**                                                                                                | §3 已完成；只有 `request-interceptors` 是复数，与 §3 清单的单数差一个 `s` |
-| `has_pages`        | `true`；§7 列的 URL 全部 200（另实测 `sitemap.xml` 与 `robots.txt` 也 200）                                          | §5 的源已切到 GitHub Actions，Pages 链路是通的                            |
-| `has_wiki`         | `true`                                                                                                               | 建议关闭（理由见 §8），需你确认                                           |
-| `v*` tag / Release | 本地与 GitHub 均 **0 个 tag、0 个 Release**                                                                          | README 的 `Release` 徽章与「方式 B」都还是空态                            |
-| `pushed_at`        | `2026-09-20T05:00:41Z`（本地领先 19 个提交，这个数每提交一次就变，用 `git rev-list --count origin/main..main` 复核） | 远端、产品站、商店看到的一切都比本地慢一个批次                            |
-| `stargazers_count` | 1                                                                                                                    | —                                                                         |
-| Social preview     | 匿名 API 读不出来（`security_and_analysis` 同样为 `null`）                                                           | 只能在设置页目测；私密漏洞报告同理，§6 要人工确认                         |
+| 字段               | 实测值                                                                                                                                                                                                     | 结论                                                                                                                                       |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `description`      | **已填**，214 码点，与 §1 的代码块逐字节相同（含结尾那句中文检索词）                                                                                                                                       | §1 已完成                                                                                                                                  |
+| `homepage`         | **已填**，就是 §2 那条产品站 URL                                                                                                                                                                           | §2 已完成                                                                                                                                  |
+| topics             | **20 个，已用满上限**                                                                                                                                                                                      | §3 已完成；只有 `request-interceptors` 是复数，与 §3 清单的单数差一个 `s`                                                                  |
+| `has_pages`        | `true`；§7 列的 URL 全部 200（另实测 `sitemap.xml` 与 `robots.txt` 也 200）                                                                                                                                | §5 的源已切到 GitHub Actions，Pages 链路是通的                                                                                             |
+| `has_wiki`         | `true`                                                                                                                                                                                                     | 建议关闭（理由见 §8），需你确认                                                                                                            |
+| `v*` tag / Release | 远端**有 tag 也有 Release**（2026-09-30 起不再空；具体号别抄这里，`curl -s https://api.github.com/repos/liaolongdong/cross-origin-proxy/tags` 现量）。本机另有一个从未推送的 `v1.3.0` 轻量 tag，别顺手补推 | README 的 `Release` 徽章与「方式 B」已经有实物；商店还停在 1.3.0，因为 `release.yml` 读的 `CHROME_*` Secrets 一个都没配（RELEASING.md §5） |
+| `pushed_at`        | 每次 push 都变，别信这里抄的数——用 `git rev-list --count origin/main..main` 自己量（2026-10-01 写这一行时是 0，本地与远端同点）                                                                            | 本地领先多少个，远端与产品站就看到多少个——商店那一头另有自己的节奏（见上一行）                                                             |
+| `stargazers_count` | 1                                                                                                                                                                                                          | —                                                                                                                                          |
+| Social preview     | 匿名 API 读不出来（`security_and_analysis` 同样为 `null`）                                                                                                                                                 | 只能在设置页目测；私密漏洞报告同理，§6 要人工确认                                                                                          |
 
 **§1–§3、§5 都已落库，GitHub 侧的一次性清单只剩 §4 社交预览（图片已有，只能手动传）与 §6 私密漏洞报告勾选，外加 §8 那条「关 wiki」的建议。**
 
-现在真正的曝光瓶颈不在设置页，而在**没有任何东西被推出去**：0 个 tag 意味着 Releases 空、`Release` 徽章画不出数、README 的「方式 B」是空口承诺、`docs/` 落地页的 HowTo 第一步指向一个空页面；本地领先远端的那批提交又让产品站停在上一批内容（这个数每提交一次就变，用上面 §0 那行的 `git rev-list --count origin/main..main` 复核）。所以下面这些"再优化"都比不上把这一批推出去：按 [RELEASING.md](./RELEASING.md) §2 把 `package.json` 里的那个版本提成 `chore(release): vX.Y.Z` 提交、打同名 tag、`git push origin main vX.Y.Z`，推完回头把 §12 那六处「尚无 tag」的句子翻正（清单在 `CHROMEWEBSTORE.md` §12 ①）。
+**这一段的处方已经抓完药，2026-10-01 起换成另一件事。** 曾经卡住曝光的是「没有任何东西被推出去」：0 个 tag → Releases 空、`Release` 徽章画不出数、README 的「方式 B」是空口承诺、落地页 HowTo 第一步指向一个空页面。第一支 tag 已经在 2026-09-30 推出去，GitHub Release 连同预构建 zip 都在，`CHROMEWEBSTORE.md` §12 那八句也已翻完（记录见那张表）。**现在唯一还缺的出口是商店**：`release.yml` 要读的 `CHROME_*` 四个 Secrets 一个都没配（仓库里只有 `CWS_*` 三个，且 `CHROME_REFRESH_TOKEN` 从来没有过），所以最新那一包只到了 GitHub、没进商店，商店在装的还是 1.3.0。补法两条，都在 [RELEASING.md](./RELEASING.md)：§1.2–§1.3 把凭据配好后按 §3 用 `workflow_dispatch` 补跑，或直接把 Release 上那只 zip 拖进 Dashboard 人工上传。
 
 ## 1. About → Description
 
@@ -189,7 +189,7 @@ curl -s -H "Accept: application/vnd.github.mercy-preview+json" \
 
 期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 都应返回 200——2026-09-22 实测七个全绿，另外 `sitemap.xml` 与 `robots.txt` 也是 200。中文页在站点根、英文页带 `en` 前缀这次搬迁**已经在远端生效**，`/en.html` 与 `/en-alternatives.html` 不再是 404。旧的 `/zh.html` 与 `/zh-alternatives.html` 已下线且**没有 301**（Pages 是纯静态目录，没有重写规则），所以仓库内任何文档都不许再引用它们——`tests/docs-consistency.test.ts` 已把这条钉死。
 
-还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（因为还没有任何 Release，2026-09-22 实测仍是 0 个 tag），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。`CWS` 那枚已改成 shields 的商店版本端点，**不需要每次发版手改**：它显示的是商店在线版本，本轮之前一直是 `v1.0.0`。
+还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（它读 `img.shields.io/github/v/release/…`，没有 Release 就没有数），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。**2026-10-01 实测两枚都已变色有数**：`Release` 跟着远端最新的 tag，`CWS` = v1.3.0——这两个数**故意不一样**（最新那一包只到了 GitHub Release、没进商店，原因见 §0 那张表的 `v*` tag / Release 行），别把它们「对齐」成同一个号。`CWS` 那枚已改成 shields 的商店版本端点，**不需要每次发版手改**：它显示的是商店在线版本，2026-10-01 实测是 `v1.3.0`（更早写这一句时是 `v1.0.0`）。
 
 ### 7.1 搜索收录与 AI 检索的提交动作（一次性的站外清单）
 

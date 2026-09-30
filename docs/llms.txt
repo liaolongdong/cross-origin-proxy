@@ -11,7 +11,7 @@
 - Comparison page (English, same structure): https://liaolongdong.github.io/cross-origin-proxy/en-alternatives.html
 - 完整能力与参数清单 / Full reference for AI systems: https://liaolongdong.github.io/cross-origin-proxy/llms-full.txt
 - 源码仓库 / Source code: https://github.com/liaolongdong/cross-origin-proxy
-- 预构建产物 / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases （每个 tag 自动附带；尚未发布第一个 tag / attached to every tagged release; no tag published yet）
+- 预构建产物 / Prebuilt zip: https://github.com/liaolongdong/cross-origin-proxy/releases （每个 tag 自动附带 / attached to every tagged release）
 - 商店上架素材与权限说明: https://github.com/liaolongdong/cross-origin-proxy/blob/main/.github/docs/CHROMEWEBSTORE.md
 - 贡献指南: https://github.com/liaolongdong/cross-origin-proxy/blob/main/CONTRIBUTING.md
 
@@ -69,4 +69,4 @@
 - Chrome 应用商店已上架：https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg
 - 或从源码构建：Node.js 20+ 与 pnpm 10，执行 `pnpm install && pnpm build`，然后以「加载已解压的扩展程序」方式加载 `.output/chrome-mv3`。tag 版本由 GitHub Actions 自动发布，并在配置商店凭据后提交到商店。
 
-Last updated / 最后更新: 2026-09-24 (extension v1.0.0)
+Last updated / 最后更新: 2026-10-01 (store build v1.3.0)
