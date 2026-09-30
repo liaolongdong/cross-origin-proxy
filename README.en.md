@@ -70,7 +70,7 @@ The six screens map to six everyday actions: **see the whole picture → write a
 
 **Request blocking** — toggle Block Request. Matched requests receive a network error, which is how you test error handling and offline fallback behaviour.
 
-**Response modification** — expand Response Overrides to set a status code, add or replace response headers, or replace specific JSON fields by dot-notation path (e.g. `data.token` → `"mock-token"`).
+**Response modification** — expand Response Overrides to set a status code and its reason phrase, add or replace response headers, replace specific JSON fields by dot-notation path (e.g. `data.token` → `"mock-token"`), or replace the entire response body with raw text (fill that in and the per-field replacements stop applying).
 
 </details>
 
@@ -136,15 +136,15 @@ Either way, once it is installed: click the icon, turn on **Proxy Switch**, add 
 
 ## ✨ What makes it different
 
-| Advantage                                        | What it means while you debug                                                                                                                                   |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ⚡ **Zero JavaScript on the fast path**          | Rules that only rewrite the URL compile to `declarativeNetRequest` redirects, so the browser's network stack does the work — no page-side hook runs per request |
-| 🌐 **Reads and rewrites HTTPS with no local CA** | It runs inside the browser: no certificate to install, no proxy port to point DevTools at, no system-wide setting                                               |
-| 📝 **Rewrites responses, not just destinations** | Status code, response headers, or single JSON fields by dot path (`data.token`), plus mock bodies chosen by URL / method / query conditions                     |
-| 🔌 **Covers WebSocket**                          | `ws://` and `wss://` connections are redirected by the same rule set that handles your HTTP calls                                                               |
-| 🔄 **Environments instead of one-off edits**     | Named profiles snapshot the entire rule set for FAT / UAT / PROD, and an auto-off countdown stops the proxy before you forget it is on                          |
-| 🔒 **Nothing leaves the machine**                | Rules, logs and profiles live in `chrome.storage.local`; no analytics, no telemetry, no account, no service of its own                                          |
-| 📖 **Open source and bilingual**                 | MIT licensed, and both the UI and the documentation ship in English and Chinese                                                                                 |
+| Advantage                                        | What it means while you debug                                                                                                                                                          |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⚡ **Zero JavaScript on the fast path**          | Rules that only rewrite the URL compile to `declarativeNetRequest` redirects, so the browser's network stack does the work — no page-side hook runs per request                        |
+| 🌐 **Reads and rewrites HTTPS with no local CA** | It runs inside the browser: no certificate to install, no proxy port to point DevTools at, no system-wide setting                                                                      |
+| 📝 **Rewrites responses, not just destinations** | Status code and reason phrase, response headers, single JSON fields by dot path (`data.token`) or a whole-body replacement, plus mock bodies chosen by URL / method / query conditions |
+| 🔌 **Covers WebSocket**                          | `ws://` and `wss://` connections are redirected by the same rule set that handles your HTTP calls                                                                                      |
+| 🔄 **Environments instead of one-off edits**     | Named profiles snapshot the entire rule set for FAT / UAT / PROD, and an auto-off countdown stops the proxy before you forget it is on                                                 |
+| 🔒 **Nothing leaves the machine**                | Rules, logs and profiles live in `chrome.storage.local`; no analytics, no telemetry, no account, no service of its own                                                                 |
+| 📖 **Open source and bilingual**                 | MIT licensed, and both the UI and the documentation ship in English and Chinese                                                                                                        |
 
 **Who it fits**
 
@@ -208,7 +208,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Request header overrides** — inject or replace headers per rule (e.g. the target environment's auth token)
 - **Send cookies** — off by default; a rule that turns it on has the extension send the request with `credentials: 'include'`, so the target environment sees the session you already have there
 - **Request body override** — replace the original body with custom content
-- **Response modification** — override status code, response headers, or individual JSON fields by dot-notation path (`data.token`)
+- **Response modification** — override the status code and its reason phrase, response headers, individual JSON fields by dot-notation path (`data.token`), or the whole response body (which wins over the per-field replacements while it is not empty)
 - **Mock response** — return custom JSON / text / HTML / XML without hitting any server
 - **Conditional mock** — attach conditions (URL pattern, HTTP method, query params) and the first match decides the body, status and content type
 - **Request delay injection** — 0–60000 ms of artificial latency to exercise loading and timeout states
@@ -222,7 +222,8 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 ### 🧰 Rule management
 
 - Add / edit / duplicate / delete via a visual form
-- **Quick templates** in the empty state, before you have any rules (wildcard API proxy, prefix path, auth header, header override), and **undo** immediately after a delete
+- **Quick templates** in the empty state, before you have any rules (wildcard API proxy, prefix path, auth header, header override)
+- **Undoable deletes** — single and batch deletions share one 5-second window; hitting undo puts the rows back in place with no storage write, and the delete is only committed when the window closes. If that commit fails, the rules return to the list with a clear error instead of the UI claiming they were gone
 - **Drag-and-drop reordering** of priority (grab the ⠿ handle)
 - **Capability badges** on every rule: **H** headers · **C** send cookies · **B** body · **R** response · **M** mock · **D** delay · **X** block · **Re** retry · **WS** WebSocket
 - Per-rule and batch enable / disable
@@ -230,6 +231,7 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - Keyword search across name, pattern and target URL, plus filters by status and match type; **selections survive filtering**, and batch actions only ever hit rules that still exist
 - **"Not applied" badge** — a regex rule using syntax RE2 rejects (lookaround, backreferences), or a target URL referencing a capture group that does not exist, is never applied by the browser; such rules are flagged in the list, with the reason and the fix on hover
 - **Conflict warning** when the rule being edited is shadowed by a higher-priority rule with the same pattern, so a rule that can never fire does not go unnoticed
+- **Capture-group read-out** while editing a regex rule: the form lists the capture groups in the pattern against the `$n` references in the target address and flags the ones out of range, plus any above `\9` (the network layer reads a substitution one digit at a time, so from number 10 up only the forwarding channel can reach the group). It shares its predicate with the "Not applied" badge above, and it only warns — saving is never blocked, so an imported rule can still be renamed or reprioritised
 - **Hit counts shown as two cells** — the network-layer cell covers a 5-minute window, the background cell is an in-memory counter since the last config change (it restarts from zero when the worker is recycled); the two windows are not addable, so they are no longer summed into one number. Each cell speaks only for its own channel, so "no reading", "quota spent" and "this rule doesn't take that path" all render as "—" rather than 0, each with its own sentence
 
 ### 🔍 Logs & debugging
@@ -247,17 +249,18 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 - **Config restore points** — the three operations that replace the whole rule set (replace-import, loading a profile, a batch delete that actually removed something) each keep a copy of what they replaced: the last 5 are listed under Settings → Config restore points, and a rollback keeps its own copy the same way. A restore point holds rules only (credentials stay `{{NAME}}` references), and rolling back swaps the rule set without ever touching the global proxy switch
 - **HAR 1.2** export of captured requests — it follows the same **share mode** tick as config export (on by default), dropping credential-like request/response headers from every entry while leaving bodies and URLs intact (a token sitting in a URL stays yours to handle); untick for a full export. HAR import auto-creates rules from recorded traffic (those rules arrive disabled until you enable them)
 - **cURL import** — paste DevTools' "Copy as cURL" output to prefill a rule
-- **Environment profiles** — save the current rule set as a named snapshot and switch between FAT / UAT / PROD
-- Auto-off countdown (`chrome.alarms`, survives service-worker restarts) and a badge that shows proxy state
+- **Environment profiles** — save the current rule set as a named snapshot and switch between FAT / UAT / PROD: the popup's "Env Profiles" card lists what you have saved, and one row plus one confirmation swaps the whole set over. That confirmation names both consequences — it replaces the rule set and turns the global proxy switch on, with your current config kept first as a restore point. When nothing is saved yet, or the list could not be read this time, the card still opens the options dialog instead of claiming you stored nothing
+- Auto-off countdown (`chrome.alarms`, survives service-worker restarts) and a badge that shows proxy state; the interval (off, 30 minutes, 1, 2 or 4 hours) is settable from the popup as well as the settings page
 
 ### 🎨 Interface
 
-- Popup quick panel: global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, recent requests, auto-off countdown, **this page's address hit preview** (with network-layer rules Chrome won't apply flagged), and "Create Rule for This Page" — clicking it first lists **the API origins this page is calling** (read from the page's own resource-timing entries, origin and count only; it falls back to the page address when the page can't answer), and picking one prefills the new rule
+- Popup quick panel: global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, recent requests, the auto-off interval picker and its countdown, **this page's address hit preview** (with network-layer rules Chrome won't apply flagged), "Create Rule for This Page" — clicking it first lists **the API origins this page is calling** (read from the page's own resource-timing entries, origin and count only; it falls back to the page address when the page can't answer), and picking one prefills the new rule — plus **in-place environment switching** on the "Env Profiles" card (the list opens inside the popup and the confirmation is a pair of plain buttons, so no dialog module is pulled into the popup bundle)
 - Right under that data row, **only when it has something to say** (this page's address hits a background-channel rule, or a reading already exists), one more line gives **what this page itself reports having intercepted**. The sentence on screen names two of the four counters — how many requests the JS layer caught and how many of those were handed to the background channel (when anything fell back it says how many went native instead, and with no fallback but a timeout the second number is how many never got a response after being handed over); when there is a reading, hovering expands it to all four plus the moment the report was accepted, and states that one request can count in more than one of them so they never add up. The counters accumulate for the current document and reset on navigation. It covers the gap the other three signals can't see — when a complex rule intercepts nothing, "0 requests via the extension" is indistinguishable from "this page made no requests", and a fallback to native or a proxy timeout used to leave nothing but a console warning. Any fallback above zero is called out as "some requests on this page did not go through the proxy", and outranks the timeout sentence, because one line can only carry the thing you most need to know first. These four numbers are reported by the page and can be forged by a script running on that same page (never another tab), so they are a diagnostic clue only: they drive no decision, and the wording always says "page-reported"
 - The popup carries one more line, **"This page has not received the latest rules — reloading it usually fixes it"**: complex rules take effect live because the new config is pushed to open pages, and this line appears only when the background actually recorded that a page missed that push (and only with the global switch on, this page proxyable, and the ledger genuinely read this time). Its tooltip names both causes and their respective fixes — the document was open before the extension was installed, updated or reloaded (reload it), or the extension is disabled for the site (re-enable it from Chrome's extension menu). That ledger lives in memory and records known failures only; non-http(s) pages and documents still loading take no part, a page that pulls the config itself settles its entry on the spot, so "unknown" is never drawn as "broken" and a recycled worker does not conjure a screen full of warnings
 - English / 简体中文 UI, six themes with light / dark / system modes
 - **Credential variable table** in the settings dialog: name a value, store it once (up to 50, and the value field renders as a password box by default); every variable shows how many rules use it, deleting one that is in use asks for confirmation, and names a rule still references but the table no longer has are listed as an orphan warning instead of surfacing as a failed request
 - Keyboard shortcuts: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>P</kbd> toggle proxy (Chrome-level command), and on the options page <kbd>N</kbd> new rule, <kbd>/</kbd> or <kbd>⌘</kbd>+<kbd>F</kbd> focus search, <kbd>Esc</kbd> close the topmost dialog. <kbd>N</kbd> is a bare key, like Gmail — <kbd>⌘</kbd>+<kbd>N</kbd> is reserved by the browser and cannot be captured.
+- **Readings that announce themselves**: after saving or duplicating a rule the row scrolls into view and takes two beats of highlight (at 200 rules the new row lands at the bottom of the table, and between the toast and "where is mine" there used to sit a manual scroll). The popup's active-rule cell and the two hit-count columns give their very light acknowledgement only on the beat where the number actually moved, so a periodic refresh with an unchanged reading stays quiet, and the "the browser will not apply this rule" tag spreads one danger ring when it first appears instead of sitting still in a table you have to scroll past. Under reduced motion none of these play and the scroll lands directly.
 
 ## 🚀 Use cases
 

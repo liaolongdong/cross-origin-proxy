@@ -956,6 +956,34 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(css).toMatch(/html\.js \.hero-visual \.flow-node::before/);
       expect(js).toMatch(/matchMedia\('\(hover: hover\) and \(pointer: fine\)'\)/);
     });
+
+    /**
+     * 「试一试」那个入口是预演面板唯一的门，而门的位置就是它有没有人用。
+     * 2026-09-30 按 headless Chrome 在 1440×900（`innerHeight` 757）量过：链接写在示例卡尾部时，
+     * 卡片是中文页 616→860、英文页 665→910，整个入口落在折叠线以下；挪进 `.hero-example-head`
+     * 之后读到 633→655 与 682→705，两页都在折叠线之内。位置本身钉不住（node 环境没有布局），
+     * 所以钉它的**结构代理**：入口必须待在卡头那个容器里。把它挪回 `</dl>` 后面，
+     * 这条就红——没有测试会因为「一个链接掉到屏幕外」而失败，只有这一条会。
+     * 边界一并记着，别让这句话读起来像无条件成立：1280×800 与 1440 同值，但 1152×720 下
+     * 上面的 `.stat-strip` 折成两行、整张卡让到 705 / 727 起，入口又掉回折叠线以下。
+     */
+    it('预演面板的唯一入口住在示例卡的卡头', () => {
+      for (const page of ['docs/index.html', 'docs/en.html']) {
+        const html = read(page);
+        const anchors = [...html.matchAll(/href="#try"/g)];
+        expect(anchors.length, `${page} 指向 #try 的入口应恰好一处`).toBe(1);
+
+        const head = /<div class="hero-example-head">([\s\S]*?)<\/div>/.exec(html);
+        expect(head, `${page} 示例卡缺了 .hero-example-head 那一行`).toBeTruthy();
+        expect(head![1], `${page} 的 #try 入口不在卡头——它掉回卡尾就又在折叠线以下`).toContain('href="#try"');
+        const tail = html.slice(html.indexOf('</dl>', html.indexOf('hero-example')));
+        expect(tail.slice(0, tail.indexOf('</article>')), `${page} 卡尾不该再有一份入口`).not.toContain('#try');
+      }
+
+      // 渐进增强的前提没变：入口默认不存在，只有面板真的装配好了才出现。
+      expect(withoutComments).toMatch(/\.hero-example-cta\s*\{\s*display: none;/);
+      expect(withoutComments).toMatch(/html\.js\.try-ready \.hero-example-cta\s*\{\s*display: inline-block;/);
+    });
   });
 
   describe('落地页菜单顺序跟随正文', () => {

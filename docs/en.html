@@ -25,6 +25,14 @@
       name="description"
       content="Fix CORS and switch API environments with no code changes. A Chrome MV3 extension: rewrite URLs, headers and responses, mock, delay, block, retry, WebSocket."
     />
+    <meta
+      name="robots"
+      content="max-image-preview:large"
+    />
+    <meta
+      name="author"
+      content="Better"
+    />
     <link
       rel="canonical"
       href="https://liaolongdong.github.io/cross-origin-proxy/en.html"
@@ -153,7 +161,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-29"
+            "dateModified": "2026-09-30"
           },
           {
             "@type": "SoftwareApplication",
@@ -188,12 +196,12 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-29",
+            "dateModified": "2026-09-30",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
               "Request body replacement",
-              "Response status code, response header and JSON field overrides by dot path",
+              "Response status code and reason phrase, response headers, JSON field overrides by dot path, and whole-body replacement",
               "Mock responses (JSON, text, HTML, XML) without contacting any server",
               "Conditional mock responses selected by URL pattern, HTTP method and query parameters",
               "Artificial request delay from 0 to 60000 ms",
@@ -215,10 +223,10 @@
               "HAR 1.2 export that honours the same share mode as config export (credential-like request and response headers dropped, bodies and URLs kept), and HAR import that creates rules from captured traffic (those rules arrive disabled until you enable them)",
               "cURL import from DevTools Copy as cURL output",
               "JSON config export with share mode on by default, stripping credentials, and replace or merge modes on import, with a preview of what would be added and which same-name, same-pattern rules are kept before anything is written",
-              "Named environment profiles for one-click FAT / UAT / PROD switching",
+              "Named environment profiles — one tap in the popup swaps the whole rule set for another environment",
               "Config restore points: a replace-import, a profile load or a batch delete that actually removed something keeps the rule set it replaces, and the last 5 are listed in Settings for one-click rollback",
               "Auto-off countdown that disables the proxy after 30 minutes to 4 hours",
-              "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's self-reported interception activity, this page's address match preview and create-rule-for-this-page",
+              "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's self-reported interception activity, this page's address match preview, create-rule-for-this-page and one-tap environment profile switching",
               "English and Chinese UI, six themes, light / dark / system modes, keyboard shortcuts"
             ]
           },
@@ -649,6 +657,29 @@
               <div class="stat"><b>200</b><span>rules max</span></div>
               <div class="stat"><b>0</b><span>bytes uploaded</span></div>
             </div>
+            <article class="hero-example">
+              <div class="hero-example-head">
+                <p class="hero-example-title">What one wildcard rule actually does</p>
+                <a
+                  class="hero-example-cta"
+                  href="#try"
+                  >Try your own values →</a
+                >
+              </div>
+              <dl class="hero-example-rows">
+                <dt>Match pattern</dt>
+                <dd><code data-hero="pattern">https://fat-api.example.com/*</code></dd>
+                <dt>Target URL</dt>
+                <dd><code data-hero="target">https://uat-api.example.com</code></dd>
+                <dt>Page requests</dt>
+                <dd><code data-hero="url">https://fat-api.example.com/api/user/list</code></dd>
+                <dt class="hero-example-final">Browser sends</dt>
+                <dd class="hero-example-final">
+                  <code data-hero="result">https://uat-api.example.com/api/user/list</code>
+                  <span class="hero-example-channel">Rewritten in the network layer · zero JS per request</span>
+                </dd>
+              </dl>
+            </article>
           </div>
         </div>
       </section>
@@ -866,10 +897,11 @@
               <h3>Full control over request and response</h3>
               <p>
                 Rewrite the URL; inject or replace request headers; replace the request body; override the response
-                status code and response headers, or replace individual JSON fields by dot path such as
-                <code>data.token</code>. Header names are validated and CRLF inside values is refused, so a rule can
-                never smuggle a split request; mocked and overridden status codes are clamped to 200–599 so the page
-                always gets a response it can construct.
+                status code, its reason phrase and the response headers; replace individual JSON fields by dot path such
+                as <code>data.token</code>; or replace the whole body — which takes precedence over the per-field
+                replacements whenever it is not empty. Header names are validated and CRLF inside values is refused, so
+                a rule can never smuggle a split request; mocked and overridden status codes are clamped to 200–599 so
+                the page always gets a response it can construct.
               </p>
               <div class="chip-row">
                 <span class="cap">H</span><span class="cap">C</span><span class="cap">B</span><span class="cap">R</span
@@ -910,8 +942,11 @@
                 Three match types — <code>*</code> for any text, a leading substring, or a full regular expression whose
                 capture groups the target URL can reference. Wildcard and prefix rewrite the same way on both channels;
                 a regex only does when it covers the whole URL, because the network layer replaces the URL while the
-                background channel replaces the matched part. Regexes are screened for nested-quantifier ReDoS patterns,
-                and anything heading for the network layer is validated against Chrome's
+                background channel replaces the matched part. On a regex rule the form lines up those capture groups
+                against the <code>$n</code> references in the target address and flags the ones that disagree — a number
+                out of range, or above <code>\9</code>, which the network layer cannot read at all (it warns, it never
+                blocks the save). Regexes are screened for nested-quantifier ReDoS patterns, and anything heading for
+                the network layer is validated against Chrome's
                 <a
                   href="https://github.com/google/re2/wiki/Syntax"
                   rel="noopener"
@@ -1120,15 +1155,17 @@
                 is written that says how many rules the file adds and which same-name, same-pattern rules stay; HAR 1.2
                 export of captured traffic and HAR import that turns recorded requests into rules (those rules arrive
                 disabled until you enable them); cURL paste that prefills the form; copy-as-cURL on every log entry,
-                using its original URL. Named profiles snapshot the whole rule set so FAT, UAT and PROD are one click
-                apart, and batch migration rewrites target domains across selected rules with a change preview. A
-                replace-import, a profile load or a batch delete that actually removed something keeps the rule set it
-                replaces as a restore point under Settings → Config restore points (the last 5), ready to roll back.
-                Header and query-parameter values can also be written as a reference such as <code>{{UAT_TOKEN}}</code>,
-                with the real value kept in the credential variable table under Settings → Credential Variables — the
-                rule itself, the exported config, the profiles and the configuration sent down to the page all carry
-                nothing but that reference, and the substitution happens at the last moment inside the extension-proxied
-                request.
+                using its original URL. Named profiles snapshot the whole rule set, and switching between FAT, UAT and
+                PROD does not need the options page: the popup lists what you have saved, and one tap on a row plus a
+                confirmation replaces everything with that set (your current config is kept first as a restore point,
+                and the global switch turns on). Batch migration rewrites target domains across selected rules with a
+                change preview. A replace-import, a profile load or a batch delete that actually removed something keeps
+                the rule set it replaces as a restore point under Settings → Config restore points (the last 5), ready
+                to roll back. Header and query-parameter values can also be written as a reference such as
+                <code>{{UAT_TOKEN}}</code>, with the real value kept in the credential variable table under Settings →
+                Credential Variables — the rule itself, the exported config, the profiles and the configuration sent
+                down to the page all carry nothing but that reference, and the substitution happens at the last moment
+                inside the extension-proxied request.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1163,22 +1200,22 @@
               <p>
                 The popup holds the global switch, the active-rule count, the request count via the extension
                 (background channel only), this tab's network-layer hit count for the last 5 minutes, the recent-request
-                list, quick rule toggles, the auto-off countdown, this page's address match preview and “create a rule
-                for this page” — that last one first looks at what the page itself has been requesting (fetch/XHR
-                origins read locally from <code>performance</code> entries, up to six) and offers those API addresses to
-                pick from instead of copying only the page URL into the rule; when the page reports no such requests, it
-                prefills the page URL as before. Under that data row a line appears when it has something to say,
-                reading “page-reported”: one sentence showing two of the four counters — how many requests this page's
-                JS layer intercepted and how many it handed to the extension (a fallback swaps the second number for how
-                many went native, and with no fallback but a timeout it is how many never got a response) — while a
-                reading lets hovering expand all four with the moment the report was accepted, noting that one request
-                can count in more than one of them so they never add up; the counters accumulate for the current
-                document and reset on navigation. A fallback or a timeout used to leave nothing but a console line, and
-                “nothing was intercepted” looked exactly like “this page makes no such requests”. Those four numbers are
-                reported by the page itself and a script on it could forge them, so they stay a diagnostic clue that
-                feeds no decision, and the wording always says “page-reported”. A toolbar badge shows the proxy state,
-                and auto-off (30 minutes to 4 hours, on <code>chrome.alarms</code>) closes the switch so a forgotten
-                proxy never outlives the debugging session.
+                list, quick rule toggles, the auto-off interval picker and its countdown, this page's address match
+                preview and “create a rule for this page” — that last one first looks at what the page itself has been
+                requesting (fetch/XHR origins read locally from <code>performance</code> entries, up to six) and offers
+                those API addresses to pick from instead of copying only the page URL into the rule; when the page
+                reports no such requests, it prefills the page URL as before. Under that data row a line appears when it
+                has something to say, reading “page-reported”: one sentence showing two of the four counters — how many
+                requests this page's JS layer intercepted and how many it handed to the extension (a fallback swaps the
+                second number for how many went native, and with no fallback but a timeout it is how many never got a
+                response) — while a reading lets hovering expand all four with the moment the report was accepted,
+                noting that one request can count in more than one of them so they never add up; the counters accumulate
+                for the current document and reset on navigation. A fallback or a timeout used to leave nothing but a
+                console line, and “nothing was intercepted” looked exactly like “this page makes no such requests”.
+                Those four numbers are reported by the page itself and a script on it could forge them, so they stay a
+                diagnostic clue that feeds no decision, and the wording always says “page-reported”. A toolbar badge
+                shows the proxy state, and auto-off (30 minutes to 4 hours, on <code>chrome.alarms</code>) closes the
+                switch so a forgotten proxy never outlives the debugging session.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1262,7 +1299,7 @@
               class="gallery-track"
               data-gallery-track
               tabindex="0"
-              aria-label="Product screenshots, horizontally scrollable"
+              aria-label="Product screenshots, horizontally scrollable, or page with the left and right arrow keys"
             >
               <div class="slide">
                 <figure>
@@ -1775,6 +1812,7 @@ pnpm build</code></pre>
           </div>
           <div
             class="try"
+            id="try"
             data-try
           >
             <h3>Try a rule: the rewritten URL, and the channel that actually carries it</h3>
@@ -2142,7 +2180,7 @@ pnpm build</code></pre>
                 </tr>
               </thead>
               <tbody>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Needs a backend or gateway change</th>
                   <td class="col-us"><span class="mark-yes">No</span></td>
                   <td><span class="mark-part">Often, for CORS</span></td>
@@ -2150,7 +2188,7 @@ pnpm build</code></pre>
                   <td><span class="mark-yes">No</span></td>
                   <td><span class="mark-yes">No</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Configured per project</th>
                   <td class="col-us"><span class="mark-yes">No — browser-wide</span></td>
                   <td><span class="mark-no">Yes</span></td>
@@ -2158,7 +2196,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">Per rule set</span></td>
                   <td><span class="mark-no">Yes</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Works on any page origin (localhost, internal tools)</th>
                   <td class="col-us"><span class="mark-yes">Yes</span></td>
                   <td><span class="mark-part">Only traffic to that dev server</span></td>
@@ -2166,7 +2204,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">Limited by the extension API</span></td>
                   <td><span class="mark-yes">Yes</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Rewrites responses (status, headers, JSON fields)</th>
                   <td class="col-us"><span class="mark-yes">Yes</span></td>
                   <td><span class="mark-no">No</span></td>
@@ -2174,7 +2212,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">Usually not the body</span></td>
                   <td><span class="mark-no">No</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Mock / delay / block / retry from the UI</th>
                   <td class="col-us"><span class="mark-yes">Yes, conditional mock included</span></td>
                   <td><span class="mark-part">With extra plugins</span></td>
@@ -2182,7 +2220,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">Mock only, typically</span></td>
                   <td><span class="mark-no">No</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Covers WebSocket traffic</th>
                   <td class="col-us"><span class="mark-yes">Yes</span></td>
                   <td><span class="mark-part">Rarely</span></td>
@@ -2190,7 +2228,7 @@ pnpm build</code></pre>
                   <td><span class="mark-no">No</span></td>
                   <td><span class="mark-no">No</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Needs a local CA certificate to read HTTPS</th>
                   <td class="col-us"><span class="mark-yes">No — runs inside the browser</span></td>
                   <td><span class="mark-yes">No</span></td>
@@ -2198,7 +2236,7 @@ pnpm build</code></pre>
                   <td><span class="mark-yes">No</span></td>
                   <td><span class="mark-yes">No</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Rules shareable as a plain local file</th>
                   <td class="col-us"><span class="mark-yes">Yes — JSON / HAR / cURL</span></td>
                   <td><span class="mark-yes">Yes — in the repo</span></td>
@@ -2206,7 +2244,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">Often cloud-synced</span></td>
                   <td><span class="mark-yes">Yes — in the repo</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">Can proxy server-to-server or non-browser traffic</th>
                   <td class="col-us"><span class="mark-no">No — browser-scoped</span></td>
                   <td><span class="mark-no">No</span></td>
@@ -2915,7 +2953,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-09-29</span>
+            <span>Last updated 2026-09-30</span>
             <span
               ><a
                 href="./"

@@ -248,7 +248,11 @@
                 placement="top"
               >
                 <span :class="['hit-count-badge', hitCells[row.id].netUnknown && 'hit-count-unknown']">
-                  {{ hitCells[row.id].net }}
+                  <span
+                    :key="hitCells[row.id].net"
+                    class="hit-count-digit"
+                    >{{ hitCells[row.id].net }}</span
+                  >
                 </span>
               </el-tooltip>
               <el-tooltip
@@ -262,7 +266,11 @@
                     hitCells[row.id].extUnknown && 'hit-count-unknown',
                   ]"
                 >
-                  {{ hitCells[row.id].ext }}
+                  <span
+                    :key="hitCells[row.id].ext"
+                    class="hit-count-digit"
+                    >{{ hitCells[row.id].ext }}</span
+                  >
                 </span>
               </el-tooltip>
             </span>
@@ -605,6 +613,35 @@ watch(
   },
 );
 
+/**
+ * 刚保存 / 刚复制的那一行要滚进视野。
+ *
+ * 新增是 `rules.value.push(...)`——200 条时新行落在表格最底部，多半在视口之外；父组件给的
+ * 进场动画此时只发生在「看不见的那一节」上，用户读完成功提示却在表格里找不着那条规则。
+ * 判据只用 `block: 'nearest'`：已经看得见就不动（否则每次编辑保存页面都要跳一下），
+ * 与日志抽屉的键盘选行同一口径。
+ *
+ * `behavior` 必须由 JS 侧认 `prefers-reduced-motion`：令牌层那条 `scroll-behavior: auto !important`
+ * 收的是 CSS 声明，`scrollIntoView` 的实参优先级更高，不传 `'auto'` 就是减弱档下照样平滑滚。
+ *
+ * 被筛选挡住的规则（`index === -1`）不滚也不报错——那一条本来就不在这张表里，
+ * 自动改筛选条件属于交互变更，不在动效这一轮的授权范围内。
+ */
+watch(
+  () => props.highlightRuleId,
+  ruleId => {
+    if (!ruleId) return;
+    const index = props.rules.findIndex(rule => rule.id === ruleId);
+    if (index === -1) return;
+    void nextTick(() => {
+      visibleRowElements()[index]?.scrollIntoView({
+        block: 'nearest',
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      });
+    });
+  },
+);
+
 /** 删除行的离场时长：与 CSS 那条 transition 同源，减 20ms 让移除落在动画收尾之前，避免尾帧空跳 */
 function leaveDurationMs(): number {
   // 减少动效时 CSS 那边已被压成 0.01ms，这里若还等 320ms，那一行就是「先淡没再凭空消失」
@@ -759,13 +796,18 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   content: '';
 }
 
-/* 新增行：下落淡入 + 绿色底边（方向与 `cop-rise-in` 相反——新行是从上面掉进队列的） */
+/* 新增行：下落淡入 + 绿色底边（方向与 `cop-rise-in` 相反——新行是从上面掉进队列的），
+   底边之外再给两拍主色薄膜：`flashHighlight` 的标记窗口是 1.2s，单拍下落落在 200 行的表格
+   底部时，「滚过去的那一眼」很容易错过，两拍是把视线钉在那一行的那一下。
+   光晕画在 `td` 的 inset box-shadow 上而不是 `background-color` 上：后者要在 from/to 写一个
+   「静止态」的颜色，而单元格的本底属于 Element Plus，抄一份白色就是给自己埋暗色的雷。 */
 .rule-table :deep(.row-entering) {
   animation: row-drop-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
 .rule-table :deep(.row-entering td) {
   border-bottom: 2px solid var(--el-color-success);
+  animation: row-flash var(--cop-duration-base) var(--cop-ease-standard) 2;
 }
 
 @keyframes row-drop-in {
@@ -777,6 +819,23 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* 三档必须写成 `0% / 50% / 100%`：Stylelint 的 `keyframe-selector-notation` 按「同一块里
+   记法一致」判，掺进一个百分号停点，`from` / `to` 就是要被改写的两个（本文件其余关键帧只有
+   首尾两档，写 `from` / `to` 是合规的）。 */
+@keyframes row-flash {
+  0% {
+    box-shadow: inset 0 0 0 60px rgb(var(--cop-primary-rgb) / 0%);
+  }
+
+  50% {
+    box-shadow: inset 0 0 0 60px rgb(var(--cop-primary-rgb) / 12%);
+  }
+
+  100% {
+    box-shadow: inset 0 0 0 60px rgb(var(--cop-primary-rgb) / 0%);
   }
 }
 
@@ -959,6 +1018,28 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   background: var(--el-fill-color-light, #f5f7fa);
 }
 
+/* 数字自己换过一次才动：`:key` 绑在读数上，值没变就不会重挂载，所以这一下只在「数真的变了」
+   那一拍响（采样是周期性的，读数不变时表格安静）。方向只向上滚 3px、配 40% 的淡入，
+   是为了让「这一格刚变过」被看见，而不是让一个 24px 的小胶囊跳舞。
+   刻意不给「读不到」那一格加呼吸循环——它会画成「正在读」，而这一格存在的全部理由正是
+   「没有读数」与「零次」必须分开。 */
+.hit-count-digit {
+  display: inline-block;
+  animation: hit-roll-in var(--cop-duration-base) var(--cop-ease-enter);
+}
+
+@keyframes hit-roll-in {
+  from {
+    opacity: 0.4;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .hit-count-zero {
   font-size: 12px;
   color: var(--el-text-color-placeholder, #c0c4cc);
@@ -982,7 +1063,10 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   border-radius: 50%;
 }
 
-/* 「浏览器不会应用该规则」标记：比遮蔽标记更重，用危险色 + 文字而非仅用颜色表达 */
+/* 「浏览器不会应用该规则」标记：比遮蔽标记更重，用危险色 + 文字而非仅用颜色表达。
+   首次出现时向外扩散一圈再散掉——这条红标今天完全静态，而 200 行的表格里「滚过去也注意不到」
+   正是它最坏的失效方式；`to` 落回「没有 box-shadow」这个静止态，所以动画结束后不必收回。
+   关键帧的形状与 popup 那枚状态点的 `dot-ping` 是同一种语言，只换颜色通道。 */
 .dnr-dead-tag {
   display: inline-flex;
   flex-shrink: 0;
@@ -997,6 +1081,17 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   background: var(--el-color-danger-light-9, #fef2f2);
   border: 1px solid var(--el-color-danger-light-7, #f5cccc);
   border-radius: 4px;
+  animation: dead-tag-halo var(--cop-duration-slow) var(--cop-ease-standard) 1;
+}
+
+@keyframes dead-tag-halo {
+  from {
+    box-shadow: 0 0 0 0 rgb(var(--cop-danger-rgb) / 55%);
+  }
+
+  to {
+    box-shadow: 0 0 0 6px rgb(var(--cop-danger-rgb) / 0%);
+  }
 }
 
 .dnr-skip-tip p {

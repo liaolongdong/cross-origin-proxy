@@ -88,13 +88,17 @@ describe('[Esc 级联] 确认框在场时不得连背后的弹窗一起关', () 
 });
 
 describe('[撤销入口] 删除提示里的「撤销」必须是原生可聚焦按钮', () => {
-  const start = optionsSrc.indexOf('const message = ElMessage({');
-  const undoBlock = optionsSrc.slice(start, optionsSrc.indexOf('duration: 5000', start));
+  // 单条与批量现在共用 `runDeleteUndo` 那一次渲染，所以这里查一份就同时钉住了两条路
+  const start = optionsSrc.indexOf('prompt = ElMessage({');
+  const undoBlock = optionsSrc.slice(start, optionsSrc.indexOf('showClose: false', start));
+  /** 样式抽成了常量，于是「按链接画回去」那三样住在这里而不是按钮块里。 */
+  const styleBlock = optionsSrc.slice(optionsSrc.indexOf('const UNDO_BUTTON_STYLE'), start);
 
   it('渲染的是 button 且显式声明 type（表单外的按钮也按语义写全）', () => {
-    expect(start).toBeGreaterThan(-1);
+    expect(start, 'App.vue 里找不到那条删除提示的渲染处').toBeGreaterThan(-1);
     expect(undoBlock).toMatch(/h\(\s*'button',/);
     expect(undoBlock).toContain("type: 'button'");
+    expect(undoBlock).toContain('style: UNDO_BUTTON_STYLE');
   });
 
   it('没有 href 的 <a> 不得回来（那正是本次修掉的键盘死角）', () => {
@@ -102,8 +106,14 @@ describe('[撤销入口] 删除提示里的「撤销」必须是原生可聚焦�
   });
 
   it('外观仍按链接画：颜色与下划线留在原处（换成实心按钮就是另一次视觉改动）', () => {
-    expect(undoBlock).toContain('text-decoration: underline');
-    expect(undoBlock).toContain('var(--cop-primary');
-    expect(undoBlock).toContain('font: inherit');
+    expect(optionsSrc.indexOf('const UNDO_BUTTON_STYLE'), 'UNDO_BUTTON_STYLE 的定义找不到').toBeGreaterThan(-1);
+    expect(styleBlock).toContain('text-decoration: underline');
+    expect(styleBlock).toContain('var(--cop-primary');
+    expect(styleBlock).toContain('font: inherit');
+  });
+
+  it('提示的存续时长就是撤销窗口本身：分家就会出现看得见却点不动的入口', () => {
+    expect(undoBlock).toContain('duration: DELETE_UNDO_WINDOW_MS');
+    expect(optionsSrc).toContain("import { MAX_RULES, DELETE_UNDO_WINDOW_MS } from '@/utils/constants'");
   });
 });

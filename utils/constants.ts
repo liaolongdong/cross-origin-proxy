@@ -136,6 +136,20 @@ export const KEEPALIVE_INTERVAL_MINUTES = 1;
 // 代理自动关闭：开启代理后倒计时到期自动关闭，防止忘记关闭代理
 export const AUTO_OFF_ALARM = 'proxy-auto-off';
 
+/**
+ * 界面写完档位之后，等后台重建倒计时的轮询预算（`utils/autoOff.ts`）
+ *
+ * 重建 alarm 的人始终是后台（`entrypoints/background/autoOff.ts` 的 `storage.onChanged`），
+ * 界面一侧只是读 `chrome.alarms.get`，直到看见的那个落点等于「刚刚那一刻 + 档位时长」为止。
+ * 上限 `AUTO_OFF_SYNC_TRIES × AUTO_OFF_SYNC_INTERVAL_MS`（6 × 100 = 600ms）；到点还没看见就
+ * 交回真实读数，绝不拿 `Date.now() + 时长` 造一个没观测到的时刻——那是把「承诺」画成「事实」。
+ */
+export const AUTO_OFF_SYNC_INTERVAL_MS = 100;
+export const AUTO_OFF_SYNC_TRIES = 6;
+
+/** 认定「这就是刚重建的那枚 alarm」的容差：观测到的 `scheduledTime` 与预期落点的最大偏差 */
+export const AUTO_OFF_SYNC_TOLERANCE_MS = 5000;
+
 // ─── DNR 命中采样（entrypoints/background/dnrSampler） ───────────────────────
 
 /** Chrome 侧 `getMatchedRules` 的配额窗口：20 次 / `GETMATCHEDRULES_QUOTA_INTERVAL`(=10) 分钟 */
@@ -222,3 +236,12 @@ export const MAX_CONFIG_HISTORY_TOTAL_SIZE = 1024 * 1024;
  * 每次让导出格式发生不兼容变化时才 +1，纯新增字段不必。
  */
 export const SCHEMA_VERSION = 2;
+
+/**
+ * 删除的撤销窗口（配置页单条删除与批量删除共用）
+ *
+ * 窗口期内规则仍在 `storage.local`，只是从列表里乐观摘掉；到期才真正落库。
+ * 同一个值还要交给提示的 `duration`，否则「按钮还看得见」与「还点得动撤销」会分家——
+ * `tests/deleteUndo.test.ts` 按这个前提钉住两处用的是同一个常量。
+ */
+export const DELETE_UNDO_WINDOW_MS = 5000;

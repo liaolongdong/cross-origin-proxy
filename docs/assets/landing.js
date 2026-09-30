@@ -191,6 +191,19 @@
     if (prev) prev.addEventListener('click', () => show(index - 1, true));
     if (next) next.addEventListener('click', () => show(index + 1, true));
 
+    /* 键盘翻页。轨道本来就写着 `tabindex="0"`，浏览器也允许用方向键推一个可滚动区域，
+       但那套原生滚动既不挪圆点（`mark()` 只由相交检测补，慢半拍）、也不重置自动轮播的计时，
+       按一下滚出半张图，上一张和下一张各露一半。这里按「一格一张」接管，走的是与点击
+       同一出口（`show`），所以圆点、暂停、续播三件事一起对。
+       只认这四个键：上下与 PageUp/PageDown 留给页面自己的纵向滚动，修饰键组合一律放行。 */
+    track.addEventListener('keydown', event => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const target = { ArrowLeft: index - 1, ArrowRight: index + 1, Home: 0, End: slides.length - 1 }[event.key];
+      if (target === undefined) return;
+      event.preventDefault();
+      show(target, true);
+    });
+
     if (progress) {
       progress.addEventListener('animationend', event => {
         if (event.animationName === 'lp-gallery-auto') show(index + 1, true);
@@ -667,5 +680,23 @@
     table.addEventListener('pointerleave', () => {
       delete table.dataset.col;
     });
+
+    /* 「本扩展」那一列第一次进视野时刷一次主色（样式见 landing.css 的 `lp-col-flag`）。
+       判据是相交而不是页面加载：这张表在文档中段，加载时播完一轮，读者滚过来看到的
+       仍是那层常亮底色，等于没做。`disconnect()` 就是「只此一次」的实现——
+       离开再回来不重播，反复刷就成了广告。
+       没有 IntersectionObserver 的运行时不加类：那一圈是纯装饰，没有一格的可读性挂在它上面。 */
+    if ('IntersectionObserver' in window) {
+      const flag = new IntersectionObserver(
+        entries => {
+          if (!entries.some(entry => entry.isIntersecting)) return;
+          table.classList.add('us-flagged');
+          flag.disconnect();
+        },
+        { threshold: 0.35 },
+      );
+
+      flag.observe(table);
+    }
   });
 })();

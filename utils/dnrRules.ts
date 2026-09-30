@@ -37,8 +37,12 @@ function escapeRegex(text: string): string {
  * - wildcard：转义后每个 * 变为捕获组 (.*)，整串锚定 ^...$
  * - prefix：锚定前缀 + 捕获剩余部分
  * - regex：用户正则原样使用（需 RE2 兼容，由 dnrManager 侧校验）
+ *
+ * 入参收窄成 `Pick`：这三条分支只读 `matchType` 与 `matchPattern`，而表单里的「捕获组对照条」
+ * 手上只有这两个字段（它不参与分流，见下方 `captureGroupOffsets` 的说明）。传完整规则的调用方
+ * 照旧成立，写 `ProxyRule` 只会逼那边为了一次纯文本换算去拼一份假规则。
  */
-export function buildRegexFilter(rule: ProxyRule): string {
+export function buildRegexFilter(rule: Pick<ProxyRule, 'matchType' | 'matchPattern'>): string {
   switch (rule.matchType) {
     case 'wildcard':
       return `^${escapeRegex(rule.matchPattern).replace(/\*/g, '(.*)')}$`;
@@ -59,7 +63,7 @@ export function buildRegexFilter(rule: ProxyRule): string {
  * - prefix：目标 URL + 剩余部分（\1）
  * - regex：目标 URL 中的 $n 引用转为 DNR 的 \n 语法
  */
-export function buildRegexSubstitution(rule: ProxyRule): string {
+export function buildRegexSubstitution(rule: Pick<ProxyRule, 'matchType' | 'matchPattern' | 'targetUrl'>): string {
   const target = rule.targetUrl.replace(/\/$/, '');
   switch (rule.matchType) {
     case 'wildcard': {
@@ -81,14 +85,14 @@ export function buildRegexSubstitution(rule: ProxyRule): string {
 }
 
 /**
- * 统计 regexFilter 中的捕获组数量（转义感知）
- * - `(` 后不跟 `?` → 捕获组
- * - `(?<name>` → 命名捕获组（计入）
- * - `(?:` `(?=` `(?!` `(?<=` `(?<!` 及 `(?` 其他构造 → 非捕获（不计入）
- * - `\(` 为转义的字面量括号，不产生捕获组
+ * 列出 regexFilter 中每个捕获组的起始下标（那个 `(` 的位置），按出现顺序
+ *
+ * 「哪一个左括号算捕获组」只有一份判据，`countCaptureGroups` 就是它的长度。
+ * 表单里的对照条要做的只是给每个组配一小段原文，为此再抄一遍括号语法是不划算的：
+ * 判据一分叉，界面上数出来的组和 DNR 实际能引用的组就会各说各的。
  */
-export function countCaptureGroups(regexFilter: string): number {
-  let count = 0;
+export function captureGroupOffsets(regexFilter: string): number[] {
+  const offsets: number[] = [];
   for (let i = 0; i < regexFilter.length; i++) {
     const ch = regexFilter[i];
     if (ch === '\\') {
@@ -97,14 +101,50 @@ export function countCaptureGroups(regexFilter: string): number {
     }
     if (ch !== '(') continue;
     if (regexFilter[i + 1] !== '?') {
-      count++;
+      offsets.push(i);
       continue;
     }
     if (regexFilter[i + 2] === '<' && /[A-Za-z]/.test(regexFilter[i + 3] || '')) {
-      count++;
+      offsets.push(i);
     }
   }
-  return count;
+  return offsets;
+}
+
+/**
+ * 统计 regexFilter 中的捕获组数量（转义感知）
+ * - `(` 后不跟 `?` → 捕获组
+ * - `(?<name>` → 命名捕获组（计入）
+ * - `(?:` `(?=` `(?!` `(?<=` `(?<!` 及 `(?` 其他构造 → 非捕获（不计入）
+ * - `\(` 为转义的字面量括号，不产生捕获组
+ */
+export function countCaptureGroups(regexFilter: string): number {
+  return captureGroupOffsets(regexFilter).length;
+}
+
+/**
+ * 列出 regexSubstitution 里出现的每一个捕获组引用（按出现顺序，重复保留）
+ *
+ * 与 `maxSubstitutionRef` 同一份扫描：界面上的「捕获组 ↔ 引用」对照条要把每个引用逐个说一遍，
+ * 而「什么算一个引用」（`\\` 是字面量反斜杠、数字整段读取）只能有一处定义——两处各抄一遍时，
+ * 先错的是那份没人测的。
+ */
+export function substitutionRefs(substitution: string): number[] {
+  const refs: number[] = [];
+  for (let i = 0; i < substitution.length; i++) {
+    if (substitution[i] !== '\\') continue;
+    const next = substitution[i + 1];
+    if (next === undefined) break;
+    if (next < '0' || next > '9') {
+      i++; // `\\`：转义的字面量反斜杠，连同其后一字符一起跳过
+      continue;
+    }
+    let j = i + 1;
+    while (j < substitution.length && substitution[j] >= '0' && substitution[j] <= '9') j++;
+    refs.push(Number(substitution.slice(i + 1, j)));
+    i = j - 1;
+  }
+  return refs;
 }
 
 /**
@@ -117,21 +157,7 @@ export function countCaptureGroups(regexFilter: string): number {
  * 被拒（所有简单规则同时失效），守卫存在的唯一理由就是把这件事拦在同步之前。
  */
 export function maxSubstitutionRef(substitution: string): number {
-  let max = -1;
-  for (let i = 0; i < substitution.length; i++) {
-    if (substitution[i] !== '\\') continue;
-    const next = substitution[i + 1];
-    if (next === undefined) break;
-    if (next < '0' || next > '9') {
-      i++; // `\\`：转义的字面量反斜杠，连同其后一字符一起跳过
-      continue;
-    }
-    let j = i + 1;
-    while (j < substitution.length && substitution[j] >= '0' && substitution[j] <= '9') j++;
-    max = Math.max(max, Number(substitution.slice(i + 1, j)));
-    i = j - 1;
-  }
-  return max;
+  return substitutionRefs(substitution).reduce((max, ref) => Math.max(max, ref), -1);
 }
 
 /**

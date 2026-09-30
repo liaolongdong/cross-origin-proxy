@@ -25,6 +25,14 @@
       name="description"
       content="开源 Chrome MV3 扩展：把前端 API 请求代理到 FAT/UAT/PROD，不改代码也不改后端 CORS。URL、请求头与响应改写，Mock、延迟、阻断、重试、WebSocket，数据只存本机。"
     />
+    <meta
+      name="robots"
+      content="max-image-preview:large"
+    />
+    <meta
+      name="author"
+      content="Better"
+    />
     <link
       rel="canonical"
       href="https://liaolongdong.github.io/cross-origin-proxy/"
@@ -153,7 +161,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-29"
+            "dateModified": "2026-09-30"
           },
           {
             "@type": "SoftwareApplication",
@@ -188,12 +196,12 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-09-29",
+            "dateModified": "2026-09-30",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
               "替换请求体",
-              "改写响应状态码、响应头，或按点分路径改写 JSON 字段",
+              "改写响应状态码与状态行文本、响应头，按点分路径改写 JSON 字段，或整段替换响应体",
               "不访问目标服务直接返回 Mock 响应（JSON / 文本 / HTML / XML）",
               "按 URL 正则、HTTP 方法、查询参数命中不同内容的条件化 Mock",
               "注入 0 至 60000 毫秒的请求延迟",
@@ -215,10 +223,10 @@
               "HAR 1.2 导出（与配置导出共用「分享模式」，默认剔除凭据类请求/响应头，正文与 URL 保留），以及把抓包记录转成规则的 HAR 导入（新规则默认停用，确认后自行启用）",
               "粘贴 DevTools「复制为 cURL」命令预填规则",
               "JSON 配置导出（默认开启分享模式，剔除凭据），导入时支持覆盖与合并两种模式，写入前可先预览预计新增几条、哪些同名同模式的旧规则被保留",
-              "环境配置快照，FAT / UAT / PROD 一键切换",
+              "环境配置快照，在弹窗里点一下就把整套规则换成另一个环境",
               "配置恢复点：覆盖导入、加载快照、真正删掉了东西的批量删除，都会自动留下被替换掉的整套规则，最近 5 份可在设置里一键回退",
               "30 分钟至 4 小时的代理自动关闭倒计时",
-              "弹窗含总开关、经扩展请求数（只统计后台通道）、本页近 5 分钟网络层命中数、本页拦截活动的「页面自报」、本页地址命中预览与「为此页面创建规则」",
+              "弹窗含总开关、经扩展请求数（只统计后台通道）、本页近 5 分钟网络层命中数、本页拦截活动的「页面自报」、本页地址命中预览、「为此页面创建规则」与环境快照一键切换",
               "中英文界面、6 套主题、浅色/深色/跟随系统、键盘快捷键"
             ]
           },
@@ -647,6 +655,29 @@
               <div class="stat"><b>200</b><span>条规则上限</span></div>
               <div class="stat"><b>0</b><span>字节外传</span></div>
             </div>
+            <article class="hero-example">
+              <div class="hero-example-head">
+                <p class="hero-example-title">一条通配符规则，落到实处是这样</p>
+                <a
+                  class="hero-example-cta"
+                  href="#try"
+                  >改一组地址试试 →</a
+                >
+              </div>
+              <dl class="hero-example-rows">
+                <dt>匹配模式</dt>
+                <dd><code data-hero="pattern">https://fat-api.example.com/*</code></dd>
+                <dt>目标地址</dt>
+                <dd><code data-hero="target">https://uat-api.example.com</code></dd>
+                <dt>页面发起</dt>
+                <dd><code data-hero="url">https://fat-api.example.com/api/user/list</code></dd>
+                <dt class="hero-example-final">实际发出</dt>
+                <dd class="hero-example-final">
+                  <code data-hero="result">https://uat-api.example.com/api/user/list</code>
+                  <span class="hero-example-channel">网络层改写 · 单请求零 JS 开销</span>
+                </dd>
+              </dl>
+            </article>
           </div>
         </div>
       </section>
@@ -853,8 +884,9 @@
               ></span>
               <h3>请求与响应的全链路改写</h3>
               <p>
-                重写 URL；注入或替换请求头；替换请求体；改写响应状态码与响应头，或按点分路径（如
-                <code>data.token</code>）替换 JSON 字段。头名会做合法性校验、值里的 CRLF
+                重写 URL；注入或替换请求头；替换请求体；改写响应状态码、状态行文本与响应头，按点分路径（如
+                <code>data.token</code>）替换 JSON
+                字段，或整段替换响应体——后者非空时优先于按字段改写。头名会做合法性校验、值里的 CRLF
                 会被直接拒收，规则无法构造请求拆分；Mock 与改写的状态码被钳制在 200–599，保证页面总能构造出合法响应。
               </p>
               <div class="chip-row">
@@ -894,7 +926,10 @@
               <p>
                 三种匹配类型：<code>*</code>
                 匹配任意字符、前缀匹配开头、正则整体匹配且目标地址可引用捕获组。通配符与前缀在两条通道上的重写结果完全一致；正则只有覆盖整个
-                URL 时才一致——网络层整条替换 URL，后台通道只替换模式命中的那一段。用户正则会先做嵌套量词 ReDoS
+                URL 时才一致——网络层整条替换
+                URL，后台通道只替换模式命中的那一段。正则规则的表单会把模式里的捕获组和目标地址里的
+                <code>$n</code> 引用逐条对照出来，编号越界、以及网络层读不动的
+                <code>\9</code> 以上都当场标出（只提示，不拦保存）。用户正则会先做嵌套量词 ReDoS
                 筛查，送往网络层的正则还要通过 Chrome 的
                 <a
                   href="https://github.com/google/re2/wiki/Syntax"
@@ -1095,7 +1130,7 @@
                 哪些同名同模式的旧规则被保留（预览与写入同一份判据）；HAR 1.2 导出捕获到的流量，导入 HAR
                 则把录制到的请求自动变成规则（新规则默认停用，确认后自行启用）；粘贴 cURL
                 预填表单；每条日志都能按原始请求地址复制为 cURL。环境快照保存整套规则的命名副本，FAT / UAT / PROD
-                一键切换；环境换域名时，批量迁移会先给出变更预览；覆盖导入、加载快照、真正删掉了东西的批量删除这三类整套替换，会把自己换掉的那份规则集留在「设置
+                不用先开配置页——弹窗里点「环境配置」就列出已存的快照，点一下那一行、再确认一次就整套换过去（换之前先把当前配置记成一份恢复点，也会把总开关打开）；环境换域名时，批量迁移会先给出变更预览；覆盖导入、加载快照、真正删掉了东西的批量删除这三类整套替换，会把自己换掉的那份规则集留在「设置
                 → 配置恢复点」里（最近 5 份），随时一键回退。请求头与查询参数的值还能写成
                 <code>{{UAT_TOKEN}}</code> 这样的引用，真值单独存在「设置 →
                 凭据变量」表里——规则本身、导出的配置与环境快照、下发给页面的配置都只带这个引用，换出真值发生在扩展代发请求的最后一刻。
@@ -1132,7 +1167,7 @@
               <h3>每天真正要碰的部分</h3>
               <p>
                 弹窗里集中了总开关、启用规则数、经扩展请求数（只统计后台通道）、本页近 5
-                分钟的网络层命中数、最近请求、规则快捷启停、自动关闭倒计时、本页地址命中预览，以及「为此页面创建规则」——点后者时先看这一页自己发过哪些请求（本地
+                分钟的网络层命中数、最近请求、规则快捷启停、自动关闭档位与倒计时、本页地址命中预览，以及「为此页面创建规则」——点后者时先看这一页自己发过哪些请求（本地
                 <code>performance</code> 条目里的 fetch/XHR
                 来源，最多六项），把接口地址列出来让你挑，而不是只把页面地址抄进规则；这一页问不到任何接口时，仍旧按页面地址预填。数据行下方按需出现一行「页面自报」：那是一句话，只露两个数——这一页的
                 JS
@@ -1224,7 +1259,7 @@
               class="gallery-track"
               data-gallery-track
               tabindex="0"
-              aria-label="产品截图，可横向滑动"
+              aria-label="产品截图，可横向滑动，或用左右方向键翻页"
             >
               <div class="slide">
                 <figure>
@@ -1702,6 +1737,7 @@ pnpm build</code></pre>
           </div>
           <div
             class="try"
+            id="try"
             data-try
           >
             <h3>试一条规则：改写后的地址，与它实际走的那条通道</h3>
@@ -2054,7 +2090,7 @@ pnpm build</code></pre>
                 </tr>
               </thead>
               <tbody>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">需要后端或网关配合改动</th>
                   <td class="col-us"><span class="mark-yes">不需要</span></td>
                   <td><span class="mark-part">为 CORS 常常需要</span></td>
@@ -2062,7 +2098,7 @@ pnpm build</code></pre>
                   <td><span class="mark-yes">不需要</span></td>
                   <td><span class="mark-yes">不需要</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">需要逐个项目配置</th>
                   <td class="col-us"><span class="mark-yes">否——全浏览器共用</span></td>
                   <td><span class="mark-no">是</span></td>
@@ -2070,7 +2106,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">按规则集</span></td>
                   <td><span class="mark-no">是</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">对任意页面源生效（localhost、内网系统）</th>
                   <td class="col-us"><span class="mark-yes">是</span></td>
                   <td><span class="mark-part">仅指向该开发服务的流量</span></td>
@@ -2078,7 +2114,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">受扩展 API 限制</span></td>
                   <td><span class="mark-yes">是</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">改写响应（状态码、响应头、JSON 字段）</th>
                   <td class="col-us"><span class="mark-yes">支持</span></td>
                   <td><span class="mark-no">不支持</span></td>
@@ -2086,7 +2122,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">响应体通常不行</span></td>
                   <td><span class="mark-no">不支持</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">界面里直接 Mock / 延迟 / 阻断 / 重试</th>
                   <td class="col-us"><span class="mark-yes">支持，含条件化 Mock</span></td>
                   <td><span class="mark-part">需额外插件</span></td>
@@ -2094,7 +2130,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">通常只有 Mock</span></td>
                   <td><span class="mark-no">不支持</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">覆盖 WebSocket 流量</th>
                   <td class="col-us"><span class="mark-yes">支持</span></td>
                   <td><span class="mark-part">较少见</span></td>
@@ -2102,7 +2138,7 @@ pnpm build</code></pre>
                   <td><span class="mark-no">不支持</span></td>
                   <td><span class="mark-no">不支持</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">读 HTTPS 需要本地 CA 证书</th>
                   <td class="col-us"><span class="mark-yes">不需要——在浏览器内运行</span></td>
                   <td><span class="mark-yes">不需要</span></td>
@@ -2110,7 +2146,7 @@ pnpm build</code></pre>
                   <td><span class="mark-yes">不需要</span></td>
                   <td><span class="mark-yes">不需要</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">规则可用普通本地文件分享</th>
                   <td class="col-us"><span class="mark-yes">JSON / HAR / cURL</span></td>
                   <td><span class="mark-yes">随仓库代码共享</span></td>
@@ -2118,7 +2154,7 @@ pnpm build</code></pre>
                   <td><span class="mark-part">常需云端同步</span></td>
                   <td><span class="mark-yes">随仓库代码共享</span></td>
                 </tr>
-                <tr>
+                <tr class="reveal">
                   <th scope="row">能代理服务端到服务端等非浏览器流量</th>
                   <td class="col-us"><span class="mark-no">不能——仅浏览器范围</span></td>
                   <td><span class="mark-no">不能</span></td>
@@ -2783,7 +2819,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.0.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-09-29</span>
+            <span>最后更新 2026-09-30</span>
             <span
               ><a
                 href="en.html"

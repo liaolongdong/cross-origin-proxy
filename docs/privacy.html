@@ -21,6 +21,14 @@
       name="description"
       content="跨域代理助手不收集、不上传、不出售任何用户数据，规则与日志只存在本机 chrome.storage.local。Privacy policy for the Cross-Origin Proxy Chrome extension."
     />
+    <meta
+      name="robots"
+      content="max-image-preview:large"
+    />
+    <meta
+      name="author"
+      content="Better"
+    />
     <link
       rel="canonical"
       href="https://liaolongdong.github.io/cross-origin-proxy/privacy.html"
@@ -101,15 +109,38 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebPage",
-        "@id": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html#webpage",
-        "url": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html",
-        "name": "隐私政策 / Privacy Policy",
-        "inLanguage": ["zh-CN", "en"],
-        "datePublished": "2026-09-06",
-        "dateModified": "2026-09-24",
-        "isPartOf": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#website" },
-        "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" }
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html#webpage",
+            "url": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html",
+            "name": "隐私政策 / Privacy Policy",
+            "inLanguage": ["zh-CN", "en"],
+            "datePublished": "2026-09-06",
+            "dateModified": "2026-09-29",
+            "isPartOf": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#website" },
+            "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" },
+            "breadcrumb": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html#breadcrumb" }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html#breadcrumb",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "产品介绍页",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "隐私政策 / Privacy Policy",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/privacy.html"
+              }
+            ]
+          }
+        ]
       }
     </script>
   </head>

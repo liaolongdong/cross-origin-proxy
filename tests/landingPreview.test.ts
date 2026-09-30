@@ -443,4 +443,84 @@ describe('落地页重写预演引擎', () => {
       expect(presetButtons, `${file} 的预设按钮数变了，中英两页要一起改`).toBe(6);
     }
   });
+
+  /**
+   * 首屏那格静态示例：三方可对上——面板自己的默认输入、首屏抄下来的答案、引擎算出的结果。
+   *
+   * 这一格的全部价值是「不点任何东西也能看到一个具体结果」，代价是它把答案抄成了正文：
+   * 面板默认值一改、或判据一改，首屏那句话立刻变成一句产品页不该说的话，而它在浏览器里
+   * 永远「看着是对的」——没有任何运行时会把抄错的那一行认出来。所以这里不比对文本，
+   * 而是拿首屏那三项输入去问引擎，再要求它回过来的地址与首屏写的那一行逐字相同。
+   */
+  describe('首屏静态示例与预演面板同源', () => {
+    const HERO_KEYS = ['pattern', 'target', 'url', 'result'] as const;
+
+    /** 首屏那四段 `<code data-hero="…">` 的可见文字；缺任何一段就是这一格被改残了。 */
+    const heroValues = (html: string): Record<(typeof HERO_KEYS)[number], string> => {
+      const picked = HERO_KEYS.map(key => {
+        const match = new RegExp(`<code data-hero="${key}">([^<]*)</code>`).exec(html);
+        expect(match, `首屏示例里找不到 data-hero="${key}" 的那一段`).not.toBeNull();
+        return String(match?.[1]);
+      });
+      return { pattern: picked[0], target: picked[1], url: picked[2], result: picked[3] };
+    };
+
+    /** 面板的默认输入：`value="…"` 紧跟在各自的 `data-try-*` 之后，匹配类型取那个 `selected` 选项。 */
+    const panelDefaults = (html: string): Record<string, string> => {
+      const field = (attr: string): string => new RegExp(`${attr}\\s+value="([^"]*)"`).exec(html)?.[1] ?? '';
+      return {
+        matchType: /<option\s+value="([^"]+)"\s+selected/.exec(html)?.[1] ?? '',
+        pattern: field('data-try-pattern'),
+        target: field('data-try-target'),
+        url: field('data-try-url'),
+      };
+    };
+
+    for (const file of ['docs/index.html', 'docs/en.html']) {
+      const html = fs.readFileSync(path.join(ROOT, file), 'utf-8');
+
+      it(`${file}：首屏抄的三项输入就是面板自己的默认输入`, () => {
+        const hero = heroValues(html);
+        const panel = panelDefaults(html);
+        // 「改试试」落进面板时读者看到的必须是同一组值，所以这三项一字不差；
+        // 匹配类型也钉住：首屏那一行只写了一个答案，它成立的前提是这条规则是通配符。
+        expect(hero.pattern, '匹配模式与面板默认值不符').toBe(panel.pattern);
+        expect(hero.target, '目标地址与面板默认值不符').toBe(panel.target);
+        expect(hero.url, '测试地址与面板默认值不符').toBe(panel.url);
+        expect(panel.matchType, '首屏那一行说的是通配符规则，面板默认值变了就得重写这一格').toBe('wildcard');
+      });
+
+      it(`${file}：首屏写下的答案等于引擎算出的答案`, () => {
+        const hero = heroValues(html);
+        const result = engine.preview(panelDefaults(html));
+        expect(result.matched, '首屏示例的地址根本不该命中').toBe(true);
+        expect(result.netUrl, '网络层答案与首屏那一行不同').toBe(hero.result);
+        /* 首屏只写一行答案，所以两通道必须真的给出同一个地址。这里刻意不写「已知差异豁免」：
+           一旦这条示例落进那两个已接受的差异里（正则片段替换、捕获为空的分隔斜杠），
+           一行就说不清了——那时要改的是这一格，不是把断言放宽。 */
+        expect(result.extUrl, '两通道分叉，首屏那一行不再成立').toBe(hero.result);
+        expect(result.diverged, '两通道分叉，首屏那一行不再成立').toBe(false);
+        // 上面两行成立的前提：这一条归网络层管，且真的会被应用。
+        // 通道或理由码一变，首屏那句「网络层改写」（英文页同一位置写着 Rewritten in the network layer）就说反了。
+        expect(result.channel, '这一条不再走网络层，首屏那句措辞要重写').toBe('net');
+        expect(result.netSkip, '这条网络层规则不会被应用，首屏那一行不能画成已改写').toBeNull();
+        expect(result.codes, '这条示例不再是一尘不染的通配符重写').toEqual([]);
+      });
+
+      it(`${file}：入口链接指向的就是那块面板`, () => {
+        const panelId = /class="try"\s+id="([^"]+)"/.exec(html)?.[1];
+        const cta = /class="hero-example-cta"\s+href="#([^"]+)"/.exec(html)?.[1];
+        // 两处都必须真的解析得出来，否则两个 `undefined` 相等，这条就成了空转的断言。
+        expect(panelId, '预演面板没有 id，首屏那个链接无处可去').toBeTruthy();
+        expect(cta, '首屏示例找不到「改试试」那条链接').toBeTruthy();
+        expect(cta, '链接指的不是预演面板').toBe(panelId);
+      });
+    }
+
+    it('中英两页的那四个地址是同一组数据', () => {
+      const zh = heroValues(fs.readFileSync(path.join(ROOT, 'docs/index.html'), 'utf-8'));
+      const en = heroValues(fs.readFileSync(path.join(ROOT, 'docs/en.html'), 'utf-8'));
+      expect(en, '示例地址是语言无关的数据，两页不许各写一套').toEqual(zh);
+    });
+  });
 });

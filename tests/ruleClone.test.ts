@@ -102,16 +102,20 @@ describe('[buildDuplicateRuleData] 「复制规则」拿到响应式规则时不
 
 describe('[源码契约] SFC 那一层没法实例化，只能按源码钉', () => {
   const appSrc = readFileSync('components/options/App.vue', 'utf-8');
+  const undoSrc = readFileSync('composables/useDeleteUndo.ts', 'utf-8');
 
-  it('App.vue 不再直接 structuredClone（撤销那份快照走 cloneRule）', () => {
+  it('App.vue 不直接 structuredClone，撤销快照走 cloneRule（现在住在 useDeleteUndo 里）', () => {
     expect(appSrc).not.toContain('structuredClone(');
-    expect(appSrc).toContain('cloneRule(rules.value[index])');
+    // 快照那份拷贝是撤销的正确性前提：嵌套的 headerOverrides / mockResponse 不能与原规则共享引用
+    expect(undoSrc).toContain('cloneRule(rule)');
+    expect(undoSrc).not.toContain('structuredClone(');
   });
 
   it('全仓不再有第二处对响应式数据裸用 structuredClone 的地方', () => {
     const offenders = [
       'utils/ruleDuplicate.ts',
       'composables/useRuleManagement.ts',
+      'composables/useDeleteUndo.ts',
       'components/options/RuleTable.vue',
     ].filter(f => readFileSync(f, 'utf-8').includes('structuredClone('));
     expect(offenders).toEqual([]);
