@@ -11,6 +11,13 @@ Version numbers still live in `package.json` only — but release-please now wri
 还没进版本的变更先记在这里，中英各一段。下一次 release-please 开出 `## [x.y.z]` 小节时，把这一段并进那个小节、然后清空这里：机器人只会列提交标题，而商店用户读到的说明需要这里的长文。**标题不要写成 `## [Unreleased]` 这种带方括号的形式**——release-please 找插入点用的正则（`\n###? v?[0-9[]`）会把那一行当成第一个版本小节，于是新生成的小节插在它**上面**，整份已发布历史被挪到「未发布」这个标题底下，读起来像上一版还没发。
 Collect changes that are not in a released version yet here, in Chinese and English, and fold the block into the new `## [x.y.z]` section when release-please opens it. Do not title this block `## [Unreleased]`: release-please locates its insertion point with a regex that matches a bracketed heading, so the generated section would land above it and push the entire released history under an "unreleased" heading.
 
+## [1.4.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.4.0...v1.4.1) (2026-09-30)
+
+
+### Fixed
+
+* **ci:** 给 release.yml 里两个用 gh 的步骤补上 GH_TOKEN ([0ae1333](https://github.com/liaolongdong/cross-origin-proxy/commit/0ae13336e3cfca697011ab84c7e236982d3ef2f0))
+
 ## [1.4.0] - 2026-09-30
 
 这一版把弹窗从「只能看」变成「能直接改」：环境快照就地列出并切换、自动关闭档位就地改、批量删除也有 5 秒撤销；规则表单补上此前只有导入 JSON 才写得出的两个响应字段（状态行文本、整段响应体），正则规则多一条「捕获组 ↔ 引用」对照；扩展界面与产品站补了一批只在读数真的变了才响应的反馈动效，并把预演面板的入口提到折叠线之上。权限、存储结构、URL 匹配与重写语义、双通道分流结果一概未改。
