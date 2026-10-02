@@ -705,6 +705,23 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       ).toBeLessThanOrEqual(160);
     });
 
+    /**
+     * 分享卡上那两句从前**一条守卫都没有**：五页十串全靠人工数，而 `en-alternatives.html`
+     * 的 `og:description` 正是这样一路漂到 172 的（2026-10-02 收回 157）。判据与上面
+     * `meta description` 同一套口径——平台按可见宽度截断那一句，不是按码点，所以中英文串
+     * 不能互相顶替，也不能拿 `.length` 估。
+     */
+    it.each(SITE_PAGES)('%s 的 og 与 twitter 描述收在分享卡可见宽度以内', file => {
+      for (const key of ['og:description', 'twitter:description'] as const) {
+        const text = visible(metaContent(file, key));
+        expect(text, `${file} 缺少 ${key}`).not.toBe('');
+        expect(
+          displayWidth(text),
+          `${file} 的 ${key} 宽 ${displayWidth(text)} 单位，>160 会在分享卡上被截断`,
+        ).toBeLessThanOrEqual(160);
+      }
+    });
+
     it.each(SITE_PAGES)('%s 的每段 JSON-LD 可解析，且 og:type 有对应节点', file => {
       const html = read(`docs/${file}`);
       const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
