@@ -10,9 +10,10 @@
  *    与「fetch 那条路径一行都没动」。最后这组最要紧：给 fetch 挂拒绝处理器会**削掉页面自己的
  *    `unhandledrejection`**，那是 Sentry 一类前端监控唯一的上报口，代价远超一个显示用的读数。
  *
- * 本环境测不到的两件事（node 无 DOM，`jsdom` / `@vue/test-utils` 未装）：
- * 真实 XHR 的 `error` 事件形状，与那一列行在 320px 里的排版。前者按源码契约钉，
- * 后者只能在真浏览器里目测（见交付说明）。
+ * 本环境测不到的一件事：那一列行在 320px 里的排版，只能在真浏览器里目测（见交付说明）。
+ * 至于「真实 XHR 的 `error` 事件形状」——它现在有了运行时对应物：`tests/interceptorXhr.test.ts`
+ * 的「疑似跨域观测」那组用同一份假 XHR（监听器按注册序累加、`open()` 不清注册表）跑出笔数与
+ * 串味两条。本文件那组按源码钉的仍是两份手工副本与「fetch 一行都没动」这类**只能读源码**的判据。
  */
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
@@ -284,6 +285,12 @@ describe('[MAIN world] 观测只挂在没有规则的那条路径，fetch 一行
     expect(block).toContain('origin === window.location.origin');
     // 计数不得反过来影响请求路径：观测函数不返回任何东西、也不抛
     expect(block).not.toMatch(/\breturn\s+(true|false|null)\b/);
+    // 监听器必须落定即摘、注册前先摘旧的：`open()` 不清监听器，一份从不摘的会活过每一次复用，
+    // 于是那一笔被按三角数记账，而「上一笔成功、这一笔代理失败」还会把成功的那个来源画成疑似。
+    // 这两条的真实形状由 `tests/interceptorXhr.test.ts` 的「疑似跨域观测」那组按运行时测；
+    // 这里只钉住「摘除这一件事还在」，因为运行时那两条一旦被人跳过，这一句是唯一的守门。
+    expect(block).toContain("removeEventListener('error'");
+    expect(block).toContain("addEventListener('loadend'");
   });
 
   it('上报只走既有 channel 与 origin 受限的 postMessage，不新增网络请求', () => {

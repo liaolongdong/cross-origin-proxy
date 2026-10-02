@@ -45,8 +45,12 @@ export interface ApiPickerRow {
  * 四道收口：`suspects` 必须是数组；`origin` 必须**本身就是一个 http(s) origin**
  * （剥掉路径/查询后与给来的串不相等就不要——那些内容不该画到界面，更不该跟着下一次点击进 Options）；
  * `count` 必须是有限正数并钳制到 `CORS_SUSPECT_MAX_COUNT`；来源数钳制到 `CORS_SUSPECT_CACHE_SIZE`。
- * 同源重复取最大笔数，排序后只留前 `CORS_SUSPECT_CACHE_SIZE` 个——那一个数同时是面板的行数上限，
- * 于是卡片那句「检测到 N 个来源」画的数，与面板里带标记的行数必然对得上。
+ * 同源重复取最大笔数。那道来源数上限发生在**插入时**（先到先得，见上面那句 `counts.size >=`）：
+ * 数组里排在前面的 N 个来源入账，排在后面的即使笔数更大也不进——不是「留笔数最多的前 N 个」，
+ * 下面那一次排序只改变已入账这 N 行的显示顺序，不改变谁被丢掉。这个口径由
+ * `tests/corsSuspects.test.ts` 的「来源数与伪造包都有上界」钉住（那份载荷故意把最大笔数放在第 N+3 位）。
+ * 末尾那一次 `slice` 今天恒不截断（插入时已经卡在 N），留着是因为它同时替「读端那一档不超过
+ * 面板那一档」这条不变量收了第二道闩：哪天有人放宽插入时那一道，这一句仍然画不出第 N+1 行。
  */
 export function parseCorsSuspects(value: unknown): CorsSuspect[] {
   const raw = (value as { suspects?: unknown } | null | undefined)?.suspects;

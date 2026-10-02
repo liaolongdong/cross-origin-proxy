@@ -84,6 +84,9 @@ interface FakeXhr {
   onreadystatechange: (() => void) | null;
   onloadend: (() => void) | null;
   addEventListener(type: string, listener: () => void): void;
+  /** 测试侧要自己派 `error` / `load` / `loadend`，所以这一格在公开面上；
+   *  `removeEventListener` 只有被测物自己会调，测试从不按它说话，因而不声明。 */
+  dispatchEvent(event: Event): boolean;
   open(method: string, url: string | URL, asyncFlag?: boolean): void;
   setRequestHeader(name: string, value: string): void;
   send(body?: unknown): void;
@@ -931,5 +934,70 @@ describe('实例复用与自报计数', () => {
     await new Promise(resolve => setTimeout(resolve, 1100));
 
     expect(payloadOfType(INTERCEPTOR_STATS)).toEqual([]);
+  });
+});
+
+/* ───────── 疑似跨域那份观测的监听器生命周期 ─────────
+ *
+ * `watchNativeXhr` 是这一整个功能唯一「会说话」的一面：它报出去的数字要变成弹窗里
+ * 「这一页哪几个来源像是没通」。判据（`error` + `status === 0`）由 `corsSuspects` 按源码钉，
+ * 但**监听器挂在实例上的活法**只有按运行时测才看得见——而它错起来的形状恰好是
+ * 「数出来的笔数与界面那句话不一致」和「把一笔成功的请求说成疑似」，都不会报错。
+ *
+ * 承重的是 `open()` 不清监听器（与真实 XHR 一致：`open` 只复位状态，注册表原样留着），
+ * 所以一份从不摘掉的监听器会活过这一次复用，并在那一次 `error` 派发里和新的每一份一起被命中。
+ */
+describe('疑似跨域观测：监听器只在它那一笔上生效', () => {
+  const CROSS = 'https://fat-api.example.com';
+  const CROSS_URL = `${CROSS}/api/user/list`;
+  const SUSPECTS = 'CORS_SUSPECTS';
+
+  /** 最近一版自报里的 `{ origin, count }` 清单（字面量与 MAIN world 那份手工副本同源） */
+  function suspectsSnapshot(): Array<{ origin: string; count: number }> {
+    const posts = payloadOfType(SUSPECTS);
+    const last = posts[posts.length - 1]?.data;
+    return (last?.suspects ?? []) as Array<{ origin: string; count: number }>;
+  }
+
+  it('同一实例复用两次、各失败一笔：记两笔，不是三笔', async () => {
+    // 摘掉「注册前先摘旧的 + 落定即摘」任何一处，这一笔就是 1 + 2 = 3：第一份监听器从不被摘，
+    // 第二次 `error` 派发同时命中新旧两份。界面那句「疑似 N 笔」于是按三角数膨胀。
+    armProxy([]);
+    const xhr = newXhr();
+
+    request(xhr, CROSS_URL);
+    xhr.dispatchEvent(new Event('error'));
+    expect(suspectsSnapshot()).toEqual([{ origin: CROSS, count: 1 }]);
+
+    vi.useFakeTimers();
+    request(xhr, CROSS_URL);
+    xhr.dispatchEvent(new Event('error'));
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(suspectsSnapshot()).toEqual([{ origin: CROSS, count: 2 }]);
+  });
+
+  it('原生那一笔成功之后，代理失败不得把它的来源画成疑似', async () => {
+    // 这一条测的是「串味」：成功永不派 `error`，所以那份监听器一直留在实例上；
+    // 下一次复用命中规则、后台代发失败，拦截器自己会把 status 覆成 0 并派 `error`
+    // ——旧监听器就此把一笔**成功过的**来源记成疑似，而那正是文件头写明不该入账的一类
+    // （代理失败说的是「规则没配对」，不是「这个来源还值得建规则」）。
+    armProxy([]);
+    const xhr = newXhr();
+
+    request(xhr, CROSS_URL);
+    Object.defineProperty(xhr, 'status', { value: 200, writable: true, configurable: true });
+    xhr.dispatchEvent(new Event('load'));
+    xhr.dispatchEvent(new Event('loadend'));
+    expect(payloadOfType(SUSPECTS)).toEqual([]);
+
+    armProxy([rule()]);
+    request(xhr, API_URL);
+    respond(lastRequestId(), { error: 'fetch failed' });
+    await settle();
+
+    expect(payloadOfType(SUSPECTS)).toEqual([]);
+    // 这一笔本身照样要走代发的失败结局，别把观测修成影响请求路径
+    expect(xhr.events).toContain('error');
   });
 });

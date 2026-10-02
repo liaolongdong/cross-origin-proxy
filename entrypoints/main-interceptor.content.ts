@@ -221,15 +221,36 @@ export default defineContentScript({
      *
      * 两道收窄：只认 http(s)，只认跨域。同源请求的 `status === 0` 与 CORS 无关（它压根不受
      * CORS 约束），把同源画成候选就是凭空多给一列可点击的地址。
-     * 复用实例不额外去重：同一实例第二次 `send()` 再失败确实是两笔，挂着的监听器只会各响一次。
+     *
+     * 监听器必须**一笔一份、落定即摘**（`open()` 不清监听器，摘干净这件事只能自己做）：
+     * 同一实例复用 k 次就会攒下 k 份，而那一次 `error` 派发命中全部 k 份，界面那句
+     * 「疑似 N 笔」于是按三角数膨胀。更要紧的是成功的那一笔永远不派 `error`——不摘在
+     * `loadend` 上，那份监听器就一直留在实例上，下一次复用若命中规则、后台代发失败
+     * （那条路径自己派 `error` 并把 status 覆成 0），它就把一个**成功过的**来源画成疑似，
+     * 而代理失败说的是「规则没配对」，恰恰是上面 `corsSuspects` 写明不该入账的那一类。
+     * 两条都由 `tests/interceptorXhr.test.ts` 的「疑似跨域观测」那组按运行时守住。
      */
     function watchNativeXhr(xhr: XMLHttpRequest, url: string): void {
       const origin = httpOriginOf(url);
       if (!origin || origin === window.location.origin) return;
-      xhr.addEventListener('error', () => {
+      const onError = () => {
         // `status === 0` 才是「这笔没走到能读出响应的地方」；某些封装库在别的形状上也会派 `error`
         if (xhr.status === 0) noteCorsOrigin(origin);
-      });
+      };
+      const detach = () => {
+        xhr.removeEventListener('error', onError);
+        xhr.removeEventListener('loadend', detach);
+        if ((xhr as any).__proxyCorsWatch === detach) (xhr as any).__proxyCorsWatch = undefined;
+      };
+      // 先摘上一笔那份再挂这一笔的：正常路径上 `loadend` 已经摘过了，这一句只兜住
+      // 「上一笔还挂着就又被复用」的那种页面（长轮询、`open()` 之后不 `send()`）。
+      const previous = (xhr as any).__proxyCorsWatch as (() => void) | undefined;
+      if (previous) previous();
+      (xhr as any).__proxyCorsWatch = detach;
+      xhr.addEventListener('error', onError);
+      // `loadend` 是四种结局（成功 / 失败 / 超时 / 中止）共有的那一个，所以只挂这一个。
+      // 不用 `{ once: true }`：那份监听器要能活到 `error` 之后，而 once 恰好帮不上「成功」那一档。
+      xhr.addEventListener('loadend', detach);
     }
 
     // Pending requests waiting for response from content script

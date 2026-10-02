@@ -21,7 +21,7 @@ import { logger } from '@/utils/logger';
  * 挑一个框架的账，还会让「谁答的」变成界面说不出来的事。
  * 超时那条分支必须与「这一页没有内容脚本」同样落成 `null`：一次点击悬在那里比少一个读数糟得多。
  */
-async function askPage(tabId: number, type: string): Promise<unknown | null> {
+async function askPage(tabId: number, type: string): Promise<unknown> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     return await Promise.race([
