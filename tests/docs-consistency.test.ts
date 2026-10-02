@@ -975,6 +975,39 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
 
     /**
+     * 偏好回调的登记必须排在「没有 `IntersectionObserver`」那道早退**之前**。
+     * 2026-10-03 抓到的正是反的那一份：这句原本写在早退之后，于是那种运行时里巡航只登记了一次
+     * 闸门、`syncLive` 永远收不到偏好翻转——JSDoc 承诺的「中途翻回来当场就能续上」恰好落在
+     * 唯一需要它的老引擎上（样式侧的媒体查询只负责「关」，帮不上「重新开」）。
+     * node 环境既没有 `IntersectionObserver` 也没有布局，这条除了按源码钉没有别的出路。
+     * 三处登记里只有这一处所在的函数自己会早退（另两处的分支是「整段不绑定」，不是早退），
+     * 所以把张数一起钉住：将来多出第四处，就得回来重判它排在哪个分支之前。
+     */
+    it('巡航的偏好回调排在无 IntersectionObserver 的早退之前', () => {
+      expect(
+        js.match(/onMotionChange\(/g) ?? [],
+        'onMotionChange 的登记点张数变了，请回来重判每一处排在哪个早退之前',
+      ).toHaveLength(3);
+
+      const body = /const cruiseWhenVisible = target => \{([\s\S]*?)\n {2}\};/.exec(js)?.[1];
+      expect(body, 'cruiseWhenVisible 的函数体形状变了（收尾缩进不再是两格），这条守卫形同空转').toBeTruthy();
+
+      const registerAt = body!.indexOf('onMotionChange(syncLive)');
+      const earlyReturnAt = body!.indexOf("if (!('IntersectionObserver' in window))");
+      expect(registerAt, '巡航不再登记偏好回调——减弱动效中途翻回来时无人续上').toBeGreaterThanOrEqual(0);
+      expect(earlyReturnAt, '无 IntersectionObserver 的降级分支不见了').toBeGreaterThanOrEqual(0);
+      expect(
+        registerAt,
+        '偏好回调排在早退之后：没有 IntersectionObserver 的运行时永远登记不到它，首屏巡航只能等刷新',
+      ).toBeLessThan(earlyReturnAt);
+
+      // 早退那半不是「什么都不做」：它自己要把巡航放到终态，否则降级态下首屏压根不动。
+      expect(flat(body!.slice(earlyReturnAt)), '降级分支不再调用 syncLive 收尾').toContain(
+        'inView = true; syncLive(); return;',
+      );
+    });
+
+    /**
      * 「试一试」那个入口是预演面板唯一的门，而门的位置就是它有没有人用。
      * 2026-09-30 按 headless Chrome 在 1440×900（`innerHeight` 757）量过：链接写在示例卡尾部时，
      * 卡片是中文页 616→860、英文页 665→910，整个入口落在折叠线以下；挪进 `.hero-example-head`
