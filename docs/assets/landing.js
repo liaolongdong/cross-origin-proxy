@@ -466,6 +466,11 @@
     let inView = false;
     const syncLive = () => target.classList.toggle('is-live', inView && !reduceMotion());
 
+    // 偏好回调两条分支都要登记：这句必须排在下面的分支判断**之前**——早 `return` 会让
+    // 「没有 IntersectionObserver」那半永远收不到它，于是那句 JSDoc 承诺的「偏好中途翻回来
+    // 时当场就能续上」在那种运行时不成立（样式那半的媒体查询只负责「关」，帮不上「重新开」）。
+    onMotionChange(syncLive);
+
     if (!('IntersectionObserver' in window)) {
       inView = true;
       syncLive();
@@ -482,8 +487,6 @@
       { threshold: 0.3 },
     );
     observer.observe(target);
-
-    onMotionChange(syncLive);
   };
 
   /* 流程图（页面 → 通道 → 目标环境）与它下面那条 CORS 两态各自入账：
