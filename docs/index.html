@@ -355,6 +355,14 @@
           },
           {
             "@type": "Question",
+            "name": "它免费吗？需要注册或登录吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "免费，没有内购也没有订阅，不需要注册或登录任何账号。扩展没有云端服务——规则、凭据变量与日志只写在你本机的 chrome.storage.local 里。"
+            }
+          },
+          {
+            "@type": "Question",
             "name": "它能绕过 CORS 限制吗？",
             "acceptedAnswer": {
               "@type": "Answer",
@@ -2454,6 +2462,13 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                 应用商店与其他扩展页面被浏览器统一限制，任何扩展都无法注入。
               </p>
             </details>
+            <details>
+              <summary>它免费吗？需要注册或登录吗？</summary>
+              <p>
+                免费，没有内购也没有订阅，不需要注册或登录任何账号。扩展没有云端服务——规则、凭据变量与日志只写在你本机的
+                <code>chrome.storage.local</code> 里。
+              </p>
+            </details>
 
             <h3
               class="faq-category"
@@ -2665,7 +2680,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               <h4 id="faq-toc-title">分类直达</h4>
               <ol class="faq-toc">
                 <li>
-                  <a href="#faq-basics">基础与匹配<span class="faq-toc-n">4</span></a>
+                  <a href="#faq-basics">基础与匹配<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
                   <a href="#faq-channels">通道、CORS 与性能<span class="faq-toc-n">4</span></a>
