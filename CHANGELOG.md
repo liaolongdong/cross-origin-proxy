@@ -13,10 +13,9 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
 ## [1.4.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.4.0...v1.4.1) (2026-09-30)
 
-
 ### Fixed
 
-* **ci:** 给 release.yml 里两个用 gh 的步骤补上 GH_TOKEN ([0ae1333](https://github.com/liaolongdong/cross-origin-proxy/commit/0ae13336e3cfca697011ab84c7e236982d3ef2f0))
+- **ci:** 给 release.yml 里两个用 gh 的步骤补上 GH_TOKEN ([0ae1333](https://github.com/liaolongdong/cross-origin-proxy/commit/0ae13336e3cfca697011ab84c7e236982d3ef2f0))
 
 ## [1.4.0] - 2026-09-30
 
