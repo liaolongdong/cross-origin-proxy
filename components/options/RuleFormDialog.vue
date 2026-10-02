@@ -1193,6 +1193,13 @@ watch(
         // 没有这三格（状态码、状态行文本、整段正文），于是 Object.assign 不会覆盖上一次的残留。
         // 开关下面已经置 false，所以残留值进不了规则——但它会在用户这一次把开关打开时
         // 直接显现在输入框里，看起来像是新建规则自带的默认值。
+        // 已知边界（今天不可达，别当成已修）：`enableResponseOverrides` 与 `enableRetry` 仍按 false
+        // 写死，而 `Object.assign` 会把 `initialData.responseOverrides` / `retryCount` 搬进 form，
+        // 保存时那两格因此被丢弃。唯一的预填来源（七张快速模板与 `buildOriginWildcardDraft`）
+        // 都不带这两个字段，所以现在没有人受害；将来谁要给模板加响应覆盖或重试，必须**像编辑
+        // 分支那样**同时展开 `responseStatus` / `statusText` / `bodyRaw` 与那两份列表
+        // （同一个 watcher 里 `props.rule` 那一支），只把开关改成派生值会画出一个
+        // 「开关亮着、内容却是空的」表单。
         form.responseStatus = undefined;
         form.responseStatusText = '';
         form.responseBodyRaw = '';
