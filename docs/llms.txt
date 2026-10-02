@@ -56,6 +56,7 @@
 
 ## Privacy / 隐私
 
+- Free of charge, with no payment, in-app purchase, subscription or account. 免费，无内购、无订阅，也不需要注册或登录任何账号。
 - No data collection, no analytics, no telemetry, no remote servers of its own, no certificate installation. 不收集数据、无统计埋点、无遥测、无自有远程服务、不安装证书。
 - Permissions: `storage`, `declarativeNetRequest`, `declarativeNetRequestFeedback`, `alarms`, host permission `<all_urls>` (each justified in CHROMEWEBSTORE.md and the privacy policy).
 - The request log records proxied headers and bodies locally, which may include tokens; every export is produced on the user's machine, and both the JSON config export and the HAR export strip credential-like request/response headers by default, while only the config export goes on to drop token-like query-parameter overrides (the cURL command copied from the log stays verbatim). 请求日志在本机记录被代理的请求头与请求体（可能含 token），导出均在本地生成；JSON 配置导出与 HAR 导出默认都剔除凭据类请求/响应头，只有配置导出还会剔掉 token 类查询参数覆盖（从日志面板复制的 cURL 命令保持原样）。
