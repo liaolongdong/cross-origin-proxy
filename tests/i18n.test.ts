@@ -157,13 +157,13 @@ describe('i18n 用到的 key 必须存在', () => {
 
   it('扫描本身不是空转（正则一旦失配，下面的断言会假绿）', () => {
     expect(usedKeys.size).toBeGreaterThan(300);
-    // 动态位点的精确数：模板卡 8 个 + 恢复点成因 5 个 + 自动关闭档位 10 个（`utils/autoOff.ts`
+    // 动态位点的精确数：模板卡 14 个 + 恢复点成因 5 个 + 自动关闭档位 10 个（`utils/autoOff.ts`
     // 的 `AUTO_OFF_PRESETS` 每档一对 `labelKey` / `shortKey`，两个界面共用这张表，所以只数一处）。
     // 钉死而不是给下界——两处写法一变
     // （改名、折行、去掉 `Record<>` 标注）就是整块漏扫，集合只会变小，而 `> 5` 这种阈值
     // 在只剩 8 个时照样绿，等于悄悄宣布自己还在守。正常新增一个位点也会红在这里：那时请
     // 连同本行一起改数，而不是把这条删掉。
-    expect(dynamicKeys.size).toBe(23);
+    expect(dynamicKeys.size).toBe(29);
   });
 
   it('每个 key 都能在中英字典里找到，且文案非空（缺一个就会画出裸键名或空白）', () => {

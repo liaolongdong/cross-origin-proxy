@@ -863,6 +863,28 @@ function withUid<T extends object>(row: T): T & { uid: number } {
 }
 
 /**
+ * 把一条 `mockResponse` 里的条件化响应展开成表单行
+ *
+ * 编辑与预填两条路径共用：条件住在 `mockResponse.conditions`，界面要的是带 `uid` 的行
+ * （见 `nextRowUid`）与逐字段回落默认值。预填那侧此前直接把列表清空，于是携带条件的
+ * 预填数据会呈现成「Mock 开关开着、条件一条没有」——开关派生自 `mockResponse` 之后更是如此。
+ */
+function toMockConditionRows(mock?: ProxyRule['mockResponse']): MockConditionRow[] {
+  return (
+    mock?.conditions?.map(c =>
+      withUid({
+        matchUrl: c.matchUrl ?? '',
+        matchMethod: c.matchMethod ?? '',
+        queryPairs: c.matchQuery ? Object.entries(c.matchQuery).map(([key, value]) => withUid({ key, value })) : [],
+        body: c.body,
+        status: c.status ?? 200,
+        contentType: c.contentType ?? 'application/json',
+      }),
+    ) ?? []
+  );
+}
+
+/**
  * 头 / 查询参数的可编辑行
  *
  * `uid` 只做列表 key（见 `nextRowUid`），不进规则数据——保存处按字段解构重建对象，它自然落下。
@@ -1135,19 +1157,7 @@ watch(
               }),
             )
           : [];
-        mockConditions.value =
-          props.rule.mockResponse?.conditions?.map(c =>
-            withUid({
-              matchUrl: c.matchUrl ?? '',
-              matchMethod: c.matchMethod ?? '',
-              queryPairs: c.matchQuery
-                ? Object.entries(c.matchQuery).map(([key, value]) => withUid({ key, value }))
-                : [],
-              body: c.body,
-              status: c.status ?? 200,
-              contentType: c.contentType ?? 'application/json',
-            }),
-          ) ?? [];
+        mockConditions.value = toMockConditionRows(props.rule.mockResponse);
         methodsList.value = props.rule.methods ? [...props.rule.methods] : [];
         queryList.value = props.rule.queryOverrides
           ? Object.entries(props.rule.queryOverrides).map(([key, value]) => withUid({ key, value }))
@@ -1162,12 +1172,22 @@ watch(
         // 硬编码 false 会让保存逻辑丢弃已赋值的 requestBodyOverride
         enableRequestBodyOverride.value = props.initialData?.requestBodyOverride !== undefined;
         enableResponseOverrides.value = false;
-        enableMockResponse.value = false;
-        enableDelay.value = false;
+        // 预填数据同样可能携带 Mock / 延迟 / 阻断（快速模板里那三张「验证错误分支」的卡就是），
+        // 把开关硬编码成 false 会让保存逻辑丢弃已经赋值的 mockResponse、delayMs 与 blocked。
+        // Mock 那三格是表单自己的扁平字段，不在 ProxyRule 里，`Object.assign` 带不过来，
+        // 必须像编辑分支那样按 `mockResponse` 展开；读不到时回到默认值，而不是上一条规则的残留
+        // ——残留值会在用户这一次把开关打开时直接显现在输入框里，看起来像是新建规则自带的默认值。
+        enableMockResponse.value = !!props.initialData?.mockResponse;
+        form.mockStatus = props.initialData?.mockResponse?.status ?? defaultForm.mockStatus;
+        form.mockContentType = props.initialData?.mockResponse?.contentType ?? defaultForm.mockContentType;
+        form.mockBody = props.initialData?.mockResponse?.body ?? defaultForm.mockBody;
+        mockConditions.value = toMockConditionRows(props.initialData?.mockResponse);
+        enableDelay.value = !!props.initialData?.delayMs;
+        form.delayMs = props.initialData?.delayMs ?? defaultForm.delayMs;
         enableRetry.value = false;
-        // initialData 不含 blocked / sendCredentials，Object.assign 不会重置它们，
-        // 需显式清除上一条规则遗留的拦截与凭据状态
-        form.blocked = false;
+        // blocked 现在可以由预填数据带进来，按它派生；sendCredentials 没有任何预填路径提供，
+        // 仍须显式清除上一条规则遗留的凭据状态（Object.assign 不会重置它）
+        form.blocked = props.initialData?.blocked === true;
         form.sendCredentials = false;
         // 同一件事也适用于这一组响应覆盖字段：`initialData` 里只有 `responseOverrides` 整个对象，
         // 没有这三格（状态码、状态行文本、整段正文），于是 Object.assign 不会覆盖上一次的残留。
@@ -1178,7 +1198,6 @@ watch(
         form.responseBodyRaw = '';
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
-        mockConditions.value = [];
         methodsList.value = [];
         queryList.value = [];
       }

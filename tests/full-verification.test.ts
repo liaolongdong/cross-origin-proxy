@@ -1093,6 +1093,34 @@ describe('[Batch 3] 弹窗保存与快捷键的闸门（源码契约）', () => 
     return src.slice(at, end);
   }
 
+  /**
+   * 空态那三张新卡（Mock / 慢网 / 阻断）走的是 `initialData` 预填这条路，而预填分支从前把
+   * 那三个开关硬编码成「关」——`submitRule` 是**按开关**重建规则的，于是用户得到一句「保存成功」
+   * 而那个能力一个字都没落库。
+   *
+   * 更要紧的是：这一处**没有任何静态门禁看得见**。`pnpm typecheck` 是 `tsc --noEmit`，它不进
+   * `.vue` 的 script 块（仓里没有 vue-tsc），`pnpm lint` 的 @typescript-eslint 也没开 type-aware
+   * 规则——「把整条规则传进一个收 `mockResponse` 的函数」这种实参错位，一路绿着过了 typecheck、
+   * lint 和 build。所以这里只能按源码契约把实参的形状钉住。
+   */
+  it('模板预填与编辑两条分支都按 mockResponse / delayMs / blocked 派生开关，条件映射的实参是那一份 mockResponse', () => {
+    for (const expr of [
+      'enableMockResponse.value = !!props.rule.mockResponse',
+      'enableMockResponse.value = !!props.initialData?.mockResponse',
+      'enableDelay.value = !!props.rule.delayMs',
+      'enableDelay.value = !!props.initialData?.delayMs',
+      'form.blocked = props.initialData?.blocked === true',
+    ]) {
+      expect(ruleDialogSrc, `两条分支里少了这句派生：${expr}`).toContain(expr);
+    }
+    const calls = [...ruleDialogSrc.matchAll(/=\s*toMockConditionRows\(([^)]*)\)/g)].map(m => m[1]);
+    expect(calls, '条件行的映射应当有编辑与预填两处调用点').toHaveLength(2);
+    for (const arg of calls) {
+      // 传整条规则进去，`conditions` 读不到，携带条件化 Mock 的预填就画成「开关开着、条件一条没有」
+      expect(arg, `实参必须是那份 mockResponse，不是整条规则：${arg}`).toMatch(/(?:\?\.|\.)mockResponse$/);
+    }
+  });
+
   it('六个可变长列表的 v-for key 是行自身的 uid，不是下标（L-9）', () => {
     // 以 index 为 key + 支持中间删行 = 删掉那一行后，后面每一行的输入框实例往前挪一位复用：
     // IME 正在组合的那半截字符跟着串到相邻行，焦点与校验态一起错位，且全程无报错。

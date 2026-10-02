@@ -109,7 +109,17 @@
 </template>
 
 <script setup lang="ts">
-import { Plus, Upload, Link, Switch as SwitchIcon, Key, Setting } from '@element-plus/icons-vue';
+import {
+  Plus,
+  Upload,
+  Link,
+  Switch as SwitchIcon,
+  Key,
+  Setting,
+  MagicStick,
+  Timer,
+  CircleClose,
+} from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
 import type { ProxyRule } from '@/utils/types';
 import type { Component } from 'vue';
@@ -193,6 +203,60 @@ const templates: TemplateItem[] = [
       priority: 50,
     },
   },
+  // 后三张是「验证错误分支」那一档：Mock、延迟、阻断是这套工具区别于纯重定向插件的能力，
+  // 但空状态里只给前四张时，新用户第一次遇到「后端还没写好」只能自己摸索。
+  // 刻意不做 WebSocket 模板——长连接的能力面只有地址重写、查询参数注入与阻断，
+  // 一张写着 Mock 的卡片会让人以为握手也能顶替响应；也刻意不在模板里写 `{{变量}}` 引用，
+  // 未定义的引用按字面量保留，首发用户看到的就是请求头里一串花括号。
+  {
+    key: 'mock-response',
+    titleKey: 'mockApiResponse',
+    descKey: 'mockApiResponseDesc',
+    icon: MagicStick,
+    ruleData: {
+      name: 'Mock User API',
+      enabled: true,
+      matchPattern: 'https://api-fat.example.com/api/user/*',
+      targetUrl: '',
+      matchType: 'wildcard',
+      mockResponse: {
+        body: '{"code":0,"data":{"name":"Mock User"}}',
+        contentType: 'application/json',
+        status: 200,
+      },
+      priority: 50,
+    },
+  },
+  {
+    key: 'slow-network',
+    titleKey: 'simulateSlowNetwork',
+    descKey: 'simulateSlowNetworkDesc',
+    icon: Timer,
+    ruleData: {
+      name: 'Slow API (3s)',
+      enabled: true,
+      matchPattern: '*://api-fat.example.com/*',
+      targetUrl: '',
+      matchType: 'wildcard',
+      delayMs: 3000,
+      priority: 50,
+    },
+  },
+  {
+    key: 'block-request',
+    titleKey: 'blockRequest',
+    descKey: 'blockRequestDesc',
+    icon: CircleClose,
+    ruleData: {
+      name: 'Block Banner API',
+      enabled: true,
+      matchPattern: 'https://api-fat.example.com/api/banner*',
+      targetUrl: '',
+      matchType: 'wildcard',
+      blocked: true,
+      priority: 50,
+    },
+  },
 ];
 
 function handleTemplateClick(tpl: TemplateItem) {
@@ -249,8 +313,9 @@ function handleTemplateClick(tpl: TemplateItem) {
    和先后出现，读起来是「一屏文案」与「几件可做的事」的差别。
    每一级都写成 `n + k`（「第 k 张起」）而不是逐个点名：逐个点名时，将来从 `templates` 里
    多加一张卡、或往 `.guide-cards` 里再插一张，那张没有规则命中它，延迟回落到 0、跟第一张
-   同时进场，阶梯走到末尾会倒着跳一次——而且没有任何报错。今天实算是 2 张引导卡 + 4 张模板卡
-   （`templates` 那份数组），`n + 4` 就是给第 5 张预留的那一级。
+   同时进场，阶梯走到末尾会倒着跳一次——而且没有任何报错。今天实算是 2 张引导卡 + 7 张模板卡
+   （`templates` 那份数组），第 5 张起统一落在 `n + 4` 那一档的 180ms：再往上添张也只会平摊到
+   这一档，不会让最后一张等到半秒开外。
    填充只用 `backwards`（延迟期间停在起始帧，播完就交还给样式）——用 `both` 会把
    `transform` 冻结在动画的收尾值上，而动画的层叠优先级高于 `:hover`，
    那张卡从此抬不起来。阶梯本身由 `tests/designTokens.test.ts` 按张数与写法双向钉住。 */
