@@ -450,37 +450,46 @@
     });
   }
 
-  /* ─────────────── 8. 首屏流程图：滚进视口才巡航 ─────────────── */
+  /* ─────────────── 8. 首屏循环动效：滚进视口才巡航 ─────────────── */
 
-  const flow = document.querySelector('.hero-visual .flow');
+  /**
+   * 循环动效的入视闸门。样式侧在 `html.js` 之下先 `animation-play-state: paused`，
+   * 由这里加上 `.is-live` 才放行——循环动效在视口外照样逐帧跑，不该这么耗电。
+   * 观察器无条件建：减弱动效下不放行（那种偏好下画不出巡航），但偏好中途翻回来时
+   * 当场就能续上——样式那半的媒体查询只负责「关」，帮不上「重新开」。
+   *
+   * @param {Element | null} target 承载 `.is-live` 的元素，找不到就整段不绑定
+   */
+  const cruiseWhenVisible = target => {
+    if (!target) return;
 
-  /* 循环动效在视口外照样逐帧跑，所以样式默认按住（`html.js` 下的
-     `animation-play-state: paused`），由这里加上 `.is-live` 才放行。
-     观察器无条件建：减弱动效下这一位不放行（画不出巡航），但偏好中途翻回来时
-     当场就能续上——样式那半的媒体查询只负责「关」，帮不上「重新开」。 */
-  if (flow) {
-    let flowInView = false;
-
-    const syncFlowLive = () => flow.classList.toggle('is-live', flowInView && !reduceMotion());
+    let inView = false;
+    const syncLive = () => target.classList.toggle('is-live', inView && !reduceMotion());
 
     if (!('IntersectionObserver' in window)) {
-      flowInView = true;
-      syncFlowLive();
-    } else {
-      const flowObserver = new IntersectionObserver(
-        entries => {
-          entries.forEach(entry => {
-            flowInView = entry.isIntersecting;
-            syncFlowLive();
-          });
-        },
-        { threshold: 0.3 },
-      );
-      flowObserver.observe(flow);
+      inView = true;
+      syncLive();
+      return;
     }
 
-    onMotionChange(syncFlowLive);
-  }
+    const observer = new IntersectionObserver(
+      entries => {
+        entries.forEach(entry => {
+          inView = entry.isIntersecting;
+          syncLive();
+        });
+      },
+      { threshold: 0.3 },
+    );
+    observer.observe(target);
+
+    onMotionChange(syncLive);
+  };
+
+  /* 流程图（页面 → 通道 → 目标环境）与它下面那条 CORS 两态各自入账：
+     两叠卡片的可见度不一样，共用一个闸门会让半截动画在没人看的时候照跑。 */
+  cruiseWhenVisible(document.querySelector('.hero-visual .flow'));
+  cruiseWhenVisible(document.querySelector('.hero-outcome'));
 
   /* ─────────────── 9. 卡片指针追光 ─────────────── */
 

@@ -807,6 +807,110 @@ html.js.try-ready .hero-example-cta:hover {
   color: var(--lp-primary-strong);
 }
 
+/* ---------- Hero 首屏的 CORS 两态 ----------
+ * 两行事实都写死在 HTML 里：禁用脚本、减弱动效下两行同样完整可读，谁都不被压暗——
+ * 动画只决定「先讲哪一行」，不决定「哪一行算数」。
+ * 亮环复用首屏流程图那套 `lp-hop` 与 6.4s 周期，延迟与巡航对表：0 是数据包离开页面，
+ * 3250ms 是它抵达目标环境，于是「扩展代发送回 200」在目标节点亮起的同一刻亮起来——
+ * 讲的是同一趟来回，不是两个各自为政的循环。
+ * 措辞口径跟着本页的论证走：被拦的是页面直连，代发那条必须带上任一高级能力，
+ * 通配符那条走的是网络层改写、页面侧照样要过这道校验（见示例卡与 #problem 的报错地图）。 */
+
+.hero-outcome {
+  padding: 12px 16px 14px;
+  font-size: 12.5px;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius);
+}
+
+/* 标题与「三句报错」入口同行：这张条是 hero 右栏的最后一块，而那个入口是站内跳转，
+   不像预演面板要脚本才存在——所以它不套 `.hero-example-cta` 那套 `html.js` 门。 */
+.hero-outcome-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lp-ink-faint);
+}
+
+.hero-outcome-why {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lp-primary);
+}
+
+.hero-outcome-why:hover {
+  color: var(--lp-primary-strong);
+}
+
+.hero-outcome-row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.hero-outcome-row + .hero-outcome-row {
+  margin-top: 5px;
+}
+
+/* 状态由文字承载，左边框只是给眼睛的一个落点——不单独用颜色表达状态。 */
+.hero-outcome-row b {
+  padding-left: 7px;
+  color: var(--lp-ink-soft);
+  border-left: 3px solid var(--lp-danger);
+}
+
+.hero-outcome-row--after b {
+  border-left-color: var(--lp-accent);
+}
+
+.hero-outcome-row code {
+  font-weight: 600;
+  color: var(--lp-ink);
+}
+
+.hero-outcome-row--after code {
+  color: var(--lp-primary-strong);
+}
+
+.hero-outcome-row small {
+  color: var(--lp-ink-faint);
+}
+
+.hero-outcome-row::before {
+  position: absolute;
+  inset: -3px -6px;
+  pointer-events: none;
+  content: '';
+  border-radius: var(--lp-radius-sm);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lp-primary) 40%, transparent);
+  opacity: 0;
+  animation: lp-hop 6.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* 与流程图的目标节点同拍。 */
+.hero-outcome-row--after::before {
+  animation-delay: 3250ms;
+}
+
+/* 循环动效不该在没人看的地方耗电：脚本在场时先按住，滚进视口由 landing.js 放行。
+   禁用 JS 时这条 paused 规则压根不匹配（在 `html.js` 下），亮环照常播。 */
+html.js .hero-outcome .hero-outcome-row::before {
+  animation-play-state: paused;
+}
+
+html.js .hero-outcome.is-live .hero-outcome-row::before {
+  animation-play-state: running;
+}
+
 /* ---------- Hero 双通道流程示意 ----------
  * 用普通 HTML 文本而不是 SVG <text>：文字不会溢出裁切，
  * 可被搜索引擎与 AI 爬虫直接抽取，也自动跟随字号与主题。 */
@@ -3019,12 +3123,13 @@ html.js .tool-card:hover::before {
     animation: none;
   }
 
-  /* 新增的四条同样逐项停：巡航的亮环与圆点、按下的亮边、数字落定、图标光晕。 */
+  /* 新增的五条同样逐项停：巡航的亮环与圆点、按下的亮边、数字落定、图标光晕、两态亮环。 */
   .hero-visual .flow-node::before,
   .hero-visual .flow-arrow::after,
   .btn-primary:active::before,
   .hero-visual .stat b,
-  .feature-card:hover .feature-icon::after {
+  .feature-card:hover .feature-icon::after,
+  .hero-outcome-row::before {
     animation: none;
   }
 
