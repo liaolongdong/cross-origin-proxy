@@ -141,6 +141,97 @@ export default defineContentScript({
       }
     }
 
+    // ---- 疑似被 CORS 拦下的原生请求（旁路观测，判据住在 utils/corsSuspects.ts） ----
+
+    // 与 utils/constants.ts 同名的三条字面量/上限是手工副本（该 world 必须自包含，无法 import），
+    // 成对性由 tests/corsSuspects.test.ts 按源码钉住。
+    const CORS_SUSPECTS = 'CORS_SUSPECTS';
+    const CORS_SUSPECT_MAX_COUNT = 99;
+    /** 本页最多累计几个来源（镜像 `CORS_SUSPECT_CACHE_SIZE`）：伪造包与重试风暴都得有上界 */
+    const CORS_SUSPECT_ORIGIN_CAP = 6;
+    /** 上报节流：与上面那四个数同一档（首报立即、此后每满 1s 一次，尾差由定时器补报） */
+    const CORS_REPORT_MIN_INTERVAL_MS = 1000;
+
+    /**
+     * 「这一页哪几个来源的原生请求像是没通」——按 origin 累计的笔数
+     *
+     * 为什么只看**没命中任何规则**的那一笔：命中了规则却在代理里失败，那说的是「规则没配对」，
+     * 而这一列要回答的是「哪一笔还值得建规则」——用户看得见的是控制台红字，看不见的是它属于
+     * 哪个来源，而那个来源恰恰就是该填进规则的目标地址。
+     *
+     * **刻意不观察 fetch**：一笔被 CORS 挡下的 fetch 是一条已 reject 的 promise，而给任何
+     * promise 挂上拒绝处理器就等于把它标记成「已处理」，页面自己的 `unhandledrejection`
+     * 从此收不到这一笔——Sentry 那类前端错误上报正是靠它。为了一个显示用的读数去削掉页面的
+     * 错误上报，代价不成比例。XHR 的 `error` 事件监听没有这种副作用（这一笔本来就要派发
+     * `error`），而 axios 在浏览器里默认走的正是 XHR。
+     *
+     * 与上面那四个数同一档处理：页面可伪造，收端只用于展示，绝不参与任何判定、不落 storage。
+     */
+    const corsSuspects = new Map<string, number>();
+    let corsLastReportAt = 0;
+    let corsTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function reportCorsSuspects(): void {
+      if (corsTimer !== null) {
+        clearTimeout(corsTimer);
+        corsTimer = null;
+      }
+      corsLastReportAt = Date.now();
+      const suspects = [...corsSuspects].map(([origin, count]) => ({ origin, count }));
+      window.postMessage({ channel: CHANNEL, type: CORS_SUSPECTS, data: { suspects } }, window.location.origin);
+    }
+
+    /**
+     * 记一笔并按需上报。与 `bump` 同一条铁律：不加 try/catch、不新增分支、不参与任何
+     * fallback 决策——少一笔计数可以，影响用户的请求路径不行。
+     */
+    function noteCorsOrigin(origin: string): void {
+      const known = corsSuspects.get(origin) ?? 0;
+      if (known === 0 && corsSuspects.size >= CORS_SUSPECT_ORIGIN_CAP) return;
+      corsSuspects.set(origin, Math.min(known + 1, CORS_SUSPECT_MAX_COUNT));
+      const sinceLast = Date.now() - corsLastReportAt;
+      if (corsLastReportAt === 0 || sinceLast >= CORS_REPORT_MIN_INTERVAL_MS) {
+        reportCorsSuspects();
+        return;
+      }
+      if (corsTimer === null) {
+        corsTimer = setTimeout(reportCorsSuspects, CORS_REPORT_MIN_INTERVAL_MS - sinceLast);
+      }
+    }
+
+    /**
+     * 取一个地址的 http(s) origin，非法或非 http(s)（含不透明的 `null` origin）一律返回空串
+     *
+     * 与 `utils/pageApiOrigins.ts` 的 `apiOriginOf` 是手工副本（MAIN world 自包含，无法 import），
+     * 函数体逐字同源由 `tests/corsSuspects.test.ts` 按源码钉住。两侧共用同一个 origin 口径，
+     * 于是「带疑似标记的那一行」必然也落在候选清单那套判据里，不会出现两列地址对不上。
+     */
+    function httpOriginOf(address: string): string {
+      if (typeof address !== 'string' || !address) return '';
+      try {
+        const url = new URL(address);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : '';
+      } catch {
+        return '';
+      }
+    }
+
+    /**
+     * 给一笔正要原生发出的 XHR 挂上观测。
+     *
+     * 两道收窄：只认 http(s)，只认跨域。同源请求的 `status === 0` 与 CORS 无关（它压根不受
+     * CORS 约束），把同源画成候选就是凭空多给一列可点击的地址。
+     * 复用实例不额外去重：同一实例第二次 `send()` 再失败确实是两笔，挂着的监听器只会各响一次。
+     */
+    function watchNativeXhr(xhr: XMLHttpRequest, url: string): void {
+      const origin = httpOriginOf(url);
+      if (!origin || origin === window.location.origin) return;
+      xhr.addEventListener('error', () => {
+        // `status === 0` 才是「这笔没走到能读出响应的地方」；某些封装库在别的形状上也会派 `error`
+        if (xhr.status === 0) noteCorsOrigin(origin);
+      });
+    }
+
     // Pending requests waiting for response from content script
     const pendingRequests = new Map<
       string,
@@ -885,6 +976,9 @@ export default defineContentScript({
         return; // Don't call original send
       }
 
+      // 没有规则覆盖这一笔：正是要原生发出去了。观测挂在 send 之前，因为 `error` 事件
+      // 只有在请求真正发出后才会派发；它只读不写任何状态，请求路径与此前完全一致。
+      watchNativeXhr(this, url);
       originalXHRSend.call(this, body);
     };
 

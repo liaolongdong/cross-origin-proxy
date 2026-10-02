@@ -129,6 +129,48 @@ export const PAGE_API_PROBE = 'PAGE_API_PROBE';
 /** 探测的等待上限：超时按「这一页问不到」处理，退回旧行为，绝不让点击悬着 */
 export const PAGE_API_PROBE_TIMEOUT_MS = 800;
 
+/**
+ * 拦截器（MAIN world）→ 桥接层：这一页哪些跨域请求**像是**被 CORS 拦下了
+ *
+ * 与 `PAGE_API_PROBE` 同一档，四条都成立：它是页面侧自己的观测、只存内存、不参与任何判定、
+ * 永不进 SW 路由（所以也不占 `MessageType`）。界面上的词必须是「疑似」——原生 XHR 被 CORS
+ * 拦下与断网、DNS 失败、连接被拒在页面上是同一个形状（`error` 事件 + `status === 0`），
+ * 扩展分不出这四者，说成结论就是谎报。
+ *
+ * MAIN world 侧那份字面量是手工副本（该 world 必须自包含），成对性由
+ * `tests/corsSuspects.test.ts` 按源码钉住。
+ */
+export const CORS_SUSPECTS = 'CORS_SUSPECTS';
+
+/**
+ * Popup → 桥接层：把上面那份内存读数交出来
+ *
+ * 同样不占 `MessageType`、同样不设 `isTrustedSender`：回包只有 origin 与条数，
+ * 而这两样页面自己本来就知道（它自己 `error` 掉的请求）。
+ */
+export const PAGE_CORS_PROBE = 'PAGE_CORS_PROBE';
+
+/** 面板最多列几行候选：popup 内容宽 320px，一屏放得下的候选才有点击价值 */
+export const CORS_SUSPECT_LIMIT = 6;
+
+/**
+ * 单个来源的条数上限（钳制，不是丢弃）
+ *
+ * 页面在一个重试循环里能把这个数推到几千，而「疑似被拦 4000 笔」对排查不多说什么——
+ * 该先知道的是**哪个来源**在报错。留在两位数是为了那一格在 320px 里挤不出第二行。
+ */
+export const CORS_SUSPECT_MAX_COUNT = 99;
+
+/**
+ * 桥接层那份内存快照最多存几个来源，同时也是 MAIN world 侧累计的上限（那边是手工副本）
+ *
+ * 与 `CORS_SUSPECT_LIMIT` 取同一个数是有意的：卡片上那句「检测到 $1 个来源…」画的就是这个数组
+ * 的长度，而它必须等于面板里带标记的行数——不然用户点开后会发现 8 个来源只剩 6 行，
+ * 那句总数就成了夸口。两边若将来要分开，得先把那句措辞改成不带计数的说法。
+ * 它同时是给伪造包收口的：伪造的包可以塞进上万个条目，插入时那道判据让它到 6 就停。
+ */
+export const CORS_SUSPECT_CACHE_SIZE = 6;
+
 // Alarm names
 export const KEEPALIVE_ALARM = 'sw-keepalive';
 // Chrome 120+ 允许的最小周期为 1 分钟（低于下限会被浏览器钳制并告警）

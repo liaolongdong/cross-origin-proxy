@@ -1,9 +1,10 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { MessageType } from '@/utils/types';
 import type { ProxyConfig } from '@/utils/types';
-import { CONTENT_SCRIPT_CHANNEL, PAGE_API_PROBE } from '@/utils/constants';
+import { CONTENT_SCRIPT_CHANNEL, PAGE_API_PROBE, PAGE_CORS_PROBE, CORS_SUSPECTS } from '@/utils/constants';
 import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
 import { summarizeApiOrigins } from '@/utils/pageApiOrigins';
+import { parseCorsSuspects, type CorsSuspect } from '@/utils/corsSuspects';
 import { normalizeProxyResponse } from '@/utils/proxyResponse';
 import { logger } from '@/utils/logger';
 
@@ -76,6 +77,15 @@ export default defineContentScript({
     /** 最近一次下发的配置缓存（供 MAIN world 主动请求时回放，消除注入时序竞态） */
     let lastConfig: ProxyConfig | null = null;
 
+    /**
+     * 拦截器自报的「疑似被 CORS 拦下的来源」快照（本文档内，导航即归零）
+     *
+     * 本 world 是它的**终点**：不转给 SW、不写 storage、不参与任何判定。它唯一的作用是
+     * 让 popup 那一次只读探测读得到（见下面的 `PAGE_CORS_PROBE`），因为页面自己那几笔
+     * `error` 掉的请求，SW 侧根本看不见（原生请求没经过扩展）。
+     */
+    let corsSuspects: CorsSuspect[] = [];
+
     function postSyncRules(config: ProxyConfig): void {
       lastConfig = config;
       window.postMessage(
@@ -128,6 +138,14 @@ export default defineContentScript({
           // SW 回收期本来就送不出去。计数是旁路观测，下一次节流上报会带上累计值，因此不重试、
           // 也不降级成 error——那只会给控制台添一条与用户无关的噪音。
           .catch(() => {});
+        return;
+      }
+
+      // 拦截器自报的疑似跨域失败：按来源逐个判据收口后存进本 world 的内存快照。
+      // 与上面那四个计数同一档——页面可伪造，所以只用于展示，不转 SW、不落 storage、不进判定。
+      // 空回包同样替换掉旧值：那是「这一页现在的账是这样的」，不是「读不到」。
+      if (event.data?.type === CORS_SUSPECTS) {
+        corsSuspects = parseCorsSuspects(event.data.data);
         return;
       }
 
@@ -206,6 +224,13 @@ export default defineContentScript({
         sendResponse({
           origins: summarizeApiOrigins(performance.getEntriesByType('resource')),
         });
+        return;
+      }
+      // popup 问「这一页哪几个来源像是被 CORS 拦下了」：读的就是上面那份内存快照，
+      // 同步回包、同样不需要 `return true`。读不到（这一页没有内容脚本）与读到空都由
+      // 调用方按「不说话」处理，所以这里不区分、也不补一句「没有」。
+      if (message.type === PAGE_CORS_PROBE) {
+        sendResponse({ suspects: corsSuspects });
       }
     });
 

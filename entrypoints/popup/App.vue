@@ -315,7 +315,7 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionCreateRuleFromTab') }}</div>
-          <div class="action-card__desc">{{ t('actionCreateRuleFromTabDesc') }}</div>
+          <div class="action-card__desc">{{ createRuleFromTabDesc }}</div>
         </div>
       </div>
 
@@ -334,18 +334,31 @@
       >
         <p class="api-picker-title">{{ t('apiPickerTitle') }}</p>
         <button
-          v-for="choice in apiPicker.choices"
-          :key="choice.origin"
+          v-for="row in apiPicker.rows"
+          :key="row.origin"
           type="button"
           class="api-picker-row"
-          @click="chooseApiDraft(choice.origin)"
+          :class="{ 'api-picker-row--suspect': row.suspect > 0 }"
+          @click="chooseApiDraft(row.origin)"
         >
           <span
             class="api-picker-origin"
-            :title="choice.origin"
-            >{{ choice.origin }}</span
+            :title="row.origin"
+            >{{ row.origin }}</span
           >
-          <span class="api-picker-count">{{ t('apiPickerCount', String(choice.count)) }}</span>
+          <!-- 带标记的那一格说「疑似几笔」而不是「几次」：这一行该先知道的是它像没通；
+               资源计时里读不到条数时（count = 0）这一格照样只讲疑似笔数，不必再说「次数未知」 -->
+          <span
+            v-if="row.suspect > 0"
+            class="api-picker-count api-picker-count--suspect"
+            :title="t('apiPickerSuspectHint', String(row.suspect))"
+            >{{ t('apiPickerSuspect', String(row.suspect)) }}</span
+          >
+          <span
+            v-else
+            class="api-picker-count"
+            >{{ t('apiPickerCount', String(row.count)) }}</span
+          >
         </button>
         <button
           v-if="apiPicker.fallback"
@@ -360,6 +373,12 @@
           >
           <span class="api-picker-count">{{ t('apiPickerOwn') }}</span>
         </button>
+        <p
+          v-if="apiPickerSuspectVisible"
+          class="api-picker-suspect-note"
+        >
+          {{ t('apiPickerSuspectNote') }}
+        </p>
         <p class="api-picker-boundary">{{ t('apiPickerBoundary') }}</p>
       </div>
 
@@ -566,8 +585,8 @@ import { useI18n } from '@/composables/useI18n';
 import { useDiagnosisText } from '@/composables/useDiagnosis';
 import { useProfiles } from '@/composables/useProfiles';
 import { MessageType } from '@/utils/types';
-import { type PageApiOrigin } from '@/utils/pageApiOrigins';
-import { probePageApiOrigins } from '@/utils/pageApiProbe';
+import { probeCorsSuspects, probePageApiOrigins } from '@/utils/pageApiProbe';
+import { buildPickerRows, type ApiPickerRow, type CorsSuspect } from '@/utils/corsSuspects';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import { diagnoseRequest, type Diagnosis, type DiagnosisCode } from '@/utils/diagnosis';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
@@ -707,6 +726,8 @@ const pageHitCauseText = computed(() => (pageHitCause.value ? diagnosisText(page
  * 哪些规则其实没被应用（`findDnrSkippedRules`）。任一失败都不连带另两条。
  * 另两条在同一处发出、同样互不连带：拦截器自报活动（`fetchTabInterceptorStats`）
  * 与配置广播的送达账（`fetchTabConfigSync`）。
+ * 第四处是页面自报的疑似跨域失败（`fetchCorsSuspects`）：它不描述本页**已经**被代理得怎样，
+ * 而是给下面那张「为本页创建规则」卡片提供一句话与面板里的标记，所以问不到只是少一句卖点。
  */
 async function computePageHit() {
   try {
@@ -722,6 +743,7 @@ async function computePageHit() {
       void fetchTabDnrStats(tab?.id);
       void fetchTabInterceptorStats(tab?.id);
       void fetchTabConfigSync(tab?.id);
+      void fetchCorsSuspects(tab?.id);
     }
 
     // 配置先行：「最近请求为什么是空的」那条解释与本页能不能被代理无关，非 http 页也要给
@@ -1014,13 +1036,41 @@ async function handleToggleRule(ruleId: string, enabled: boolean) {
 const currentVersion = chrome.runtime.getManifest().version;
 
 /**
+ * 页面自报的「疑似被 CORS 拦下」来源清单
+ *
+ * 空数组有两种来源：这一页确实没报过失败的原生请求，以及**问不到**（没有内容脚本、超时）。
+ * 两者都不许说成「这一页没有跨域问题」，所以界面只在非空时说话——与「配置送达账」那条同一个口径。
+ * 这份数由页面自报、同页脚本可伪造（判据见 `utils/corsSuspects.ts`），因此它只加一个「疑似」标记，
+ * 绝不参与任何开关、不写 storage、不进任何判定分支。
+ */
+const corsSuspects = ref<CorsSuspect[]>([]);
+
+/** 拉一次快照：`probeCorsSuspects` 自己把失败收成空数组，这里不需要 catch */
+async function fetchCorsSuspects(tabId: number | undefined): Promise<void> {
+  corsSuspects.value = await probeCorsSuspects(tabId);
+}
+
+/** 卡片那行说明：侦到了就先说这件事——值不值得点开，用户应该在点之前就知道 */
+const createRuleFromTabDesc = computed(() =>
+  corsSuspects.value.length > 0
+    ? t('actionCreateRuleFromTabSuspect', String(corsSuspects.value.length))
+    : t('actionCreateRuleFromTabDesc'),
+);
+
+/**
  * 「这一页在调哪些接口」的候选面板；`null` = 收起
  *
  * 面板里每一行点下去都走同一个 hash（`#add-rule-from-tab=<地址>`），只是带过去的地址
  * 从「页面文档」换成了「这一页真正在调的接口」。`fallback` 是旧行为的那一行（本页文档地址），
  * 只在本页 origin 没出现在候选里时补上——同一件事不该在同一列里出现两遍。
+ * `rows` 由 `buildPickerRows` 把两份读数拼成一列，带疑似标记的行排在最前。
  */
-const apiPicker = ref<{ choices: PageApiOrigin[]; fallback: { origin: string; draft: string } | null } | null>(null);
+const apiPicker = ref<{ rows: ApiPickerRow[]; fallback: { origin: string; draft: string } | null } | null>(null);
+
+/** 面板里有没有带「疑似」标记的行：那一句解释只在说得出这件事时出现，没标记就不必自证清白 */
+const apiPickerSuspectVisible = computed(() =>
+  apiPicker.value ? apiPicker.value.rows.some(row => row.suspect > 0) : false,
+);
 
 /** 选定一个来源（或那行本页地址）：沿用与旧行为完全相同的 hash 契约直达 Options */
 async function chooseApiDraft(draft: string) {
@@ -1029,8 +1079,12 @@ async function chooseApiDraft(draft: string) {
 }
 
 /**
- * 为当前标签页创建规则：先问这一页在调哪些接口，问得出就给候选，问不到照旧按页面地址预填。
+ * 为当前标签页创建规则：先问这一页在调哪些接口、哪些像是没通，问得出就给候选，
+ * 两句都问不到照旧按页面地址预填。
  * 非 http/https 页面（如浏览器内部页）无法代理，提示后保留 popup 不跳转。
+ *
+ * 两次探测并发发出：它们各有各的 800ms 上限，串起来就是点击后悬着 1.6 秒。
+ * 面板用的是**刷新过的那份**疑似清单（与卡片那行说明同一个数，不会点开后少一个标记）。
  */
 async function handleCreateRuleFromTab() {
   try {
@@ -1040,16 +1094,17 @@ async function handleCreateRuleFromTab() {
       ElMessage.error(t('createRuleFromTabFailed'));
       return;
     }
-    const choices = await probePageApiOrigins(tab?.id);
-    if (choices.length === 0) {
+    const [choices] = await Promise.all([probePageApiOrigins(tab?.id), fetchCorsSuspects(tab?.id)]);
+    const rows = buildPickerRows(choices, corsSuspects.value);
+    if (rows.length === 0) {
       await openOptionsPage(`#add-rule-from-tab=${encodeURIComponent(url)}`);
       return;
     }
     // 只取 origin 做「候选里有没有本页」的比对：文档地址带路径时字符串永远不相等
     const pageOrigin = new URL(url).origin;
     apiPicker.value = {
-      choices,
-      fallback: choices.some(choice => choice.origin === pageOrigin) ? null : { origin: pageOrigin, draft: url },
+      rows,
+      fallback: rows.some(row => row.origin === pageOrigin) ? null : { origin: pageOrigin, draft: url },
     };
   } catch (error) {
     logger.error('Create rule from tab failed:', error);
@@ -1778,11 +1833,28 @@ async function openOptionsPage(hash = '') {
   color: var(--cop-text-color-secondary);
 }
 
+/* 「疑似 N 笔」那一格：与 options 规则列表的「未生效」同一套危险色通道。
+   状态由文字说出来，颜色只是让它在这一列里更醒目（无障碍基线：不只用颜色表达状态）。 */
+.api-picker-count--suspect {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+/* 带标记的行加一道同色描边，让最该点的那一行先跳出来；悬停时加深，与主色那套同一节奏 */
+.api-picker-row--suspect {
+  border-color: var(--el-color-danger-light-7, #f5cccc);
+}
+
+.api-picker-row--suspect:hover {
+  border-color: var(--el-color-danger, #f56c6c);
+}
+
 /* 那行「本页地址」是旧行为，措辞与颜色都退半步，别与真候选同权重 */
 .api-picker-row--muted .api-picker-origin {
   color: var(--cop-text-color-regular);
 }
 
+/* 「疑似」那句说明与边界那句同权重：都是这份读数的限制，不是一条错误 */
+.api-picker-suspect-note,
 .api-picker-boundary {
   margin: 8px 0 0;
   font-size: 11px;

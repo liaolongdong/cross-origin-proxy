@@ -15,7 +15,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 | -------- | ---------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 名称     | 75 码点    | 36 / 52                | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                                                                                                                                                                                                                                |
 | 摘要     | 132 码点   | 100 / 127              | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                                                                                                                                                                                                                           |
-| 详细描述 | 16000 码点 | 中约 5.8K / 英约 15.9K | 中文侧余量充足，**英文侧只剩 88 码点**：中英按「行数 / 条目数 / 段落数」逐行对等同步（`tests/docs-consistency.test.ts` 守卫），所以**扩写瓶颈在英文，不在中文**。往下加新段落的唯一前提是先在英文侧腾出等量空间，见 §0.1；加字只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
+| 详细描述 | 16000 码点 | 中约 5.8K / 英约 16.0K | 中文侧余量充足，**英文侧只剩 29 码点**：中英按「行数 / 条目数 / 段落数」逐行对等同步（`tests/docs-consistency.test.ts` 守卫），所以**扩写瓶颈在英文，不在中文**。往下加新段落的唯一前提是先在英文侧腾出等量空间，见 §0.1；加字只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
 | 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
 | ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 **这个差不是「中文写得少」**。两份详细描述逐行对等：28 个段落、64 个 `- ` 条目、134 行，一条不多一条不少（`tests/docs-consistency.test.ts` 的「中英详细描述结构对等」按 `{lines, bullets, paragraphs}` 全等断言）。差的只有语言密度——2026-09-22 这一轮新增的五处内容块，中文侧 +852 码点，英文镜像 +2,781 码点，**约 3.3 倍**。所以「把中文字数追到和英文一样」只能靠给中文单独加行，而那当场就会让对等守卫变红；**不要把码点不等当缺陷去"修"**，它和「英文列表以 FAT/UAT 开头」是同一类事实：语言特性，不是覆盖差。
 
-真正的约束因此落在英文那一份上。商店按语言各填一份详细描述、各自吃 16000 上限，中文列表还剩约 10.2K，英文只剩 **88 码点**；但因为结构必须对等，**英文一满，中文同时封顶**。
+真正的约束因此落在英文那一份上。商店按语言各填一份详细描述、各自吃 16000 上限，中文列表还剩约 10.2K，英文只剩 **29 码点**；但因为结构必须对等，**英文一满，中文同时封顶**。
 
 要再扩中文，按这个顺序腾空间：
 
@@ -152,7 +152,7 @@ PY
 - 把任意一条日志复制为 cURL（按原始请求地址）；支持 HAR 1.2 导出、HAR 导入（由录制流量生成规则，新规则默认停用，确认后自行启用）、cURL 粘贴导入
 - 规则可拖拽排序、单条与批量启停/删除，按名称、匹配模式或目标地址搜索，并按状态与匹配类型筛选
 - 环境轮换时批量迁移目标域名，并给出逐条变更预览
-- 规则列表为空时可直接点快速模板（通配符代理、前缀匹配、鉴权头、改请求头）起步；删除一条规则后能立即撤销，误删不用重填
+- 规则列表为空时可直接点快速模板（通配符代理、前缀匹配、鉴权头、改请求头等）起步；删除一条规则后能立即撤销，误删不用重填
 - 把整套规则保存成命名环境快照，在 FAT / UAT / PROD 间一键切换
 - 配置以 JSON 导出；导出默认开启分享模式，剔除 Authorization / Cookie 一类请求与响应头以及 token 类查询参数（取消勾选即原样备份），导入支持覆盖或合并两种模式，同事导入即可复现同一套规则
 - 两条通道各自的命中统计：网络层取近 5 分钟的命中记录，后台通道自上次配置变更起累计（内存计数，后台工作线程被回收后从 0 重新开始）
@@ -186,7 +186,7 @@ PY
 
 界面：
 - 中文 / English 双语界面，6 套主题与浅色 / 深色 / 跟随系统
-- 弹窗提供总开关、经扩展请求数（只统计后台通道）、本页近 5 分钟的网络层命中数、自动关闭倒计时、「本页地址命中哪条规则」的预览（浏览器不会应用的网络层规则会标红），以及「为这个页面创建规则」
+- 弹窗提供总开关、经扩展请求数（只统计后台通道）、本页近 5 分钟的网络层命中数、自动关闭倒计时、「本页地址命中哪条规则」的预览（浏览器不会应用的网络层规则会标红），以及「为这个页面创建规则」——点开先列这一页在调的接口来源，像是被跨域拦下的那几个排在最前
 - 代理自动关闭：30 分钟 / 1 小时 / 2 小时 / 4 小时，基于浏览器定时器，服务工作线程重启后仍然生效
 - 快捷键：⌘⇧P（Windows/Linux 为 Ctrl+Shift+P）切换代理；配置页内 N 新建规则、/ 或 ⌘F 聚焦搜索、Esc 关闭弹窗
 
@@ -305,7 +305,7 @@ Debugging and teamwork:
 - Copy any logged request as cURL, using its original URL; HAR 1.2 export, HAR import that generates rules from recorded traffic (those rules arrive disabled until you enable them), and cURL paste import
 - Drag to reorder rule priority, enable/disable/delete one at a time or in batch, search by name, pattern or target, and filter by status and match type
 - Batch-migrate target domains across rules with a per-rule change preview
-- Start from a quick template while the list is still empty (wildcard proxy, prefix match, auth header, header override), and undo a delete immediately — a mistaken removal does not mean retyping the rule
+- Start from a quick template while the list is still empty (wildcard proxy, prefix match, auth header, header override, and more), and undo a delete immediately — a mistaken removal does not mean retyping the rule
 - Save the whole rule set as a named environment profile and switch between FAT, UAT and PROD in one click
 - Export configuration as JSON; share mode is on by default, stripping Authorization / Cookie style request and response headers plus token-like query parameters (untick it for a verbatim backup). On import you replace the current rules or merge into them, so a teammate gets the identical setup
 - Per-rule hit counts for both channels: the network layer over the last 5 minutes, the background channel since the last config change (an in-memory count that restarts when the worker is recycled)
@@ -339,7 +339,7 @@ What it is not:
 
 Interface:
 - English and Chinese UI, six themes, light / dark / system modes
-- Popup with a global switch, the request count via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, an auto-off countdown, a preview of which rule matches the page you have open (network-layer rules Chrome won't apply go red), and "create a rule for this page"
+- Popup with a global switch, the request count via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, an auto-off countdown, a preview of which rule matches the page you have open (network-layer rules Chrome won't apply go red), and "create a rule for this page" — the origins it calls, likely CORS blocks first
 - Auto-off countdown of 30 minutes, 1, 2 or 4 hours, built on browser alarms so it survives service-worker restarts
 - Keyboard shortcut Ctrl+Shift+P (⌘⇧P on macOS) to toggle proxying; on the options page N adds a rule, / or ⌘F focuses search, Esc closes the topmost dialog
 

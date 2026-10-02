@@ -99,8 +99,12 @@ export function parsePageApiOrigins(value: unknown): PageApiOrigin[] {
  *
  * 判据只有这一处：条目侧与回包侧都走它，于是「popup 能列出来的地址」与
  * 「Options 能快速建规则的地址」（`handleCreateRuleFromUrl` 同样只认 http/https）是同一件事。
+ * 导出给 `utils/corsSuspects.ts` 复用：那一份读数是页面自报的，必须用**同一个** origin 判据
+ * 才不会出现「这里收进来、那里认不出」的两套口径。
+ * MAIN world 里还有一份逐字同源的手工副本（`entrypoints/main-interceptor.content.ts` 的
+ * `httpOriginOf`，那个 world 不能 import），成对性由 `tests/corsSuspects.test.ts` 按源码钉住。
  */
-function apiOriginOf(address: string): string {
+export function apiOriginOf(address: string): string {
   if (typeof address !== 'string' || !address) return '';
   try {
     const url = new URL(address);

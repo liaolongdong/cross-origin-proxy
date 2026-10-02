@@ -230,7 +230,7 @@
               "Named environment profiles — one tap in the popup swaps the whole rule set for another environment",
               "Config restore points: a replace-import, a profile load or a batch delete that actually removed something keeps the rule set it replaces, and the last 5 are listed in Settings for one-click rollback",
               "Auto-off countdown that disables the proxy after 30 minutes to 4 hours",
-              "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's self-reported interception activity, this page's address match preview, create-rule-for-this-page and one-tap environment profile switching",
+              "Popup with global switch, requests via the extension (background channel only), this tab's network-layer hit count over the last 5 minutes, this page's self-reported interception activity, this page's address match preview, create-rule-for-this-page (origins on the page that no rule covers and that look blocked by CORS are flagged and sorted first) and one-tap environment profile switching",
               "English and Chinese UI, six themes, light / dark / system modes, keyboard shortcuts"
             ]
           },
@@ -395,6 +395,14 @@
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Network-layer redirects never reach the extension, so there is nothing to log per request. Their rule-level hit counts appear under DNR hits for the last five minutes; the quota Chrome allows for that read is limited, so the panel refreshes on demand, keeps the previous numbers when the quota is exhausted and says the stats may lag. Background-channel hits are counted separately."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "My rule looks right but the page doesn't change — what should I check, in order?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "In this order: whether the popup's master switch is on (turning it off also uninstalls the network-layer rules) → whether that rule itself is enabled → whether the page has been reloaded, because requests already sent are never rewritten retroactively → paste the real request URL into the URL match tester to see whether a rule with a smaller priority number shadows it → if you use a regex, confirm it covers the whole URL: the network layer replaces the entire URL with the substitution, the background channel only the matched span, so a partial regex lands on two different results. Complex rules give you one more clue — when the background actually recorded that this page never received that config push, the popup reads “This page has not received the latest rules — reloading it usually fixes it”, and hovering names which of the two causes it is: the document predates an install, update or reload of the extension (reloading fixes it), or the extension is disabled for this site (re-enable it from Chrome's extension menu). It only says what it is sure of: non-http(s) pages, documents still loading and pages that never had this record stay silent. One more case is a page with no rule covering it at all: the popup's “create a rule for this page” then says up front which origins look blocked by CORS — those origins carry a “suspect” marker and sort first, and they come from the page's own failing native requests that no rule caught. A CORS block, an offline page and a DNS failure are the same shape, so it is a clue about what to build first, not a verdict."
             }
           },
           {
@@ -1217,18 +1225,24 @@
                 preview and “create a rule for this page” — that last one first looks at what the page itself has been
                 requesting (fetch/XHR origins read locally from <code>performance</code> entries, up to six) and offers
                 those API addresses to pick from instead of copying only the page URL into the rule; when the page
-                reports no such requests, it prefills the page URL as before. Under that data row a line appears when it
-                has something to say, reading “page-reported”: one sentence showing two of the four counters — how many
-                requests this page's JS layer intercepted and how many it handed to the extension (a fallback swaps the
-                second number for how many went native, and with no fallback but a timeout it is how many never got a
-                response) — while a reading lets hovering expand all four with the moment the report was accepted,
-                noting that one request can count in more than one of them so they never add up; the counters accumulate
-                for the current document and reset on navigation. A fallback or a timeout used to leave nothing but a
-                console line, and “nothing was intercepted” looked exactly like “this page makes no such requests”.
-                Those four numbers are reported by the page itself and a script on it could forge them, so they stay a
-                diagnostic clue that feeds no decision, and the wording always says “page-reported”. A toolbar badge
-                shows the proxy state, and auto-off (30 minutes to 4 hours, on <code>chrome.alarms</code>) closes the
-                switch so a forgotten proxy never outlives the debugging session.
+                reports no such requests, it prefills the page URL as before. And when a request on the page looks
+                blocked by CORS — a native XHR that no rule covers, failing as <code>error</code> +
+                <code>status === 0</code> — its origin is flagged “N suspect” and sorted first, while the card says “N
+                origin(s) here look blocked by CORS” before you even click. Being blocked by CORS, being offline, a DNS
+                failure and a refused connection are the same shape to an extension, so that flag is a clue about what
+                to create first, not a verdict; the numbers are page-reported, kept in memory and used for nothing but
+                what you see here. Under that data row a line appears when it has something to say, reading
+                “page-reported”: one sentence showing two of the four counters — how many requests this page's JS layer
+                intercepted and how many it handed to the extension (a fallback swaps the second number for how many
+                went native, and with no fallback but a timeout it is how many never got a response) — while a reading
+                lets hovering expand all four with the moment the report was accepted, noting that one request can count
+                in more than one of them so they never add up; the counters accumulate for the current document and
+                reset on navigation. A fallback or a timeout used to leave nothing but a console line, and “nothing was
+                intercepted” looked exactly like “this page makes no such requests”. Those four numbers are reported by
+                the page itself and a script on it could forge them, so they stay a diagnostic clue that feeds no
+                decision, and the wording always says “page-reported”. A toolbar badge shows the proxy state, and
+                auto-off (30 minutes to 4 hours, on <code>chrome.alarms</code>) closes the switch so a forgotten proxy
+                never outlives the debugging session.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -2647,6 +2661,27 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 exhausted and says the stats may lag. Background-channel hits are counted separately.
               </p>
             </details>
+            <details>
+              <summary>My rule looks right but the page doesn't change — what should I check, in order?</summary>
+              <p>
+                In this order: whether the popup's master switch is on (turning it off also uninstalls the network-layer
+                rules) → whether that rule itself is enabled → whether the page has been reloaded, because requests
+                already sent are never rewritten retroactively → paste the real request URL into the URL match tester to
+                see whether a rule with a smaller priority number shadows it → if you use a regex, confirm it covers the
+                whole URL: the network layer replaces the entire URL with the substitution, the background channel only
+                the matched span, so a partial regex lands on two different results. Complex rules give you one more
+                clue — when the background actually recorded that this page never received that config push, the popup
+                reads “This page has not received the latest rules — reloading it usually fixes it”, and hovering names
+                which of the two causes it is: the document predates an install, update or reload of the extension
+                (reloading fixes it), or the extension is disabled for this site (re-enable it from Chrome's extension
+                menu). It only says what it is sure of: non-http(s) pages, documents still loading and pages that never
+                had this record stay silent. One more case is a page with no rule covering it at all: the popup's
+                “create a rule for this page” then says up front which origins look blocked by CORS — those origins
+                carry a “suspect” marker and sort first, and they come from the page's own failing native requests that
+                no rule caught. A CORS block, an offline page and a DNS failure are the same shape, so it is a clue
+                about what to build first, not a verdict.
+              </p>
+            </details>
 
             <h3
               class="faq-category"
@@ -2820,7 +2855,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
                   <a href="#faq-basics">Basics and matching<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
-                  <a href="#faq-channels">Channels, CORS and performance<span class="faq-toc-n">4</span></a>
+                  <a href="#faq-channels">Channels, CORS and performance<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
                   <a href="#faq-mock">Mock and failure injection<span class="faq-toc-n">3</span></a>
