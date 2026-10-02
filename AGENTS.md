@@ -19,6 +19,7 @@
 | 构建     | `pnpm build`（输出 `.output/chrome-mv3`）                                                                                   |
 | 打包     | `pnpm build:zip`（产出 `.output/<name>-<version>-chrome.zip`，发布链路用的就是它）                                          |
 | 商店素材 | `pnpm assets` / `pnpm assets:en`（生成商店图与落地页图）                                                                    |
+| 宣传视频 | `pnpm promo` / `pnpm promo:en`（实拍商店宣传视频，要本机 Chrome for Testing 与 ffmpeg，CI 不跑）                            |
 | 发版     | release-please 开出待合并的 PR（写版本号与 CHANGELOG 小节）→ 人合并 → 人 `git tag vX.Y.Z`，**分两条命令**先推 tag 再推 main |
 | 鉴权预检 | `pnpm exec wxt submit --dry-run`（只验商店凭据，不上传不提审；需 `.env.submit`，已 gitignore）                              |
 | 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                                                                                          |
@@ -59,7 +60,7 @@
 | 版本历史                  | `CHANGELOG.md`（唯一事实源；小节由 release-please 开出、release 工作流把对应小节切成 GitHub Release 说明；顶部「待发布」区是人工草稿）                                                                                                                                                                                             |
 | 四条自动化链路            | `.github/workflows/{ci,deploy-pages,release,release-please}.yml`；共用校验 `.github/actions/verify`；机器人只起草版本 PR、发版仍是人推 tag（`release-please-config.json` 里 `skip-github-release: true`）                                                                                                                          |
 | 产品落地页 / 隐私政策     | `docs/index.html`（中，站点根）、`docs/en.html`（英）、`docs/privacy.html`、`docs/llms.txt`（新增页面必须中英成对）                                                                                                                                                                                                                |
-| 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）                                                                                                                                                                                                                                                  |
+| 商店/落地页图生成         | `scripts/generate-store-assets.mjs`（从 `screenshots/` 派生 1280×800 等精确尺寸）、`scripts/record-promo-video.mjs`（headless Chrome + CDP 实拍商店宣传视频，出 `store-assets/promo/` 下的 mp4 与 440×280 静帧）                                                                                                                   |
 | WXT / 测试配置            | `wxt.config.ts`、`vitest.config.ts`（纯 vitest，alias `@` + node 环境）                                                                                                                                                                                                                                                            |
 
 ## 架构总览
@@ -182,6 +183,7 @@
   - 发布、CI、Pages、仓库展示信息变化：`.github/docs/RELEASING.md`（凭据与发版流程）、`.github/docs/GITHUB.md`（一次性仓库设置清单）、`.github/workflows/*` 与 `.github/actions/verify`。
   - manifest 描述、权限、命令或配置变化：`wxt.config.ts` 及对应 `_locales` 文案；同时同步 `.github/docs/CHROMEWEBSTORE.md`（商店文案/权限/截图清单）与 `docs/` 落地页（能力、FAQ、隐私政策）。
   - 商店图或落地页图变化：改 `scripts/generate-store-assets.mjs` 后跑 `pnpm assets && pnpm assets:en`，不手工改图片。
+  - 商店宣传视频变化：改 `scripts/record-promo-video.mjs` 的镜头脚本后跑 `pnpm promo && pnpm promo:en`（要本机 Chrome for Testing 与 ffmpeg，CI 不跑），产物与商店图同一口径只留本地（`store-assets/promo/`，已 gitignore），不手工改；实测参数与**未核验的后台限制**记在 `.github/docs/CHROMEWEBSTORE.md` §2 的 Video notes，改这一栏必须把两边一起说清楚，不许把没验过的上限写成事实。
 
 ## 测试与验证
 
@@ -224,7 +226,7 @@
   2. **规则拖拽排序只有指针路径**：`RuleTable.vue` 的行 `dragstart` 无键盘等价物。键盘用户改优先级数值可达到同样的生效顺序，只有「列表顺序」这一件事是鼠标独占。
   3. **7 个 Options 弹窗不做 `v-if` 惰性挂载**：`defineAsyncComponent` 只保证分片不进首屏 chunk，页面挂载时仍会取回并实例化全部弹窗（约 130kB JS + 60kB CSS）。收益仅几毫秒到二十毫秒，而改造要碰每个弹窗的初始化路径——见「常见陷阱 · Element Plus / i18n」。
   4. **弹窗「页面自报」那一行的完整四个数只有指针可达**：句子上只带两个数，其余三个数与采信时刻走原生 `title` 悬停，没有点击展开、也没有 `focus`/键盘唤出。这一行是**纯展示的诊断线索**（可被同页脚本伪造，绝不参与判定），为它加可聚焦语义与展开状态，把「最不该被当结论的数据」抬成了界面主角；句子本身已经说了最该先知道的那件事。
-- **商店文案**：`public/_locales` 承载搜索关键词（CORS/跨域/环境切换/Mock），`CHROMEWEBSTORE.md` 是商店表单的唯一素材源；截图由 `pnpm assets` 生成（商店只接受 1280×800 或 640×400，最多 5 张，像素级校验）。
+- **商店文案**：`public/_locales` 承载搜索关键词（CORS/跨域/环境切换/Mock），`CHROMEWEBSTORE.md` 是商店表单的唯一素材源；截图由 `pnpm assets` 生成（商店只接受 1280×800 或 640×400，最多 5 张，像素级校验），宣传视频由 `pnpm promo` 实拍（后台那一栏收什么格式、时长与体积上限**本机未核验**，只记产物实测值，见 `CHROMEWEBSTORE.md` §2 Video notes）。
 - **命名身份（两层，互为直译，不得混用）**：工程身份 = `cross-origin-proxy`（`package.json` 的 `name`、GitHub 仓库名、Pages 路径基、`pnpm build:zip` 产物名）；品牌身份 = 「跨域代理助手 / Cross-Origin Proxy」（商店名 `extensionName`、`extensionShortName`、HeaderBar、popup 标题、落地页 `<title>` 与 schema `name`）。品牌名是描述性短语（与用户查询语序一致，利于商店搜索与 AI 实体消歧），刻意不造臆造品牌词——FAT/UAT 是中国研发语境黑话，中文是主市场。工程身份曾被写成 `web-cross-origin`、`web-proxy` 并残留于包名，2026-09 已统一；`web-proxy` 在 GitHub `in:name` 有 5471 个仓库（且语义撞 VPN/翻墙代理）、`web-cross-origin` 不是任何检索短语，两者都不要再改回去。起量后若要加品牌前缀，只改商店名称字段与 HeaderBar：扩展 ID 不变、已装用户无感；**仓库名与 Pages 地址不动**，因为隐私政策 URL 是商店审核项，改动需重新提审。
 
 ## 常见陷阱

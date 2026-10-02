@@ -413,9 +413,18 @@ Redirects a page's API requests to another backend environment and lets develope
 | Screenshot 1–5（英文） | 1280×800    | ✅ Ready | `store-assets/screenshots-en/0X-*.png`（英文界面，标题与说明为英文）                  |
 | Small promo tile       | 440×280     | ✅ Ready | `store-assets/tiles/small-tile-zh.png` / `small-tile-en.png`                          |
 | Marquee promo tile     | 1400×560    | ✅ Ready | `store-assets/tiles/marquee-zh.png` / `marquee-en.png`                                |
+| Promo video（中文）    | 1280×720    | ✅ Ready | `store-assets/promo/promo-1280.mp4`（50.8s / 13.1 MiB，`pnpm promo` 实拍）            |
+| Promo video（英文）    | 1280×720    | ✅ Ready | `store-assets/promo/promo-1280-en.mp4`（50.7s / 13.0 MiB，`pnpm promo:en` 实拍）      |
+| Video still（中／英）  | 440×280     | ⚠️ 待核  | `store-assets/promo/promo-thumb-440x280{,-en}.jpg`（是否需要这张由后台当场说，见下）  |
 | GitHub social preview  | 1280×640    | ✅ Ready | `store-assets/tiles/github-social-preview.png`（仓库 Settings → Social preview 上传） |
 
 **Screenshot notes**：每张图顶部带一句能力标题 + 一行说明，主体是真实界面截图（非 mockup、不含任何真实内网域名或 token）。商店只接受 **1280×800 或 640×400**，像素级校验，最多 5 张——顺序按「先讲清主用途 → 再讲能力 → 最后讲开关可见性」排列。标题与说明只写**这张图里画得出来的东西**：规则表单是可滚动的，所以 02 说「匹配 / 重写 / 方法 / 查询参数 / 请求头 + `{{凭据变量}}`」，Mock、延迟、阻断留给详细描述与落地页。落地页与 README 另有两张不进商店的图（`config-import`、`credential-variables`），因为 5 张是硬上限。
+
+**Video notes**：两条片子由 `pnpm promo`（中文列表）与 `pnpm promo:en`（英文列表）实拍生成，脚本是 `scripts/record-promo-video.mjs`——起一个 headless Chrome for Testing，用 CDP 的 `Extensions.loadUnpacked` 装上 `.output/chrome-mv3`（**不是** `--load-extension`，那样会同时存在两份实例），先种一份演示配置，再按镜头脚本点真实入口，全程按固定节拍抓 `Page.captureScreenshot`，最后交 ffmpeg 出片。镜头依次是：首屏规则表 → 滚到下半部 → 请求日志抽屉 → **URL 匹配预演里真的敲进一个地址**（输入框有值、命中规则、重写后的 URL 改动段高亮、转发通道那几行同时在场，所以缩略图取这一拍）→ 添加规则表单 → 设置弹窗换主题（换到粉色再回品牌蓝，整页换肤看得见）→ 关总开关再打开。演示数据是 3 条规则 + 4 条日志，域名统一 `fat-api.example.com` / `uat-api.example.com`，不含任何真实内网域名、token 或账号。
+
+2026-10-02 用 1.4.1 构建实拍的参数（两条同一套镜头脚本，只差界面语言与那三个规则名）。**跟着脚本走、不会漂的那部分**：十五拍停留时长合计 48.9s，加上每拍点击与尾部那 300ms，就是产物时长——中文 50.83s、英文 50.67s（ffprobe 的 `duration`）；容器一律 mp4 / **h264 High / 30 fps**，产物 1525 帧与 1520 帧；`ffprobe` 读出来是 `yuvj420p(pc, bt709/unknown/unknown)`，编码侧那行报的是 `nv12`——同一个东西，`yuvj420p` 就是「420p + full range（`pc`）」的写法，`color_space` 由 `-colorspace bt709` 钉住，而 `color_primaries` / `color_trc` 这两项 videotoolbox 不吃、恒为 `unknown`（sRGB 的 ICC 描述文件仍然随包）。**随机器负载漂的那部分**：实抓帧数（中文 632、英文 686，即约 12.4 与 13.6 fps）、平均码率（2159 / 2152 kbps）、体积（13,717,148 / 13,626,309 字节）。同一套脚本连跑两轮，中文那条的体积从 14,020,114 掉到 13,717,148 字节、帧数从 708 掉到 632——所以这几个数只能读成「本轮实测」，不是规格；要核对就对着产物跑一次 `ffprobe -select_streams v:0 -show_entries stream=codec_name,profile,pix_fmt,width,height,avg_frame_rate,nb_frames -show_entries format=duration,size,bit_rate`。实抓之所以只有 12–14 fps：`Page.startScreencast` 在 headless=new 下给的是缩小过的表面（实测 1280×720 视口只回 756×413 的帧，放大就是糊的且比例不对，所以没用它），改成按 60ms 节拍抓 `Page.captureScreenshot` 后，抓取本身约 40ms 一拍就成了上限，余下由 ffmpeg 的 `fps=30` 补帧到恒定帧率。这台机器的 ffmpeg **没有 libx264 / libvpx / vp9**，编码器是 macOS 硬件的 `h264_videotoolbox`——换平台要一起换脚本里 `FF_ARGS` 那一条 `-c:v`。
+
+**未核验项（必须按后台当场的说法来）**：商店后台「宣传视频」那一栏到底收哪些容器格式、时长与体积上限是多少、要不要自定义封面，本机**一条都没能核验**——`developer.chrome.com` 在这台机器上取不到（WebFetch 失败），匿名访问商店文档也没有可用的凭据。所以表里那两行只记**产物自己**的实测值，`⚠️ 待核` 那一行是「脚本顺手按小型图块那枚 440×280 出的静帧，后台若要封面就是它，不要就不传」。若那一栏只接受外链（YouTube 一类）而不是本地文件，这两条 mp4 就是喂给那条外链的源片，需要先自行托管再回填链接——**这一步同样没验过**，上传时以 Dashboard 当场报的限制为准。
 
 ## 3. Permissions Justification
 
@@ -600,6 +609,7 @@ PY
 - [ ] 中文列表 5 张按 `01-rules-overview` → `05-popup` 的顺序上传——前 3 张在搜索结果里可见，顺序别打乱
 - [ ] 先切到 English 本地化列表再传 `screenshots-en/` 的 5 张；英文图不要传进默认语言
 - [ ] 小型图块 440×280 与大型图块 1400×560 各按语言传对应版本（`store-assets/tiles/`）
+- [ ] 宣传视频按语言各传一条：`store-assets/promo/promo-1280.mp4`（中文列表）与 `promo-1280-en.mp4`（英文列表）——**别把中文那条挂到英文列表**。后台那一栏的容器格式、时长与体积上限本机未核验（第 2 节 Video notes 说明了为什么），以它当场报的说法为准；要封面就用同批的 `promo-thumb-440x280{,-en}.jpg`
 - [ ] 没有把第 6 张深色主题图传进商店——它只用于产品站
 - [ ] 截图与这次要提交的包体行为一致，且不含任何真实内网域名或 token（示例统一 `fat-api.example.com` / `uat-api.example.com`）
 

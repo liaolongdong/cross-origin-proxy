@@ -1174,6 +1174,27 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(Number(declared![1]), '中文详细描述码点数与 §0 记录不符').toBeCloseTo(measured[0], 1);
       expect(Number(declared![2]), '英文详细描述码点数与 §0 记录不符').toBeCloseTo(measured[1], 1);
     });
+
+    /**
+     * 可再生的本地产物根，一份都不许进 git 索引。
+     *
+     * 判据取 `git ls-files` 而不是 `git check-ignore`：后者默认跳过已跟踪路径，
+     * 恰好放过这里要防的那一件事（有人真的把片子 `git add` 了进去）。2026-09 那次是
+     * `.test-tmp/` 里的 Chrome for Testing 把 `.git` 撑到 195MB，重写历史才清掉；
+     * `store-assets/` 现在又多了一对 13MB 量级的宣传视频（`pnpm promo` 的产物），
+     * 是同一件事的第二条路，所以按前缀钉住，不靠人记得 `.gitignore` 还在。
+     */
+    it('可再生的本地产物不进 git 索引', () => {
+      const LOCAL_ONLY_ROOTS = ['.test-tmp/', 'store-assets/', 'marketing/'];
+      const LOCAL_ONLY_FILES = ['.env.submit'];
+      const tracked = [...trackedFiles()];
+      const leaked = tracked.filter(
+        file => LOCAL_ONLY_ROOTS.some(root => file.startsWith(root)) || LOCAL_ONLY_FILES.includes(file),
+      );
+      expect(leaked, '这些路径可再生、且单个文件就是十几 MB，入库就是把仓库撑爆的那一步').toEqual([]);
+      // 空索引会让上面那句永远绿，所以把量具自己钉一下。
+      expect(tracked.length, 'git ls-files 一条路径都没读到，这条守卫等于空转').toBeGreaterThan(100);
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -34,6 +34,12 @@ export default [
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
+        // scripts/record-promo-video.mjs 驱动 CDP 用的三个运行时全局：
+        // setTimeout/clearTimeout 是 node 定时器，WebSocket 是 Node 22 起内置的全局
+        //（该脚本按 `node --check` 无依赖运行，不引 ws 包）。
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        WebSocket: 'readonly',
       },
     },
     rules: {
