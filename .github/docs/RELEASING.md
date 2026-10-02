@@ -180,6 +180,18 @@ Actions → **Release** → **Run workflow**：
 
 Release 创建步骤是幂等的：同一个 tag 重跑会更新说明并 `--clobber` 覆盖资产，不会报"已存在"。
 
+**Secrets 还没配、而这一次就想把包送进去**：本机直传与链路做的是同一件事（都是 `wxt submit`），凭据读 `.env.submit`（§1.2 末尾那句 `wxt submit init` 生成的那份），不需要动仓库设置。
+
+```bash
+pnpm build:zip
+pnpm exec wxt submit --dry-run    # 先验鉴权——别把审核配额浪费在撞 401 的那一刻
+pnpm exec wxt submit --chrome-zip .output/<包名>-<版本>-chrome.zip --chrome-publish-target default
+```
+
+它与上面那条链路唯一的差别是**它不动 refs**：GitHub Release 那一侧要么已经存在（正是「tag 早就推了、商店没吃到包」这种状态），要么得另外补一次 `git tag` + 推 tag。两条路都走得通，代价是商店的号与 GitHub 的号从此可以不一致，§5 那套措辞纪律（落地页页脚、`softwareVersion`、§8 状态列说的都是**商店在装**那个号）必须跟着走。另外两个档位：`--chrome-skip-submit-review` 只上传不提审，去 Dashboard 人工核对后再手动提交；`--chrome-review-exemption` 走加急审核，配额在 Google 侧、数量有限，留给真正的紧急修复。
+
+**商店落后好几个版本时，只交最新那一份**。商店吃的是「当前这个包 + 更新说明」，不是将中间每个版本号补齐；依次上传只会重复消耗审核配额，还把已经修好的东西退回商店一次。
+
 **灰度**：`wxt submit` 支持 `--chrome-deploy-percentage`（1–100），本工作流默认全量。需要灰度时把该 flag 加进 `Submit to Chrome Web Store` 步骤，或本机直接跑：
 
 ```bash
