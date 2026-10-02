@@ -16,9 +16,11 @@
  *    否则按 `.test-tmp/chrome-mac-<arch>` 与 `~/.cache/chrome-for-testing/` 的顺序找；
  * 3. ffmpeg，且**这台机器的 ffmpeg 没有 libx264 / vp9**，只有 `h264_videotoolbox`
  *    （macOS 硬件编码）。换平台要改下面 `FF_ARGS` 里的编码器。
+ * 4. Node 22+：CDP 那一层直接用 node 自带的全局 `WebSocket`，不为它引 `ws` 依赖。
  *
- * 产物落在 `store-assets/promo/`（已 gitignore，与 `pnpm assets` 那批商店图同一口径：
- * 可再生，所以不入库）。演示数据里没有任何真实内网域名、token 或账号。
+ * 交付物落在 `store-assets/promo/`（已 gitignore，与 `pnpm assets` 那批商店图同一口径：
+ * 可再生，所以不入库）；中间件（帧序列与那份 profile）落在 `.test-tmp/promo/`，同样已
+ * gitignore，出片成功后一并删掉，失败时留着当现场。演示数据里没有任何真实内网域名、token 或账号。
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -53,14 +55,24 @@ const expand = pattern => {
     .filter(p => fs.existsSync(p));
 };
 
+/** Chrome for Testing 的解压目录按架构命名（`chrome-mac-arm64` / `chrome-mac-x64`），
+ *  而 `os.arch()` 在 macOS 上给出的正是这两个后缀本身，不需要第二张映射表。 */
+const CHROME_ARCH = os.arch() === 'arm64' ? 'arm64' : 'x64';
+
 /** 找 Chrome for Testing：环境变量优先，其次本机已知的两处落点，最后退到系统 Chrome。
- *  找不到就把三条修法一起说出来——这一步失败得越早，越不会白跑一场录制。 */
+ *  找不到就把三条修法一起说出来——这一步失败得越早，越不会白跑一场录制。
+ *
+ *  缓存那一路必须跟着本机架构走：`chrome-mac-x64` 写死在候选里，在 Apple Silicon 上
+ *  永远匹配不到（那边解压出来是 `chrome-mac-arm64`），于是这条候选形同不存在——
+ *  而文件头承诺的是「按 `.test-tmp/chrome-mac-<arch>` 与 `~/.cache/chrome-for-testing/` 找」。
+ *  这里用 `os.arch()` 现取而不是再套一层通配：`expand` 只展一个 `*`（见上），
+ *  版本目录那个通配位已经用掉了，一条模式里两个 `*` 会把后一个当字面量拼出来。 */
 const findChrome = () => {
   const APP = 'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
   const candidates = [
     process.env.CHROME_BIN,
     path.join(ROOT, '.test-tmp', 'chrome-mac-*', APP),
-    path.join(os.homedir(), '.cache', 'chrome-for-testing', '*', 'chrome-mac-x64', APP),
+    path.join(os.homedir(), '.cache', 'chrome-for-testing', '*', `chrome-mac-${CHROME_ARCH}`, APP),
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ].filter(Boolean);
   for (const pattern of candidates) {
@@ -96,8 +108,16 @@ if (!CHROME) {
   missing.push(
     '找不到 Chrome for Testing。三种修法任选：' +
       '① `CHROME_BIN=/path/to/chrome pnpm promo`；' +
-      '② 把 Chrome for Testing 解压到 `.test-tmp/chrome-mac-x64/`（该目录已 gitignore）；' +
+      `② 把 Chrome for Testing 解压到 \`.test-tmp/chrome-mac-${CHROME_ARCH}/\`（该目录已 gitignore，架构后缀按本机现取）；` +
       '③ 装一份系统 Chrome 到 /Applications（未在本仓验过它吃不吃 Extensions.loadUnpacked）。',
+  );
+}
+/* CDP 那一层用的是 Node 自带的全局 WebSocket，没有再引 `ws` 依赖。这个全局在 Node 22 才稳定可用，
+ * 而本机 PATH 上同时躺着旧版 node（`/usr/local/bin/node` 是残留的 v16）——按能力现测比写死版本号诚实：
+ * 缺什么就说缺什么，而不是让人去猜哪一个大版本开始算「够新」。 */
+if (typeof globalThis.WebSocket !== 'function') {
+  missing.push(
+    `当前 node（${process.version}）没有全局 WebSocket，连不上 CDP。切到 Node 22+ 再跑，例如 \`nvm use 22 && pnpm promo\`。`,
   );
 }
 if (!fs.existsSync(path.join(EXT, 'manifest.json'))) {
@@ -122,6 +142,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const NAMES = EN
   ? { wildcard: 'FAT → UAT API', mock: 'Mock user API', slow: 'Slow network (loading)' }
   : { wildcard: 'FAT → UAT 接口', mock: 'Mock 用户接口', slow: '慢网络（加载态）' };
+
+/** `components/options/HeaderBar.vue` 里 `.header-actions` 那六个按钮的 i18n 键，
+ *  顺序 = 模板里的 DOM 顺序。镜头脚本按索引点按钮，索引能不能对上号只由这个顺序保证，
+ *  所以首屏那道闸门拿它和界面上的文字逐格比（见下面 `HEADER_LABELS` 的用处）。 */
+const HEADER_KEYS = ['addRule', 'tabLogs', 'urlTest', 'importExportConfig', 'openProfiles', 'tabSettings'];
+const HEADER_LABELS = (() => {
+  const file = path.join(ROOT, 'locales', EN ? 'en' : 'zh_CN', 'options.json');
+  const dict = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return HEADER_KEYS.map(key => {
+    // 键被改名或删掉，这里必须先炸——否则期望清单变成一串 undefined，界面上一个字都对不上
+    if (typeof dict[key] !== 'string') throw new Error(`${path.relative(ROOT, file)} 里读不到按钮文案键 ${key}`);
+    return dict[key];
+  });
+})();
 
 /* ───────── 演示数据：三条规则 + 四条日志，全部是示例域名，不含任何真实凭据 ───────── */
 
@@ -254,13 +288,28 @@ const chrome = spawn(
   ],
   { stdio: ['ignore', 'pipe', 'pipe'] },
 );
-process.on('exit', () => {
+/** 收掉那个 headless Chrome：它带着 `--remote-allow-origins=*` 的调试端口和本机的
+ *  `--user-data-dir`，进程活着就意味着一个「任何来源都能连的 CDP 门面」开着。
+ *
+ *  只挂 `exit` 是不够的：`process.on('exit')` 在 SIGTERM/SIGHUP 默认终止下根本不跑，
+ *  Ctrl-C（SIGINT）同理，于是「录到一半中止」= 一个孤儿 Chrome 常驻后台，
+ *  下一次重跑还会因为 profile 被占而行为不可预期。三种信号各接管一次，走完清理再按
+ *  原语义退出；`exit` 那道留着兜住任何绕过信号处理器的出口路径。 */
+const killChrome = () => {
   try {
     chrome.kill('SIGKILL');
   } catch {
     /* noop */
   }
-});
+};
+process.on('exit', killChrome);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    console.error(`\n收到 ${signal}，中止录制（产物不会写出，避免留下一条说假话的片子）`);
+    killChrome();
+    process.exit(1);
+  });
+}
 
 const wsUrl = await new Promise((resolve, reject) => {
   let buf = '';
@@ -405,8 +454,18 @@ const first = JSON.parse(probe.result.value);
 console.log('首屏 =', probe.result.value);
 // 空白页也能一路"录"出几十秒，所以这里就断：视口要是 1280×720，界面要真的挂载了。
 if (first.vw !== 1280 || first.vh !== 720) throw new Error(`视口不是 1280×720，而是 ${first.vw}×${first.vh}`);
-if (!first.btns?.length) throw new Error('header 按钮一个都没找到——Vue 没挂载，录下去只是空白幻灯片');
 if (!first.rows) throw new Error('规则表 0 行——种数据没生效，录出来的表是空的');
+/* header 那六个按钮的文字按 `components/options/HeaderBar.vue` 的 DOM 顺序现读 locale JSON。
+   这一比对是为了下面那几拍的**索引**成立：往 header 里插一个按钮或换个序，
+   `clickNthHeaderButton(1)` 点开的就不是日志抽屉了，而片子照样一分钟填满、exit code 照样是 0，
+   只是画面在讲另一件事——这种片子没人看得出来，直到它传上商店。
+   文字从本仓的文案里读，不抄第二份清单：改措辞不用回来对，改结构当场红。 */
+if (first.btns?.join('|') !== HEADER_LABELS.join('|')) {
+  throw new Error(
+    `header 按钮和镜头脚本假设的不是同一串：界面「${(first.btns ?? []).join(' / ')}」 vs ` +
+      `期望「${HEADER_LABELS.join(' / ')}」（键序见 HEADER_KEYS）`,
+  );
+}
 // 两条片子分别传中英两份列表；英文那条要是没真的切成英文界面，就是一张挂错语言的片子，
 // 上传之后没人看得出来（界面是中文、列表是英文）。标签页标题由入口 main.ts 按应用内 i18n 设。
 const wantTitle = EN ? /options|cross-origin/i : /配置|跨域/;
@@ -423,6 +482,9 @@ if (!wantTitle.test(first.title)) {
 
 const frames = [];
 let recording = true;
+/** 抓帧通道一旦坏了就没法恢复（每一次 `send` 都是同一个 sessionId 上的往返），所以循环一失败就 break，
+ *  这里存下的就是那一次、也是唯一一次失败的原因。它必须一路带到编码前——见下面「4. 落帧 + 编码」。 */
+let captureFailure = null;
 
 /** 抓一帧并记账。首帧的真实尺寸由调用方核（见下面那道闸门），尺寸不对就没必要录完整场。 */
 const grabFrame = async () => {
@@ -445,7 +507,9 @@ const captureLoop = (async () => {
     try {
       await grabFrame();
     } catch (e) {
-      console.log(`  抓帧失败：${e.message}`);
+      /* 不能只 `console.log` 然后继续走镜头脚本：那样剩下十几拍录的是同一帧静止画面，
+         而主流程一无所知，最后照样出片、照样 exit 0，文档里那一栏就写成「✅ Ready」。 */
+      captureFailure = e;
       recording = false;
       break;
     }
@@ -454,8 +518,9 @@ const captureLoop = (async () => {
   }
 })();
 
-/** 从 JPEG 的 SOF0/SOF2 段读宽高——不外包给 ffprobe：喂管道给它读不出尺寸，
- *  而"读不出"会被下面那道尺寸闸门当成失败，把一次好录制白白中止。 */
+/** 从 JPEG 的 SOF0/SOF2 段读宽高。不为此多依赖一个 ffprobe：前置检查只验了 ffmpeg 在位，
+ *  而尺寸闸门（下面那一道 1280×720）要的是「帧到底多大」这个事实本身，
+ *  拿不到答案时它必须失败得清楚，不是「探测工具没跑起来」。 */
 const jpegDims = buf => {
   for (let i = 2; i + 9 < buf.length;) {
     if (buf[i] !== 0xff) {
@@ -566,10 +631,13 @@ const pickSwatch = n =>
  * ② 必须走原生 value setter：el-input 的 v-model 挂在原生 input 事件上，
  *    直接 el.value = …… 会被 Vue 读过的那个 getter 掩盖——框里有字，
  *    但 testUrl 仍是空串；Vue 那边绑定值没变，也就不会把 DOM 写回去，
- *    于是「读回来有值」和「界面出了结果」是两件事，两个都得断。 */
+ *    于是「读回来有值」和「界面出了结果」是两件事，两个都得断。
+ * ③ `PICK_INPUT` 那句「没找到 input」的回落必须返回 JSON：打字那一拍不看返回值，
+ *    最后那一拍要 `JSON.parse` 它，返回裸串 `'no-input'` 会让 parse 先抛 `SyntaxError`，
+ *    于是下面那句专门写好的「URL 没有真的打进输入框」永远显示不出来。 */
 const PICK_INPUT =
   "const el = [...document.querySelectorAll('.url-test-input-row input')].find(i => !i.closest('.el-select')); " +
-  "if (!el) return 'no-input'; ";
+  "if (!el) return JSON.stringify({ value: null, hit: null, missing: 'no-input' }); ";
 
 const typeIntoUrlTest = async text => {
   for (let i = 4; i <= text.length + 4; i += 4) {
@@ -601,12 +669,23 @@ const typeIntoUrlTest = async text => {
   );
   console.log(`  typed -> ${r.result.value}`);
   const out = JSON.parse(r.result.value);
-  if (out.value === 'no-input' || !out.value) throw new Error('URL 没有真的打进输入框——那一行的 input 没找到');
+  // 三种「这一拍其实没录上东西」分开说，因为修法完全不同：选择器失效 / 敲进去的字没留住 / 结果块没渲染。
+  if (out.missing) {
+    throw new Error('URL 没有真的打进输入框——.url-test-input-row 里没找到非 el-select 的 input，先看那个类名还在不在');
+  }
+  if (out.value !== text) {
+    throw new Error(`输入框里是「${out.value}」，不是打进去的「${text}」——画面上的地址和这拍要说的不是同一条`);
+  }
   if (!out.hit) throw new Error('输入框有值但没渲染出命中结果块——这一拍没有信息量');
 };
 
+/** 镜头脚本里每一拍的停留时长累加起来，就是「这一次录制本该有多长」。
+ *  计在 `step` 这个唯一出口里，而不是另写一份常量——改镜头的人不需要记得回来对账。 */
+let plannedMs = 0;
+
 const step = async (label, holdMs, fn) => {
   console.log(`· ${label}`);
+  plannedMs += holdMs;
   if (fn) await fn();
   await sleep(holdMs);
 };
@@ -655,12 +734,28 @@ await step('再打开，收尾', 3000, () =>
 );
 
 recording = false;
+// 循环退出时最后一帧已经入账（`await` 等的就是那一次在途抓帧 + 节拍 sleep），不必再补一段等待。
 await captureLoop;
-await sleep(300);
 
 /* ───────── 4. 落帧 + 编码 ───────── */
 
-if (frames.length < 20) throw new Error(`只收到 ${frames.length} 帧，不够成片`);
+/* 两道闸门，各拦一种「出得来片子，但片子在说谎」：
+ * ① 抓帧通道中途坏掉——循环自己 break 之后，镜头脚本照跑，画面停在中止那一刻的同一帧上，
+ *    剩下的十几拍全是静止画面，而 exit code 照样是 0。
+ * ② 跨度对不上镜头脚本的停留总和——①的兜底（万一失败没被 catch 到，比如循环外的路径），
+ *    以及任何让录制提前收尾的情况（Chrome 自己退出、CDP 断连、机器休眠）。
+ * 帧数那一道按实测节拍（60ms 一拍、连跑四轮 12.4–14.0 fps）取一个远低于下限的整数，
+ * 它只负责「压根没在抓」这一种，不承担判断录了多久——那是②的活。 */
+if (captureFailure) {
+  throw new Error(
+    `抓帧在中途失败，这条片子只有静止画面，不出片：${captureFailure.message}（已抓 ${frames.length} 帧）`,
+  );
+}
+const spanMs = frames.length > 1 ? (frames.at(-1).t - frames[0].t) * 1000 : 0;
+if (frames.length < 100) throw new Error(`只收到 ${frames.length} 帧，不够成片（60ms 一拍的节拍该有 700 帧上下）`);
+if (spanMs < plannedMs * 0.95) {
+  throw new Error(`录制跨度 ${spanMs.toFixed(0)}ms，短于镜头脚本计划停留 ${plannedMs}ms——中间有拍子没录上，不出片`);
+}
 frames.forEach((f, i) => {
   fs.writeFileSync(path.join(FRAMES, `f${String(i).padStart(4, '0')}.jpg`), Buffer.from(f.data, 'base64'));
 });
@@ -676,7 +771,7 @@ for (let i = 0; i < frames.length; i++) {
 lines.push(`file 'f${String(frames.length - 1).padStart(4, '0')}.jpg'`);
 fs.writeFileSync(path.join(FRAMES, 'list.txt'), lines.join('\n') + '\n');
 
-const span = frames.at(-1).t - frames[0].t;
+const span = spanMs / 1000;
 console.log(`帧 ${frames.length}，时间跨度 ${span.toFixed(1)}s，约 ${(frames.length / span).toFixed(1)} fps`);
 
 /* 编码那一段单独收在这里：换平台要改的就是这一份参数（尤其 `-c:v` 那一条），
@@ -754,4 +849,14 @@ execFileSync(
 
 socket.close();
 chrome.kill('SIGKILL');
+/* 收摊。中间件落在 `.test-tmp/promo/`（一次中英各跑一轮实测留下 46M + 53M 帧与 16.8M profile），
+ * 起跑时本来就会先 `rmSync` 一遍，所以出片成功之后就可以删干净。
+ * 只在成功这条路上删——中途失败时那叠帧是唯一的现场证据，留着才有得查。
+ * 删不动不影响产物：Chrome 刚被 SIGKILL，profile 里可能还有几百毫秒的写在途。 */
+try {
+  fs.rmSync(FRAMES, { recursive: true, force: true });
+  fs.rmSync(PROFILE, { recursive: true, force: true });
+} catch {
+  /* noop */
+}
 process.exit(0);

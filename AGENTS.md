@@ -183,7 +183,7 @@
   - 发布、CI、Pages、仓库展示信息变化：`.github/docs/RELEASING.md`（凭据与发版流程）、`.github/docs/GITHUB.md`（一次性仓库设置清单）、`.github/workflows/*` 与 `.github/actions/verify`。
   - manifest 描述、权限、命令或配置变化：`wxt.config.ts` 及对应 `_locales` 文案；同时同步 `.github/docs/CHROMEWEBSTORE.md`（商店文案/权限/截图清单）与 `docs/` 落地页（能力、FAQ、隐私政策）。
   - 商店图或落地页图变化：改 `scripts/generate-store-assets.mjs` 后跑 `pnpm assets && pnpm assets:en`，不手工改图片。
-  - 商店宣传视频变化：改 `scripts/record-promo-video.mjs` 的镜头脚本后跑 `pnpm promo && pnpm promo:en`（要本机 Chrome for Testing 与 ffmpeg，CI 不跑），产物与商店图同一口径只留本地（`store-assets/promo/`，已 gitignore），不手工改；实测参数与**未核验的后台限制**记在 `.github/docs/CHROMEWEBSTORE.md` §2 的 Video notes，改这一栏必须把两边一起说清楚，不许把没验过的上限写成事实。
+  - 商店宣传视频变化：改 `scripts/record-promo-video.mjs` 的镜头脚本后跑 `pnpm promo && pnpm promo:en`（要本机 Chrome for Testing、ffmpeg 与 Node 22+——CDP 那层直接用 node 自带的全局 `WebSocket`，不为它引 `ws`；CI 不跑），产物与商店图同一口径只留本地（`store-assets/promo/`，已 gitignore），不手工改；实测参数与**未核验的后台限制**记在 `.github/docs/CHROMEWEBSTORE.md` §2 的 Video notes，改这一栏必须把两边一起说清楚，不许把没验过的上限写成事实。
 
 ## 测试与验证
 
