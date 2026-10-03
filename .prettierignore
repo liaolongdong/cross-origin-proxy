@@ -4,3 +4,4 @@ node_modules
 dist
 public
 .test-tmp
+types/components.d.ts

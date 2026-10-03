@@ -57,9 +57,12 @@ runs:
 
     # `tsc` 把 `.vue` 当组件类型声明看，`<script setup>` 块与模板表达式全都不进；
     # ESLint 那侧也没开 type-aware 规则。这两处的实参错位、属性名拼错只能原地存在，
-    # 所以 Vue 文件另过一遍 vue-tsc。它刻意不读 `.wxt/components.d.ts`（那份由 build/dev
-    # 生成，`wxt prepare` 不产出，CI 走到这里时它还不存在）——因此这道门禁查的是脚本块
-    # 与模板表达式，查不出 `el-*` 组件的 prop 名拼错。
+    # 所以 Vue 文件另过一遍 vue-tsc。那份 `GlobalComponents` 注册表刻意入库在
+    # `types/components.d.ts`（`wxt.config.ts` 的 `Components({ dts })` 指过去，dev/build 生成），
+    # 所以这一步排在 Build 之前也读得到它 —— `el-*` 的 prop **取值**与 emit 签名一起进检查。
+    # prop **名**拼错仍然查不出：`strictTemplates` 实测一次涌出 45 条，其中 8 条是刻意保留的
+    # 透传属性（aria-label / spellcheck / tabindex / @keydown），故维持关闭。
+    # 注册表与模板不同步（改了 `<el-*>` 忘了跑 build）由 `tests/elementComponents.test.ts` 点名。
     - name: Typecheck Vue
       run: pnpm typecheck:vue
       shell: bash

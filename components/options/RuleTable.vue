@@ -42,7 +42,13 @@
         <p>{{ t('noMatch') }}</p>
       </div>
 
-      <!-- 规则表格 -->
+      <!--
+        规则表格
+        `el-table-column` 的默认插槽把 `row` 报成 Element Plus 的 `DefaultRow`
+        （= `Record<PropertyKey, any>`，索引签名不满足 `ProxyRule` 的必需属性），而这里的
+        数据源 `:data="rules"` 是 `ProxyRule[]`。所以每个把整行交给脚本/事件的落点都写一次
+        `row as ProxyRule`：纯类型断言、编译后不存在，`row.xxx` 的属性名访问不受影响。
+      -->
       <el-table
         v-else
         key="rule-table"
@@ -77,7 +83,7 @@
             <span
               class="drag-handle"
               draggable="true"
-              @dragstart="onDragStart($event, row)"
+              @dragstart="onDragStart($event, row as ProxyRule)"
               @dragend="onDragEnd"
               >⠿</span
             >
@@ -120,42 +126,46 @@
               </el-tooltip>
               <span class="rule-badges">
                 <el-tooltip
-                  v-if="showsHttpOnlyBadge(row) && row.headerOverrides && Object.keys(row.headerOverrides).length > 0"
+                  v-if="
+                    showsHttpOnlyBadge(row as ProxyRule) &&
+                    row.headerOverrides &&
+                    Object.keys(row.headerOverrides).length > 0
+                  "
                   :content="t('hasHeaderOverrides')"
                   placement="top"
                 >
                   <span class="rule-badge rule-badge--h">H</span>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="showsHttpOnlyBadge(row) && row.sendCredentials === true"
+                  v-if="showsHttpOnlyBadge(row as ProxyRule) && row.sendCredentials === true"
                   :content="t('hasSendCredentials')"
                   placement="top"
                 >
                   <span class="rule-badge rule-badge--c">C</span>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="showsHttpOnlyBadge(row) && row.requestBodyOverride"
+                  v-if="showsHttpOnlyBadge(row as ProxyRule) && row.requestBodyOverride"
                   :content="t('hasBodyOverride')"
                   placement="top"
                 >
                   <span class="rule-badge rule-badge--b">B</span>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="showsHttpOnlyBadge(row) && row.responseOverrides"
+                  v-if="showsHttpOnlyBadge(row as ProxyRule) && row.responseOverrides"
                   :content="t('hasResponseOverrides')"
                   placement="top"
                 >
                   <span class="rule-badge rule-badge--r">R</span>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="showsHttpOnlyBadge(row) && row.mockResponse"
+                  v-if="showsHttpOnlyBadge(row as ProxyRule) && row.mockResponse"
                   :content="t('hasMockResponse')"
                   placement="top"
                 >
                   <span class="rule-badge rule-badge--m">M</span>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="showsHttpOnlyBadge(row) && row.delayMs"
+                  v-if="showsHttpOnlyBadge(row as ProxyRule) && row.delayMs"
                   :content="t('hasDelay')"
                   placement="top"
                 >
@@ -169,14 +179,14 @@
                   <span class="rule-badge rule-badge--x">X</span>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="showsHttpOnlyBadge(row) && row.retryCount"
+                  v-if="showsHttpOnlyBadge(row as ProxyRule) && row.retryCount"
                   :content="t('hasRetry')"
                   placement="top"
                 >
                   <span class="rule-badge rule-badge--re">Re</span>
                 </el-tooltip>
                 <el-tooltip
-                  v-if="isWsRule(row)"
+                  v-if="isWsRule(row as ProxyRule)"
                   :content="t('wsRuleHint')"
                   placement="top"
                 >
@@ -313,7 +323,7 @@
                   circle
                   size="small"
                   :icon="EditPen"
-                  @click="$emit('edit', row)"
+                  @click="$emit('edit', row as ProxyRule)"
                 />
               </el-tooltip>
               <el-tooltip
@@ -325,14 +335,14 @@
                   circle
                   size="small"
                   :icon="CopyDocument"
-                  @click="$emit('duplicate', row)"
+                  @click="$emit('duplicate', row as ProxyRule)"
                 />
               </el-tooltip>
               <el-popconfirm
                 :title="t('confirmDeleteRule')"
                 :confirm-button-text="t('confirm')"
                 :cancel-button-text="t('cancel')"
-                @confirm="handleDelete(row)"
+                @confirm="handleDelete(row as ProxyRule)"
               >
                 <template #reference>
                   <el-button

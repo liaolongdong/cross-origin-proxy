@@ -44,6 +44,8 @@ Load `.output/chrome-mv3` unpacked at `chrome://extensions` to try it. Run `pnpm
 
 CI runs lint, stylelint, Prettier, typecheck (both `tsc` and `vue-tsc`), a production build and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./.github/docs/GITHUB.md).
 
+`vue-tsc` sees Element Plus components through the generated `GlobalComponents` registry, which is checked in at `types/components.d.ts` on purpose (it used to live under the gitignored, dot-prefixed `.wxt/`, where CI's Typecheck step ran before the build that produces it — so `el-*` prop values and emit signatures were silently unchecked). Because it is a build artifact, **edit a template's `<el-*>` and you run `pnpm build` once** so the registry lands in the same commit; `tests/elementComponents.test.ts` names the exact component otherwise. Prop _names_ are still not checked (that needs `strictTemplates`, which measures at 45 errors here, 8 of them deliberate fall-through attributes such as `tabindex` and `aria-label`), and neither tool checks rendering or interaction.
+
 ## Repository layout
 
 ```
@@ -109,7 +111,7 @@ The full release runbook, including the one-time store credentials, is [RELEASIN
 ## 贡献要点（中文）
 
 1. 从 `main` 分支拉分支，一个分支只解决一件事。完整命令清单见上文「Setting up」，目录结构见「Repository layout」。
-2. 按改动范围跑对应检查：TS/Vue 跑 `pnpm typecheck` + `pnpm typecheck:vue` + `pnpm lint` + `pnpm test`；样式跑 `pnpm lint:style`；入口/清单/依赖/打包跑 `pnpm build`；文档与 JSON 跑 `pnpm exec prettier --check <改动文件>`。仓库没有 git hook，靠手动与 CI 保证。`typecheck` 与 `typecheck:vue` 都要跑：前者根本不进 `.vue` 文件，`.vue` 里的实参错位、属性名拼错只有 `typecheck:vue` 看得见（它反过来不查 `el-*` 组件的 prop 名，那一份注册表不在 `tsconfig.json` 的 `include` 里）。
+2. 按改动范围跑对应检查：TS/Vue 跑 `pnpm typecheck` + `pnpm typecheck:vue` + `pnpm lint` + `pnpm test`；样式跑 `pnpm lint:style`；入口/清单/依赖/打包跑 `pnpm build`；文档与 JSON 跑 `pnpm exec prettier --check <改动文件>`。仓库没有 git hook，靠手动与 CI 保证。`typecheck` 与 `typecheck:vue` 都要跑：前者根本不进 `.vue` 文件，`.vue` 里的实参错位、prop 取值与 emit 签名不匹配只有 `typecheck:vue` 看得见（`el-*` 的类型来自入库的 `types/components.d.ts`，所以**改了模板里的 `<el-*>` 要跑一次 `pnpm build`** 让那份注册表跟着进同一个提交，漏跑 `tests/elementComponents.test.ts` 会点名缺哪个组件；prop **名字**拼错仍查不出，那要 `strictTemplates`，实测 45 条报错里 8 条是刻意保留的透传属性，故维持关闭）。
 3. PR 描述要写清「改动前行为 / 改动后行为 / 跑了哪些命令及结果 / 未能验证的部分」。
 
 关键约束：`isSimpleRule()` 决定规则走 DNR 还是后台通道，改它必须保证两条通道的重写语义一致；`chrome.storage.local` 是唯一事实来源，内存缓存必须可重建并在 `storage.onChanged` 失效；DNR 同步前必须过 RE2 与替换引用校验，否则整批规则被拒；MAIN world 拦截器必须自包含（不能 import logger、不能用 `chrome.*`）；页面 DOM、导入文件、runtime message 与 storage 数据都按不可信输入处理；日志统一走 `utils/logger.ts`；禁止用 `eslint-disable`、`@ts-ignore` 或降低断言来绕过问题；新增可见文案必须同时补齐中英文，且 `name` ≤ 75、`description` ≤ 132 字符由测试守卫。

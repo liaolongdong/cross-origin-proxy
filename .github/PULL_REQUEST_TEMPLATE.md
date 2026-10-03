@@ -36,7 +36,7 @@
 - [ ] `pnpm test`（全量或指明跑了哪些文件）
 - [ ] `pnpm lint:style`（改了 CSS / `<style>` / `docs/assets/landing.css` 时）
 - [ ] `pnpm exec prettier --check <改动文件>`（文档、JSON、Markdown、YAML）
-- [ ] `pnpm build`（入口 / manifest / 依赖 / 打包行为变化时）
+- [ ] `pnpm build`（入口 / manifest / 依赖 / 打包行为变化时；改了模板里的 `<el-*>` 时也要跑——它重新生成入库的 `types/components.d.ts`，漏跑由 `tests/elementComponents.test.ts` 点名）
 - 备注与未验证项：
 
 ## 国际化与文档 / i18n and docs

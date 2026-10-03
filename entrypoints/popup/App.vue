@@ -48,7 +48,7 @@
           v-model="enabled"
           :loading="loading"
           :aria-label="t('proxySwitch')"
-          @change="handleToggleProxy"
+          @change="(val: boolean | string | number) => handleToggleProxy(val as boolean)"
         />
       </div>
       <!--
@@ -148,7 +148,7 @@
                 :model-value="rule.enabled"
                 size="small"
                 :aria-label="t('enableRuleA11y', rule.name)"
-                @change="(val: boolean) => handleToggleRule(rule.id, val)"
+                @change="(val: boolean | string | number) => handleToggleRule(rule.id, val as boolean)"
               />
             </div>
           </template>
@@ -527,8 +527,16 @@
           :key="log.id"
           class="recent-item"
         >
+          <!--
+            两处 `as TagProps['type']` 是给 `pnpm typecheck:vue` 的纯类型断言（编译后不存在）。
+            Element Plus 的 `type` 联合里**没有「中性」这一档**，而 `getMethodColor` /
+            `getStatusColor` 用空串表示它（GET 徽章、3xx 状态徽章；`utils/formatters.ts` 写了
+            3xx 刻意落中性、不许挪到 success 那边）。空串在运行时靠 `.el-tag` 基础规则画成浅色底
+            + **继承字色**，改成 `'primary'`（也就是不传 `type`）字色就变主题蓝——那是视觉改动，
+            不在本轮范围，所以值原样交出去，只在类型层对齐。
+          -->
           <el-tag
-            :type="getMethodColor(log.method)"
+            :type="getMethodColor(log.method) as TagProps['type']"
             size="small"
             class="method-tag"
             disable-transitions
@@ -543,7 +551,7 @@
           </span>
           <el-tag
             v-if="log.status"
-            :type="getStatusColor(log.status)"
+            :type="getStatusColor(log.status) as TagProps['type']"
             size="small"
             class="status-tag"
             disable-transitions
@@ -580,6 +588,7 @@ import {
   Plus,
   Link,
 } from '@element-plus/icons-vue';
+import type { TagProps } from 'element-plus';
 import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 import { useDiagnosisText } from '@/composables/useDiagnosis';

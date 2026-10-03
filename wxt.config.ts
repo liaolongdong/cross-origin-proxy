@@ -38,7 +38,15 @@ export default defineConfig({
       }),
       Components({
         resolvers: [ElementPlusResolver({ importStyle: 'css' })],
-        dts: '.wxt/components.d.ts',
+        // 这份 GlobalComponents 注册表刻意写到入库的 `types/`，而不是 `.wxt/`：
+        // 它只由 dev/build 生成（`wxt prepare` 不产出），而 `pnpm typecheck:vue` 在 CI 里
+        // 排在 Build 之前——放在 `.wxt/` 就等于「干净检出时那份注册表不存在」，于是 `el-*`
+        // 的 prop 取值与 emit 签名对门禁是隐形的（它只看得见自己声明过的类型）。
+        // 放回 `.wxt/` 再靠 tsconfig 的通配命中也不行：那是点目录，实测通配进不去，
+        // 只能按名字点名——也就是把门禁挂在一个 CI 此刻还没有的文件上。
+        // 生成物，不要手改：改完模板里的 `<el-*>` 跑一次 `pnpm build` 让它同步；
+        // 漏跑由 `tests/elementComponents.test.ts` 当场点名（它按模板里用到的 `el-*` 对账）。
+        dts: 'types/components.d.ts',
       }),
     ],
   }),

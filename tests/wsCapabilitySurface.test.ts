@@ -67,6 +67,17 @@ describe('[RuleTable 徽章] 界面画的徽章用的是同一份能力面', () 
    * 同一行里先承诺七次再撤销一次。现在七个无效项各由 `showsHttpOnlyBadge(row)` 收口。
    */
   const tableSrc = readFileSync('components/options/RuleTable.vue', 'utf-8');
+  /**
+   * 同一份模板，比之前先把空白跑折成单个空格。原因是 prettier 会把超列的 `v-if` 拆成多行
+   * （2026-10-03 给 `row` 加上 `as ProxyRule` 之后，那七条守卫全部被拆开了），而**逐行匹配会被
+   * 折行从缝里漏掉**——这不是放宽判据：折叠后仍然要求 `v-if="` 紧跟那一个函数调用、紧跟 `&& row.<字段>`，
+   * 把两条不相干的属性拼起来造不出这个前缀。折进来源的那份 ` row ` 也一并用 `\s*` 认掉。
+   *
+   * `(?: as ProxyRule)?` 收的是 `pnpm typecheck:vue` 要的那份类型断言（`el-table-column` 的默认
+   * 插槽把 `row` 报成 `DefaultRow`）：它编译后不存在，这条守卫的判据不因为它在不在而改变，
+   * 所以写成可选而不是把它钉进断言里。
+   */
+  const tableTpl = tableSrc.replace(/\s+/g, ' ');
   const inertBadges: ReadonlyArray<readonly [string, string]> = [
     ['headerOverrides', 'h'],
     ['sendCredentials', 'c'],
@@ -78,17 +89,19 @@ describe('[RuleTable 徽章] 界面画的徽章用的是同一份能力面', () 
   ];
 
   it.each(inertBadges)('%s 那枚（--%s）在 WS 规则上不画', (field, mod) => {
-    expect(tableSrc, field).toMatch(new RegExp(`v-if="showsHttpOnlyBadge\\(row\\) && row\\.${field}`));
-    expect(tableSrc, mod).toContain(`class="rule-badge rule-badge--${mod}"`);
+    expect(tableTpl, field).toMatch(
+      new RegExp(`v-if="\\s*showsHttpOnlyBadge\\(row(?: as ProxyRule)?\\)\\s*&&\\s*row\\.${field}`),
+    );
+    expect(tableTpl, mod).toContain(`class="rule-badge rule-badge--${mod}"`);
   });
 
   it('收口的枚数正好七个（多一枚就是阻断被误收，少一枚就是留了个空承诺）', () => {
-    expect([...tableSrc.matchAll(/v-if="showsHttpOnlyBadge\(row\)/g)]).toHaveLength(7);
+    expect([...tableTpl.matchAll(/v-if="\s*showsHttpOnlyBadge\(row(?: as ProxyRule)?\)/g)]).toHaveLength(7);
   });
 
   it('阻断与 WS 本身不受收口（长连接上它们是生效项）', () => {
-    expect(tableSrc).toMatch(/v-if="row\.blocked"/);
-    expect(tableSrc).toMatch(/v-if="isWsRule\(row\)"/);
+    expect(tableTpl).toMatch(/v-if="\s*row\.blocked\s*"/);
+    expect(tableTpl).toMatch(/v-if="\s*isWsRule\(row(?: as ProxyRule)?\)\s*"/);
   });
 });
 

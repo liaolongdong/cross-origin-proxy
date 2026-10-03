@@ -222,7 +222,7 @@
         :data="windowedLogs"
         :row-class-name="rowClassName"
         row-key="id"
-        :current-row-key="focusedRowId"
+        :current-row-key="focusedRowId ?? undefined"
         class="log-table"
         highlight-current-row
         tabindex="0"
@@ -859,6 +859,10 @@ function handleDrawerClose() {
  * 当前被选中/高亮的那一行 id（指针与键盘共用这一份，见 {@link handleTableKeydown}）
  *
  * 绑给 `el-table` 的 `current-row-key`，所以「点过的行」与「方向键走到的行」画的是同一个高亮。
+ * 模板里那句 `?? undefined` 是给 `pnpm typecheck:vue` 的：EP 把这个 prop 声明成
+ * `string | number | undefined`，`null` 不在其列。它不改任何渲染结果——EP 唯一的消费者
+ * `style-helper` 只做 `!unref(currentRowKey)` 这种 falsy 判断，`null` 与 `undefined` 同路，
+ * 而 store 内部的 `_currentRowKey` 自己就是 `null` 起步。别把它「简化」回 `focusedRowId`。
  */
 const focusedRowId = ref<string | null>(null);
 
