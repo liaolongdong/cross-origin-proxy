@@ -112,13 +112,23 @@ export function invalidateLogsCache(): void {
 
 /**
  * 读取完整代理配置
+ *
+ * 交出的对象**可以是缓存本身**：`toggleProxy` / `addRule` / `updateRule` 走的全是
+ * 「读出 → 就地改 → 把同一个对象交给 `saveProxyConfig`」，每次给副本反而要多拷一遍，
+ * 而且照样写对（写回的是那份副本，落盘内容一致）。唯一的约束是**回落值必须是新的一份**：
+ * 存储里没有 `proxy_config` 键时（首次安装、或 devtools 手删那把键），把模块常量
+ * `DEFAULT_PROXY_CONFIG` 直接交出去，就等于允许这条调用链把默认值本身写脏——下一次读到的
+ * 「默认」是上一次的残值，而 `background.ts` 的 install 分支还会把同一份常量原样写进 storage。
+ * 浅拷贝加一句 `rules` 另起一份现在就是完整复制，因为 `ProxyConfig` 除 `rules` 外全是标量
+ * （给这个类型新增引用字段时必须回来改这里）。
  */
 export async function getProxyConfig(): Promise<ProxyConfig> {
   if (cachedConfig !== null) {
     return cachedConfig;
   }
   const result = await chrome.storage.local.get(STORAGE_KEYS.PROXY_CONFIG);
-  const config = (result[STORAGE_KEYS.PROXY_CONFIG] as ProxyConfig | undefined) ?? DEFAULT_PROXY_CONFIG;
+  const stored = result[STORAGE_KEYS.PROXY_CONFIG] as ProxyConfig | undefined;
+  const config = stored ?? { ...DEFAULT_PROXY_CONFIG, rules: [...DEFAULT_PROXY_CONFIG.rules] };
   cachedConfig = config;
   return config;
 }

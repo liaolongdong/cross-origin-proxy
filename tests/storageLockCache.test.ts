@@ -146,9 +146,9 @@ beforeEach(() => {
   setSpy.mockClear();
   invalidateConfigCache();
   invalidateLogsCache();
-  // `getProxyConfig()` 在键缺失时交出的是 `DEFAULT_PROXY_CONFIG` 那个常量本身，就地改会写脏它，
-  // 而模块常量在这支文件的用例之间不会自动复位。这条守卫让「谁写脏了常量」当场红，
-  // 而不是让后面那条「缺键回落」用例为一个已经被改过的默认值保持绿色。
+  // 回落那份口子 2026-10-03 已经收掉（`getProxyConfig()` 缺键时给新副本），但这条守卫不能跟着撤：
+  // 模块常量在这支文件的用例之间不会自动复位，谁把它写脏了要让**下一用例开头**当场红，
+  // 而不是让末尾那条「缺键回落是新副本」为一个已经被改过的默认值保持绿色。
   expect(DEFAULT_PROXY_CONFIG).toEqual({ enabled: false, rules: [] });
   // 凭据表没有公开的失效入口，唯一的复位路径就是它自己注册的那个监听器——
   // 与 `chrome.storage.local.clear()` 同理：本文件的用例不依赖清空能力，只依赖这一行确实把缓存置了空
@@ -301,8 +301,9 @@ describe('配置缓存：命中不读盘，跨上下文改动必须失效', () =
     expect(second).toBe(first);
     // 顺手钉住「就地改之后写回的还是这一个对象」这条常用链能落盘。
     // 注意这条链本身并不依赖身份（`toggleProxy` / `addRule` 都是改完把同一个对象交给
-    // `saveProxyConfig`，改成返回副本照样写对）；身份真正带来的后果是下面那条「缺键时写脏常量」，
-    // 以及同一上下文里就地改对后续读者立刻可见。别把它当成「改成副本会丢更新」的理由。
+    // `saveProxyConfig`，改成返回副本照样写对）；身份曾经的后果只有「缺键回落交出常量本身」那一条，
+    // 那个口子 2026-10-03 由末尾那条用例收掉了。于是这里剩下的只是「同一上下文里就地改对后续读者
+    // 立刻可见」这一份省拷贝的收益。别把它当成「改成副本会丢更新」的理由。
     first.enabled = false;
     await saveProxyConfig(first);
     expect((store[STORAGE_KEYS.PROXY_CONFIG] as ProxyConfig).enabled).toBe(false);
@@ -341,15 +342,27 @@ describe('配置缓存：命中不读盘，跨上下文改动必须失效', () =
     expect(configRules(config)).toEqual([]);
   });
 
-  it('现状记录：回落的是 `DEFAULT_PROXY_CONFIG` 那个对象本身，而调用链会就地改它', async () => {
-    // 这条不是「应该这样」，是把已经存在的口子钉住：`getProxyConfig()` 把模块常量当缓存交出去，
-    // 而 `toggleProxy` / `addRule` 全是「读出 → 就地改 → 写回」，于是在同一上下文里
-    // 常量本身会被写脏（键被删掉后的下一次读就看到上一次的残值；同一份常量还被
-    // `background.ts` 的 install 分支原样写进 storage）。
-    // 可达窗口很窄（首次安装、或 devtools 手删 `proxy_config` 键——与 AGENTS 里徽章那条同源），
-    // 目前没有任何用户可见症状，所以留作待确认点而不是随手改行为。
-    // 修掉它（回落时给一份新副本）会让这一条红——那时请连同待确认点一起更新，别只删断言。
-    expect(await getProxyConfig()).toBe(DEFAULT_PROXY_CONFIG);
+  it('缺键回落交出的是新副本：整条写链改完，默认值本身仍然干净', async () => {
+    // 这一条曾经是「现状记录」（回落的是模块常量本身，而调用链会就地改它）。
+    // 2026-10-03 修掉了口子，于是它变成一条真契约，两头都要钉：
+    // ① 交出的不是 `DEFAULT_PROXY_CONFIG` 那个对象；② 走完「读出 → 就地改 → 写回」之后常量没被写脏。
+    // 用 `toggleProxy` 而不是手改返回值，因为真实调用链就是它，手改只能证明身份、证明不了这条链。
+    await toggleProxy(true);
+
+    expect(DEFAULT_PROXY_CONFIG).toEqual({ enabled: false, rules: [] });
+    expect((store[STORAGE_KEYS.PROXY_CONFIG] as ProxyConfig).enabled).toBe(true);
+
+    // 缓存作废、键再删一次：读回来的必须是默认值本身，而不是上一次的残值——
+    // 「键被删掉后的下一次读看到上一次改过的值」正是那个口子留给这里的形状。
+    invalidateConfigCache();
+    delete store[STORAGE_KEYS.PROXY_CONFIG];
+    const fresh = await getProxyConfig();
+
+    expect(fresh).not.toBe(DEFAULT_PROXY_CONFIG);
+    expect(fresh.enabled).toBe(false);
+    expect(configRules(fresh)).toEqual([]);
+    // 另一半契约照旧：缓存命中时交出的是同一个对象，调用链靠它省掉一次深拷贝，别把它「顺手」改成副本
+    expect(await getProxyConfig()).toBe(fresh);
   });
 });
 
