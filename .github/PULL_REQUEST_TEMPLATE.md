@@ -32,6 +32,7 @@
 
 - [ ] `pnpm lint`
 - [ ] `pnpm typecheck`
+- [ ] `pnpm typecheck:vue`（改了任何 `.vue` 时——`typecheck` 根本不进 `.vue`，两边的盲区不一样）
 - [ ] `pnpm test`（全量或指明跑了哪些文件）
 - [ ] `pnpm lint:style`（改了 CSS / `<style>` / `docs/assets/landing.css` 时）
 - [ ] `pnpm exec prettier --check <改动文件>`（文档、JSON、Markdown、YAML）

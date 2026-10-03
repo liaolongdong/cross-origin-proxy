@@ -120,7 +120,7 @@ git push origin feature-dev          # 照常开 PR、跑 CI、合进 main
 
 # 3) 合并之后，本机把那份 main 拉下来，走发布前的门禁（等价于 CI 的 Verify）
 git pull --ff-only origin main
-pnpm lint && pnpm typecheck && pnpm lint:style && pnpm test && pnpm build
+pnpm lint && pnpm typecheck && pnpm typecheck:vue && pnpm lint:style && pnpm test && pnpm build
 pnpm exec prettier --check CHANGELOG.md package.json   # 只查改动文件
 
 # 4) 打 tag，然后**分两条命令**推：先 tag、后 main。把两个 ref 写进同一条 push（先 main 后 tag

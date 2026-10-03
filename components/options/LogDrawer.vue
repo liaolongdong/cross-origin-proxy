@@ -103,7 +103,7 @@
             style="width: 110px"
             @update:model-value="
               (val: string | number | undefined) =>
-                emit('update:refreshInterval', Number(val ?? REFRESH_INTERVAL_PRESETS[0].value))
+                emit('update:refreshInterval', Number(val ?? fallbackRefreshInterval))
             "
           >
             <el-option
@@ -117,7 +117,7 @@
             :model-value="autoRefresh"
             :active-text="t('autoRefresh')"
             :aria-label="t('autoRefresh')"
-            @change="val => $emit('refresh', val as boolean)"
+            @change="(val: boolean | string | number) => $emit('refresh', val as boolean)"
           />
         </div>
       </div>
@@ -591,6 +591,16 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
+
+/**
+ * 刷新频率下拉的兜底值：`update:model-value` 给不出值时回到第一个预设（5s）。
+ *
+ * 写在脚本侧而不是模板表达式里，是因为 vue-tsc 3.3.12 对模板中
+ * `REFRESH_INTERVAL_PRESETS[0].value` 这种「下标取元素再取属性」会报
+ * TS2551——它把接收者算成了整个数组，而同样的句子在 `<script setup>` 里照常通过
+ * （已用最小复现核过：`at(0)` 与非空断言同样命中，只有脚本侧这一种是干净的）。
+ */
+const fallbackRefreshInterval = REFRESH_INTERVAL_PRESETS[0].value;
 
 // 筛选
 const ruleFilter = ref('');

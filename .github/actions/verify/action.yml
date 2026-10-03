@@ -1,5 +1,5 @@
 name: Verify
-description: 安装依赖并跑完仓库全套校验（ESLint / Stylelint / Prettier / tsc / build / vitest）
+description: 安装依赖并跑完仓库全套校验（ESLint / Stylelint / Prettier / tsc / vue-tsc / build / vitest）
 
 # CI 与 Release 共用同一份校验实现：任何一项检查的新增或调整只改这里，
 # 不需要同步维护两份会漂移的 YAML。
@@ -53,6 +53,15 @@ runs:
 
     - name: Typecheck
       run: pnpm typecheck
+      shell: bash
+
+    # `tsc` 把 `.vue` 当组件类型声明看，`<script setup>` 块与模板表达式全都不进；
+    # ESLint 那侧也没开 type-aware 规则。这两处的实参错位、属性名拼错只能原地存在，
+    # 所以 Vue 文件另过一遍 vue-tsc。它刻意不读 `.wxt/components.d.ts`（那份由 build/dev
+    # 生成，`wxt prepare` 不产出，CI 走到这里时它还不存在）——因此这道门禁查的是脚本块
+    # 与模板表达式，查不出 `el-*` 组件的 prop 名拼错。
+    - name: Typecheck Vue
+      run: pnpm typecheck:vue
       shell: bash
 
     # build-verification.test.ts 断言的是真实构建产物，所以 build 必须在 test 之前。

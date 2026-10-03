@@ -22,7 +22,7 @@
 | 宣传视频 | `pnpm promo` / `pnpm promo:en`（实拍商店宣传视频，要本机 Chrome for Testing 与 ffmpeg，CI 不跑）                            |
 | 发版     | release-please 开出待合并的 PR（写版本号与 CHANGELOG 小节）→ 人合并 → 人 `git tag vX.Y.Z`，**分两条命令**先推 tag 再推 main |
 | 鉴权预检 | `pnpm exec wxt submit --dry-run`（只验商店凭据，不上传不提审；需 `.env.submit`，已 gitignore）                              |
-| 类型检查 | `pnpm typecheck`（`tsc --noEmit`）                                                                                          |
+| 类型检查 | `pnpm typecheck`（`tsc --noEmit`，不进 `.vue`）与 `pnpm typecheck:vue`（`vue-tsc --noEmit`，进 `.vue`）                     |
 | Lint     | `pnpm lint`（修复 `pnpm lint:fix`）                                                                                         |
 | 样式检查 | `pnpm lint:style`                                                                                                           |
 | 格式检查 | `pnpm format:check`（格式化 `pnpm format`，慎用）                                                                           |
@@ -188,11 +188,14 @@
 ## 测试与验证
 
 - 测试位于 `tests/*.test.ts`，Vitest node 环境；纯函数模块（`dnrRules`/`urlMatcher`/`curlParser`/`har`/`formatters`）可直接单测。
-- **`pnpm typecheck` 与 `pnpm lint` 都进不去 `.vue` 的 script 块**：前者是 `tsc --noEmit`，`.vue` 只经 shim 声明成组件类型，块内代码从不参与检查（仓里没有 `vue-tsc`）；后者的 @typescript-eslint 未开 type-aware 规则。所以 Vue 文件里的**实参错位、属性名拼错、可选链漏写**可以原地存在而无人拦：`typecheck` 与 `lint` 看不见它，`build` 走的是剥类型的打包、本来也不做类型检查。2026-10-02 实测漏过一处 `toMockConditionRows(props.initialData)`（那个函数收的是 `mockResponse` 那一份子对象；把错的实参放回树里重跑，`typecheck` 与 `lint` 各自 exit 0，只有新加的源码契约守卫红）。这类位置只有两条出路：按源码契约钉（`tests/full-verification.test.ts` 里「模板预填与编辑两条分支」那条钉住了这两处调用点的实参形状），或真浏览器目测——**不要把 `pnpm typecheck` 通过写成 Vue 改动的证据**。
-- **已经跑起来测的层，与两类钉不住的层**：除纯函数单测外，存储门面（锁与两份缓存）、桥接层消息流、拦截器三条通道（`interceptorFetch` / `interceptorXhr` 测结局，`interceptorWebSocket` 测选址）、后台 `dnrManager` / `autoOff` / `badgeManager`，以及界面读数层 `composables/{useRequestLog,useProxyStatus}`（`tests/composablesReadouts.test.ts`）与凭据/恢复点读写层 `composables/{useVariables,useConfigHistory}`（`tests/composablesCredentials.test.ts`，含 `SettingsDialog.vue` 那两个布尔闸门怎么被用），以及 DNR 可用性判定的采纳时序 `composables/useDnrSupport`（`tests/composablesDnrSupport.test.ts`：过期轮次整包作废、抛错维持上一份结论）与导入预览的三条失败面 `composables/useImportExport`（`tests/importConfig.test.ts`：本地格式判据一条消息都不发、空回包与抛错各有专属码、`importing` 只锁写入不锁预览）都是**假 `window` / 假 `chrome` ＋ 真实现**按外部可观察面测的。仍没有运行时对应物的两类：① Vue 组件的渲染与交互——node 环境无 DOM，`jsdom` / `@vue/test-utils` 未装（新增 devDependency 需先获批准），这些位置只能靠源码契约（`full-verification` / `docs-consistency`）；② `onMounted` / `onUnmounted` 在组件实例外永不触发，所以 composable 的「挂载即拉、卸载即停表」一律另按源码契约钉，并在文件头写明「本环境测不到的那半」。补这类用例时有三个反复踩到的坑：断言的值必须与「这一轮什么都没发生」**可区分**（初值就是 `false` 时，`toggleProxy(false)` 那一句是空话；同理「落定后为 false」钉不住「压根没置起 true」，忙闲旗标要有一格在途读数），源码契约里被钉的那个表达式若在组件内有多个调用点，`toContain` 只看得到第一处，必须改成数次数，判据是否承重只由单点变异说了算（`.test-tmp/mutate-*.py`，不入库）。
+- **`pnpm typecheck` 与 `pnpm lint` 都进不去 `.vue` 的 script 块**：前者是 `tsc --noEmit`，`.vue` 只经 shim 声明成组件类型，块内代码从不参与检查；后者的 @typescript-eslint 未开 type-aware 规则。所以 Vue 文件里的**实参错位、属性名拼错、可选链漏写**可以原地存在而无人拦，`build` 走的是剥类型的打包、本来也不做类型检查。2026-10-02 就实测漏过一处 `toMockConditionRows(props.initialData)`（那个函数收的是 `mockResponse` 那一份子对象；把错的实参放回树里重跑，`typecheck` 与 `lint` 各自 exit 0，只有新加的源码契约守卫红）。
+- **这一格从 2026-10-03 起由 `pnpm typecheck:vue`（`vue-tsc --noEmit`）守着**，已进 `.github/actions/verify`，与 CI 同一条清单。同一处变异重跑：放回 `props.initialData` 报 `TS2345 …'Omit<ProxyRule, …> | null | undefined' is not assignable to 'MockResponseConfig | undefined'`，放回非空的 `props.rule` 报 `Property 'body' is missing in type 'ProxyRule' but required in type 'MockResponseConfig'`，而那一轮 `typecheck` 与 `lint` 照旧各自 exit 0。它顺带查模板表达式，代价是模板里 `REFRESH_INTERVAL_PRESETS[0].value` 这种「下标取元素再取属性」会被判 TS2551（vue-tsc 3.3.12 把接收者算成整个数组；同一句在 `<script setup>` 里正常，`at(0)` 与非空断言实测同样命中）——所以那处下拉兜底值写在脚本侧，别再挪回模板里。
+  **它拦不住的那一面必须说清楚**：`tsconfig.json` 的 `include` 里刻意没有 `.wxt/components.d.ts`。那份 `GlobalComponents` 注册由 `unplugin-vue-components` 在 dev/build 时生成，`wxt prepare` **不产出**它（实测），门禁不能挂在一个 CI 走到那一步还不存在的文件上；把它加进 `include` 实测一次涌出 20+ 条报错，绝大多数是 Element Plus 自身类型与界面既有 looseness 的冲突（`el-table` 插槽的 `DefaultRow` 收不进 `ProxyRule`、`el-tag` 的 `type=""`、`el-switch` 处理函数的参数逆变），那是另一件事，别当「顺手补全门禁」做掉。所以 **`el-*` 的 prop 名拼错、emit 签名对不上仍然看不见**；模板里 `@change="val => …"` 这类不写参数类型的处理器在注册表缺席时是隐式 any，`typecheck:vue` 会按 `noImplicitAny` 点名，新增内联处理器要么标注参数（按 Element Plus 声明的 `boolean | string | number` 写，别写 `boolean`——将来真注册上组件类型，逆变方向会红），要么挪进脚本侧写成方法。
+  **加检查脚本的人回来改这条**：`docs-consistency` 的「verify 动作覆盖 package.json 里定义的全部检查脚本」是按脚本名正则反推的，`typecheck:vue` 已显式列进那条交替式；漏进去的结果是脚本存在而 CI 不跑它，且全仓无人红。
+- **已经跑起来测的层，与两类钉不住的层**：除纯函数单测外，存储门面（锁与两份缓存）、桥接层消息流、拦截器三条通道（`interceptorFetch` / `interceptorXhr` 测结局，`interceptorWebSocket` 测选址）、后台 `dnrManager` / `autoOff` / `badgeManager`，以及界面读数层 `composables/{useRequestLog,useProxyStatus}`（`tests/composablesReadouts.test.ts`）与凭据/恢复点读写层 `composables/{useVariables,useConfigHistory}`（`tests/composablesCredentials.test.ts`，含 `SettingsDialog.vue` 那两个布尔闸门怎么被用），以及 DNR 可用性判定的采纳时序 `composables/useDnrSupport`（`tests/composablesDnrSupport.test.ts`：过期轮次整包作废、抛错维持上一份结论）与导入预览的三条失败面 `composables/useImportExport`（`tests/importConfig.test.ts`：本地格式判据一条消息都不发、空回包与抛错各有专属码、`importing` 只锁写入不锁预览）都是**假 `window` / 假 `chrome` ＋ 真实现**按外部可观察面测的。仍没有运行时对应物的两类：① Vue 组件的渲染与交互——node 环境无 DOM，`jsdom` / `@vue/test-utils` 未装（新增 devDependency 需先获批准），`typecheck:vue` 管的是类型而不管渲染，这些位置只能靠源码契约（`full-verification` / `docs-consistency`）；② `onMounted` / `onUnmounted` 在组件实例外永不触发，所以 composable 的「挂载即拉、卸载即停表」一律另按源码契约钉，并在文件头写明「本环境测不到的那半」。补这类用例时有三个反复踩到的坑：断言的值必须与「这一轮什么都没发生」**可区分**（初值就是 `false` 时，`toggleProxy(false)` 那一句是空话；同理「落定后为 false」钉不住「压根没置起 true」，忙闲旗标要有一格在途读数），源码契约里被钉的那个表达式若在组件内有多个调用点，`toContain` 只看得到第一处，必须改成数次数，判据是否承重只由单点变异说了算（`.test-tmp/mutate-*.py`，不入库）。
 - 修改前先找现有测试；修 bug 优先加“修复前失败、修复后通过”的回归测试；新增逻辑覆盖成功、失败与关键边界。
 - 交付前按改动范围执行：
-  - TypeScript/Vue/运行时代码：`pnpm typecheck`、`pnpm lint`、相关 `pnpm test`。
+  - TypeScript/Vue/运行时代码：`pnpm typecheck`、`pnpm typecheck:vue`（碰 `.vue` 就是必跑）、`pnpm lint`、相关 `pnpm test`。
   - 通用逻辑、存储、消息路由或跨入口改动：`pnpm test`（全量）。
   - Vue/CSS 样式：`pnpm lint:style`。
   - 入口、manifest、WXT/Vite 配置、依赖或打包行为：`pnpm build`。
@@ -274,7 +277,7 @@
 
 - 当 popup 入口 HTML 存在**非空 `<title>`** 时，WXT 会用它推导 `manifest.action.default_title` 并覆盖 `wxt.config.ts` 里的同名声明（`wxt/dist/core/utils/manifest.mjs`，实测于 0.20.27）。因此悬停提示只能改 `entrypoints/popup/index.html` 的标题；若将来 popup 标题被删空，配置里的值会重新生效——升级 WXT 后需复核这一行为。
 - Chrome **不替换**扩展页面 HTML 里的 `__MSG_x__` 占位符（只对 manifest.json 生效），所以页面 `<title>` 里写占位符会直接以字面量出现在标签页上；需本地化时用入口 `main.ts` 设 `document.title`，静态值只作首帧兜底。
-- 干净检出跑 `pnpm typecheck` 前必须先 `pnpm exec wxt prepare`（`.wxt/` 不入库，CSS 模块与 `import.meta.env` 类型均来自它）。
+- 干净检出跑 `pnpm typecheck` 或 `pnpm typecheck:vue` 前必须先 `pnpm exec wxt prepare`（`.wxt/` 不入库，CSS 模块与 `import.meta.env` 类型均来自它）。`typecheck:vue` 只依赖 `prepare` 的产物，不依赖 `components.d.ts`（那份只有 dev/build 才生成）——所以它在 CI 的「Prepare → Lint → … → Build」序列里排在 Build 之前也是绿的，实测摘掉 `.wxt/components.d.ts` 后 exit 0。
 
 ### 发布与 CI
 
@@ -305,5 +308,5 @@
 
 - 需求已满足，既有功能、交互、数据与权限边界未发生未经确认的变化。
 - 已自查 diff，确认没有敏感数据、调试代码、无关改动、重复实现或未处理的异常路径。
-- 相关 `typecheck`、`lint`、`lint:style`、`format:check`、`test`、`build` 按上述矩阵通过，或已明确报告限制。
+- 相关 `typecheck`、`typecheck:vue`、`lint`、`lint:style`、`format:check`、`test`、`build` 按上述矩阵通过，或已明确报告限制。
 - 交付说明包含：改了什么、关键设计原因、执行了哪些验证、仍存在什么风险或未验证项。

@@ -1477,9 +1477,10 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
     it('verify 动作覆盖 package.json 里定义的全部检查脚本', () => {
       // 从 scripts 反推而不是手写一份数组：新增 `pnpm check:xxx` 并漏进 verify 动作时，
-      // 本用例必须变红。
+      // 本用例必须变红。`typecheck:vue` 必须显式列进这条交替式——它和 `typecheck` 只差一个
+      // 后缀，`^typecheck$` 那种锚点收不住它，漏掉就等于新加的门禁谁都不管它在不在 CI 里。
       const checkScripts = Object.keys(pkg.scripts).filter(key =>
-        /^(lint|lint:style|format:check|typecheck|test)$/.test(key),
+        /^(lint|lint:style|format:check|typecheck|typecheck:vue|test)$/.test(key),
       );
       expect(checkScripts.length).toBeGreaterThan(0);
       for (const script of checkScripts) {

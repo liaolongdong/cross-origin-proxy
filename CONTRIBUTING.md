@@ -11,7 +11,7 @@ Thanks for taking the look. This is a small, focused Chrome extension for cross-
 
    | What you changed                         | Must pass                                                     |
    | ---------------------------------------- | ------------------------------------------------------------- |
-   | TypeScript / Vue                         | `pnpm typecheck` `pnpm lint` `pnpm test`                      |
+   | TypeScript / Vue                         | `pnpm typecheck` `pnpm typecheck:vue` `pnpm lint` `pnpm test` |
    | CSS or `<style>` blocks                  | `pnpm lint:style` (recess-order property sorting is enforced) |
    | Storage, messaging, matching or rewrites | `pnpm test` (full suite)                                      |
    | Entrypoints, manifest, deps, bundling    | `pnpm build`                                                  |
@@ -31,7 +31,8 @@ pnpm dev          # WXT dev server with HMR on port 8899
 pnpm build        # production build → .output/chrome-mv3
 pnpm build:zip    # build + zip for store upload
 pnpm test         # vitest unit tests
-pnpm typecheck    # tsc --noEmit
+pnpm typecheck    # tsc --noEmit (skips .vue files entirely)
+pnpm typecheck:vue # vue-tsc --noEmit (the <script setup> blocks + template expressions)
 pnpm lint         # eslint (autofix: pnpm lint:fix)
 pnpm lint:style   # stylelint (recess-order property sorting)
 pnpm format:check # prettier (format: pnpm format — repo-wide, use sparingly)
@@ -41,7 +42,7 @@ pnpm promo        # film the store promo video (1280x720 mp4 + a 440x280 still)
 
 Load `.output/chrome-mv3` unpacked at `chrome://extensions` to try it. Run `pnpm assets` (and `pnpm assets:en` for the English store captions) only when you want to regenerate the store and landing-page images from `screenshots/`. `pnpm promo` / `pnpm promo:en` do the same job for the store promo video: they start a headless Chrome for Testing, load the **build output** through CDP, seed example-domain data and drive the real UI on a shot list, so `pnpm build` has to have run first and the machine needs a Chrome for Testing binary plus `ffmpeg` (point at them with `CHROME_BIN` / `FFMPEG` if auto-discovery misses). Neither command runs in CI, and both only ever write into gitignored directories — `pnpm assets` into `store-assets/`, `pnpm promo` into `store-assets/promo/` plus the throwaway frame/profile directories under `.test-tmp/promo/` (removed once the clip is encoded, kept when a run fails so there is something to inspect). Two commands matter only when releasing: `pnpm exec wxt submit --dry-run` (check store credentials without uploading) and `pnpm build:zip` (what the release workflow publishes) — see [RELEASING.md](./.github/docs/RELEASING.md).
 
-CI runs lint, stylelint, Prettier, typecheck, a production build and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./.github/docs/GITHUB.md).
+CI runs lint, stylelint, Prettier, typecheck (both `tsc` and `vue-tsc`), a production build and tests on every push and pull request ([.github/workflows/ci.yml](./.github/workflows/ci.yml)); the check list lives in one composite action (`.github/actions/verify`) so CI and releases cannot drift apart. Repository display settings — About description, website, topics, social preview, Pages source — are a one-time manual checklist in [GITHUB.md](./.github/docs/GITHUB.md).
 
 ## Repository layout
 
@@ -108,7 +109,7 @@ The full release runbook, including the one-time store credentials, is [RELEASIN
 ## 贡献要点（中文）
 
 1. 从 `main` 分支拉分支，一个分支只解决一件事。完整命令清单见上文「Setting up」，目录结构见「Repository layout」。
-2. 按改动范围跑对应检查：TS/Vue 跑 `pnpm typecheck` + `pnpm lint` + `pnpm test`；样式跑 `pnpm lint:style`；入口/清单/依赖/打包跑 `pnpm build`；文档与 JSON 跑 `pnpm exec prettier --check <改动文件>`。仓库没有 git hook，靠手动与 CI 保证。
+2. 按改动范围跑对应检查：TS/Vue 跑 `pnpm typecheck` + `pnpm typecheck:vue` + `pnpm lint` + `pnpm test`；样式跑 `pnpm lint:style`；入口/清单/依赖/打包跑 `pnpm build`；文档与 JSON 跑 `pnpm exec prettier --check <改动文件>`。仓库没有 git hook，靠手动与 CI 保证。`typecheck` 与 `typecheck:vue` 都要跑：前者根本不进 `.vue` 文件，`.vue` 里的实参错位、属性名拼错只有 `typecheck:vue` 看得见（它反过来不查 `el-*` 组件的 prop 名，那一份注册表不在 `tsconfig.json` 的 `include` 里）。
 3. PR 描述要写清「改动前行为 / 改动后行为 / 跑了哪些命令及结果 / 未能验证的部分」。
 
 关键约束：`isSimpleRule()` 决定规则走 DNR 还是后台通道，改它必须保证两条通道的重写语义一致；`chrome.storage.local` 是唯一事实来源，内存缓存必须可重建并在 `storage.onChanged` 失效；DNR 同步前必须过 RE2 与替换引用校验，否则整批规则被拒；MAIN world 拦截器必须自包含（不能 import logger、不能用 `chrome.*`）；页面 DOM、导入文件、runtime message 与 storage 数据都按不可信输入处理；日志统一走 `utils/logger.ts`；禁止用 `eslint-disable`、`@ts-ignore` 或降低断言来绕过问题；新增可见文案必须同时补齐中英文，且 `name` ≤ 75、`description` ≤ 132 字符由测试守卫。

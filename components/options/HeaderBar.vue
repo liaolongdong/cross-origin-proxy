@@ -70,7 +70,7 @@
         <el-switch
           :model-value="proxyEnabled"
           :aria-label="t('proxyToggleA11y')"
-          @change="val => $emit('toggleProxy', val as boolean)"
+          @change="(val: boolean | string | number) => $emit('toggleProxy', val as boolean)"
         />
       </div>
     </div>

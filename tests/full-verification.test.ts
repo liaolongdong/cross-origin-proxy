@@ -1098,10 +1098,16 @@ describe('[Batch 3] 弹窗保存与快捷键的闸门（源码契约）', () => 
    * 那三个开关硬编码成「关」——`submitRule` 是**按开关**重建规则的，于是用户得到一句「保存成功」
    * 而那个能力一个字都没落库。
    *
-   * 更要紧的是：这一处**没有任何静态门禁看得见**。`pnpm typecheck` 是 `tsc --noEmit`，它不进
-   * `.vue` 的 script 块（仓里没有 vue-tsc），`pnpm lint` 的 @typescript-eslint 也没开 type-aware
-   * 规则——「把整条规则传进一个收 `mockResponse` 的函数」这种实参错位，一路绿着过了 typecheck、
-   * lint 和 build。所以这里只能按源码契约把实参的形状钉住。
+   * 更要紧的是：这一处曾经**没有任何静态门禁看得见**。`pnpm typecheck` 是 `tsc --noEmit`，它不进
+   * `.vue` 的 script 块，`pnpm lint` 的 @typescript-eslint 也没开 type-aware 规则——「把整条规则
+   * 传进一个收 `mockResponse` 的函数」这种实参错位，一路绿着过了 typecheck、lint 和 build。
+   *
+   * 2026-10-03 起 `pnpm typecheck:vue`（vue-tsc）补上了那一格，实测把两种变异放回树里都报
+   * `TS2345`（`props.initialData` 那一支是 `| null` 不兼容，非空的 `props.rule` 那一支是
+   * `Property 'body' is missing in type 'ProxyRule'`），同一轮 `typecheck` 与 `lint` 照旧 exit 0。
+   * 这条源码契约**照样留着**，因为类型系统守的是「可赋值性」而不是「这里要的那份是 mockResponse」：
+   * `MockResponseConfig` 一旦把字段都改成可选，或者函数签名放宽，TS2345 就静默消失，而下面那句
+   * 「调用点必须恰好两处」本来就不是类型能表达的事。
    */
   it('模板预填与编辑两条分支都按 mockResponse / delayMs / blocked 派生开关，条件映射的实参是那一份 mockResponse', () => {
     for (const expr of [

@@ -291,7 +291,7 @@
               :model-value="row.enabled"
               size="small"
               :aria-label="t('enableRuleA11y', row.name)"
-              @change="val => $emit('toggle', row.id, val as boolean)"
+              @change="(val: boolean | string | number) => $emit('toggle', row.id, val as boolean)"
             />
           </template>
         </el-table-column>
