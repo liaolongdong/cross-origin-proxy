@@ -34,6 +34,26 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 - **英文对比页的分享卡那句 `og:description` 收回预算，并且这一面从此有守卫**：`docs/en-alternatives.html` 那条是 `AGENTS.md` 记下的已知待办——按可见宽度 172 单位，过线，分享到社交平台会被截断。改法取最便宜的一种：结尾 `and when a browser rule is the right answer` 收成 `and when a browser rule wins`，172 → 157，对比表的内容与条目一条没动。同一天给这十串补了守卫（`tests/docs-consistency.test.ts` 新增一支按页跑的 `it.each`，口径与 `meta description` 那条完全相同：先剥标签、解实体、并空白，再按 CJK 码点记 2、其余记 1，阈值 160），所以「写回 180 不会有测试拦你」这句从今天起不成立。牙是量过的：把阈值临时收到 158，红字点名 `en` 的 og 159 与 `en-alternatives` 的 twitter 159；再收到 150，点名换成 `en-alternatives` 的 og 157——两次都与独立复算一致，随后阈值原样回到 160。
   **The English comparison page's share-card line is back within budget, and that surface now has a guard.** The `og:description` in `docs/en-alternatives.html` was the known open item recorded in `AGENTS.md`: 172 display-width units, over the line, so the sentence gets cut off wherever the page is shared. The cheapest edit won: the tail `and when a browser rule is the right answer` becomes `and when a browser rule wins`, 172 → 157, with nothing in the comparison table's content or row count touched. These ten strings also got their guard the same day (a per-page `it.each` in `tests/docs-consistency.test.ts` using exactly the `meta description` measurement — strip tags, decode entities, collapse whitespace, CJK code points counted as 2, everything else as 1, threshold 160), which is why "writing it back to 180 stops nothing" no longer holds. The teeth were measured rather than asserted: lowering the threshold to 158 named `en`'s og at 159 and `en-alternatives`' twitter at 159, and to 150 it named `en-alternatives`' og at 157 — both agreeing with an independent recomputation — before the threshold went back to 160.
 
+## [1.5.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.4.1...v1.5.0) (2026-10-07)
+
+
+### Added
+
+* **options:** 空态一键模板从 4 张加到 7 张，顺手修掉带进来的三个开关本来是关着的 ([5c531f0](https://github.com/liaolongdong/cross-origin-proxy/commit/5c531f01deadd8cdd67a0ff584997e8262451878))
+* **popup:** 「为当前页创建规则」现在会说哪几个来源像是被跨域拦下了，并把它们排在最前 ([4f17332](https://github.com/liaolongdong/cross-origin-proxy/commit/4f17332cb8be613d5164a496db1a987f0cf90f9c))
+* **site:** 中英落地页首屏多一条「CORS 这道校验，两种走法」，亮环与流程图同拍 ([4e13e5f](https://github.com/liaolongdong/cross-origin-proxy/commit/4e13e5f066c6d6ed8542a3122a8470f0074d9a04))
+* **store:** 商店宣传视频改成一条命令实拍，中英各一条 ([dbd24a7](https://github.com/liaolongdong/cross-origin-proxy/commit/dbd24a7783164d5150339c723718c64f2964d4ea))
+* 弹窗直改环境快照与自动关闭档位，批量删除补 5 秒撤销，表单补两个响应字段 ([6176a7c](https://github.com/liaolongdong/cross-origin-proxy/commit/6176a7cccb0cb80e0972b8578dba48446ca7ca4b))
+
+
+### Fixed
+
+* **ci:** 给 release.yml 里两个用 gh 的步骤补上 GH_TOKEN ([0ae1333](https://github.com/liaolongdong/cross-origin-proxy/commit/0ae13336e3cfca697011ab84c7e236982d3ef2f0))
+* **docs:** 落地页菜单把「安装」排回「常见问题」前面，中英两页 × 两簇四处一起对 ([d006ee5](https://github.com/liaolongdong/cross-origin-proxy/commit/d006ee5a5c85e6d8587e8be241684a1c84e59ebe))
+* **site:** 英文对比页那句 og 描述收回 160 显示单位，并给这十串补上守卫 ([cda8271](https://github.com/liaolongdong/cross-origin-proxy/commit/cda8271a5e216ed4e9f3b7c8c831942440232a8c))
+* **site:** 首屏那条偏好回调不再被「没有 IntersectionObserver」的分支挡在门外 ([8af8a33](https://github.com/liaolongdong/cross-origin-proxy/commit/8af8a33a8908c76b814f26676e6858186e2a8499))
+* **storage:** getProxyConfig 缺键回落改成交出新副本，默认值常量不再被调用链写脏 ([6088385](https://github.com/liaolongdong/cross-origin-proxy/commit/6088385f8bc26abb1d0f9e1811d042214c4b33bb))
+
 ## [1.4.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.4.0...v1.4.1) (2026-09-30)
 
 ### Fixed
