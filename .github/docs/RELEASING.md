@@ -142,6 +142,8 @@ git push origin main    # 本地分支不叫 main 时写 `git push origin <你�
 
 **走过 §2.3 手工 bump，上面那一步会扫不到东西，得人工换**。清扫按**标题里写着本版本号**来筛已合并的发布 PR，而手工 bump 意味着发出去的号不是机器人 PR 标题上那一个（2026-09-30 那一次：PR #1 的标题写的是 `chore(main): release 1.3.1`，推出去的 tag 比它高一级）。日志会老实说一句「没有待清理的 release-please PR（可能这一版是 §2.3 的手工 bump）」然后正常退出——**这不是失败**，但那个 PR 仍带 `pending`，机器人下次起草时看到它就当场放弃。所以手工发版后要自己去看一眼有没有已合并却仍带 `pending` 的发布 PR，人工换成 `tagged`（症状与处置见 §4「机器人不再开新的发布 PR」那一行）。
 
+**手工换那一格有两个静默假成功的坑**（2026-10-07 踩在第一个上）。① `POST /issues/{n}/labels` 是**追加**而不是覆盖：用它提交 `["autorelease: tagged"]`，HTTP 回 200，GET 回来却是 `pending | tagged` 两个并存，而 release-please 的判据是「有没有**已合并仍带 `pending`** 的发布 PR」——卡点原样还在，界面却看着像已经改好了。覆盖整个标签集要用 `PUT`，且换完必须 GET 一次确认那个数组里只剩 `tagged`。② 换完不会立刻有下文：`release-please.yml` 只有 `push: branches: [main]` 一个触发器，没配 `workflow_dispatch`，所以解开卡点之后还得再推一笔 main 它才会重新起草——这一笔提交本身就是为了这件事存在的。
+
 **`pnpm test` 不再要求你去翻「复述当前版本号」的文档**：那三处（`docs/llms-full.txt` 两句与 `.github/ISSUE_TEMPLATE/bug_report.yml` 的示例版本）已经改成不带号的指针，指向 CHANGELOG 的最新小节。改带号的守卫反而会把机器人自己的发布 PR 判红——它在同一个 PR 里抬 `package.json`，却写不了散文。取而代之的是一条按文件清单放的断言：**除「写号是它的职责」的那几处**（`package.json`、`.release-please-manifest.json`、`CHANGELOG.md`、`CHROMEWEBSTORE.md`、`docs/**` 说的商店在装版本、HAR 规范字段、锁文件）**以外，任何被跟踪的文本文件都不许复述开发中的版本号**；新地方想写号，要么改措辞成指针，要么把那个文件连理由一起加进清单。
 
 落地页页脚、schema 的 `softwareVersion` 与 `CHROMEWEBSTORE.md` §8 表里的历史行说的是**商店在装的已发布版本**，不在 bump 范围内——它们要到 tag 真的推出去那一刻才按 §2.2 翻。
