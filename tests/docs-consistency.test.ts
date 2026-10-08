@@ -1109,6 +1109,13 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * 只匹配「`detail/` 后紧跟一段无连字符的 slug」，因此对比页里引用的竞品链接
      * （`detail/<slug>/<id>` 形式，slug 含连字符）不会被误计。此前实测存在三种写法
      * （30 位漏字、32 位换字、真值），JSON-LD 的那两份正是错的。
+     *
+     * 同一个判据也覆盖 `img.shields.io/chrome-web-store/v/<id>.json`：那三本手册与两份
+     * README 用它量「商店在装哪个版本」，抄错一位就打出一个 `not found`，而 `not found`
+     * 在那个端点上同时是「ID 不存在」与「shields 抓不到商店页」两种说法的落点——写错的
+     * 那个人恰恰是最容易把它读成「条目被下架」的人。2026-10-07 就是这么漏进去过一次（§12
+     * 那段记录里的 URL 少打两个字符，32 位写成 30 位，第二天照它复算才撞上）。`GITHUB.md`
+     * §7 用的是 `<id>` 占位写法，这个字符类匹配不到它，也不会误报。
      */
     it('所有商店链接共用同一个扩展 ID', () => {
       const truth = doc.match(/chromewebstore\.google\.com\/detail\/([a-z0-9]{32})(?![a-z0-9-])/)?.[1];
@@ -1123,6 +1130,18 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
 
       const wrong = ids.filter(row => row.id !== truth).map(row => `${row.file}: ${row.id}`);
       expect([...new Set(wrong)].sort(), '存在与 CHROMEWEBSTORE.md 真值不一致的商店 ID').toEqual([]);
+
+      const badgeSources = [...new Set([...STORE_URL_SOURCES, RELEASING_DOC, GITHUB_DOC])].filter(exists);
+      const badges = badgeSources.flatMap(file => [
+        ...read(file)
+          .matchAll(/img\.shields\.io\/chrome-web-store\/v\/([a-z0-9]{8,})(?![a-z0-9])/g)
+          .map(m => ({ file, id: m[1] })),
+      ]);
+      expect(badges.length, '文档里应当出现 shields 商店版本徽章').toBeGreaterThan(0);
+      const wrongBadges = badges
+        .filter(row => row.id !== truth)
+        .map(row => `${row.file}: ${row.id}（${row.id.length} 位，真值 ${truth?.length ?? 0} 位）`);
+      expect([...new Set(wrongBadges)].sort(), 'shields 徽章 URL 里的扩展 ID 与商店链接不是同一个').toEqual([]);
     });
 
     /** 取某个小节区间内的全部 ``` 代码块（商店表单的可粘贴值就放在这里）。 */
