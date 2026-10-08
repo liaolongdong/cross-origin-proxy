@@ -535,37 +535,37 @@ done
 
 写作约束与商店描述同源：不带版本号（这一栏本来就绑在版本上，写了反而在改包重传时变假）、不出现 `best` / `free` / 排名类措辞、不承诺下面第 9 节没被实机验证过的能力。中英文条目数一一对应，删减时**两边同步删**，只删一边就是下一次审计的一条发现。
 
+**下面这两块描述的是「商店在装的那一包 → 这一次要交的包」这一段差集**，2026-10-08 按 [CHANGELOG.md](../../CHANGELOG.md) 的 `## [1.4.0]` 与 `## [1.5.0]` 两节重写（上一版说的是 1.3.0 那一包，`v1.4.0` 与 `v1.5.0` 都没进过商店，所以商店用户一次升级同时吃到这两节的内容——见第 8 节表顶与第 12 节）。版本号只出现在这段说明里，两块正文里一个都不写，正是上面那条约束。第 9 节的功能自检里那三条「弹窗就地操作 / 疑似跨域来源 / 一键模板与它带进来的三个开关」是这一批新增的用户界面，勾选框走一遍再粘——`CHANGELOG.md` 里表单预填那一条把真浏览器目测如实列为未验证项，这两块文本承诺的恰恰包含它。
+
 中文（粘贴进「中文（中国）」列表）：
 
 ```
-- 复杂规则没生效时终于能看出卡在哪：弹窗新增「这一页尚未收到最新配置」提示，并多一行页面自报的拦截活动。
-- 修复复杂规则在 iframe 里从来没生效过的问题——此前只注入顶层页面。
-- 导入前先预览：说清哪几条算新增、哪几条保留；替换式导入、加载快照与批量删除之后，都能从「设置 · 配置恢复点」整包回退（最多 5 份）。
-- 凭据变量库：token 在规则里写成 {{名称}} 引用，真值只存在本机、只在后台代发那一刻展开，规则详情、导出文件与请求日志里始终只有这个引用。
-- 导出更放心：配置导出与 HAR 导出默认走「分享模式」，凭据类请求头与响应头不再跟着文件走。
-- 新增按规则的「携带 Cookie」开关，默认关闭。
-- 命中次数按两条通道分两格显示，「这条规则不走该通道」不再被画成 0；规则表与 URL 匹配预演会标出「浏览器不会应用这条规则」并说明原因。
-- 稳定性：被阻断的请求不再因后台重新匹配而真的发出；请求取消、超时、204/205/304 与含非 Latin-1 字符的响应头不再让页面请求永久挂起；同步 XHR 改为回退原生请求，而不是给页面一个空响应。
-- 关闭总开关时，浏览器网络层的重定向规则一并卸载——此前仅重写 URL 的简单规则仍会继续改写请求。
-- 界面细节：小屏菜单高亮当前区块、主题首帧不再闪默认配色、扩展内界面尊重系统的「减少动态效果」设置。
+- 弹窗里现在能直接改东西，不只是看：已存的环境快照直接列在卡片下面，选中一行当场换完；自动关闭的档位（从不 / 30 分 / 1 小时 / 2 小时 / 4 小时）也并排在总开关下面，点一下就生效，不用再切去配置页。
+- 「为当前页创建规则」会标出这一页上有几个来源像是被跨域拦下，并把它们排在候选最前——控制台那行红字属于哪个地址，那个地址正是规则要填的目标。措辞只到「疑似」：被拦下、断网、DNS 失败、连接被拒在页面上是同一个形状，它是线索不是结论。
+- 配置页空态的一键模板从 4 张补到 7 张：Mock 接口响应、模拟慢网、阻断请求，点一张卡就是一个能直接跑的例子；带进表单的这三个开关也不再是关着的。
+- 批量删除也有 5 秒撤销窗口，与单条删除同一条时序；删除没真的写进去时不再照样显示「已删除」，那几条会放回列表并明确报错。
+- 响应覆盖补上两个字段：状态行文本与整段替换的响应体，此前只有导入的配置文件写得出这两项；状态行那一格直接显示实际会发出的那一份。
+- 正则规则多一条「捕获组 ↔ 引用」对照：编号越界的引用会被点名，并分别说明两条通道各自会发生什么。
+- 加载环境快照的确认框现在会说明代理总开关被一并打开。
+- 反馈只在读数真的变了才响：保存或复制规则后那一行滚进视野并刷两拍，活跃规则数与两格命中数在数值变化的那一拍才动，「浏览器不会应用该规则」的标记首次出现时向外扩散一圈；导入预览用入场方向区分「本次净结果」与「现网会被改动」，不再只靠颜色。
+- 以上动效在系统开启「减少动态效果」时一起不播，包括那一处滚动。
 ```
 
 English（粘贴进 English 本地化列表）：
 
 ```
-- When a complex rule does not take effect you can now see where it stalls: the popup adds a "this page has not received the latest config" notice and a page-reported interception line.
-- Fixed complex rules never applying inside iframes — only the top frame was injected before.
-- Preview an import before it lands: see which entries count as new and which stay, and roll back a whole replace-style import, a loaded snapshot or a bulk delete from "Settings · Config restore points" (up to 5).
-- Credential variables: write tokens in rules as a {{NAME}} reference. Real values stay on your machine and are expanded only at the moment the background sends the request, so rule details, exported files and request logs carry just the reference.
-- Safer exports: config and HAR exports now run through "share mode" by default, so credential headers no longer travel with the file.
-- New per-rule "send cookies" switch, off by default.
-- Hit counts are split into one column per channel, and "this rule does not use that channel" no longer renders as 0; the rule table and the URL match tester now flag rules the browser will not apply, with the reason.
-- Stability: blocked requests are no longer actually sent after a background re-match; cancelled requests, timeouts, 204/205/304 responses and response headers containing non Latin-1 characters no longer leave page requests pending forever; synchronous XHR falls back to a native request instead of handing the page an empty response.
-- Turning the global toggle off now unloads the network-layer redirect rules too — previously URL-rewrite-only rules kept rewriting requests.
-- Interface details: the small-screen menu highlights the current section, the first frame no longer flashes the default palette, and the extension UI honours the system "reduce motion" setting.
+- The popup now lets you act instead of only read: saved env profiles are listed right under their card and switching one takes effect on the spot, and the auto-off intervals (never / 30 min / 1 h / 2 h / 4 h) sit next to the main switch, so changing one no longer means going to the options page.
+- "Create Rule for This Page" now flags which origins on the page look blocked by CORS and puts them first — the origin behind that red console line is exactly the address a rule needs. It says _look blocked_ on purpose: a CORS block, an offline page, a DNS failure and a refused connection are one shape in the browser, so this is a lead, not a verdict.
+- The one-click templates in the empty state go from four to seven: mock an API response, simulate a slow network, block a request. Each card is a working example as soon as you click it, and the three switches a template carries into the form are no longer left off.
+- Bulk deletes now open the same 5-second undo window as a single delete. When a delete did not actually reach storage the list no longer says "deleted": those rows go back and the failure is stated.
+- Response overrides gained two fields — the status line and a whole-body replacement, which until now only an imported config file could carry — and the status line shows what will actually be sent.
+- Regex rules now come with a capture-group ↔ reference read-out: an out-of-range reference is named, and what each of the two channels does with it is spelled out.
+- The confirmation before loading an env profile now states that the global proxy switch is turned on as well.
+- Feedback fires only when a reading actually moved: the row you saved or duplicated scrolls into view with two beats of highlight, the active-rule count and the two hit-count cells react on the tick the number changed, and the "the browser will not apply this rule" marker spreads a ring the first time it appears. The import preview separates "what this run adds" from "what it changes in the live set" by entry direction, not by colour alone.
+- All of the above stays still when your system asks for reduced motion, including that scroll.
 ```
 
-字段长度上限无法从本机核实（这一栏只在登录后的 Dashboard 出现，本仓库机器访问不到商店域名），所以上面按「一条一句」写：中文 10 条 599 码点、英文 10 条 1,821 字符，两边条目数一致。若粘贴时被截断，**两边同步删到最后 4 条**（每条独立成句，删尾部不伤前面），不要只删一边。重算上面两个数（本文件的代码块不是从 §1 起就成对闭合的，按「末尾两个代码块」取会错位，所以这里按小节标题定位）：
+字段长度上限无法从本机核实（这一栏只在登录后的 Dashboard 出现，本仓库机器访问不到商店域名），所以上面按「一条一句」写：2026-10-08 现量，中文 9 条 675 码点、英文 9 条 2,138 字符，两边条目数一致（上一版是 10 条 599 码点 / 10 条 1,821 字符；这一版少一条却长了 76 码点，因为快照与自动关闭、模板与那三个开关各并成了一句）。若粘贴时被截断，**两边同步删到最后 4 条**（每条独立成句，删尾部不伤前面），不要只删一边。重算上面两个数（本文件的代码块不是从 §1 起就成对闭合的，按「末尾两个代码块」取会错位，所以这里按小节标题定位）：
 
 ````bash
 python3 - <<'PY'
@@ -621,6 +621,9 @@ PY
 - [ ] 通配 / 前缀 / 正则三类规则均能命中并重写（正则注意：网络层重定向替换的是整个 URL，想两通道结果一致就写覆盖整条 URL 的正则）
 - [ ] 通道判定用「URL 匹配测试」面板核对：它直接显示命中的通道（网络层 / 后台）。简单规则在该面板显示网络层重定向、请求能正常转发，且弹窗右上格「本页 · 近 5 分钟」会出现网络层命中数、规则表的「命中次数」列会增长——但**请求日志里不会有这一条**（日志只由后台通道写入，网络层重定向不经过扩展脚本）；复杂规则在面板显示后台且日志有对应行。日志抽屉另有一个只统计网络层命中的面板可交叉验证
 - [ ] Mock、延迟、阻断、响应改写、方法过滤、查询参数注入逐项生效
+- [ ] 弹窗就地操作：「环境配置」卡下面直接列出已存快照（名称 + 条数），选中一行确认后当场换完，并顺手刷新「活跃规则 / 快捷开关列表」与本页命中预演；读不到列表或一份快照都没存时这颗卡照旧跳配置页的管理弹窗——把一次 IO 失败说成「你还没存快照」是假话。自动关闭那五格（从不 / 30 分 / 1 小时 / 2 小时 / 4 小时）点一下真的重挂倒计时：`chrome.alarms.get('proxy-auto-off')` 的 `scheduledInSeconds` 要与所选档位对得上，代理没开时点档位只写值、不建 alarm
+- [ ] 一键模板 7 张：三张新卡（Mock 接口响应 / 模拟慢网 / 阻断请求）点进表单后，Mock、延迟、阻断三个开关当场是**开着**的——此前它们是关着的，点保存会静默落一份缺能力的配置；保存后规则表那一行要看得出对应能力，且这三张的目标地址为空、确实走后台通道
+- [ ] 「为当前页创建规则」的候选面板：这一页上真有未被任何规则覆盖的跨域 XHR 失败时，那个来源带「疑似 N 笔」标记并排在最前，卡片那行说明在点开之前先说「检测到 N 个来源」；同源、非 http(s)、以及命中规则之后回退原生那几笔都不入账；**读不到与读到空都不许出现那句「像是被跨域拦下」**——这一条要验的是「不冤枉」，不是「有惊喜」
 - [ ] WebSocket 规则能转发 `wss://` 连接；规则列表里 WS 徽标的悬停说明与实现一致——只有地址重写、查询参数注入与阻断在长连接上生效，其余能力画了也不会作用到 socket
 - [ ] 「携带 Cookie」默认关闭时，目标环境收到的请求不带它的 Cookie；某条规则打开后请求以 `credentials: 'include'` 发出，且「URL 匹配测试」显示这条规则走后台通道（网络层无法表达该能力）
 - [ ] 凭据变量：在「设置 → 凭据变量」建一个 `UAT_TOKEN`，把规则的请求头覆盖值写成 `{{UAT_TOKEN}}`，目标环境收到的是真值，而规则详情、配置导出、环境快照与请求日志里始终只有这个字面量引用（日志的 URL 那栏是未展开形态）；引用一个不存在的名字时请求把 `{{名称}}` 原样发出、控制台只点名不点值；WebSocket 规则的查询参数填 `{{名称}}` 在保存时被当场拒绝并说明原因
@@ -677,7 +680,7 @@ PY
 
 **①做完了，下面八行已在 2026-10-01 全部翻掉，最后一列就是翻完之后的样子。** 其中 4、5、7、8 按本表的口径说的是「商店在装的版本」（8 那行还顺带记了 tag 的存在性，那半截不回头），而 `v1.4.0` 那一次商店**没有**收到包（仓库里只有 `CWS_*` 三个 Secrets，`release.yml` 读的是 `CHROME_*` 四个，且 `CHROME_REFRESH_TOKEN` 从来没有过——`Submit to Chrome Web Store` 因此被跳过，见 RELEASING.md §5），所以这四项翻成的是 **v1.3.0**（shields 实测 `chrome-web-store/v/<id>.json` = `v1.3.0`），不是 `package.json` 里那个号。**等商店真的装上 1.4.0 那一刻，这 4、5、7、8 四行要再回来翻一次**；1、2、3、6 讲的是 tag 存在与否，翻了就不回头。
 
-**2026-10-07 又推了一支 tag（`v1.5.0`），这一轮只动了「tag 侧」，商店侧四行原样不动。** 同一次 Run 里 `Submit to Chrome Web Store` **仍然是 skipped**——四个 `CHROME_*` Secrets 一个都没配，形状与 2026-09-30 那次一模一样，所以「商店在装 1.3.0」这句话今天重新量过还是真的（`img.shields.io/chrome-web-store/v/dednngakllfilbndkaggphohmpgcbg.json` 报 `v1.3.0`，2026-10-07 实测）。翻了的只有 §8 那张表：顶上加了 `1.5.0` 一行（tag 与 Release 已就绪、商店未提审），`1.4.0` 那行的状态列补了一句「已被 `v1.5.0` 取代，不要再单独送它」（§3：商店落后好几版时只交最新那一份，依次上传是重复消耗审核配额）。等商店真吃到这一包，第 4、5、7、8 行才回来翻，而第 5 行要翻的是**两件事**——§8 表顶那行的「未提审」变成「已提审 / 已上架」，而 4、7 两处和 `GITHUB.md` 的 `CWS` 徽章翻成的是**商店那个号**，届时按 §3 与 `RELEASING.md` §5 现量 shields，别抄 `package.json`。§8.1 那两块待粘贴的更新说明**还没换**：它们说的是商店在装的 1.3.0，而下一次要粘的是 1.4.0 + 1.5.0 的合集——商店用户是从 1.3.0 升上去的，只写最新一节的条目会漏掉中间那一包，这一步留待与提审同批做。
+**2026-10-07 又推了一支 tag（`v1.5.0`），这一轮只动了「tag 侧」，商店侧四行原样不动。** 同一次 Run 里 `Submit to Chrome Web Store` **仍然是 skipped**——四个 `CHROME_*` Secrets 一个都没配，形状与 2026-09-30 那次一模一样，所以「商店在装 1.3.0」这句话今天重新量过还是真的（`img.shields.io/chrome-web-store/v/dednngakllfilbndkaggphohmpgcbg.json` 报 `v1.3.0`，2026-10-07 实测）。翻了的只有 §8 那张表：顶上加了 `1.5.0` 一行（tag 与 Release 已就绪、商店未提审），`1.4.0` 那行的状态列补了一句「已被 `v1.5.0` 取代，不要再单独送它」（§3：商店落后好几版时只交最新那一份，依次上传是重复消耗审核配额）。等商店真吃到这一包，第 4、5、7、8 行才回来翻，而第 5 行要翻的是**两件事**——§8 表顶那行的「未提审」变成「已提审 / 已上架」，而 4、7 两处和 `GITHUB.md` 的 `CWS` 徽章翻成的是**商店那个号**，届时按 §3 与 `RELEASING.md` §5 现量 shields，别抄 `package.json`。§8.1 那两块待粘贴的更新说明**已于 2026-10-08 换掉**（上一轮记录写的是「留待与提审同批做」，这一轮把它做了）：原来说的是商店在装的 1.3.0，现在按 1.4.0 + 1.5.0 的**合集**重写——商店用户是从 1.3.0 升上去的，只写最新一节的条目会漏掉中间那一包。条目数 10 → 9，中文 675 码点、英文 2,138 字符（两边同数，现量口径见那一节末尾的重算脚本）。**但粘贴动作还没发生**，所以这两块文本属于「已备好、未提交」：商店那一步一旦真跑起来（`RELEASING.md` §3 补跑或本机直传），先走 §9 新加的那三条勾选，再把它粘进 Dashboard 的「更新信息 / Release notes」，中英各一份——`wxt submit` 没有这个参数，自动化不会替你填。
 
 | #   | 文件                                        | 位置                                                                                                                                                       | 翻之前写的是                                                                                        | 现在写的是（2026-10-01）                                                                                                                                                                      |
 | --- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
