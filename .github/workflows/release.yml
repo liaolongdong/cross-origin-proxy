@@ -3,13 +3,42 @@ name: Release
 # 发版链路：tag `v*` → 全量校验（复用 CI 的 verify 动作）→ 构建并打包 zip →
 # GitHub Release（附 zip 与 CHANGELOG 小节）→ Chrome 应用商店上传并提审。
 #
+# 三个入口，发布实现只有这一份：
+#   - `push: tags` —— 人从本机推 tag（RELEASING.md §2 路径 B）。
+#   - `workflow_call` —— 被 `store-publish.yml` 在**人工审批通过并打好 tag 之后**调用
+#     （§2 路径 A，合并即发布）。它自己用作业令牌推 tag，所以触发不了本文件（GitHub 的
+#     「同一令牌产生的事件不起跑新工作流」那条规则），必须由调用方显式接力。
+#   - `workflow_dispatch` —— 补跑与灰度（§3）。
+#
 # 首次上架无法自动化：`publish-extension` 明确不提供「新建商店条目」的能力，
 # 必须先在 Developer Dashboard 手动上传一次 zip 拿到 Extension ID，
-# 之后所有版本都由本工作流提审。步骤见 RELEASING.md。
+# 之后所有版本都由这条链路提审。步骤见 RELEASING.md。
 on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: '要发布的标签，必须已存在于远端（由调用方刚刚打出来）'
+        required: true
+        type: string
+      # `workflow_call` 的输入类型只有 boolean / number / string 三种：`choice` 与
+      # `environment` 是 `workflow_dispatch` 专属（官方 workflow-syntax 的 inputs.<id>.type
+      # 那一节写死了这份清单）。把 `choice` 写在这里不是「多个字段没支持」而是**整份工作流
+      # 文件解析失败**：GitHub 随即把这条链路判成 failure 且一个作业都不起跑，而 Run 页面
+      # 上只有工作流文件名。`publish-target` 因此在这里是 `string`，那份「只能是 default 或
+      # trustedTesters」的约束改由 `Validate publish inputs` 那一步钉住（fail closed）。
+      publish-target:
+        description: 'Chrome 商店发布分组（default 或 trustedTesters）'
+        required: false
+        type: string
+        default: default
+      skip-review:
+        description: '只上传 zip 到商店草稿，不提交审核'
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       tag:
@@ -60,6 +89,32 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref_name }}
 
+      # 排在 Verify **之前**：这两个值一路只有 `choice` 在 dispatch 入口替人挡着，
+      # 而 `workflow_call` 的 `publish-target` 是自由字符串。等到建完 Release、传完商店
+      # 才发现分组名写错，代价是一次不可撤回的提审；写错号则是整格红在这里，几秒钟。
+      - name: Validate publish inputs
+        env:
+          PUBLISH_TARGET: ${{ inputs.publish-target || 'default' }}
+          SKIP_REVIEW: ${{ inputs.skip-review }}
+        run: |
+          # 白名单只放 `wxt submit` / Chrome Web Store API 实际认的那两个分组：
+          # `unlisted` 在这里等于把包交出去却不进商店检索，而本链路的语义只有「提审」和
+          # 「先给测试者」两种，第三种必须由人显式决定，不接受一个拼错的字符串兜住它。
+          case "$PUBLISH_TARGET" in
+            default | trustedTesters) ;;
+            *)
+              echo "::error::publish-target 只能是 default 或 trustedTesters（收到长度 ${#PUBLISH_TARGET} 的值，不复读原文）"
+              exit 1
+              ;;
+          esac
+          case "$SKIP_REVIEW" in
+            '' | true | false) ;;
+            *)
+              echo "::error::skip-review 必须是布尔值 true 或 false（收到长度 ${#SKIP_REVIEW} 的值）"
+              exit 1
+              ;;
+          esac
+
       - name: Verify
         uses: ./.github/actions/verify
         with:
@@ -85,7 +140,7 @@ jobs:
           fi
           VERSION="$(node -p "require('./package.json').version")"
           if [ "v${VERSION}" != "$TAG" ]; then
-            echo "::error::标签 $TAG 与 package.json 的 $VERSION 不一致。先在本地 npm version 并同步 CHANGELOG.md 再打 tag。"
+            echo "::error::标签 $TAG 与 package.json 的 $VERSION 不一致。号只写在 package.json（§2 路径 A 由机器人的发布 PR 写、路径 B 由 §2.3 手工 bump 写），tag 必须跟上它，不要反过来改 tag 迁就文件。"
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -108,32 +163,14 @@ jobs:
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       # CHANGELOG.md 是版本历史唯一事实源；无对应小节时回落到自动生成的说明，
-      # 宁可说明朴素也不要发布时空白。
+      # 宁可说明朴素也不要发布时空白。切片判据住在 `.github/actions/release-notes`，
+      # 与 `store-publish.yml` 审批页那段「这一版要发什么」同源——预览和落款分两份判据，
+      # 审批人点头的内容就不是商店拿到的内容。
       - name: Build release notes
         id: notes
-        env:
-          VERSION: ${{ steps.guard.outputs.version }}
-        run: |
-          # 小节标题有两种形状，都得认：release-please 在有上一个 tag 时写
-          # `## [x.y.z](…/compare/上号...本号) (日期)`，拿不到上一个 tag 时写裸的
-          # `## x.y.z (日期)`（模板见 conventional-changelog-conventionalcommits 的 header.hbs
-          # 里 `linkCompare` 那两个分支）。号必须锚在 `## ` 之后原位比对：拿整行做子串查找会把
-          # 上一个版本号的对比链接读成自己的小节。
-          awk -v version="$VERSION" '
-            BEGIN { printing = 0 }
-            /^## (\[|[0-9])/ {
-              if (printing) exit
-              printing = ($0 ~ ("^## \\[" version "\\]") || $0 ~ ("^## " version "[ (]"))
-              next
-            }
-            printing { print }
-          ' CHANGELOG.md > notes.md
-          if [ -s notes.md ]; then
-            echo "source=changelog" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::CHANGELOG.md 里没有 [$VERSION] 小节，回落到自动生成的发布说明"
-            echo "source=generated" >> "$GITHUB_OUTPUT"
-          fi
+        uses: ./.github/actions/release-notes
+        with:
+          version: ${{ steps.guard.outputs.version }}
 
       # 手动重跑是文档里的恢复路径，所以这里必须幂等：已存在就改说明并覆盖资产。
       #
@@ -273,3 +310,8 @@ jobs:
             echo '补齐后在本工作流页面点 **Run workflow** 并填入同一个 tag 即可继续发布；Release 已存在会被复用，不会重复创建。'
             echo '获取步骤见 [.github/docs/RELEASING.md](https://github.com/liaolongdong/cross-origin-proxy/blob/main/.github/docs/RELEASING.md)。'
           } >> "$GITHUB_STEP_SUMMARY"
+          # 这一句必须是**注解**而不只是摘要正文：摘要要点进作业才看得到，而整条 run 是绿的。
+          # 本仓库已经这么连着错过两包——Release 建好、zip 挂上、全绿，Google 那边什么都没收到。
+          # 措辞刻意点名「值在、名字不对」这一种形状：历史遗留的 `CWS_*` 四条凭据此刻就在这
+          # 仓库里，任何只看「凭据配了没有」的读者都会读成已配好，而 `Detect` 读的是上面那四个名字。
+          echo "::warning::商店提审已跳过（仓库级缺：${MISSING# }）——GitHub Release 照常已发，Google 侧没收到包。若四个值都在、只是命名不同（例如历史遗留的 \`CWS_EXTENSION_ID\` / \`CWS_CLIENT_ID\` / \`CWS_CLIENT_SECRET\` / \`CWS_REFRESH_TOKEN\`），去 Settings → Secrets and variables → Actions 逐条用 Rename 把名字改成 \`CHROME_EXTENSION_ID\` / \`CHROME_CLIENT_ID\` / \`CHROME_CLIENT_SECRET\` / \`CHROME_REFRESH_TOKEN\`：改名保留值，无需重新拿 secret，而 GitHub 没有 rename Secrets 的 API，只能网页上点。处置与判据见 .github/docs/RELEASING.md §1.3。"

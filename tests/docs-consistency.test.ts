@@ -1487,11 +1487,100 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     const pages = read('.github/workflows/deploy-pages.yml');
     const release = read('.github/workflows/release.yml');
     const releasePlease = read('.github/workflows/release-please.yml');
+    const storePublish = read('.github/workflows/store-publish.yml');
     const verify = read('.github/actions/verify/action.yml');
+    const notesAction = read('.github/actions/release-notes/action.yml');
+    const gateScript = read('scripts/release-gate.mjs');
 
-    it('CI 与发布共用同一个 verify 复合动作，避免两份清单漂移', () => {
+    /**
+     * 作业级切分：YAML 在这里只按「两个空格缩进的就是作业名」拆，不引解析器（见文件头那句
+     * 「只依赖 fs 与正则」）。拆出来是为了把断言**绑到具体那一格**——整文件 grep 一次
+     * `approval-state == 'configured'` 拦不住「把它从 confirm 挪到 prepare 上」这种改法，
+     * 而那一挪正好让审批闸门失效。
+     */
+    const jobsOf = (yaml: string): Record<string, string> => {
+      const body = yaml.split(/^jobs:$/m)[1] ?? '';
+      const marks = [...body.matchAll(/^ {2}([a-z][\w-]*):$/gm)];
+      const out: Record<string, string> = {};
+      marks.forEach((mark, index) => {
+        out[String(mark[1])] = body.slice(
+          Number(mark.index) + mark[0].length,
+          index + 1 < marks.length ? Number(marks[index + 1].index) : body.length,
+        );
+      });
+      return out;
+    };
+    const publishJobs = jobsOf(storePublish);
+
+    /**
+     * 把 `on.workflow_call` 那一块里的 `type:` 值按缩进切出来。
+     *
+     * 存在的理由是一条 GitHub 的硬规则：**被调用的工作流只认 `boolean` / `number` / `string`
+     * 三种输入类型**，`choice` 与 `environment` 是 `workflow_dispatch` 专属。写错的代价不是
+     * 「那个字段少了下拉框」，而是**整份工作流文件解析失败**：GitHub 把这条链路判成 failure、
+     * 一个作业都不起跑，Run 页面只显示文件名，日志是空的（2026-10-09 首次开 PR 就是撞在这里，
+     * `release.yml` 与 `store-publish.yml` 两格同时零作业红，本机 YAML 却解析得好好的）。
+     */
+    const workflowCallTypes = (yaml: string): string[] => {
+      const lines = yaml.split('\n');
+      const start = lines.findIndex(line => /^ {2}workflow_call:\s*(#.*)?$/.test(line));
+      if (start < 0) return [];
+      const out: string[] = [];
+      for (let index = start + 1; index < lines.length; index += 1) {
+        const line = lines[Number(index)];
+        if (line.trim() === '' || /^\s*#/.test(line)) continue;
+        // 缩进退回 ≤2 个空格 = `workflow_call` 这一块结束（下一个 `on:` 平级键，比如 dispatch）。
+        if (!/^ {3,}\S/.test(line)) break;
+        const type = line.match(/^ +type:\s*(\S+)\s*$/);
+        if (type) out.push(String(type[1]));
+      }
+      return out;
+    };
+    const CALL_TYPES = ['boolean', 'number', 'string'];
+
+    it('被调用的工作流只声明 boolean / number / string 三种输入类型', () => {
+      const types = workflowCallTypes(release);
+      // 先证明这一块里真的数得到东西：整体失配时（比如 `workflow_call:` 的缩进或写法变了，
+      // 于是这一格切出空数组）断言会静默假通过，所以把「非空」本身钉住。
+      expect(types.length, '没从 workflow_call 块里数到任何 type——提取口径坏了').toBeGreaterThan(0);
+      for (const type of types) {
+        expect(CALL_TYPES, `workflow_call 的输入类型 ${type} 会让整份工作流解析失败`).toContain(type);
+      }
+      // 切块的下界也得有人管：dispatch 那份下拉框（`choice`）是**故意留着**的，人手补跑时靠它挡错。
+      // 若块边界算错，`choice` 会同时出现在「被调用」这一侧，上面的断言立刻红；反过来若有人把
+      // dispatch 的下拉框一并删了，这条红——两边都不许悄悄动。
+      expect(release, 'workflow_dispatch 的 publish-target 不再是下拉框').toContain('type: choice');
+      // 少了一种取值就没人挡着传给 `wxt submit`：`publish-target` 从 `choice` 降级成自由字符串之后，
+      // 那份白名单必须住在作业里，而不是消失。
+      expect(release).toContain('Validate publish inputs');
+      expect(release).toMatch(/case "\$PUBLISH_TARGET" in[\s\S]*default \| trustedTesters/);
+      expect(release).toMatch(/PUBLISH_TARGET: \$\{\{ inputs\.publish-target/);
+
+      // 阳性对照：这一格自己的牙。同一份提取函数遇到 `choice` 必须把它数出来，
+      // 否则「全绿」只说明我没看见那个错。
+      const poisoned = [
+        'on:',
+        '  workflow_call:',
+        '    inputs:',
+        '      publish-target:',
+        '        type: choice',
+        '        default: default',
+        '  workflow_dispatch:',
+        '    inputs:',
+        '      x:',
+        '        type: string',
+      ].join('\n');
+      expect(workflowCallTypes(poisoned), '提取函数没抓到被注入的 choice').toEqual(['choice']);
+      // `workflow_call:` 缺席时必须返回空数组，而不是把 dispatch 那一侧的类型误报进来。
+      expect(workflowCallTypes('on:\n  workflow_dispatch:\n    inputs:\n      x:\n        type: choice\n')).toEqual([]);
+    });
+
+    it('CI、发布、以及审批前的校验，共用同一个 verify 复合动作', () => {
       expect(ci).toContain('uses: ./.github/actions/verify');
       expect(release).toContain('uses: ./.github/actions/verify');
+      // 点头之前那一格也必须走同一份清单，否则「CI 绿」与「审批人看到的绿」是两件事。
+      expect(publishJobs.prepare ?? '').toContain('uses: ./.github/actions/verify');
+      expect(publishJobs.prepare ?? '').toContain('build-mode: zip');
     });
 
     it('verify 动作覆盖 package.json 里定义的全部检查脚本', () => {
@@ -1515,7 +1604,16 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(pages).toMatch(/branches:\s*\[main\]/);
     });
 
-    it('发布工作流引用 4 个商店凭据、走 wxt submit、且只在 tag 上触发', () => {
+    /**
+     * 「谁能把包交到 Google 手上」必须只有一个出口。
+     *
+     * `release.yml` 现在有**三个**入口（人推的 `v*` tag、被 `store-publish.yml` 调用、手动补跑），
+     * 所以旧那句「只在 tag 上触发」已经不是它的边界了。边界换成了两条更硬的：
+     * ① 商店凭据只被这一个文件引用——闸门那条链路一个 `secrets.CHROME_*` 都不碰，它只负责
+     *    「批准」和「打 tag」；② `wxt submit` 全仓只出现一次。谁哪天在别的链路里再写一次
+     *    `wxt submit`，就等于开出第二条提审通道，而配额有限与不可撤回这两件事从此没有单一守门人。
+     */
+    it('向商店提审的出口只有 release.yml，它有三个入口但没有第四个', () => {
       for (const secret of [
         'CHROME_EXTENSION_ID',
         'CHROME_CLIENT_ID',
@@ -1529,6 +1627,170 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(release).toContain("'v*'");
       expect(release).toContain('permissions:');
       expect(release).toContain('contents: write');
+      // 三个入口都得在文件里声明；缺 `workflow_call` 就是闸门链路调不到它，
+      // 而那个失败是「审批点了、tag 打了、商店没动」——Release 那一侧看着一切正常。
+      expect(release).toMatch(/^ {2}workflow_call:$/m);
+      expect(release).toMatch(/^ {2}workflow_dispatch:$/m);
+
+      for (const other of [ci, releasePlease, storePublish]) {
+        expect(other, '出现了第二份提审实现').not.toContain('wxt submit');
+      }
+      expect(storePublish, '闸门链路不该直接引用商店凭据').not.toContain('secrets.CHROME_');
+    });
+
+    /**
+     * 闸门链路的全部静默失败都长得同一副样子：**某一格的条件被挪走**，于是它要么永远不跑，
+     * 要么在没人点头的时候跑了。所以这里的每条断言都按作业名取那一格来看，而不是整文件 grep 一次
+     * ——全文搜 `approval-state == 'configured'` 拦不住「把它从 confirm 挪到 prepare 上」，
+     * 而那一挪恰好让这道闸门当场失效（环境仍然会等批准吗？不会——`prepare` 不带环境）。
+     */
+    it('闸门链路的六格齐在，且各判各的', () => {
+      expect(Object.keys(publishJobs).length, '作业一格都没切出来——YAML 缩进或本用例的正则变了').toBe(6);
+      expect(Object.keys(publishJobs).sort()).toEqual(
+        ['confirm', 'decide', 'prepare', 'publish', 'release-tag', 'hold'].sort(),
+      );
+    });
+
+    it('confirm 那一格就是人工确认：它带环境，且只在实测过「闸门已配」时才可达', () => {
+      const confirm = publishJobs.confirm ?? '';
+      // 环境名必须逐字等于判据脚本里 `DEFAULT_ENVIRONMENT` 那一个，也等于手册教人去建的那一个。
+      const environment = /(?:^|\n) {4}environment:\s*(\S+)/.exec(confirm)?.[1];
+      expect(environment, 'confirm 那一格不带 environment，人工确认根本不存在').toBeTruthy();
+      expect(environment).toBe(/const DEFAULT_ENVIRONMENT = '([^']+)'/.exec(gateScript)?.[1]);
+      expect(storePublish).toContain(`environments/${environment}`);
+      /**
+       * 手册必须**教人建这一个环境**。判据要求环境名出现在反引号里（那是文中指认一个
+       * 字面量的写法），而不是子串命中：§2 那条翻牌清单里有一整条 shields 徽章 URL，
+       * 路径里就带着 `chrome-web-store` 这五个词，按子串查时它替文档答了「教过了」——
+       * 而读者照着那份手册做完，环境仍然是空的。
+       */
+      const releasing = read(RELEASING_DOC);
+      expect(
+        releasing,
+        `手册里没有把环境名写成待创建的那个字面量 \`${environment}\`（工作流按这个名字等审批）`,
+      ).toContain('`' + String(environment) + '`');
+      expect(releasing, '手册里没有那条链路的这一格，读者不知道审批发生在哪').toContain('store-publish.yml');
+      expect(releasing, '手册里没有 Required reviewers 那一步——环境建了但没人能点头，闸门等于直接通过').toContain(
+        'Required reviewers',
+      );
+      // 这一条是整件事的核心：环境**存在**与**有人能点头**是两件事，隐式创建的裸环境会让
+      // 这一格直接成功通过，「合并即发版」当场变成真的，而流水线全绿。
+      expect(confirm).toContain("needs.decide.outputs.approval-state == 'configured'");
+      expect(confirm).toContain("github.event_name != 'pull_request'");
+    });
+
+    it('批准之后的三格对 PR 不可达，判定与校验两格可达', () => {
+      // 补跑与手动起跑靠的是「不是 PR」，而 PR 必须能跑到 `decide`/`prepare`——那两格只读不写，
+      // 是这条链路唯一能在 PR 上被 GitHub 真实起跑的部分（改动它的判据时先看它跑过没有）。
+      for (const name of ['confirm', 'release-tag', 'publish']) {
+        expect(publishJobs[name], `${name} 不再排除 pull_request——PR 上就能一路走到发布`).toMatch(
+          /github\.event_name != 'pull_request'/,
+        );
+      }
+      for (const name of ['decide', 'prepare']) {
+        expect(publishJobs[name], `${name} 被排除了，PR 上就演不出「这一版会不会被发」`).not.toMatch(
+          /github\.event_name != 'pull_request'/,
+        );
+      }
+    });
+
+    /**
+     * 「已配闸门」这道判据必须出现在**每一个**批准之后才该跑的作业上（confirm / release-tag /
+     * publish 三处），一处都不能少：少的是 `release-tag` 或 `publish`，那 `confirm` 自己那格
+     * 即使被裸环境秒过，后面照样会把 tag 推出去。判据取「按作业切出来的那一格里有没有这一句」，
+     * 所以它既拦得住「把某一格的条件挪走」，也拦得住「新增一格没带闸门」。
+     *
+     * 锚必须是行首的表达式而不是子串：文件头与 `confirm` 上方都**引用**过这一句来解释设计，
+     * 按子串数处数时那两句注释会一起进账，于是「三处」这种写法当场红在一次解释性注释上。
+     */
+    it('闸门判据在三处承重，一处不多一处不少', () => {
+      const gated = Object.entries(publishJobs)
+        .filter(([, body]) => /^\s+needs\.decide\.outputs\.approval-state == 'configured'/m.test(body))
+        .map(([name]) => name)
+        .sort();
+      expect(
+        gated,
+        "带 `approval-state == 'configured'` 的作业集合变了：新增作业要重判它的闸门归属，删一处就是开了后门",
+      ).toEqual(['confirm', 'publish', 'release-tag']);
+    });
+
+    it('批准之后打 tag 之前先重查一次，读不到也不打', () => {
+      const tagJob = publishJobs['release-tag'] ?? '';
+      expect(tagJob).toContain('contents: write');
+      // 形状再钉一次：上游那格的 output 是跨作业的文本，这里一个进 URL 路径、一个进请求体。
+      // 正则停在形状本身，不追 ` ]]` ——shell 里 `$ ]]` 之间那个空格是 prettier 之外的一切写法都改得动的。
+      expect(tagJob).toMatch(/\[\[ "\$TAG" =~ \^v\[0-9\]/);
+      expect(tagJob).toMatch(/\[\[ "\$SHA" =~ \^\[0-9a-f\]\{40\}\$/);
+      // 审批可以挂很久（上限 30 天）。期间人若自己推过 tag，再打一次轻则 422、
+      // 重则把已经发布的东西再向 Google 提审一遍。
+      expect(tagJob).toContain('在等待期间已被打出');
+      expect(tagJob).toContain('!= "404"');
+      // 浅克隆里 `git push` 标签会被 git 拒，所以用 API 建轻量 ref。
+      expect(tagJob).toContain('/git/refs');
+    });
+
+    /**
+     * 发布实现只有 `release.yml` 那一份，靠 `workflow_call` 接力——而不是把 120 行抄第二遍。
+     * 抄第二遍的代价不是维护量，是两份会漂移的提审实现。
+     *
+     * `secrets: inherit` 有一个不能写进 YAML 的前提：**四个 `CHROME_*` 只能放仓库级**。
+     * 环境级 Secrets 不会随 `inherit` 进被调用的工作流（带环境的是上一格，发布那一格不带），
+     * 挪上去的结果是「审批通过、构建完成、商店静默跳过」，而 GitHub Release 照样建好。
+     */
+    it('发布那一格是调用 release.yml，自己不带环境也不带凭据', () => {
+      const publish = publishJobs.publish ?? '';
+      expect(publish).toContain('uses: ./.github/workflows/release.yml');
+      expect(exists('.github/workflows/release.yml'), '被调用的工作流不在仓库里，这一格永远红').toBe(true);
+      expect(publish).toContain('secrets: inherit');
+      expect(publish).toContain('tag: ${{ needs.decide.outputs.tag }}');
+      expect(publish, '发布作业带环境等于把凭据挪到环境级的诱因').not.toMatch(/^ {4}environment:/m);
+      expect(publish).toContain('contents: write');
+      expect(publish).toContain('pull-requests: write');
+    });
+
+    it('拦下来那一格是红的，不是安静跳过', () => {
+      const hold = publishJobs.hold ?? '';
+      expect(hold).toContain('needs.decide.outputs.hold');
+      expect(hold, '只写摘要不 exit 1，等于把「没人能点头」降级成一条容易被划过去的注释').toContain('exit 1');
+    });
+
+    /**
+     * 判据住在脚本里、YAML 只搬运读数，这件事本身也要有人守：一旦有人图省事把比较写回 shell，
+     * 它就脱离了 `tests/releaseGate.test.ts` 的覆盖，而那是这条链路唯一能在本机真跑的部分
+     * （工作流 YAML 本机跑不了）。
+     */
+    it('闸门判据只有 scripts/release-gate.mjs 一份，且它被单测覆盖', () => {
+      expect(storePublish).toContain('node scripts/release-gate.mjs');
+      expect(gateScript).toContain('export function decide');
+      const gateTest = read('tests/releaseGate.test.ts');
+      expect(gateTest).toContain('@/scripts/release-gate.mjs');
+      for (const fn of [
+        'isValidVersion',
+        'tagStateOf',
+        'approvalStateOf',
+        'secretPresenceOf',
+        'decide',
+        'renderSummary',
+      ]) {
+        expect(gateTest, `${fn} 没有对应用例——判据必须全部可单测`).toContain(`${fn}(`);
+      }
+      // YAML 里不许自己比对 HTTP 状态码形状以外的东西：判定一律交给脚本。
+      // 只剥整行注释再查——文件头那段解释「环境存在 ≠ 有人能点头」的注释正好点过这两个字段名，
+      // 连着注释一起查，会在一次纯粹的设计说明上红。
+      const code = [...storePublish.split('\n')].filter(line => !/^\s*#/.test(line)).join('\n');
+      expect(
+        code.match(/protection_rules|required_reviewers|fromjson|\bjq\b/g)?.length ?? 0,
+        'YAML 里开始自己读环境的保护规则了——那份判据没有单测',
+      ).toBe(0);
+    });
+
+    it('store-publish 里每个调 GitHub API 的步骤都自己声明 GH_TOKEN', () => {
+      const steps = storePublish.split(/^ {6}- name:/m).slice(1);
+      const apiSteps = steps.filter(step => /\$GH_TOKEN|gh\s+(?:api|release|pr)\b/.test(step));
+      expect(apiSteps.length, '一个调用 API 的步骤都没匹配到——判据已失效').toBeGreaterThanOrEqual(2);
+      for (const step of apiSteps) {
+        expect(step, '有步骤在用 GH_TOKEN 却没声明它，探测会把「读不到」当成常态').toContain('GH_TOKEN:');
+      }
     });
 
     /**
@@ -1607,12 +1869,36 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * 时写裸的 `## x.y.z (日期)`——两种都发得出去，所以切片器必须两种都认。
      * 只认带方括号那一种的后果是静默降级：切不到小节就退回 GitHub 自动生成的提交流水账，
      * 而商店用户看到的那份说明里没有了人补的中英长文。
+     *
+     * 判据从 `release.yml` 挪进了 `.github/actions/release-notes`，因为现在有两个消费者：
+     * 发布那一条，以及审批页那句「这一版要发什么」。**两份必须同源**——预览另算一份差集，
+     * 点头时看到的正文就不是商店真正拿到的正文。
      */
-    it('Release 说明的切片器认两种 CHANGELOG 小节标题', () => {
-      expect(release, '切片器不再按行首小节标题分割，改 awk 时这条要一起看').toContain('awk -v version=');
-      expect(release, '只认 `## [` 会漏掉机器人写的裸 `## x.y.z` 小节').toContain('/^## (\\[|[0-9])/');
-      expect(release).toContain('CHANGELOG.md > notes.md');
-      expect(release, '切不到小节时的兜底被删掉了，会发一份空说明的 Release').toContain('if [ -s notes.md ]');
+    it('Release 说明的切片器认两种 CHANGELOG 小节标题，且审批预览与发布共用它', () => {
+      expect(notesAction, '切片器不再按行首小节标题分割，改 awk 时这条要一起看').toContain('awk -v version=');
+      expect(notesAction, '只认 `## [` 会漏掉机器人写的裸 `## x.y.z` 小节').toContain('/^## (\\[|[0-9])/');
+      expect(notesAction).toContain('CHANGELOG.md > notes.md');
+      expect(notesAction, '切不到小节时的兜底被删掉了，会发一份空说明的 Release').toContain('if [ -s notes.md ]');
+
+      // 两个入口，一份判据。
+      expect(release, '发布不再走那份共用的切片器，审批预览与 Release 正文就分家了').toContain(
+        'uses: ./.github/actions/release-notes',
+      );
+      expect(storePublish, '审批页不再预览 Release 说明，点头时看到的就是未经验证的内容').toContain(
+        'uses: ./.github/actions/release-notes',
+      );
+      // 切片结果经 `notes.md`（工作区文件）交给 `gh --notes-file`，两侧都读 `source` 输出决定兜底。
+      expect(release).toContain('--notes-file notes.md');
+      expect(release, '兜底不再由切片器的结论决定，切不到小节时会发布空白说明').toContain(
+        'NOTES_SOURCE: ${{ steps.notes.outputs.source }}',
+      );
+
+      /**
+       * 复合动作的文件取自**工作流所在 ref**，而它读的 `CHANGELOG.md` 取自 checkout 出来的树。
+       * 于是「让切片器去 import 仓库脚本」会静默坏在 §3 那条恢复路径上：用 main 修好的链路补跑
+       * 一个旧 tag 时，旧树里可能还没有那个脚本，而表现是切片器整体失败、说明回落成流水账。
+       */
+      expect(notesAction, '切片器开始读仓库里的脚本文件了——旧 tag 的树里可能没有它').not.toContain('scripts/');
     });
   });
 
