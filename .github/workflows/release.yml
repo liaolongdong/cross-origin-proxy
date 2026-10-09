@@ -310,3 +310,8 @@ jobs:
             echo '补齐后在本工作流页面点 **Run workflow** 并填入同一个 tag 即可继续发布；Release 已存在会被复用，不会重复创建。'
             echo '获取步骤见 [.github/docs/RELEASING.md](https://github.com/liaolongdong/cross-origin-proxy/blob/main/.github/docs/RELEASING.md)。'
           } >> "$GITHUB_STEP_SUMMARY"
+          # 这一句必须是**注解**而不只是摘要正文：摘要要点进作业才看得到，而整条 run 是绿的。
+          # 本仓库已经这么连着错过两包——Release 建好、zip 挂上、全绿，Google 那边什么都没收到。
+          # 措辞刻意点名「值在、名字不对」这一种形状：历史遗留的 `CWS_*` 四条凭据此刻就在这
+          # 仓库里，任何只看「凭据配了没有」的读者都会读成已配好，而 `Detect` 读的是上面那四个名字。
+          echo "::warning::商店提审已跳过（仓库级缺：${MISSING# }）——GitHub Release 照常已发，Google 侧没收到包。若四个值都在只是命名不同（如 \`CWS_*\`），去 Settings → Secrets and variables → Actions 逐条用 **Rename** 改成上面那四个名字：改名保留值，无需重新拿到 secret，而 GitHub 没有 rename Secrets 的 API，只能在网页上点。"
