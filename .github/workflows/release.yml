@@ -314,4 +314,4 @@ jobs:
           # 本仓库已经这么连着错过两包——Release 建好、zip 挂上、全绿，Google 那边什么都没收到。
           # 措辞刻意点名「值在、名字不对」这一种形状：历史遗留的 `CWS_*` 四条凭据此刻就在这
           # 仓库里，任何只看「凭据配了没有」的读者都会读成已配好，而 `Detect` 读的是上面那四个名字。
-          echo "::warning::商店提审已跳过（仓库级缺：${MISSING# }）——GitHub Release 照常已发，Google 侧没收到包。若四个值都在只是命名不同（如 \`CWS_*\`），去 Settings → Secrets and variables → Actions 逐条用 **Rename** 改成上面那四个名字：改名保留值，无需重新拿到 secret，而 GitHub 没有 rename Secrets 的 API，只能在网页上点。"
+          echo "::warning::商店提审已跳过（仓库级缺：${MISSING# }）——GitHub Release 照常已发，Google 侧没收到包。若四个值都在、只是命名不同（例如历史遗留的 \`CWS_EXTENSION_ID\` / \`CWS_CLIENT_ID\` / \`CWS_CLIENT_SECRET\` / \`CWS_REFRESH_TOKEN\`），去 Settings → Secrets and variables → Actions 逐条用 Rename 把名字改成 \`CHROME_EXTENSION_ID\` / \`CHROME_CLIENT_ID\` / \`CHROME_CLIENT_SECRET\` / \`CHROME_REFRESH_TOKEN\`：改名保留值，无需重新拿 secret，而 GitHub 没有 rename Secrets 的 API，只能网页上点。处置与判据见 .github/docs/RELEASING.md §1.3。"
