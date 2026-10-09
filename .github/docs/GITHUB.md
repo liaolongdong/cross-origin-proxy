@@ -8,13 +8,14 @@
 
 ## 0. 为什么要填：每个字段的受众
 
-| 字段                | 谁看                                                        | 空的代价                                                |
-| ------------------- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| About → Description | GitHub 搜索摘要、Google 收录的仓库卡、分享链接的机器摘要    | 仓库名之外没有任何可被检索的语义，星标转化低            |
-| About → Website     | 仓库首页右侧链接、README 之外的最短入口                     | 落地页与隐私政策少一个权威入口，商店审核看不到产品站    |
-| Topics              | GitHub 话题页（`/topics/<slug>`）与相关推荐                 | 话题页是长期被动流量来源，空 = 完全放弃                 |
-| Social preview      | 所有聊天工具、Twitter/X、Slack、掘金/知乎链接卡（1280×640） | 分享时只显示灰底仓库名，点击率显著下降                  |
-| Pages Source        | 产品站与隐私政策的托管开关                                  | `privacy.html` 打不开是 Chrome 商店首审最常见的拒审理由 |
+| 字段                           | 谁看                                                        | 空的代价                                                                                   |
+| ------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| About → Description            | GitHub 搜索摘要、Google 收录的仓库卡、分享链接的机器摘要    | 仓库名之外没有任何可被检索的语义，星标转化低                                               |
+| About → Website                | 仓库首页右侧链接、README 之外的最短入口                     | 落地页与隐私政策少一个权威入口，商店审核看不到产品站                                       |
+| Topics                         | GitHub 话题页（`/topics/<slug>`）与相关推荐                 | 话题页是长期被动流量来源，空 = 完全放弃                                                    |
+| Social preview                 | 所有聊天工具、Twitter/X、Slack、掘金/知乎链接卡（1280×640） | 分享时只显示灰底仓库名，点击率显著下降                                                     |
+| Pages Source                   | 产品站与隐私政策的托管开关                                  | `privacy.html` 打不开是 Chrome 商店首审最常见的拒审理由                                    |
+| Environment `chrome-web-store` | 发版链路上那句「必须有人点头」的落地处（§6.1）              | 环境没建时 GitHub 会隐式建一个不带保护规则的同名环境，「合并即发版」当场成立且整条链路全绿 |
 
 ## 0.1 当前实测状态（配置类字段量于 2026-09-22，tag/徽章类量于 2026-10-01、2026-10-07 复核仍是同一形状，用 §7 的命令可复核）
 
@@ -25,12 +26,13 @@
 | topics             | **20 个，已用满上限**                                                                                                                                                                                                                                                                                                                | §3 已完成；只有 `request-interceptors` 是复数，与 §3 清单的单数差一个 `s`                                                                                                                                  |
 | `has_pages`        | `true`；§7 列的 URL 全部 200（另实测 `sitemap.xml` 与 `robots.txt` 也 200）                                                                                                                                                                                                                                                          | §5 的源已切到 GitHub Actions，Pages 链路是通的                                                                                                                                                             |
 | `has_wiki`         | `true`                                                                                                                                                                                                                                                                                                                               | 建议关闭（理由见 §8），需你确认                                                                                                                                                                            |
+| environments       | 只有 `github-pages` 一个（2026-10-09 实测：`GET /repos/…/environments` 的 `total_count` 为 1，它带的保护规则是 `branch_policy`；`GET /repos/…/environments/chrome-web-store` 返回 404）                                                                                                                                              | **§6.1 还没做**。发版闸门用的那个环境不存在，而 `.github/workflows/store-publish.yml` 一合进 `main` 就会让 GitHub 隐式建一个不带必需审查员的同名环境——先按 §6.1（即 RELEASING.md §1.6）建好，再合那条链路  |
 | `v*` tag / Release | 远端**有 tag 也有 Release**（2026-09-30 起不再空；具体号别抄这里，`curl -s https://api.github.com/repos/liaolongdong/cross-origin-proxy/tags` 现量）。2026-10-07 复核：`/tags` 现量 2 支（最新一支同日推出），GitHub Release 附了那支的 zip，而 shields 那枚 `CWS` 仍报 v1.3.0。本机另有一个从未推送的 `v1.3.0` 轻量 tag，别顺手补推 | README 的 `Release` 徽章与「方式 B」已经有实物；商店还停在 1.3.0，因为 `release.yml` 读的 `CHROME_*` Secrets 一个都没配（RELEASING.md §5）——**两包了，1.4.0 与最新那支都没进商店**，按 §3 只补跑最新那一支 |
 | `pushed_at`        | 每次 push 都变，别信这里抄的数——用 `git rev-list --count origin/main..main` 自己量（2026-10-01 写这一行时是 0，本地与远端同点）                                                                                                                                                                                                      | 本地领先多少个，远端与产品站就看到多少个——商店那一头另有自己的节奏（见上一行）                                                                                                                             |
 | `stargazers_count` | 1                                                                                                                                                                                                                                                                                                                                    | —                                                                                                                                                                                                          |
 | Social preview     | 匿名 API 读不出来（`security_and_analysis` 同样为 `null`）                                                                                                                                                                                                                                                                           | 只能在设置页目测；私密漏洞报告同理，§6 要人工确认                                                                                                                                                          |
 
-**§1–§3、§5 都已落库，GitHub 侧的一次性清单只剩 §4 社交预览（图片已有，只能手动传）与 §6 私密漏洞报告勾选，外加 §8 那条「关 wiki」的建议。**
+**§1–§3、§5 都已落库，GitHub 侧的一次性清单还剩这几件：§6.1 那个发版审批环境（它挡在 `store-publish.yml` 合进 `main` 之前，做错了是静默的）、§4 社交预览（图片已有，只能手动传）、§6 私密漏洞报告勾选，外加 §8 那条「关 wiki」的建议。**
 
 **这一段的处方已经抓完药，2026-10-01 起换成另一件事。** 曾经卡住曝光的是「没有任何东西被推出去」：0 个 tag → Releases 空、`Release` 徽章画不出数、README 的「方式 B」是空口承诺、落地页 HowTo 第一步指向一个空页面。第一支 tag 已经在 2026-09-30 推出去，GitHub Release 连同预构建 zip 都在，`CHROMEWEBSTORE.md` §12 那八句也已翻完（记录见那张表）。**现在唯一还缺的出口是商店**：`release.yml` 要读的 `CHROME_*` 四个 Secrets 一个都没配（仓库里只有 `CWS_*` 三个，且 `CHROME_REFRESH_TOKEN` 从来没有过），所以最新那一包只到了 GitHub、没进商店，商店在装的还是 1.3.0。补法两条，都在 [RELEASING.md](./RELEASING.md)：§1.2–§1.3 把凭据配好后按 §3 用 `workflow_dispatch` 补跑，或直接把 Release 上那只 zip 拖进 Dashboard 人工上传。
 
@@ -169,6 +171,14 @@ pnpm assets:en
 
 勾选后仓库首页 Security 标签页会出现 **Report a vulnerability** 按钮，可在里面验证一下入口真能用。
 
+## 6.1 建发版审批环境 `chrome-web-store`（做错了是静默的）
+
+`.github/workflows/store-publish.yml` 里那句「合进 main 之后，必须有人点头才向 Chrome 应用商店提审」落在这个环境上：`confirm` 那一格挂着 `environment: chrome-web-store`，批准动作就发生在那里。**这一步必须在那条链路合进 `main` 之前做完**——作业引用一个仓库里不存在的环境时，GitHub 会**隐式创建一个不带任何保护规则的同名环境**，于是 `confirm` 直接通过、合并即发版，而整条流水线全绿。
+
+设置项与逐条步骤只写在一个地方：[RELEASING.md](./RELEASING.md) **§1.6**（建环境 + 勾 **Required reviewers** + 至少一名审查员，以及配完该跑的复核命令）。本文不重复那份清单，避免两处措辞漂开后不知道信哪个。
+
+这里只补一句**它为什么排不进 §1–§5 那一类**：那五节的字段没填，代价是曝光低、徽章画不出数，随时能补；这一项没填，代价是把「不可撤回地向 Google 提交审核」这一步的闸门摘掉，而摘掉之后没有任何信号。同一条链路上还有一处也住在 GitHub 设置里、且不能靠令牌代跑的：`release.yml` 要读的那四个 `CHROME_*` Secrets 必须留在**仓库级**（RELEASING.md §1.6 末写了为什么不能挪进环境级）。
+
 ## 7. 自检命令
 
 ```bash
@@ -185,15 +195,19 @@ curl -s https://api.github.com/repos/liaolongdong/cross-origin-proxy \
 curl -s -H "Accept: application/vnd.github.mercy-preview+json" \
   https://api.github.com/repos/liaolongdong/cross-origin-proxy/topics \
   | python3 -c 'import json,sys; n=json.load(sys.stdin)["names"]; print(len(n), n)'
+
+# 发版审批环境在不在、带不带必需审查员（§6.1；仓库公开，匿名读就够，本机也没有 gh）
+curl -s https://api.github.com/repos/liaolongdong/cross-origin-proxy/environments \
+  | python3 -c 'import json,sys; es=json.load(sys.stdin).get("environments",[]); print([(e["name"], [r["type"] for r in e.get("protection_rules") or []]) for e in es])'
 ```
 
-期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 都应返回 200——2026-09-22 实测七个全绿，另外 `sitemap.xml` 与 `robots.txt` 也是 200。中文页在站点根、英文页带 `en` 前缀这次搬迁**已经在远端生效**，`/en.html` 与 `/en-alternatives.html` 不再是 404。旧的 `/zh.html` 与 `/zh-alternatives.html` 已下线且**没有 301**（Pages 是纯静态目录，没有重写规则），所以仓库内任何文档都不许再引用它们——`tests/docs-consistency.test.ts` 已把这条钉死。
+期望：`description`/`homepage` 非 null、`has_pages: true`、topics 长度 `20`。七个 URL 都应返回 200——2026-09-22 实测七个全绿，另外 `sitemap.xml` 与 `robots.txt` 也是 200。最后那条在 §6.1 做完之前只会画出 `[('github-pages', ['branch_policy'])]`（2026-10-09 实测就是这个），做完之后应当多一条 `('chrome-web-store', ['required_reviewers'])`——**只出现名字、不出现 `required_reviewers`，等于闸门没配**，那条链路的 `confirm` 会直接通过。名单里有谁、几个人，用带令牌的读法或设置页确认（复核命令与四种读数的处置在 RELEASING.md §1.6）。中文页在站点根、英文页带 `en` 前缀这次搬迁**已经在远端生效**，`/en.html` 与 `/en-alternatives.html` 不再是 404。旧的 `/zh.html` 与 `/zh-alternatives.html` 已下线且**没有 301**（Pages 是纯静态目录，没有重写规则），所以仓库内任何文档都不许再引用它们——`tests/docs-consistency.test.ts` 已把这条钉死。
 
 还要确认 README 顶部两枚徽章已变绿：`Release` 在仓库首个 tag 推上去之前会显示 unknown（它读 `img.shields.io/github/v/release/…`，没有 Release 就没有数），`Product site` 在 §5 的 Source 开关没切之前会跟着首次失败的 run 显红。两者都是配置未就绪的中间态，不是徽章写错。**2026-10-01 实测两枚都已变色有数**：`Release` 跟着远端最新的 tag，`CWS` = v1.3.0——这两个数**故意不一样**（最新那一包只到了 GitHub Release、没进商店，原因见 §0 那张表的 `v*` tag / Release 行），别把它们「对齐」成同一个号。`CWS` 那枚已改成 shields 的商店版本端点，**不需要每次发版手改**：它显示的是商店在线版本，2026-10-01 实测是 `v1.3.0`（更早写这一句时是 `v1.0.0`）。**它偶尔报 `not found`**——2026-10-01 连着量七次遇到一次，那是 shields 自己抓商店页失败，不是下架信号；判下架要看 Developer Dashboard，或带 `?cacheSeconds=30` 绕开它的缓存重试几次。**2026-10-07 那一轮的记法已在 2026-10-08 被推翻，推翻的原因比结论更值得记**：当时写的是「不带参数的三次全报 `v1.3.0`，带 `?cacheSeconds=30` 的五次全报 `not found`，而同轮兄弟条目那个 id 稳定报 `v1.0.0`，所以不是端点整体挂了」，并据此把两个处置的顺序倒过来、判给 Dashboard。今天按真值 id 复量：不带参数三次 `v1.3.0`，带 `?cacheSeconds=30` **也三次 `v1.3.0`**，兄弟条目三次 `v1.0.0`。那五次 `not found` 既不是缓存、不是抓取失败、也不是下架——是**那条 URL 的 id 少打了两个字符**（32 位写成 30 位；同一个错字当时还写进了 `CHROMEWEBSTORE.md` §12 的那句引用，2026-10-08 照它复算才撞出来）。两条教训按顺序排：**先数 id**——`not found` 的第一解释永远是「这个 id 在商店里不存在」，逐字符对回 §1 那条 Store URL，别先看缓存；**兄弟条目那个 id 只证明端点活着，不证明你手里这条 URL 写对了**，它挡不住自己打错字，所以「另问一个 id 当对照」这件事不能替代自查。判「条目被下架」确实只有 Developer Dashboard 那一条路（本机 curl 与 WebFetch 到商店域名都是死路），但 `?cacheSeconds=30` 仍然是绕开 shields 缓存的有效手段——只是它绕不出「下架」这个结论，报什么都不行。文档里写「商店在装的版本号」之前：先把 id 数对，再按这个方法重试确认它稳定。`tests/docs-consistency.test.ts` 那条「所有商店链接共用同一个扩展 ID」已把 `img.shields.io/chrome-web-store/v/<id>.json` 一并纳入同一份真值对账——它此前只扫 `chromewebstore.google.com/detail/`，所以这个错字在文档里活了整整一天而全仓无人红。
 
 ### 7.1 搜索收录与 AI 检索的提交动作（一次性的站外清单）
 
-§7 那三条命令证明的是**站内**东西是干净的：`robots.txt` 放行、`sitemap.xml` 200、hreflang 成对、canonical 自指。这些只回答「爬虫来了能不能读懂」，不回答「它来没来过」。`docs/robots.txt` 逐个放行 GPTBot / OAI-SearchBot / Perplexity / Claude 系同理是**允许**而非**已收录**——放行之后没有任何一次提交动作，索引里就是没有。所以这一步只能在网页界面做，没有 API 可代跑（`GITHUB_TOKEN` 也管不到站外服务）。
+§7 那四条命令证明的是**站内**东西是干净的：`robots.txt` 放行、`sitemap.xml` 200、hreflang 成对、canonical 自指，外加发版那个审批环境到底配没配（§6.1）。这些只回答「爬虫来了能不能读懂」，不回答「它来没来过」。`docs/robots.txt` 逐个放行 GPTBot / OAI-SearchBot / Perplexity / Claude 系同理是**允许**而非**已收录**——放行之后没有任何一次提交动作，索引里就是没有。所以这一步只能在网页界面做，没有 API 可代跑（`GITHUB_TOKEN` 也管不到站外服务）。
 
 按这个顺序做，做完各留一条实测记录在下面：
 

@@ -3,13 +3,39 @@ name: Release
 # 发版链路：tag `v*` → 全量校验（复用 CI 的 verify 动作）→ 构建并打包 zip →
 # GitHub Release（附 zip 与 CHANGELOG 小节）→ Chrome 应用商店上传并提审。
 #
+# 三个入口，发布实现只有这一份：
+#   - `push: tags` —— 人从本机推 tag（RELEASING.md §2 路径 B）。
+#   - `workflow_call` —— 被 `store-publish.yml` 在**人工审批通过并打好 tag 之后**调用
+#     （§2 路径 A，合并即发布）。它自己用作业令牌推 tag，所以触发不了本文件（GitHub 的
+#     「同一令牌产生的事件不起跑新工作流」那条规则），必须由调用方显式接力。
+#   - `workflow_dispatch` —— 补跑与灰度（§3）。
+#
 # 首次上架无法自动化：`publish-extension` 明确不提供「新建商店条目」的能力，
 # 必须先在 Developer Dashboard 手动上传一次 zip 拿到 Extension ID，
-# 之后所有版本都由本工作流提审。步骤见 RELEASING.md。
+# 之后所有版本都由这条链路提审。步骤见 RELEASING.md。
 on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: '要发布的标签，必须已存在于远端（由调用方刚刚打出来）'
+        required: true
+        type: string
+      publish-target:
+        description: 'Chrome 商店发布分组'
+        required: false
+        type: choice
+        default: default
+        options:
+          - default
+          - trustedTesters
+      skip-review:
+        description: '只上传 zip 到商店草稿，不提交审核'
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       tag:
@@ -85,7 +111,7 @@ jobs:
           fi
           VERSION="$(node -p "require('./package.json').version")"
           if [ "v${VERSION}" != "$TAG" ]; then
-            echo "::error::标签 $TAG 与 package.json 的 $VERSION 不一致。先在本地 npm version 并同步 CHANGELOG.md 再打 tag。"
+            echo "::error::标签 $TAG 与 package.json 的 $VERSION 不一致。号只写在 package.json（§2 路径 A 由机器人的发布 PR 写、路径 B 由 §2.3 手工 bump 写），tag 必须跟上它，不要反过来改 tag 迁就文件。"
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -108,32 +134,14 @@ jobs:
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       # CHANGELOG.md 是版本历史唯一事实源；无对应小节时回落到自动生成的说明，
-      # 宁可说明朴素也不要发布时空白。
+      # 宁可说明朴素也不要发布时空白。切片判据住在 `.github/actions/release-notes`，
+      # 与 `store-publish.yml` 审批页那段「这一版要发什么」同源——预览和落款分两份判据，
+      # 审批人点头的内容就不是商店拿到的内容。
       - name: Build release notes
         id: notes
-        env:
-          VERSION: ${{ steps.guard.outputs.version }}
-        run: |
-          # 小节标题有两种形状，都得认：release-please 在有上一个 tag 时写
-          # `## [x.y.z](…/compare/上号...本号) (日期)`，拿不到上一个 tag 时写裸的
-          # `## x.y.z (日期)`（模板见 conventional-changelog-conventionalcommits 的 header.hbs
-          # 里 `linkCompare` 那两个分支）。号必须锚在 `## ` 之后原位比对：拿整行做子串查找会把
-          # 上一个版本号的对比链接读成自己的小节。
-          awk -v version="$VERSION" '
-            BEGIN { printing = 0 }
-            /^## (\[|[0-9])/ {
-              if (printing) exit
-              printing = ($0 ~ ("^## \\[" version "\\]") || $0 ~ ("^## " version "[ (]"))
-              next
-            }
-            printing { print }
-          ' CHANGELOG.md > notes.md
-          if [ -s notes.md ]; then
-            echo "source=changelog" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::CHANGELOG.md 里没有 [$VERSION] 小节，回落到自动生成的发布说明"
-            echo "source=generated" >> "$GITHUB_OUTPUT"
-          fi
+        uses: ./.github/actions/release-notes
+        with:
+          version: ${{ steps.guard.outputs.version }}
 
       # 手动重跑是文档里的恢复路径，所以这里必须幂等：已存在就改说明并覆盖资产。
       #

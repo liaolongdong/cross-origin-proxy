@@ -1,0 +1,341 @@
+name: Store Publish
+
+# 合并进 main 之后，这一版该不该发、能不能发，由这条链路判断；**点不点头由人决定**。
+#
+# 五个作业，一条直线，每一格只做一件事：
+#
+#   decide    只读远端三份事实（tag 在不在、审批闸门配没配、凭据齐不齐），按判据出结论
+#   prepare   与 CI 同一份清单的全量校验 + 打包，产物留成 Artifact 给审批人核
+#   confirm   空跑一格，但它挂着 Environment —— GitHub 的「必需审查员批准」就发生在这里
+#   release-tag  批准之后才把 `vX.Y.Z` 落到远端（先重查一次，避免和人工补跑撞车）
+#   publish   调用 `release.yml`（发布实现只有那一份：建 Release、换标签、传商店、提审）
+#
+# **为什么发版那一下仍然要人点头**：向 Chrome 应用商店提交审核是不可撤回的动作，且 Google
+# 侧的审核配额有限；它不该是「合并 PR」这个动作的副作用。同一条理由也解释了为什么机器人
+# 只起草版本 PR（`release-please.yml` 的 `skip-github-release: true`）。
+#
+# **为什么是五格而不是一格**：批准之前必须让审批人看到两件事——这份代码过没过全套校验
+# （`prepare`），以及这一版到底要发什么（`decide` 摘要里那段说明，与 `release.yml` 用的是
+# 同一份切片判据）。反过来，批准之后没有任何一步可以再等人，所以打 tag 与发布各占一格，
+# 坏了能从 Run 页面一眼看出停在哪。
+#
+# **为什么 `publish` 是 `workflow_call` 而不是「打完 tag 让 `release.yml` 自己起跑」**：
+# GitHub 规定由默认 `GITHUB_TOKEN` 产生的事件不再起跑新工作流。本链路用作业令牌推 tag，
+# 那个 tag 触发不了 `release.yml`——链路会停在「tag 有了、商店没吃到包」这个中间态，
+# 而它看起来像成功。所以必须显式接力。（人从本机推 tag 没有这个问题，那是 §2 路径 B。）
+#
+# **这一条链路里最大的一处静默风险**：作业引用的 `environment:` 若在仓库里不存在，
+# GitHub 会**隐式创建一个不带任何保护规则的同名环境**（官方文档原文：Running a workflow
+# that references an environment that does not exist will create an environment with the
+# referenced name）。于是 YAML 里写了 `environment:` 与「有人必须先点头」是两件事，
+# 前者只保证界面上多一个环境名。`decide` 因此先去读那个环境的 `protection_rules`，
+# 没配必需审查员就让 `hold` 那一格翻红——宁可红一次让人去看，也不做「合并即发版」。
+#
+# 一次性配置（环境、四个仓库级 Secrets）见 `.github/docs/RELEASING.md` §1.6；
+# 日常怎么走、出问题怎么查，见同一份文档的 §2、§4 与 §7。
+on:
+  push:
+    branches: [main]
+  # PR 上只跑 `decide`（外加 `prepare` 的校验），用于把「这一版会不会被发」提前演一遍。
+  # 后三格对 `pull_request` 显式不可达，fork 的 PR 更是一个 Secrets 都拿不到。
+  pull_request:
+  # 补跑：把「读事实 → 校验 → 点头 → 发布」整条再走一遍，不需要人再推一次 main。
+  workflow_dispatch:
+
+# 默认零权限。写权限只给确实要写 refs 的那一格（`release-tag`）和被调用的发布链路。
+permissions:
+  contents: read
+
+# 一条挂着的审批不能被下一笔合并取消掉，所以这里刻意不 `cancel-in-progress`。
+# 代价：审批期间新合进 main 的那笔会排队，等这一条走完才起跑。
+concurrency:
+  group: store-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    name: Decide（只读远端事实）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.gate.outputs.version }}
+      tag: ${{ steps.gate.outputs.tag }}
+      tag-state: ${{ steps.gate.outputs.tag-state }}
+      approval-state: ${{ steps.gate.outputs.approval-state }}
+      should-publish: ${{ steps.gate.outputs.should-publish }}
+      hold: ${{ steps.gate.outputs.hold }}
+      reason: ${{ steps.gate.outputs.reason }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 版本号只从 `package.json` 取（AGENTS.md：号只写在这一处），且在这一格就把形状钉死：
+      # 它下一步要拼进 API 路径，未校验的文本进 URL 就是路径穿越面——而 fork 的 PR 改得到这个文件。
+      - name: Read version from package.json
+        id: pkg
+        run: |
+          RAW="$(node -e "console.log(require('./package.json').version || '')" 2>/dev/null || true)"
+          if [[ "$RAW" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+            echo "version=$RAW" >> "$GITHUB_OUTPUT"
+          else
+            # 不复读那串原文：它是仓库内容，含 `\r` 或 `::` 时能把日志拼成一条假的注解。
+            echo "::warning::package.json 的 version 形状非法（长度 ${#RAW}），闸门会拦下来——流水线不猜号"
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Probe tag / environment / secrets
+        id: probe
+        if: steps.pkg.outputs.valid == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+          TAG_FILE: ${{ runner.temp }}/tag.json
+          ENVIRONMENT_FILE: ${{ runner.temp }}/environment.json
+          SECRETS_FILE: ${{ runner.temp }}/secrets.json
+        run: |
+          # 三个 GET，只读，状态码逐个留给判据：`000`、非数字、4xx、5xx 一律按「读不到」处理，
+          # 绝不把「这次没读到」读成「不存在」——后者会让一次限流变成一次重复提审。
+          get() {
+            local code
+            code="$(curl -sS --max-time 20 -o "$2" -w '%{http_code}' \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$1" 2>/dev/null || true)"
+            case "$code" in
+              '' | *[!0-9]*) code=000 ;;
+            esac
+            printf '%s' "$code"
+          }
+          echo "tag=$(get "$API_URL/repos/$REPOSITORY/git/ref/tags/v$VERSION" "$TAG_FILE")" >> "$GITHUB_OUTPUT"
+          echo "environment=$(get "$API_URL/repos/$REPOSITORY/environments/chrome-web-store" "$ENVIRONMENT_FILE")" >> "$GITHUB_OUTPUT"
+          echo "secrets=$(get "$API_URL/repos/$REPOSITORY/actions/secrets" "$SECRETS_FILE")" >> "$GITHUB_OUTPUT"
+
+      # 审批页那句「这一版要发什么」必须与真正写进 GitHub Release 的那段同源，
+      # 否则点头时看到的内容就不是商店拿到的内容。判据收在 `.github/actions/release-notes`，
+      # 与 `release.yml` 引用的是同一份。
+      - name: Preview release notes
+        id: notes
+        if: steps.pkg.outputs.valid == 'true'
+        continue-on-error: true
+        uses: ./.github/actions/release-notes
+        with:
+          version: ${{ steps.pkg.outputs.version }}
+
+      - name: Decide
+        id: gate
+        env:
+          TAG_STATUS: ${{ steps.probe.outputs.tag }}
+          APPROVAL_STATUS: ${{ steps.probe.outputs.environment }}
+          SECRETS_STATUS: ${{ steps.probe.outputs.secrets }}
+          NOTES_SOURCE: ${{ steps.notes.outputs.source }}
+          NOTES_LINES: ${{ steps.notes.outputs.lines }}
+          TAG_FILE: ${{ runner.temp }}/tag.json
+          ENVIRONMENT_FILE: ${{ runner.temp }}/environment.json
+          SECRETS_FILE: ${{ runner.temp }}/secrets.json
+        run: |
+          # 判据与措辞全在 `scripts/release-gate.mjs`（有单测），这里只搬运读数。
+          # 它自己恒退 0：拦下来不是它的失败，而是 `hold` 那一格的失败——两件事分开，
+          # 摘要才写得出「为什么拦」，日志也不会把配置问题读成脚本崩溃。
+          node scripts/release-gate.mjs \
+            --package package.json \
+            --tag-status "$TAG_STATUS" --tag-file "$TAG_FILE" \
+            --approval-status "$APPROVAL_STATUS" --approval-file "$ENVIRONMENT_FILE" \
+            --secrets-status "$SECRETS_STATUS" --secrets-file "$SECRETS_FILE" \
+            --environment chrome-web-store \
+            --notes-source "$NOTES_SOURCE" --notes-lines "$NOTES_LINES" \
+            --output "$GITHUB_OUTPUT" --summary "$GITHUB_STEP_SUMMARY"
+
+  prepare:
+    name: Verify & package（审批之前）
+    needs: decide
+    if: needs.decide.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 与 CI、与 `release.yml` 同一份清单（`.github/actions/verify`）。让它排在审批**之前**：
+      # 审批人该在点头前知道这份代码合不合格，而不是点完头才发现构建是红的。
+      - name: Verify
+        uses: ./.github/actions/verify
+        with:
+          build-mode: zip
+
+      - name: Report the package
+        id: zip
+        run: |
+          # 包路径按 wxt 的命名规则现算，和 `release.yml` 的 `Locate extension zip` 同一套：
+          # 版本号取构建产物里的 manifest.version（WXT 已削去预发布后缀），不取 package.json 原文。
+          NAME="$(node -e "console.log(require('./package.json').name)")"
+          ZIP_VERSION="$(node -e "console.log(require('./.output/chrome-mv3/manifest.json').version)")"
+          ZIP=".output/${NAME}-${ZIP_VERSION}-chrome.zip"
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::未找到期望的构建包 $ZIP（实际产物：$(ls .output/*.zip 2>/dev/null | tr '\n' ' ')）"
+            exit 1
+          fi
+          SHA256="$(sha256sum "$ZIP" | cut -d' ' -f1)"
+          echo "path=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          {
+            echo '### 这一版的包（校验作业构建，审批前可下载核对）'
+            echo
+            echo "- 文件：\`$ZIP\`（\`$SHA256\`）"
+            echo
+            echo '点头之后，发布作业会**再构建一次**并把当时那份产物交给商店——zip 不是字节可复现的产物，'
+            echo '所以这里的哈希是「同一棵提交树的一次成功构建」的指纹，供核对内容与体积，不等于商店收到的那一份。'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload package for approval
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-publish-zip
+          path: ${{ steps.zip.outputs.path }}
+          if-no-files-found: error
+
+  # 这一格什么都不做，它存在的意义就是那个 `environment:`：GitHub 在该环境配置了
+  # **Required reviewers** 时，会把作业挂起直到有人点批准（30 天没人批准则自动失败）。
+  # 拒绝批准 = 这一格失败 = 后面两格全部不跑，refs 与商店都动不了。
+  #
+  # 它能被起跑的唯一前提是 `approval-state == 'configured'`——也就是**已经实测过那个环境
+  # 带着至少一个必需审查员**。少了这个前提，隐式创建的裸环境会让这一格直接成功通过，
+  # 「人工确认」当场沦为界面上的一个装饰。
+  confirm:
+    name: 人工确认（必需审查员点头）
+    needs: [decide, prepare]
+    if: >-
+      needs.decide.outputs.should-publish == 'true' &&
+      needs.decide.outputs.approval-state == 'configured' &&
+      github.event_name != 'pull_request'
+    environment: chrome-web-store
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Approved
+        env:
+          TAG: ${{ needs.decide.outputs.tag }}
+        run: |
+          echo "$TAG 已获批准：接下来打标签、建 GitHub Release、向 Chrome 应用商店上传并提审。"
+
+  hold:
+    name: 拦下来：审批通道没配好或事实读不到
+    needs: decide
+    if: needs.decide.outputs.hold == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Explain and fail closed
+        env:
+          REASON: ${{ needs.decide.outputs.reason }}
+          APPROVAL_STATE: ${{ needs.decide.outputs.approval-state }}
+        run: |
+          {
+            echo '### 商店发布已拦下'
+            echo
+            echo "$REASON"
+            echo
+            echo '处置见 `.github/docs/RELEASING.md` §1.6（环境必须手动创建并配必需审查员）、§4（排查）与 §7（常见问题）。'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 两个值都出自判据脚本自己的模板（审批读数那五档是固定字符串），不掺仓库内容。
+          echo "::error::闸门拦下（审批读数：$APPROVAL_STATE）——原因与处置见 decide 作业摘要"
+          exit 1
+
+  release-tag:
+    name: 批准之后打出标签
+    needs: [decide, confirm]
+    if: >-
+      needs.decide.outputs.should-publish == 'true' &&
+      needs.decide.outputs.approval-state == 'configured' &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Re-check then create the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ needs.decide.outputs.tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          # 上游那格的 output 仍是跨作业的文本，用之前在本作业再钉一次形状：
+          # 这两个值一个进 URL 路径、一个进请求体。
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
+            echo "::error::标签形状非法，拒绝创建"
+            exit 1
+          fi
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::提交 SHA 形状非法，拒绝创建"
+            exit 1
+          fi
+
+          # 重查一次，因为它可能已经挂了很久（审批等待不计入作业超时，上限 30 天）。
+          # 期间人可能已经按 §2 路径 B 自己推了 tag，或按 §3 补跑过：那一刻再打一次，
+          # 轻则 422，重则把已经发布的东西再向 Google 提审一遍——配额有限、且不可撤回。
+          code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$API_URL/repos/$REPOSITORY/git/ref/tags/$TAG" 2>/dev/null || true)"
+          case "$code" in
+            '' | *[!0-9]*) code=000 ;;
+          esac
+          if [ "$code" = "200" ]; then
+            echo "::error::$TAG 在等待期间已被打出（有人走了 §2 路径 B 或 §3 补跑）。不重复推标签、不重复提审。"
+            exit 1
+          fi
+          if [ "$code" != "404" ]; then
+            echo "::error::读不到 $TAG 是否存在（HTTP $code）。事实不明时不打标签——宁可红一次让人看一眼。"
+            exit 1
+          fi
+
+          # 用 API 建轻量标签，而不是 `git tag` + `git push`：checkout 默认是浅克隆，
+          # 从浅仓库推标签会被 git 拒绝，而这里要的只是「让这个 sha 多一个 ref」。
+          BODY="$(mktemp)"
+          created="$(curl -sS --max-time 20 -o "$BODY" -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\":\"refs/tags/$TAG\",\"sha\":\"$SHA\"}" \
+            "$API_URL/repos/$REPOSITORY/git/refs" 2>/dev/null || true)"
+          case "$created" in
+            '' | *[!0-9]*) created=000 ;;
+          esac
+          if [ "$created" != "201" ]; then
+            # 回显只取状态码与前 300 字符，并抹掉 CR/LF：错误体可能来自代理页，
+            # 一段带 `\r` 的 HTML 足以把日志伪装成另一条注解。
+            echo "::error::创建 $TAG 失败（HTTP $created）：$(tr -d '\r\n' < "$BODY" | head -c 300)"
+            exit 1
+          fi
+          echo "$TAG 已指向 $SHA（由审批通过触发的作业令牌创建，因此不会再起跑 `release.yml`——发布由下一格显式调用）。"
+
+  publish:
+    name: 发布（复用 release.yml）
+    needs: [decide, release-tag]
+    if: >-
+      needs.decide.outputs.should-publish == 'true' &&
+      needs.decide.outputs.approval-state == 'configured' &&
+      github.event_name != 'pull_request'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.decide.outputs.tag }}
+    # `inherit` 而不是逐个映射，但有一个前提必须写在这里：**四个 CHROME_* Secrets 只能放在
+    # 仓库级**。环境级 Secrets 不会随 `secrets: inherit` 传给被调用的工作流（发布作业自己
+    # 不带环境——带环境的是上一格），挪到环境级就是「审批通过、构建完成、商店静默跳过」。
+    secrets: inherit

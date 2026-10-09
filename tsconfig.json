@@ -8,6 +8,11 @@
     "skipDefaultLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    // `scripts/release-gate.mjs` 是发布闸门判据：它必须是纯 JS（Actions 里 `node` 直接跑，
+    // 那格不装依赖、不跑构建），而 `tests/releaseGate.test.ts` 要按类型 import 它。
+    // 开 allowJs 让 tsc 从脚本自己的 JSDoc 推类型——比再手写一份 `.d.mts` 少一处会漂移的
+    // 事实源；`checkJs` 保持关闭，脚本本身不因此挨类型报错。
+    "allowJs": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,

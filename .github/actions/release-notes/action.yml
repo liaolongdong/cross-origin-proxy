@@ -1,0 +1,63 @@
+name: Release notes
+description: 从 CHANGELOG.md 里切出某个版本的小节，当 GitHub Release 与审批预览的说明
+
+# `release.yml`（发布）与 `store-publish.yml`（人工确认那道闸门）**共用这一份切片判据**。
+# 抽出来的理由不是省几十行 YAML，而是审批页那句「这一版要发什么」与真正写进 Release 的
+# 那段文字必须同源：预览另算一份差集，就是「审批时看到 A、商店拿到 B」级别的谎报。
+#
+# 复合动作的文件取自**工作流所在 ref**（而不是作业 checkout 出来的那个 tag 的树），
+# 而 `CHANGELOG.md` 取自 checkout 出来的树——这正是 §3「用 main 上修好的链路补跑旧 tag」
+# 所依赖的搭配。所以这里不得读取仓库里的脚本文件（旧 tag 的树里可能还没有它）。
+
+inputs:
+  version:
+    description: '不带 v 的版本号，例如 1.0.0'
+    required: true
+
+outputs:
+  source:
+    description: 'changelog = 切到了小节；generated = 没切到，调用方应回落到自动生成的说明'
+    value: ${{ steps.slice.outputs.source }}
+  lines:
+    description: '切出来的行数（0 表示没内容）'
+    value: ${{ steps.slice.outputs.lines }}
+
+runs:
+  using: composite
+  steps:
+    - name: Slice the CHANGELOG section
+      id: slice
+      env:
+        # `inputs.version` 是自由文本（手动补跑时由人填），绝不能直接 ${{ }} 插进 shell——
+        # 那是脚本注入面。走 env 传递，形状在下面判据里再钉一次。
+        VERSION: ${{ inputs.version }}
+      shell: bash
+      run: |
+        # 小节标题有两种形状，都得认：release-please 在有上一个 tag 时写
+        # `## [x.y.z](…/compare/上号...本号) (日期)`，拿不到上一个 tag 时写裸的
+        # `## x.y.z (日期)`（模板见 conventional-changelog-conventionalcommits 的 header.hbs
+        # 里 `linkCompare` 那两个分支）。号必须锚在 `## ` 之后原位比对：拿整行做子串查找会把
+        # 上一个版本号的对比链接读成自己的小节。
+        if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
+          echo "::error::版本号形状非法：$VERSION（应为 MAJOR.MINOR.PATCH）"
+          echo "source=generated" >> "$GITHUB_OUTPUT"
+          echo "lines=0" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+        awk -v version="$VERSION" '
+          BEGIN { printing = 0 }
+          /^## (\[|[0-9])/ {
+            if (printing) exit
+            printing = ($0 ~ ("^## \\[" version "\\]") || $0 ~ ("^## " version "[ (]"))
+            next
+          }
+          printing { print }
+        ' CHANGELOG.md > notes.md
+        LINES="$(wc -l < notes.md | tr -d '[:space:]')"
+        if [ -s notes.md ]; then
+          echo "source=changelog" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::CHANGELOG.md 里没有 [$VERSION] 小节（或那一节是空的），回落到自动生成的发布说明"
+          echo "source=generated" >> "$GITHUB_OUTPUT"
+        fi
+        echo "lines=$LINES" >> "$GITHUB_OUTPUT"

@@ -586,6 +586,7 @@ PY
 - [ ] About 描述 / website / topics 三项已填（[GITHUB.md](./GITHUB.md) §1–§3）；三项全空等于放弃 GitHub 搜索摘要与话题页这两条被动流量
 - [ ] Social preview 已上传（[GITHUB.md](./GITHUB.md) §4，无可用 API，只能设置页手动传）
 - [ ] 已勾选私密漏洞报告（[GITHUB.md](./GITHUB.md) §6；`SECURITY.md` 把私密上报列为首选，本扩展拿的是 `<all_urls>`）
+- [ ] 发版审批环境 `chrome-web-store` 在远端存在、且带 **Required reviewers**（[GITHUB.md](./GITHUB.md) §6.1 → RELEASING.md §1.6，那里有复核命令）。这一条守的是路径 A：环境没建就被工作流引用，GitHub 会隐式建一个不带保护规则的裸环境，「合并即向 Google 提审」当场成立而流水线全绿。走路径 B（本机推 tag）时它不参与这一次发布，但下一次合进 main 照样会撞上同一幕，所以别因为它没挡住今天就算它无关
 - [ ] 这一版的 `v*` tag 已推到**远端**：Releases 带着可下载 zip、README 的 `Release` 徽章有数（判据是远端有没有 tag，本机打的不算，见 RELEASING.md §6）。商店已上架所以这一步不再影响「有没有安装入口」，但它决定「方式 B」是否成立；推完按第 12 节那张翻牌记录核一遍——讲 tag 存在性的 1、2、3、6 行只在「从无到有」那一次翻过就不回头，讲**商店在装版本**的 4、5、7、8 行每轮提审完都要回来对一次
 
 包与清单：
@@ -660,10 +661,10 @@ PY
 
 第 1–10 节是人工填写的商店表单；一旦条目存在，包体本身就不该再手工传。
 
-- **一次性准备（无法绕开的手动部分）**：`publish-extension` 不提供「新建商店条目」能力，必须在 Dashboard 手动上传一次 zip 才能拿到 Extension ID；同时在 Google Cloud 建 OAuth 客户端换 refresh token。四个值落到仓库 Secrets：`CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`。逐步命令见 [RELEASING.md](./RELEASING.md) §1。
-- **日常**：推 `v*` 标签即触发 `.github/workflows/release.yml`——全量校验 → 打 zip → 建 GitHub Release → `pnpm exec wxt submit` 上传并提审。版本号必须与 `package.json` 一致，不一致时工作流直接终止（商店收到错版本号的包是静默失败）。
+- **一次性准备（无法绕开的手动部分）**：`publish-extension` 不提供「新建商店条目」能力，必须在 Dashboard 手动上传一次 zip 才能拿到 Extension ID；同时在 Google Cloud 建 OAuth 客户端换 refresh token。四个值落到仓库 Secrets：`CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`。还有一项在 GitHub 仓库设置里、且必须在那条审批链路合进 `main` **之前**做完：名为 `chrome-web-store` 的 environment 加上 **Required reviewers**（§9 那条勾选，步骤与复核命令见 RELEASING.md §1.6）。逐步命令见 [RELEASING.md](./RELEASING.md) §1。
+- **日常（两条入口，结尾是同一条 `release.yml`，所以「发出去的是什么」与「你从哪一头进去」无关）**：**路径 A**——合进 `main` 即起跑 `.github/workflows/store-publish.yml`：`decide` 只读三份远端事实（这一版的 tag 在不在、审批环境配没配、商店凭据齐不齐）→ `prepare` 跑与 CI 同一份全量校验并把 zip 留成 Artifact 给审批人核 → `confirm` 挂在 `chrome-web-store` 环境上**停下等人 Approve** → 批准后 `release-tag` 才把 `vX.Y.Z` 落到远端，`publish` 再用 `workflow_call` 把 `release.yml` 叫起来（那个 tag 是作业令牌推的，按 GitHub 的规则触发不了新工作流，所以必须显式接力）。**路径 B**——本机 `git tag` 再推上去，直接触发 `.github/workflows/release.yml`，同一套步骤、没有那道审批。两条都走到 `pnpm exec wxt submit` 上传并提审；版本号必须与 `package.json` 一致，不一致时工作流直接终止（商店收到错版本号的包是静默失败）。逐步命令见 [RELEASING.md](./RELEASING.md) §2。
 - **不在这条链路里的两件事**：①新建商店条目（见上一条的一次性准备）；②**新版本绑定的「更新说明」**——`wxt submit` 的参数表里没有它，只能提审时在 Dashboard 粘贴第 8.1 节那两块文本。GitHub Release 的说明反而是自动的（工作流把 `CHANGELOG.md` 对应小节切出来），两边别互相以为对方已经填了。
-- **Secrets 未配时的行为**：Release 照建，商店那一步跳过并在 Run 页面留指引，不报红。
+- **Secrets 未配时的行为**：Release 照建，商店那一步跳过并在 Run 页面留指引，不报红。路径 A 会把这件事提前一格——`decide` 的 Job Summary 里写明仓库级缺哪几个，审批人点头之前就看得见（但看得见不等于被挡住：那一格的判定只依赖 tag 与审批环境，凭据齐不齐不拦发布）。
 - **先验后提审**：首次接管已有条目时，用 `Run workflow` 勾选 `skip-review`（只上传成草稿）或选 `publish-target=trustedTesters`，人工核对完再走 `default`。
 - **与商店表单的耦合点**：详细描述里刻意不写版本号，避开每次发版都要改商店文案；但限制条数（200 规则 / 500 日志 / 10MB）与能力清单必须与 `README.md`、`docs/` 落地页、`CHANGELOG.md` 保持同一事实。
 
