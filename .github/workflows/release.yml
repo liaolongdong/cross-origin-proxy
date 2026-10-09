@@ -23,14 +23,17 @@ on:
         description: '要发布的标签，必须已存在于远端（由调用方刚刚打出来）'
         required: true
         type: string
+      # `workflow_call` 的输入类型只有 boolean / number / string 三种：`choice` 与
+      # `environment` 是 `workflow_dispatch` 专属（官方 workflow-syntax 的 inputs.<id>.type
+      # 那一节写死了这份清单）。把 `choice` 写在这里不是「多个字段没支持」而是**整份工作流
+      # 文件解析失败**：GitHub 随即把这条链路判成 failure 且一个作业都不起跑，而 Run 页面
+      # 上只有工作流文件名。`publish-target` 因此在这里是 `string`，那份「只能是 default 或
+      # trustedTesters」的约束改由 `Validate publish inputs` 那一步钉住（fail closed）。
       publish-target:
-        description: 'Chrome 商店发布分组'
+        description: 'Chrome 商店发布分组（default 或 trustedTesters）'
         required: false
-        type: choice
+        type: string
         default: default
-        options:
-          - default
-          - trustedTesters
       skip-review:
         description: '只上传 zip 到商店草稿，不提交审核'
         required: false
@@ -85,6 +88,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+
+      # 排在 Verify **之前**：这两个值一路只有 `choice` 在 dispatch 入口替人挡着，
+      # 而 `workflow_call` 的 `publish-target` 是自由字符串。等到建完 Release、传完商店
+      # 才发现分组名写错，代价是一次不可撤回的提审；写错号则是整格红在这里，几秒钟。
+      - name: Validate publish inputs
+        env:
+          PUBLISH_TARGET: ${{ inputs.publish-target || 'default' }}
+          SKIP_REVIEW: ${{ inputs.skip-review }}
+        run: |
+          # 白名单只放 `wxt submit` / Chrome Web Store API 实际认的那两个分组：
+          # `unlisted` 在这里等于把包交出去却不进商店检索，而本链路的语义只有「提审」和
+          # 「先给测试者」两种，第三种必须由人显式决定，不接受一个拼错的字符串兜住它。
+          case "$PUBLISH_TARGET" in
+            default | trustedTesters) ;;
+            *)
+              echo "::error::publish-target 只能是 default 或 trustedTesters（收到长度 ${#PUBLISH_TARGET} 的值，不复读原文）"
+              exit 1
+              ;;
+          esac
+          case "$SKIP_REVIEW" in
+            '' | true | false) ;;
+            *)
+              echo "::error::skip-review 必须是布尔值 true 或 false（收到长度 ${#SKIP_REVIEW} 的值）"
+              exit 1
+              ;;
+          esac
 
       - name: Verify
         uses: ./.github/actions/verify

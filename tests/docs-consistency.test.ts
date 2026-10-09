@@ -1512,6 +1512,69 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     };
     const publishJobs = jobsOf(storePublish);
 
+    /**
+     * 把 `on.workflow_call` 那一块里的 `type:` 值按缩进切出来。
+     *
+     * 存在的理由是一条 GitHub 的硬规则：**被调用的工作流只认 `boolean` / `number` / `string`
+     * 三种输入类型**，`choice` 与 `environment` 是 `workflow_dispatch` 专属。写错的代价不是
+     * 「那个字段少了下拉框」，而是**整份工作流文件解析失败**：GitHub 把这条链路判成 failure、
+     * 一个作业都不起跑，Run 页面只显示文件名，日志是空的（2026-10-09 首次开 PR 就是撞在这里，
+     * `release.yml` 与 `store-publish.yml` 两格同时零作业红，本机 YAML 却解析得好好的）。
+     */
+    const workflowCallTypes = (yaml: string): string[] => {
+      const lines = yaml.split('\n');
+      const start = lines.findIndex(line => /^ {2}workflow_call:\s*(#.*)?$/.test(line));
+      if (start < 0) return [];
+      const out: string[] = [];
+      for (let index = start + 1; index < lines.length; index += 1) {
+        const line = lines[Number(index)];
+        if (line.trim() === '' || /^\s*#/.test(line)) continue;
+        // 缩进退回 ≤2 个空格 = `workflow_call` 这一块结束（下一个 `on:` 平级键，比如 dispatch）。
+        if (!/^ {3,}\S/.test(line)) break;
+        const type = line.match(/^ +type:\s*(\S+)\s*$/);
+        if (type) out.push(String(type[1]));
+      }
+      return out;
+    };
+    const CALL_TYPES = ['boolean', 'number', 'string'];
+
+    it('被调用的工作流只声明 boolean / number / string 三种输入类型', () => {
+      const types = workflowCallTypes(release);
+      // 先证明这一块里真的数得到东西：整体失配时（比如 `workflow_call:` 的缩进或写法变了，
+      // 于是这一格切出空数组）断言会静默假通过，所以把「非空」本身钉住。
+      expect(types.length, '没从 workflow_call 块里数到任何 type——提取口径坏了').toBeGreaterThan(0);
+      for (const type of types) {
+        expect(CALL_TYPES, `workflow_call 的输入类型 ${type} 会让整份工作流解析失败`).toContain(type);
+      }
+      // 切块的下界也得有人管：dispatch 那份下拉框（`choice`）是**故意留着**的，人手补跑时靠它挡错。
+      // 若块边界算错，`choice` 会同时出现在「被调用」这一侧，上面的断言立刻红；反过来若有人把
+      // dispatch 的下拉框一并删了，这条红——两边都不许悄悄动。
+      expect(release, 'workflow_dispatch 的 publish-target 不再是下拉框').toContain('type: choice');
+      // 少了一种取值就没人挡着传给 `wxt submit`：`publish-target` 从 `choice` 降级成自由字符串之后，
+      // 那份白名单必须住在作业里，而不是消失。
+      expect(release).toContain('Validate publish inputs');
+      expect(release).toMatch(/case "\$PUBLISH_TARGET" in[\s\S]*default \| trustedTesters/);
+      expect(release).toMatch(/PUBLISH_TARGET: \$\{\{ inputs\.publish-target/);
+
+      // 阳性对照：这一格自己的牙。同一份提取函数遇到 `choice` 必须把它数出来，
+      // 否则「全绿」只说明我没看见那个错。
+      const poisoned = [
+        'on:',
+        '  workflow_call:',
+        '    inputs:',
+        '      publish-target:',
+        '        type: choice',
+        '        default: default',
+        '  workflow_dispatch:',
+        '    inputs:',
+        '      x:',
+        '        type: string',
+      ].join('\n');
+      expect(workflowCallTypes(poisoned), '提取函数没抓到被注入的 choice').toEqual(['choice']);
+      // `workflow_call:` 缺席时必须返回空数组，而不是把 dispatch 那一侧的类型误报进来。
+      expect(workflowCallTypes('on:\n  workflow_dispatch:\n    inputs:\n      x:\n        type: choice\n')).toEqual([]);
+    });
+
     it('CI、发布、以及审批前的校验，共用同一个 verify 复合动作', () => {
       expect(ci).toContain('uses: ./.github/actions/verify');
       expect(release).toContain('uses: ./.github/actions/verify');
