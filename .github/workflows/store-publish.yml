@@ -335,7 +335,13 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ needs.decide.outputs.tag }}
-    # `inherit` 而不是逐个映射，但有一个前提必须写在这里：**四个 CHROME_* Secrets 只能放在
-    # 仓库级**。环境级 Secrets 不会随 `secrets: inherit` 传给被调用的工作流（发布作业自己
-    # 不带环境——带环境的是上一格），挪到环境级就是「审批通过、构建完成、商店静默跳过」。
+      # 显式写 `publish` 而不是靠那份输入的默认值：这一条链路的语义就是「人已点头、要完整发布」，
+      # 而 `mode` 的默认值属于被调用方，它哪天改成 `publish-dry`（比如为了保险）就会让审批通过
+      # 变成「校验跑完、tag 打上、商店静默没提审」——正是本仓库已经栽过两次的那个形状。
+      mode: publish
+    # `inherit` 而不是逐个映射，但有一个前提必须写在这里：**四条 v2 商店 Secrets 只能放在
+    # 仓库级**（`CHROME_EXTENSION_ID` / `CHROME_PUBLISHER_ID` / `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL`
+    # / `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`）。环境级 Secrets 不会随 `secrets: inherit` 传给被调用的
+    # 工作流（发布作业自己不带环境——带环境的是上一格），挪到环境级就是「审批通过、构建完成、
+    # 商店静默跳过」。
     secrets: inherit

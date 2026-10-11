@@ -185,12 +185,12 @@ describe('secretPresenceOf：只是给审批人看的一条线索', () => {
 
   it('缺两个就报两个，多出来的别的 Secrets 不混进 present', () => {
     const body = JSON.stringify({
-      secrets: [{ name: 'CHROME_EXTENSION_ID' }, { name: 'CHROME_CLIENT_ID' }, { name: 'NPM_TOKEN' }],
+      secrets: [{ name: 'CHROME_EXTENSION_ID' }, { name: 'CHROME_PUBLISHER_ID' }, { name: 'NPM_TOKEN' }],
     });
     expect(secretPresenceOf(200, body)).toEqual({
       known: true,
-      present: ['CHROME_EXTENSION_ID', 'CHROME_CLIENT_ID'],
-      missing: ['CHROME_CLIENT_SECRET', 'CHROME_REFRESH_TOKEN'],
+      present: ['CHROME_EXTENSION_ID', 'CHROME_PUBLISHER_ID'],
+      missing: ['CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL', 'CHROME_SERVICE_ACCOUNT_PRIVATE_KEY'],
     });
   });
 
@@ -208,10 +208,24 @@ describe('secretPresenceOf：只是给审批人看的一条线索', () => {
   it('这份清单就是 release.yml 里那四个名字，顺序与拼写一致', () => {
     expect(STORE_SECRET_NAMES).toEqual([
       'CHROME_EXTENSION_ID',
-      'CHROME_CLIENT_ID',
-      'CHROME_CLIENT_SECRET',
-      'CHROME_REFRESH_TOKEN',
+      'CHROME_PUBLISHER_ID',
+      'CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL',
+      'CHROME_SERVICE_ACCOUNT_PRIVATE_KEY',
     ]);
+  });
+
+  it('v1.1 那三个 OAuth 名字不许回来：它们在 v2 下没有读者', () => {
+    // 留着就是「Secrets 配齐了、闸门也绿，Google 侧却始终拿不到包」——CLI 不会替我们报错，
+    // 它只会说缺 `publisherId` 那一类必填项，或者更糟：悄悄按 v1.1 那条已死的路走。
+    const retired = ['CHROME_CLIENT_ID', 'CHROME_CLIENT_SECRET', 'CHROME_REFRESH_TOKEN'];
+    for (const name of retired) {
+      expect(STORE_SECRET_NAMES, name).not.toContain(name);
+    }
+    expect(secretPresenceOf(200, JSON.stringify({ secrets: retired.map(n => ({ name: n })) }))).toEqual({
+      known: true,
+      present: [],
+      missing: [...STORE_SECRET_NAMES],
+    });
   });
 });
 
@@ -356,9 +370,9 @@ describe('renderSummary：审批人打开那条 run 时看到的那一屏', () =
   it('凭据那一行三种读数三种说法，缺的那几个要点名', () => {
     expect(render({ secrets: { known: false, present: [], missing: [] } })).toContain('读不到仓库 Secrets 名单');
     const missing = render({
-      secrets: { known: true, present: ['CHROME_EXTENSION_ID'], missing: ['CHROME_REFRESH_TOKEN'] },
+      secrets: { known: true, present: ['CHROME_EXTENSION_ID'], missing: ['CHROME_SERVICE_ACCOUNT_PRIVATE_KEY'] },
     });
-    expect(missing).toContain('CHROME_REFRESH_TOKEN');
+    expect(missing).toContain('CHROME_SERVICE_ACCOUNT_PRIVATE_KEY');
     expect(missing).toContain('GitHub Release 照发');
     expect(render()).toContain('别挪到环境级');
   });

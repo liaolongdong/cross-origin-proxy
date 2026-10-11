@@ -22,12 +22,18 @@ import { pathToFileURL } from 'url';
 /** 与 `.github/workflows/store-publish.yml` 里 `environment:` 那个名字一致（这里只用于措辞）。 */
 const DEFAULT_ENVIRONMENT = 'chrome-web-store';
 
-/** 商店提审要用的四个仓库级 Secrets（与 `release.yml` 的 `Detect Chrome Web Store credentials` 同一份清单）。 */
+/**
+ * 商店提审要用的四个仓库级 Secrets（与 `release.yml` 的 `Detect Chrome Web Store credentials` 同一份清单）。
+ *
+ * 这份名字是 Chrome Web Store API v2 的形态：v1.1 于 2026-10-15 停止支持，而 v2 只认服务账号，
+ * 原来那三个 OAuth 名字（`CHROME_CLIENT_ID` / `CHROME_CLIENT_SECRET` / `CHROME_REFRESH_TOKEN`）
+ * 从此没有读者。名字逐个与 `publish-browser-extension`（CLI 自己那条帮助里写作 `publish-extension`）的环境变量同名，工作流直接 `env:` 注入即可。
+ */
 export const STORE_SECRET_NAMES = Object.freeze([
   'CHROME_EXTENSION_ID',
-  'CHROME_CLIENT_ID',
-  'CHROME_CLIENT_SECRET',
-  'CHROME_REFRESH_TOKEN',
+  'CHROME_PUBLISHER_ID',
+  'CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL',
+  'CHROME_SERVICE_ACCOUNT_PRIVATE_KEY',
 ]);
 
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/;

@@ -1491,6 +1491,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     const verify = read('.github/actions/verify/action.yml');
     const notesAction = read('.github/actions/release-notes/action.yml');
     const gateScript = read('scripts/release-gate.mjs');
+    const preflightScript = read('scripts/store-preflight.mjs');
 
     /**
      * 作业级切分：YAML 在这里只按「两个空格缩进的就是作业名」拆，不引解析器（见文件头那句
@@ -1549,12 +1550,29 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       // 切块的下界也得有人管：dispatch 那份下拉框（`choice`）是**故意留着**的，人手补跑时靠它挡错。
       // 若块边界算错，`choice` 会同时出现在「被调用」这一侧，上面的断言立刻红；反过来若有人把
       // dispatch 的下拉框一并删了，这条红——两边都不许悄悄动。
-      expect(release, 'workflow_dispatch 的 publish-target 不再是下拉框').toContain('type: choice');
-      // 少了一种取值就没人挡着传给 `wxt submit`：`publish-target` 从 `choice` 降级成自由字符串之后，
-      // 那份白名单必须住在作业里，而不是消失。
-      expect(release).toContain('Validate publish inputs');
-      expect(release).toMatch(/case "\$PUBLISH_TARGET" in[\s\S]*default \| trustedTesters/);
-      expect(release).toMatch(/PUBLISH_TARGET: \$\{\{ inputs\.publish-target/);
+      expect(release, 'workflow_dispatch 的 mode 不再是下拉框').toContain('type: choice');
+      // 少了一种取值就没人挡着传给 `wxt submit`：`mode` 从 `choice` 降级成自由字符串之后
+      // （`workflow_call` 只认 string，闸门链路传进来的就是自由字符串），那份白名单必须住在
+      // 作业里，而不是消失。判据与旗标同源：下游每一格的 `if:` 比的都是那个已判过的 output。
+      expect(release).toContain('Validate release inputs');
+      expect(release).toMatch(/case "\$MODE" in[\s\S]*preflight \| status \| publish-dry \| publish/);
+      expect(release).toMatch(/RAW_MODE: \$\{\{ inputs\.mode/);
+      // v1.1 那个「发布分组」旋钮必须真的从链路上消失。剥掉整行注释再查——文件头与那三步上方
+      // 的注释正是在解释「为什么撤掉它」，连着注释一起查会在纯粹的设计说明上红。
+      const releaseCode = [...release.split('\n')].filter(line => !/^\s*#/.test(line)).join('\n');
+      expect(releaseCode, 'release.yml 又把 v1.1 的发布分组旋钮接回来了').not.toMatch(
+        /--chrome-publish-target|trustedTesters/,
+      );
+      // 私钥只走环境变量，这一条有实测承重：把它作为 `--chrome-service-account-private-key` 的
+      // 实参交给 CLI 时，进程打印 help 后 exit 0，上传与提审一次都没发生——那一格绿得和成功一模一样。
+      expect(releaseCode, '私钥又被铺上了 argv').not.toContain('--chrome-service-account-private-key');
+      expect(releaseCode).toContain(
+        'CHROME_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_PRIVATE_KEY }}',
+      );
+      // API 版本钉在作业级 env，且与预检脚本里的那个常量是同一个值——两处不一致时预检说的是
+      // 「v2 没问题」，跑的却是 v1.1 客户端。
+      expect(releaseCode).toContain("CHROME_API_VERSION: 'v2'");
+      expect(preflightScript).toContain("export const REQUIRED_API_VERSION = 'v2'");
 
       // 阳性对照：这一格自己的牙。同一份提取函数遇到 `choice` 必须把它数出来，
       // 否则「全绿」只说明我没看见那个错。
@@ -1614,11 +1632,14 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      *    `wxt submit`，就等于开出第二条提审通道，而配额有限与不可撤回这两件事从此没有单一守门人。
      */
     it('向商店提审的出口只有 release.yml，它有三个入口但没有第四个', () => {
+      // 服务账号那四条，一条都不能少、也不能换成 v1.1 的 OAuth 三件套：
+      // `CHROME_CLIENT_ID` / `CHROME_CLIENT_SECRET` / `CHROME_REFRESH_TOKEN` 在 v2 下没有读者，
+      // 让它们回来的最快路径就是有人照着旧文档补进这个数组。
       for (const secret of [
         'CHROME_EXTENSION_ID',
-        'CHROME_CLIENT_ID',
-        'CHROME_CLIENT_SECRET',
-        'CHROME_REFRESH_TOKEN',
+        'CHROME_PUBLISHER_ID',
+        'CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL',
+        'CHROME_SERVICE_ACCOUNT_PRIVATE_KEY',
       ]) {
         expect(release, `release.yml 未引用 secrets.${secret}`).toContain(`secrets.${secret}`);
       }
@@ -1782,6 +1803,34 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         code.match(/protection_rules|required_reviewers|fromjson|\bjq\b/g)?.length ?? 0,
         'YAML 里开始自己读环境的保护规则了——那份判据没有单测',
       ).toBe(0);
+    });
+
+    /**
+     * 离线预检与闸门同一档：判据住在 `scripts/store-preflight.mjs`（有单测），YAML 只调用它。
+     * 这一格存在的全部理由是「凭据缺或形状错的包在 Google 那边是静默的」，所以守住四件事：
+     * ① `release.yml` 真的跑它；② 它有自己的运行时单测；③ 它排在构建**之前**（构建六七分钟，
+     * 一条读不出的私钥在那六七分钟里一点动静都没有）；④ 审批链路不许另写一份判据、也不许
+     * 靠被调用方的输入默认值来决定执行深度。
+     */
+    it('商店凭据的离线预检只有一份判据，且它排在构建之前', () => {
+      expect(release).toContain('node scripts/store-preflight.mjs');
+      expect(read('tests/storePreflight.test.ts')).toContain('@/scripts/store-preflight.mjs');
+      // 顺序按**出现次序**判，不是「文件里两处都在」：预检落到构建之后就是白烧六七分钟，
+      // 而那一挪在这条 grep 上照样全绿。
+      const preflightAt = release.indexOf('node scripts/store-preflight.mjs');
+      const verifyAt = release.indexOf('uses: ./.github/actions/verify');
+      expect(preflightAt).toBeGreaterThan(-1);
+      expect(verifyAt).toBeGreaterThan(-1);
+      expect(preflightAt, '离线预检排到了构建之后').toBeLessThan(verifyAt);
+
+      const code = [...release.split('\n')].filter(line => !/^\s*#/.test(line)).join('\n');
+      // v1.1 的 OAuth 三条不许以 `secrets.X` 的形式回来。只查这个形状：注释里点名它们是为了
+      // 告诉读的人「该删」，连着注释一起查会在说明文字上红。
+      for (const retired of ['CHROME_CLIENT_ID', 'CHROME_CLIENT_SECRET', 'CHROME_REFRESH_TOKEN']) {
+        expect(code, `release.yml 又去读 v1.1 的 secrets.${retired}`).not.toContain(`secrets.${retired}`);
+      }
+      // 闸门链路把执行深度显式交棒：`mode` 的默认值属于被调用方，靠它猜就是两处事实源。
+      expect(storePublish).toContain('mode: publish');
     });
 
     it('store-publish 里每个调 GitHub API 的步骤都自己声明 GH_TOKEN', () => {
