@@ -533,6 +533,8 @@ done
 
 **这一步只能手工，别去工作流里找它。** GitHub Release 的说明由 `release.yml` 从本表对应的 `CHANGELOG.md` 小节自动切出，商店那一栏却没有任何自动化通路：实测于 2026-09-22，`pnpm exec wxt submit --help`（底层 `publish-extension/4.0.5`）只有 `--chrome-zip` / `--chrome-extension-id` / 三个凭据 / `--chrome-publish-target` / `--chrome-deploy-percentage` / `--chrome-review-exemption` / `--chrome-skip-submit-review` 这几项，**没有 whats-new 类参数**。所以下面两块文本是提审时在 Dashboard「更新信息 / Release notes」栏粘贴的素材，粘贴动作发生在包上传之后。
 
+**2026-10-11 按 WXT 0.21.4 底下那一份（`publish-browser-extension@6.2.0`）复量过这一句，结论原样成立：whats-new / release-notes 类参数仍然没有。** 复量时顺带量到的是这一层的样子变了——服务账号那四条凭据（`--chrome-publisher-id` / `--chrome-service-account-client-email` / `--chrome-service-account-private-key`）进了参数表，而旧 OAuth 那三条连同 `--chrome-publish-target`、`--chrome-review-exemption` 一起在帮助里被标成 `[Deprecated: API v1.1 only]`（v2 的 schema 里没有它们的键，传进去会被 mask 掉），见 RELEASING.md §3.2 与 §7 Q16。
+
 写作约束与商店描述同源：不带版本号（这一栏本来就绑在版本上，写了反而在改包重传时变假）、不出现 `best` / `free` / 排名类措辞、不承诺下面第 9 节没被实机验证过的能力。中英文条目数一一对应，删减时**两边同步删**，只删一边就是下一次审计的一条发现。
 
 **下面这两块描述的是「商店在装的那一包 → 这一次要交的包」这一段差集**，2026-10-08 按 [CHANGELOG.md](../../CHANGELOG.md) 的 `## [1.4.0]` 与 `## [1.5.0]` 两节重写（上一版说的是 1.3.0 那一包，`v1.4.0` 与 `v1.5.0` 都没进过商店，所以商店用户一次升级同时吃到这两节的内容——见第 8 节表顶与第 12 节）。版本号只出现在这段说明里，两块正文里一个都不写，正是上面那条约束。第 9 节的功能自检里那三条「弹窗就地操作 / 疑似跨域来源 / 一键模板与它带进来的三个开关」是这一批新增的用户界面，勾选框走一遍再粘——`CHANGELOG.md` 里表单预填那一条把真浏览器目测如实列为未验证项，这两块文本承诺的恰恰包含它。
@@ -661,11 +663,11 @@ PY
 
 第 1–10 节是人工填写的商店表单；一旦条目存在，包体本身就不该再手工传。
 
-- **一次性准备（无法绕开的手动部分）**：`publish-extension` 不提供「新建商店条目」能力，必须在 Dashboard 手动上传一次 zip 才能拿到 Extension ID；同时在 Google Cloud 建 OAuth 客户端换 refresh token。四个值落到仓库 Secrets：`CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`。还有一项在 GitHub 仓库设置里、且必须在那条审批链路合进 `main` **之前**做完：名为 `chrome-web-store` 的 environment 加上 **Required reviewers**（§9 那条勾选，步骤与复核命令见 RELEASING.md §1.6）。逐步命令见 [RELEASING.md](./RELEASING.md) §1。
+- **一次性准备（无法绕开的手动部分）**：底层那份 CLI（npm 包名 `publish-browser-extension`，`publish-extension` 是它给自己起的调用名）不提供「新建商店条目」能力，必须在 Dashboard 手动上传一次 zip 才能拿到 Extension ID；凭据那一头 2026-10-11 起换成 **Chrome Web Store API v2** 的服务账号形状（v1.1 于 2026-10-15 停止支持，而 v2 只认服务账号，旧的 OAuth 客户端 + refresh token 在那一头没有读者），要在 Google Cloud 建服务账号、下载 JSON、再到开发者控制台把它授权给这个条目。四个值落到仓库 Secrets：`CHROME_EXTENSION_ID` · `CHROME_PUBLISHER_ID` · `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` · `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`（私钥必须是真换行的 PEM，且只经 `env:` 交给进程，不进命令行实参）。还有一项在 GitHub 仓库设置里、且必须在那条审批链路合进 `main` **之前**做完：名为 `chrome-web-store` 的 environment 加上 **Required reviewers**（§9 那条勾选，步骤与复核命令见 RELEASING.md §1.6）。逐步命令见 [RELEASING.md](./RELEASING.md) §1。
 - **日常（两条入口，结尾是同一条 `release.yml`，所以「发出去的是什么」与「你从哪一头进去」无关）**：**路径 A**——合进 `main` 即起跑 `.github/workflows/store-publish.yml`：`decide` 只读三份远端事实（这一版的 tag 在不在、审批环境配没配、商店凭据齐不齐）→ `prepare` 跑与 CI 同一份全量校验并把 zip 留成 Artifact 给审批人核 → `confirm` 挂在 `chrome-web-store` 环境上**停下等人 Approve** → 批准后 `release-tag` 才把 `vX.Y.Z` 落到远端，`publish` 再用 `workflow_call` 把 `release.yml` 叫起来（那个 tag 是作业令牌推的，按 GitHub 的规则触发不了新工作流，所以必须显式接力）。**路径 B**——本机 `git tag` 再推上去，直接触发 `.github/workflows/release.yml`，同一套步骤、没有那道审批。两条都走到 `pnpm exec wxt submit` 上传并提审；版本号必须与 `package.json` 一致，不一致时工作流直接终止（商店收到错版本号的包是静默失败）。逐步命令见 [RELEASING.md](./RELEASING.md) §2。
 - **不在这条链路里的两件事**：①新建商店条目（见上一条的一次性准备）；②**新版本绑定的「更新说明」**——`wxt submit` 的参数表里没有它，只能提审时在 Dashboard 粘贴第 8.1 节那两块文本。GitHub Release 的说明反而是自动的（工作流把 `CHANGELOG.md` 对应小节切出来），两边别互相以为对方已经填了。
 - **Secrets 未配时的行为**：Release 照建，商店那一步跳过并在 Run 页面留指引，不报红。路径 A 会把这件事提前一格——`decide` 的 Job Summary 里写明仓库级缺哪几个，审批人点头之前就看得见（但看得见不等于被挡住：那一格的判定只依赖 tag 与审批环境，凭据齐不齐不拦发布）。
-- **先验后提审**：首次接管已有条目时，用 `Run workflow` 勾选 `skip-review`（只上传成草稿）或选 `publish-target=trustedTesters`，人工核对完再走 `default`。
+- **先验后提审**：首次接管已有条目时，用 `Run workflow` 的 `mode` 按四档深度往上进——`preflight`（纯离线，不碰网络）→ `status`（只问商店现在的状态，连 zip 都不要）→ `publish-dry`（构建 + 出网验一次身份，不上传不提审）→ `publish`（真正上传并提审），最后一档再勾 `skip-review`（只上传成草稿）就停在校验，人工核对完再把那个勾去掉重跑一次。**v2 下没有 `publish-target` 这一档**：旧的 `trustedTesters` 走的是 v1.1 的发布组，而 v2 压根没有发布组，那个参数在 v2 的 schema 里会被直接 mask 掉（传了等于没传），所以这一条不再是「选一个安全的 target」而是「按档位往上进」。灰度发布是另一回事，靠 `CHROME_PUBLISH_TYPE` / `CHROME_DEPLOY_PERCENTAGE`（RELEASING.md §3.2）。
 - **与商店表单的耦合点**：详细描述里刻意不写版本号，避开每次发版都要改商店文案；但限制条数（200 规则 / 500 日志 / 10MB）与能力清单必须与 `README.md`、`docs/` 落地页、`CHANGELOG.md` 保持同一事实。
 
 ## 12. 安装漏斗的两段状态与翻牌记录
