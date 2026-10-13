@@ -1,29 +1,87 @@
 name: Release
 
-# 发版链路：tag `v*` → 全量校验（复用 CI 的 verify 动作）→ 构建并打包 zip →
-# GitHub Release（附 zip 与 CHANGELOG 小节）→ Chrome 应用商店上传并提审。
+# 发版链路：tag `v*` → 离线预检商店凭据 → 全量校验（复用 CI 的 verify 动作）→ 构建并打包 zip →
+# GitHub Release（附 zip 与 CHANGELOG 小节）→ Chrome 应用商店 v2 上传并提审。
 #
-# 首次上架无法自动化：`publish-extension` 明确不提供「新建商店条目」的能力，
+# 三个入口，发布实现只有这一份：
+#   - `push: tags` —— 人从本机推 tag（RELEASING.md §2 路径 B）。
+#   - `workflow_call` —— 被 `store-publish.yml` 在**人工审批通过并打好 tag 之后**调用
+#     （§2 路径 A，合并即发布）。它自己用作业令牌推 tag，所以触发不了本文件（GitHub 的
+#     「同一令牌产生的事件不起跑新工作流」那条规则），必须由调用方显式接力。
+#   - `workflow_dispatch` —— 补跑、灰度，以及下面那四档诊断（§3）。
+#
+# **执行深度由 `mode` 决定，四档一路往上**：`preflight`（只离线判凭据形状，一个字节都不出网）
+# → `status`（只读商店那头的状态，不上传、不动 refs）→ `publish-dry`（构建、联网验凭据，
+# 但不上传）→ `publish`（完整发布并提审）。越靠下的档位外部副作用越多，所以人第一次走一条
+# 新链路时可以从最便宜的那一档开始给自己攒证据。
+#
+# **商店侧只说 Chrome Web Store API v2**：v1.1 于 2026-10-15 停止支持，而 v2 只认服务账号。
+# `publish-browser-extension` 按 `chrome.apiVersion === "v2"` 选客户端，而那个字段缺省就按 v1.1 那份
+# schema 判据 —— 于是「没显式写 v2」不是走老路，是**拿已经退役的那条 API 去发版**。这里把它
+# 写死在 job 的 `env:` 里，并让离线预检再确认一次（有人删掉那行时必须当场红，而不是等到商店
+# 侧 404 才发现）。v2 同时**没有发布分组**这一概念（`--chrome-publish-target` 属于已废弃的
+# v1.1，v2 的 schema 会把它 mask 掉），所以 `trustedTesters` 从输入里整个撤掉，不留一个
+# 「选了等于没选」的旋钮；v2 里对应「别立刻全量放开」的是 `publishType: STAGED_PUBLISH` 与
+# `deployPercentage`，本链路默认全量，见 RELEASING.md §3。
+#
+# **私钥只经 `env:` 注入，绝不上命令行**：2026-10-11 实测，把 28 行真 PEM 作为
+# `--chrome-service-account-private-key` 的实参交给 `pnpm exec wxt submit`，CLI 只打印
+# help 与版本号然后 **exit 0** —— 连 zip 存在性那道本地校验都没走到，什么请求都没发。
+# 表现就是「每一步都绿、商店没收到包」，正是本仓库已经栽过两次的形状（那次是 Secrets 名字不对）。
+# 同一个键经 `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY` 环境变量传入则一切正常。其余实参（zip 路径、
+# `--dry-run`、`--chrome-skip-submit-review`）都是不含换行的短值，留在 argv 上可读性更好。
+#
+# 首次上架无法自动化：`publish-browser-extension` 明确不提供「新建商店条目」的能力，
 # 必须先在 Developer Dashboard 手动上传一次 zip 拿到 Extension ID，
-# 之后所有版本都由本工作流提审。步骤见 RELEASING.md。
+# 之后所有版本都由这条链路提审。步骤见 RELEASING.md。
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       tag:
-        description: '要发布的已存在标签，例如 v1.0.1'
+        description: '要发布的标签，必须已存在于远端（由调用方刚刚打出来）'
         required: true
         type: string
-      publish-target:
-        description: 'Chrome 商店发布分组'
+      # `workflow_call` 的输入类型只有 boolean / number / string 三种：`choice` 与
+      # `environment` 是 `workflow_dispatch` 专属（官方 workflow-syntax 的 inputs.<id>.type
+      # 那一节写死了这份清单）。把 `choice` 写在这里不是「多个字段没支持」而是**整份工作流
+      # 文件解析失败**：GitHub 随即把这条链路判成 failure 且一个作业都不起跑，而 Run 页面
+      # 上只有工作流文件名（2026-10-09 实测踩过）。`mode` 因此在这里是 `string`，
+      # 那份「只能是四档之一」的约束由 `Validate release inputs` 那一步钉住（fail closed）。
+      mode:
+        description: '执行深度：preflight / status / publish-dry / publish'
+        required: false
+        type: string
+        default: publish
+      skip-review:
+        description: '只上传 zip 到商店草稿，不提交审核'
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      # 上面两档**必填**（调用方刚刚把标签打出来），这一档刻意留空可选：`preflight` 与
+      # `status` 是在「还没有任何 tag」的时候最该跑的两档——第一次把服务账号配好、想确认
+      # 凭据形状对不对，此刻远端最后一个标签是上一版的。必填就等于逼人去填一个不存在的标签，
+      # 而 `actions/checkout` 拿到不存在的 ref 直接红，那条红和凭据对不对毫无关系。
+      # 留空时检出的是所选分支，`Guard tag vs package version` 在诊断档根本不跑（见那里的 `if:`），
+      # 所以不会误报版本不一致。`publish-dry` 与 `publish` 仍然要填：那两档要知道发的是哪一版。
+      tag:
+        description: '要发布的已存在标签，例如 v1.0.1（preflight / status 可留空）'
+        required: false
+        type: string
+      mode:
+        description: '执行深度：越往下外部副作用越多'
         required: false
         type: choice
-        default: default
+        default: publish
         options:
-          - default
-          - trustedTesters
+          - preflight
+          - status
+          - publish-dry
+          - publish
       skip-review:
         description: '只上传 zip 到商店草稿，不提交审核（先在 Dashboard 人工核对包内容）'
         required: false
@@ -35,7 +93,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  # 按**要发的那个 tag** 分组，而不是按 `github.ref`：三个入口里只有 tag push 的 ref 是标签本身，
+  # `workflow_call` 与被 tag 触发的 run 各自挂在 `refs/heads/main` 上。按 ref 分组时，
+  # 「审批链路正在发 vX.Y.Z」与「人同时补跑同一个 vX.Y.Z」用的是两个并发组，于是同一版可以向 Google
+  # 提审两遍——不可撤回，且耗的是审核配额。`inputs.tag` 在 tag push 下是空的，所以回落 ref_name。
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -48,10 +110,17 @@ jobs:
       # 只给下面那一步换标签用（`autorelease: pending` → `tagged`），见该步的注释。
       pull-requests: write
     env:
+      # 写死 v2：`publish-browser-extension` 只在 `chrome.apiVersion === "v2"` 时选 v2 客户端，
+      # 缺省则按 v1.1 的 schema 判据走老客户端。这一行是整条链路的 API 版本事实源，
+      # 离线预检会再读它一次（删掉这行必须当场红，而不是等商店侧报错）。
+      CHROME_API_VERSION: 'v2'
       CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+      # 下面两条是服务账号凭据。私钥**只能**以环境变量形式交给 CLI：实测把 28 行 PEM 作为
+      # `--chrome-service-account-private-key` 的实参传入时，进程打印 help 后 exit 0，
+      # 上传与提审一次都没发生（详见文件头那段）。
+      CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL: ${{ secrets.CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL }}
+      CHROME_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_PRIVATE_KEY }}
 
     steps:
       # tag push 时是标签本身；手动补跑时用输入的 tag。
@@ -60,7 +129,88 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref_name }}
 
+      # 排在 Verify **之前**：`mode` 决定后面每一步跑不跑，它必须是**先钉死再被使用**的那一个值。
+      # `workflow_dispatch` 有 `choice` 替人挡着，`workflow_call` 那边是自由字符串，而 tag push
+      # 根本没有这个输入（空串）——三种形状都在这一格收敛成一个白名单里的值，并写成 output，
+      # 于是下游每一格的 `if:` 比的都是「已判过的那一个」，不是「又一个没校验的 inputs」。
+      # 判错的代价不对称：把 `publish` 读成 `publish-dry` 只是白跑一次，反过来则是一次
+      # 不可撤回的提审，所以白名单只认那四个名字，拼错的一律当场红。
+      # **唯一的例外是空值，它按 `publish` 走**：`push: tags` 那一档压根没有输入可填，
+      # 而「本机推 tag」这个动作本身就是人已经点过头（§2 路径 B），它必须落到完整发布上。
+      - name: Validate release inputs
+        id: inputs
+        env:
+          RAW_MODE: ${{ inputs.mode }}
+          SKIP_REVIEW: ${{ inputs.skip-review }}
+        run: |
+          MODE="${RAW_MODE:-publish}"
+          case "$MODE" in
+            preflight | status | publish-dry | publish) ;;
+            *)
+              echo "::error::mode 只能是 preflight / status / publish-dry / publish 之一（收到长度 ${#MODE} 的值，不复读原文）"
+              exit 1
+              ;;
+          esac
+          case "$SKIP_REVIEW" in
+            '' | true | false) ;;
+            *)
+              echo "::error::skip-review 必须是布尔值 true 或 false（收到长度 ${#SKIP_REVIEW} 的值）"
+              exit 1
+              ;;
+          esac
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          # 空值（tag push 根本没有这个输入）按默认走，不把它当成「用户选了个奇怪的东西」：
+          # 默认不发 skip-review，也就是正常提审。
+          echo "skip-review=${SKIP_REVIEW:-false}" >> "$GITHUB_OUTPUT"
+          # 两个派生旗标：把「哪一档有哪种外部副作用」这件事收在这一处，下游只问旗标。
+          # builds = 要不要构建（publish-dry 也要，因为 `submit` 连 --dry-run 都会先查 zip 存不存在）
+          # releases = 要不要动 refs 之外的公开产物（GitHub Release、release-please 的标签）
+          case "$MODE" in
+            publish-dry | publish) echo "builds=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "builds=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          if [ "$MODE" = "publish" ]; then
+            echo "releases=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "releases=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 也排在 Verify **之前**：这一格只读四个环境变量在不在，几秒钟，而它决定离线预检说不说话、
+      # 商店那三档跑哪一档、以及最后那条注解的措辞。
+      # 「缺凭据」在这一格里**不是失败**——GitHub Release 与该发的号不该因为商店没配而发不出去，
+      # 那是本仓库 2026-10-09 之后刻意保留的形状（缺就跳过商店、留一条 warning，见 §5）。
+      # 唯一的例外是 `mode=status`：那一档除了商店读数无话可说，所以它在下一格自己翻红。
+      - name: Detect Chrome Web Store credentials
+        id: credentials
+        run: |
+          MISSING=""
+          for NAME in CHROME_EXTENSION_ID CHROME_PUBLISHER_ID CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL CHROME_SERVICE_ACCOUNT_PRIVATE_KEY; do
+            if [ -z "${!NAME}" ]; then MISSING="$MISSING $NAME"; fi
+          done
+          if [ -z "$MISSING" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            # 只记录变量名，不记录值
+            echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          fi
+
+      # **离线**预检：判据全部只看环境变量与本仓库文件，一个字节都不出网，所以它排在构建之前
+      # （构建要六七分钟，而一条形状不对的私钥在那六七分钟里一点动静都没有）。判据住在
+      # `scripts/store-preflight.mjs`，有单测；这里只负责把它接进链路。
+      #
+      # `mode=preflight` 时无条件跑——那正是这一档要看的东西，四项里缺哪一条就当场红哪一条，
+      # 「跳到商店步再说」在这里不是可接受的答复。其余三档只在四项齐备时跑：值都没配的场景
+      # 已经由 `Detect` 记成「跳过商店」，不该在这里翻成红。
+      #
+      # 这一格不读 `mode`：它对四档说同一套话（形状对不对、缺哪几条）。把档位传进来只会让
+      # 判据多一个分支，而多出来的分支没有对应的判据差异。
+      - name: Store preflight (offline)
+        if: steps.inputs.outputs.mode == 'preflight' || steps.credentials.outputs.ready == 'true'
+        run: node scripts/store-preflight.mjs
+
       - name: Verify
+        if: steps.inputs.outputs.builds == 'true'
         uses: ./.github/actions/verify
         with:
           build-mode: zip
@@ -69,23 +219,38 @@ jobs:
       # 商店会收到一个版本号错乱的包，而 Release 名字看起来仍然正常。
       #
       # `inputs.tag` 是自由文本，绝对不能直接 ${{ }} 插进 shell 脚本——那是一个
-      # 脚本注入面，而这个 job 的 env 里带着商店 OAuth refresh token（有仓库 write
-      # 权限就能提权到供应链发布位）。所有外部输入走 env 传递，先做格式校验，
-      # 再把已校验的值写成本步骤的 output 给下游使用。
+      # 脚本注入面，而这个 job 的 env 里带着服务账号私钥（有仓库 write 权限就能提权到
+      # 供应链发布位）。所有外部输入走 env 传递，先做格式校验，再把已校验的值写成本步骤的
+      # output 给下游使用。
+      #
+      # 只在会构建的两档跑：`preflight` / `status` 常常是在「main 的号已经领先最后一个 tag」
+      # 时跑的（正好是要发下一版之前），那时等值校验必然红，而那两档一个字节都不打算写。
+      # 让它红等于把诊断档自己的门关上——形状判据（下面的 `Validate release inputs` 与预检）
+      # 不需要版本号，所以这两档压根不需要这一格。
       - name: Guard tag vs package version
         id: guard
+        if: steps.inputs.outputs.builds == 'true'
         env:
           INPUT_TAG: ${{ inputs.tag }}
           REF_NAME: ${{ github.ref_name }}
+          MODE: ${{ steps.inputs.outputs.mode }}
         run: |
           TAG="${INPUT_TAG:-$REF_NAME}"
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]]; then
-            echo "::error::标签格式非法：$TAG（应为 vMAJOR.MINOR.PATCH）"
+            # 不复读那串原文：`inputs.tag` 是自由文本，含 `\r` 或 `::` 时能把一条日志拼成
+            # 两条注解（与 `store-publish.yml` 里 version 那格同一套口径）。
+            # 空 tag 从分支补跑时 `TAG` 是分支名，形状判据把它拦下来是对的；
+            # 但只说「格式非法」会让人去改标签，而这里真正要做的是把输入框填上。
+            if [ -z "$INPUT_TAG" ]; then
+              echo "::error::$MODE 这一档必须填 tag（没有 tag 输入，回落到了 ref 名，形状非法）。应为 vMAJOR.MINOR.PATCH。"
+            else
+              echo "::error::标签格式非法（长度 ${#TAG} 的值，不复读原文），应为 vMAJOR.MINOR.PATCH"
+            fi
             exit 1
           fi
           VERSION="$(node -p "require('./package.json').version")"
           if [ "v${VERSION}" != "$TAG" ]; then
-            echo "::error::标签 $TAG 与 package.json 的 $VERSION 不一致。先在本地 npm version 并同步 CHANGELOG.md 再打 tag。"
+            echo "::error::标签 $TAG 与 package.json 的 $VERSION 不一致。号只写在 package.json（§2 路径 A 由机器人的发布 PR 写、路径 B 由 §2.3 手工 bump 写），tag 必须跟上它，不要反过来改 tag 迁就文件。"
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -93,6 +258,7 @@ jobs:
 
       - name: Locate extension zip
         id: package
+        if: steps.inputs.outputs.builds == 'true'
         run: |
           # 按 wxt 的命名规则（<package-name>-<version>-<browser>.zip）算出唯一期望路径，
           # 而不是用 .output/*.zip 匹配：本地工作区可能残留改名前的旧 zip，
@@ -108,32 +274,18 @@ jobs:
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       # CHANGELOG.md 是版本历史唯一事实源；无对应小节时回落到自动生成的说明，
-      # 宁可说明朴素也不要发布时空白。
+      # 宁可说明朴素也不要发布时空白。切片判据住在 `.github/actions/release-notes`，
+      # 与 `store-publish.yml` 审批页那段「这一版要发什么」同源——预览和落款分两份判据，
+      # 审批人点头的内容就不是商店拿到的内容。
+      #
+      # 只有会建 Release 的那一档跑：`publish-dry` 不往 GitHub 写任何东西，切一份没人看的说明
+      # 是白活，而它万一红在这里，读日志的人会以为「预演没过」——其实两件事毫无关系。
       - name: Build release notes
         id: notes
-        env:
-          VERSION: ${{ steps.guard.outputs.version }}
-        run: |
-          # 小节标题有两种形状，都得认：release-please 在有上一个 tag 时写
-          # `## [x.y.z](…/compare/上号...本号) (日期)`，拿不到上一个 tag 时写裸的
-          # `## x.y.z (日期)`（模板见 conventional-changelog-conventionalcommits 的 header.hbs
-          # 里 `linkCompare` 那两个分支）。号必须锚在 `## ` 之后原位比对：拿整行做子串查找会把
-          # 上一个版本号的对比链接读成自己的小节。
-          awk -v version="$VERSION" '
-            BEGIN { printing = 0 }
-            /^## (\[|[0-9])/ {
-              if (printing) exit
-              printing = ($0 ~ ("^## \\[" version "\\]") || $0 ~ ("^## " version "[ (]"))
-              next
-            }
-            printing { print }
-          ' CHANGELOG.md > notes.md
-          if [ -s notes.md ]; then
-            echo "source=changelog" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::CHANGELOG.md 里没有 [$VERSION] 小节，回落到自动生成的发布说明"
-            echo "source=generated" >> "$GITHUB_OUTPUT"
-          fi
+        if: steps.inputs.outputs.releases == 'true'
+        uses: ./.github/actions/release-notes
+        with:
+          version: ${{ steps.guard.outputs.version }}
 
       # 手动重跑是文档里的恢复路径，所以这里必须幂等：已存在就改说明并覆盖资产。
       #
@@ -145,6 +297,7 @@ jobs:
       # 只差最后一步，实际什么都没发出去。`github.token` 是本 job 已声明的
       # contents: write + pull-requests: write，不额外扩权。
       - name: Publish GitHub Release
+        if: steps.inputs.outputs.releases == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.guard.outputs.tag }}
@@ -178,6 +331,7 @@ jobs:
       # 换失败不翻发布（商店那边可能已经提审成功），但必须在 Job Summary 里说清楚，
       # 否则下一次冻结无迹可循。
       - name: Clear release-please pending label
+        if: steps.inputs.outputs.releases == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.guard.outputs.version }}
@@ -230,46 +384,92 @@ jobs:
             echo "::warning::autorelease: pending 标签清理失败：$FAILED"
           fi
 
-      - name: Detect Chrome Web Store credentials
-        id: credentials
+      # 商店侧的三档动作，按 `mode` 挑一档跑，判据只看那个已收进白名单的 output。
+      #
+      # `status` 与另两档对「缺凭据」的处理**刻意相反**：这一档存在的意义就是回答「商店那头
+      # 现在是什么状态」，缺凭据时静默跳过等于把「不知道」画成绿，所以它红；另两档维持本仓库
+      # 2026-10-09 之后刻意保留的形状——GitHub Release 照发、商店跳过并留一条注解（见 §5 与
+      # 下面 `Record skipped store publish`），因为「商店凭据还没配」不该拦住一个已经审批通过的版本。
+      #
+      # 凭据一律不进 argv：私钥是经 `env:` 交给进程的（文件头那段实测），`--chrome-*` 只出现
+      # zip 路径与两个布尔开关。三档都不需要 `--chrome-publish-target`——那是 v1.1 的废弃参数，
+      # v2 的 schema 里没有这个键，传进去会被 mask 掉（选了等于没选）。
+      - name: Query store status
+        if: steps.inputs.outputs.mode == 'status'
+        env:
+          READY: ${{ steps.credentials.outputs.ready }}
+          MISSING: ${{ steps.credentials.outputs.missing }}
         run: |
-          MISSING=""
-          for NAME in CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN; do
-            if [ -z "${!NAME}" ]; then MISSING="$MISSING $NAME"; fi
-          done
-          if [ -z "$MISSING" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            # 只记录变量名，不记录值
-            echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          if [ "$READY" != "true" ]; then
+            echo "::error::mode=status 需要四项商店凭据齐备，仓库级缺：${MISSING# }——这一档是只读诊断，没有可回落的半成品，所以直接红（判据与配置见 RELEASING.md §1.3）。"
+            exit 1
           fi
+          # `status` 不需要 zip（CLI 内部给 chrome 选项塞一份假路径好让 env 里的凭据被读到），
+          # 所以这一档既不构建也不 checkout 产物，是四档里唯一一次「纯问商店」。
+          pnpm exec wxt submit status
 
-      - name: Submit to Chrome Web Store
-        if: steps.credentials.outputs.ready == 'true'
+      - name: Publish dry run (auth check, no upload)
+        if: >-
+          steps.inputs.outputs.mode == 'publish-dry' &&
+          steps.credentials.outputs.ready == 'true'
         env:
           ZIP: ${{ steps.package.outputs.zip }}
-          PUBLISH_TARGET: ${{ inputs.publish-target || 'default' }}
-          SKIP_REVIEW: ${{ inputs.skip-review }}
         run: |
-          ARGS=(--chrome-zip "$ZIP" --chrome-publish-target "$PUBLISH_TARGET")
+          # `--dry-run` 先查 zip 存不存在（这就是这一档也要构建的原因），再出网一次
+          # `items:fetchStatus`——它验的是「这份服务账号换得到 token，且这个扩展 ID 归这个
+          # publisher 管」。不上传、不提审、不动 refs、不动 GitHub Release。
+          pnpm exec wxt submit --chrome-zip "$ZIP" --dry-run
+
+      - name: Submit to Chrome Web Store
+        if: >-
+          steps.inputs.outputs.mode == 'publish' &&
+          steps.credentials.outputs.ready == 'true'
+        env:
+          ZIP: ${{ steps.package.outputs.zip }}
+          SKIP_REVIEW: ${{ steps.inputs.outputs.skip-review }}
+        run: |
+          ARGS=(--chrome-zip "$ZIP")
           if [ "$SKIP_REVIEW" = "true" ]; then
             ARGS+=(--chrome-skip-submit-review)
           fi
+          # 刻意不传 `--chrome-cancel-pending`：它会在提审前先撤掉商店那边正在排队的那一版，
+          # 而那是别人可能正在等的动作。真有排队（这一档的失败信息会说出来），先用
+          # `mode=status` 看清 `Submitted item status`，再由人决定要不要本机带那个开关重跑。
           pnpm exec wxt submit "${ARGS[@]}"
 
       - name: Record skipped store publish
-        if: steps.credentials.outputs.ready != 'true'
+        if: >-
+          steps.credentials.outputs.ready != 'true' &&
+          steps.inputs.outputs.builds == 'true'
         env:
           MISSING: ${{ steps.credentials.outputs.missing }}
+          RELEASES: ${{ steps.inputs.outputs.releases }}
         run: |
+          if [ "$RELEASES" = "true" ]; then
+            DONE='GitHub Release 已就绪，但仓库缺少以下仓库级 Secrets：'
+            NEXT='补齐后在本工作流页面点 **Run workflow**，`mode` 选 `publish` 并填入同一个 tag 即可继续；Release 已存在会被复用，不会重复创建。'
+          else
+            DONE='这一次是 `publish-dry`（不建 Release、不提审），而仓库缺少以下仓库级 Secrets：'
+            NEXT='这一档需要凭据才能出网验一次身份，所以刚才那几步是本地校验；补好凭据后把 `mode` 选成 `preflight` 再跑一次，形状过了再回这一档。'
+          fi
           {
             echo '### Chrome Web Store 发布已跳过'
             echo
-            echo "GitHub Release 已就绪，但仓库缺少以下 Secrets（$MISSING）："
+            echo "$DONE"
             echo
-            echo '- `CHROME_EXTENSION_ID` · `CHROME_CLIENT_ID` · `CHROME_CLIENT_SECRET` · `CHROME_REFRESH_TOKEN`'
+            echo '- `CHROME_EXTENSION_ID` · `CHROME_PUBLISHER_ID` · `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` · `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`'
             echo
-            echo '补齐后在本工作流页面点 **Run workflow** 并填入同一个 tag 即可继续发布；Release 已存在会被复用，不会重复创建。'
+            echo "$NEXT"
             echo '获取步骤见 [.github/docs/RELEASING.md](https://github.com/liaolongdong/cross-origin-proxy/blob/main/.github/docs/RELEASING.md)。'
           } >> "$GITHUB_STEP_SUMMARY"
+          # 这一句必须是**注解**而不只是摘要正文：摘要要点进作业才看得到，而整条 run 是绿的。
+          # 本仓库已经这么连着错过两包——Release 建好、zip 挂上、全绿，Google 那边什么都没收到。
+          # 措辞刻意点名「值在、名字不对」这一种形状：历史遗留的 v1.1 四条（例如 `CWS_*` 或
+          # `CHROME_CLIENT_*`）此刻可能仍在这个仓库里，任何只看「凭据配了没有」的读者都会读成
+          # 已配好，而 `Detect` 读的是上面那四个 v2 名字。
+          #
+          # 与上一轮不同的是：这里不能再教人「逐条 Rename 就好」。四条里只有扩展 ID 那一条
+          # 可能靠改名救回来，另外三条的**值本身在这个仓库里不存在**——服务账号要在 Google Cloud
+          # 里建、私钥要重新下载，OAuth 那三个旧值在 v2 下没有任何用途。把这条写错的指引留在
+          # 注解里，等于让下一个人在改名上花半小时。
+          echo "::warning::商店提审已跳过（仓库级缺：${MISSING# }）——Google 侧没收到包。四条里 \`CHROME_EXTENSION_ID\` 若已以别的名字存在（例如历史遗留的 \`CWS_EXTENSION_ID\`），去 Settings → Secrets and variables → Actions 用 Rename 改名即可，改名保留值且 GitHub 没有 rename Secrets 的 API；但 \`CHROME_PUBLISHER_ID\` / \`CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL\` / \`CHROME_SERVICE_ACCOUNT_PRIVATE_KEY\` 是 Chrome Web Store API v2 新引入的三条，仓库里没有对应的旧值可改名，必须先在 Google Cloud 建服务账号并授权到开发者控制台（步骤见 .github/docs/RELEASING.md §1.3 与 §1.4）。旧的 \`CHROME_CLIENT_ID\` / \`CHROME_CLIENT_SECRET\` / \`CHROME_REFRESH_TOKEN\` 在 v2 下没有读者，确认无需回滚后删掉。"

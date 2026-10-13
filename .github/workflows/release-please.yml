@@ -5,11 +5,12 @@ name: Release Please
 # 以**一个待人工合并的 PR** 的形式交出来（配置在仓库根的 `release-please-config.json`）。
 #
 # 它被刻意配置成 `skip-github-release: true`：不打 tag、不建 GitHub Release。
-# 发版仍然是人推 `vX.Y.Z` tag 的那一下（见 `RELEASING.md` §2），因为对这个项目来说
-# 推 tag 等于向 Chrome 应用商店提交审核——一个不可撤回、且有配额的动作，
+# 发版那一下仍然要人点头（见 `RELEASING.md` §2 的两条路径：Run 页面 Approve，或本机推 tag），
+# 因为对这个项目来说打出 `vX.Y.Z` 等于向 Chrome 应用商店提交审核——一个不可撤回、且有配额的动作，
 # 不该是「合并 PR」这个动作的副作用。另一条理由更硬：release-please 用默认 `GITHUB_TOKEN`
-# 打的 tag 不会触发 `release.yml`（GitHub 的规则：由该令牌产生的事件不再起跑新工作流），
-# 而从本机推的 tag 会。
+# 打的 tag 不会触发 `release.yml`（GitHub 的规则：由该令牌产生的事件不再起跑新工作流）。
+# 同一条规则也管着 `store-publish.yml` 里那个由作业令牌推出去的 tag，所以那条链路用
+# `workflow_call` 显式接力，而不是等 tag 自己把发布叫醒。
 on:
   push:
     branches: [main]
