@@ -493,10 +493,18 @@ export function createEnvServer(options) {
 
     if (path === '/api/redirect') {
       const to = q.get('to') || '/api/health';
+      // `//host` 也算 startsWith('/')，浏览器却把它当协议相对地址解析到站外去；这一档要的是
+      // 「同机跳一跳」，把测试的人引到外网主机上是纯粹的帮倒忙
       const isSafe =
-        to.startsWith('/') || to.startsWith(`http://localhost:${port}`) || to.startsWith(`http://127.0.0.1:${port}`);
+        (to.startsWith('/') && !to.startsWith('//')) ||
+        to.startsWith(`http://localhost:${port}`) ||
+        to.startsWith(`http://127.0.0.1:${port}`);
       if (!isSafe)
-        return send(req, res, 400, { ...base, error: 'bad_redirect', hint: '只接受本站路径或同端口绝对地址' });
+        return send(req, res, 400, {
+          ...base,
+          error: 'bad_redirect',
+          hint: '只接受本站路径（// 打头的协议相对地址不算）或同端口绝对地址',
+        });
       return send(req, res, intParam(q, 'code', 302, 300, 399), { ...base, redirectingTo: to }, { Location: to });
     }
 

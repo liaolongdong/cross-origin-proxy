@@ -23,7 +23,7 @@
  *   node scripts/mock-env/index.mjs --no-ws         # 不挂长连接
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ENVS, createEnvServer, ROUTES } from './backend.mjs';
@@ -92,21 +92,20 @@ function pad(text, width) {
  *
  * 仓库里那份 `presets/demo-rules.json` 是它的产物，不是手抄本——手抄的失效方式是静默的：
  * 换一次 `--base`，规则仍指向 5302，页面每一格都连到不存在的地址，而扩展界面一切正常。
+ *
+ * 只有参数全默认时才写那一份入库的：`--base=6300` 跑一次就把仓库里那份改成 63xx，工作树当场
+ * 变脏，而 `tests/mockEnvPreset.test.ts` 比的是「入库那份 === 默认参数现算那份」，于是它下一次
+ * 必红——红的是门禁，不是这次启动。非默认参数写到同目录的带名字变体（已进 .gitignore）。
  */
 function writePreset({ base, canonical }) {
-  let version = '0.0.0';
-  try {
-    version = JSON.parse(readFileSync(join(HERE, '..', '..', 'package.json'), 'utf8')).version ?? version;
-  } catch {
-    // version 只是文件里给人看的一行，导入侧不参与判读（判读看的是 schemaVersion），
-    // 读不到它不该拦下整个启动
-  }
-  const preset = buildDemoRules({ base, canonical, version });
+  const preset = buildDemoRules({ base, canonical });
   const dir = join(HERE, 'presets');
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, PRESET_FILE);
+  const isDefault = base === BASE_DEFAULT && canonical === 'localhost';
+  const name = isDefault ? PRESET_FILE : PRESET_FILE.replace(/\.json$/, `-${base}-${canonical}.json`);
+  const file = join(dir, name);
   writeFileSync(file, `${JSON.stringify(preset, null, 2)}\n`, 'utf8');
-  return { file, count: preset.config.rules.length };
+  return { file, count: preset.config.rules.length, isDefault };
 }
 
 const HELP = `用法：node scripts/mock-env/index.mjs [--base=${BASE_DEFAULT}] [--host=127.0.0.1] [--canonical=localhost] [--only=web,fat,uat,prod,dev] [--no-ws]
@@ -165,7 +164,9 @@ function main() {
   console.log(`  任一环境的自述 ${url(instances[0].env)}/env`);
   console.log(`  演示规则集 ${preset.file}`);
   console.log(
-    `  ${pad('', 6)}本次按 --base=${opts.base} --canonical=${opts.canonical} 现生成，${preset.count} 条（仓库里那份就是它）`,
+    `  ${pad('', 6)}本次按 --base=${opts.base} --canonical=${opts.canonical} 现生成，${preset.count} 条（${
+      preset.isDefault ? '仓库里那份就是它' : '参数与默认值不同，所以没动仓库里那份，导入时选上面这个路径'
+    }）`,
   );
   console.log('');
   console.log('  验证路径（四步）');

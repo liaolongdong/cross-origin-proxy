@@ -240,7 +240,8 @@ const CASES = [
     kind: 'setcookie',
     env: 'uat',
     path: '/api/set-cookie',
-    expect: '给 UAT 那台埋一个 cop_probe Cookie——下一条 sendCredentials 规则读的就是它',
+    expect:
+      '给 UAT 那台埋一个 cop_probe Cookie——下一条 sendCredentials 规则读的就是它；这一笔自带 credentials，跨原点响应的 Set-Cookie 只在带凭据的请求上落地',
   },
   {
     g: '请求头与凭据（{{变量}} 只在代发那一刻展开）',
@@ -707,7 +708,7 @@ const byId = Object.fromEntries(CASES.map(c => [c.id, c]));
 let runAll = false;
 let flakyKey = 'case-' + Date.now();
 
-function origin(env) { return (env === 'web' ? HOST + ':' + PORTS.web : HOST + ':' + PORTS[env]); }
+function origin(env) { return HOST + ':' + PORTS[env]; }
 function target(c) {
   const override = document.getElementById('override').value;
   const env = override && c.env !== 'web' ? override : c.env;
@@ -812,7 +813,10 @@ async function run(c) {
       }
       case 'setcookie': {
         const u = withParam(url, 'value', 'probe-' + Date.now()) + '&sameSite=None&secure=1';
-        const r = await fetch(u, { method: 'POST' });
+        // 跨原点响应里的 Set-Cookie 只在带凭据的请求上落地：不带 credentials:'include' 时这一笔
+        // 200 得干干净净、jar 却是空的（2026-10-14 本机实测），下一条 sendCredentials 用例就永远
+        // 读不到 Cookie，测试的人会去怪扩展，而缺陷在这张页自己。
+        const r = await fetch(u, { method: 'POST', credentials: 'include' });
         return { cls: r.ok ? 'ok' : 'mid', text: r.status + ' · ' + brief(await r.text()) };
       }
       case 'flaky': {

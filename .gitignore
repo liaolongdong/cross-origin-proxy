@@ -64,6 +64,10 @@ logs
 # 商店素材生成结果（由 `pnpm assets` 从 screenshots/ 派生，不入库；docs/assets/img 需入库供 Pages 使用）
 store-assets/
 
+# `pnpm mock` 只在参数全默认时写入库那份 presets/demo-rules.json；换过 --base 或 --canonical
+# 会写到同目录的带名字变体，它记的是这一次启动的端口，跟仓库里的规则集没关系，也不该把工作树弄脏。
+scripts/mock-env/presets/demo-rules-*.json
+
 # 仓库维护产物：历史改写备份、推广文案稿（仅本地）
 *.bundle
 .git-backup/

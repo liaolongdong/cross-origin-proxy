@@ -31,10 +31,19 @@
  * 两条 WS 规则靠 `priority` 让「阻断」排在「重写」之前（数值越小越先匹配）。
  */
 
+import { ENVS as SERVER_ENVS } from './backend.mjs';
+
 /** 固定时间戳：让同一组参数生成的文件逐字节一致，重复启动不会把工作树弄脏 */
 const PRESET_TIMESTAMP = 1791849600000;
 
-const ENVS = { web: 0, dev: 1, fat: 2, uat: 3, prod: 4 };
+/**
+ * 偏移表由 `backend.mjs` 的 `ENVS` 现算，不在这里再抄一份端口布局：
+ * 那两处一旦分叉，服务听在 5302 而规则指向别的口，扩展界面却一切正常——正是这个夹具
+ * 存在的反面（「重写到底生效了吗」变成了「得先怀疑夹具」）。
+ */
+const ENVS = Object.fromEntries(
+  Object.entries(SERVER_ENVS).map(([name, cfg]) => [name, cfg.port - SERVER_ENVS.web.port]),
+);
 
 /**
  * @param base 起始端口（与 `index.mjs --base` 同一个数）
@@ -61,6 +70,16 @@ function reEscape(text) {
 export const PRESET_FILE = 'demo-rules.json';
 
 /**
+ * 这份演示包自己的标识，写进 `version` 字段。
+ *
+ * 这里**不**填扩展版本号：入库的那份是跟踪文件，而 `tests/docs-consistency.test.ts` 有一条
+ * 「开发中的版本号只许出现在职责所在的那几份文件里」——release-please 每次抬号都会让抄进去的
+ * 那份立刻假一次，而这个字段导入侧根本不读（判读看 `schemaVersion`）。一个没人读、又必然会烂的
+ * 数字，换成一个说得出「它不是谁机器上导出来的」的标记。
+ */
+export const PRESET_VERSION = 'demo';
+
+/**
  * 组装可导入的演示配置（形状与扩展自己「导出配置」的产物一致：`ExportData`）。
  *
  * `config.enabled: true` 是有意的：替换式导入下这个键决定总开关，缺省会被判成「导入完就把代理关掉」，
@@ -68,9 +87,9 @@ export const PRESET_FILE = 'demo-rules.json';
  *
  * @param opts.base 起始端口，默认 5300
  * @param opts.canonical 浏览器使用的 host，默认 localhost
- * @param opts.version 扩展版本号，写进 `version` 字段（仅用于文件里看得懂，导入侧不参与判读）
+ * @param opts.version `version` 字段的值，默认 `PRESET_VERSION`（见那里为什么不写扩展版本号）
  */
-export function buildDemoRules({ base = 5300, canonical = 'localhost', version = '0.0.0' } = {}) {
+export function buildDemoRules({ base = 5300, canonical = 'localhost', version = PRESET_VERSION } = {}) {
   const o = origins(base, canonical);
   const wsFat = wsOrigin(o.fat);
   const wsUat = wsOrigin(o.uat);

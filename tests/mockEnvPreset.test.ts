@@ -10,7 +10,8 @@
  * 判据不同源，是本仓库反复踩过的那类谎报。
  *
  * 四条刻意的事实：
- * 1. `version` 与 `exportTime` 不参与对账：前者由 release-please 往上推（每次发版都会变），
+ * 1. `version` 与 `exportTime` 不参与对账：前者是这份演示包自己的标记（`PRESET_VERSION`，
+ *    故意不抄扩展版本号——抄了每次发版就假一次，而导入侧读的是 `schemaVersion`），
  *    后者是生成器里的固定时间戳（让重复启动不弄脏工作树）。
  * 2. 「哪几条走网络层」是**逐条点名**的名单，不是「数一下个数」。新增一条纯重写规则而忘了
  *    它因此受页面 CORS 约束时，只有点名会红。
@@ -27,7 +28,7 @@ import { SCHEMA_VERSION } from '@/utils/constants';
 import { buildDnrRules, buildRegexFilter, buildRegexSubstitution, isSubstitutionValid } from '@/utils/dnrRules';
 import { findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import type { ProxyRule } from '@/utils/types';
-import { ENVS, ROUTES } from '@/scripts/mock-env/backend.mjs';
+import { createEnvServer, ENVS, ROUTES } from '@/scripts/mock-env/backend.mjs';
 import { buildDemoRules } from '@/scripts/mock-env/demoRules.mjs';
 
 const BASE = 5300;
@@ -245,6 +246,47 @@ describe('mock-env 生成器与 DNR 构建器的接缝', () => {
     for (const rule of rules.filter(isSimpleRule)) {
       expect(() => buildRegexFilter(rule), `「${rule.name}」filter`).not.toThrow();
       expect(() => buildRegexSubstitution(rule), `「${rule.name}」substitution`).not.toThrow();
+    }
+  });
+});
+
+/**
+ * 2026-10-14 代码评审翻出来的两处，两处都是「夹具自己错、测试的人去怪扩展」的形状
+ *
+ * 1. 埋 Cookie 那一格原本用不带凭据的跨原点 `fetch`。Chrome 在这种响应上直接丢条 `Set-Cookie`
+ *    （本机实测：200 得干干净净，jar 是空的），于是下一条 `sendCredentials` 用例的
+ *    `hasCookie=true` 永远读不到，排查方向整个反过来。
+ * 2. `/api/redirect` 的 `to` 只要 `startsWith('/')` 就放行，而 `//evil.com` 同样以 `/` 开头 ——
+ *    浏览器把它解析成协议相对地址，这一跳就出了本机。这个夹具的前提是「全部流量留在 localhost」。
+ */
+describe('mock-env 自己踩过的两处', () => {
+  it('埋 Cookie 那一格带 credentials，否则跨原点的 Set-Cookie 永远不落地', () => {
+    const src = repoFile('scripts/mock-env/harness.mjs');
+    const at = src.indexOf("case 'setcookie'");
+    expect(at, '触发页里找不到 setcookie 那一格').toBeGreaterThan(-1);
+    const body = src.slice(at, at + 700);
+    expect(body).toContain("credentials: 'include'");
+  });
+
+  it('/api/redirect 拒绝协议相对地址，同机路径照旧放行', async () => {
+    const { server } = createEnvServer({ env: 'fat', port: 0 });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+    try {
+      const port = (server.address() as { port: number }).port;
+      const hit = async (to: string) => {
+        const res = await fetch(`http://127.0.0.1:${port}/api/redirect?to=${encodeURIComponent(to)}`, {
+          redirect: 'manual',
+        });
+        return { status: res.status, location: res.headers.get('location') };
+      };
+      expect(await hit('//evil.com')).toMatchObject({ status: 400, location: null });
+      expect(await hit('https://example.com/x')).toMatchObject({ status: 400, location: null });
+      expect(await hit('/api/health')).toMatchObject({ status: 302, location: '/api/health' });
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
     }
   });
 });
