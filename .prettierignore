@@ -5,3 +5,6 @@ dist
 public
 .test-tmp
 types/components.d.ts
+# 每次 `pnpm mock` 启动都由 `buildDemoRules()` 重写；让它归生成器排版，
+# 和上面那份组件注册表同一类「入库的生成物」。字节稳定是「重跑一遍还是同一份」的前提。
+scripts/mock-env/presets/demo-rules.json

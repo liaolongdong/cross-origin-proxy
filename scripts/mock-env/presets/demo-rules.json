@@ -1,0 +1,260 @@
+{
+  "version": "1.5.0",
+  "schemaVersion": 2,
+  "exportTime": 1791849600000,
+  "config": {
+    "enabled": true,
+    "rules": [
+      {
+        "id": "demo-01",
+        "name": "FAT（阻断埋点上报）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 1,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/telemetry",
+        "targetUrl": "",
+        "blocked": true
+      },
+      {
+        "id": "demo-02",
+        "name": "WS FAT（阻断带 block=1 的握手）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 2,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "ws://localhost:5302/ws?block=1",
+        "targetUrl": "",
+        "blocked": true
+      },
+      {
+        "id": "demo-03",
+        "name": "WS FAT → UAT（地址重写）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 3,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "ws://localhost:5302/ws",
+        "targetUrl": "ws://localhost:5303/ws"
+      },
+      {
+        "id": "demo-04",
+        "name": "FAT → DEV（纯重写 · 网络层）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 4,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/list",
+        "targetUrl": "http://localhost:5301/api/list"
+      },
+      {
+        "id": "demo-05",
+        "name": "FAT → DEV（图片资源 · 网络层）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 5,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/binary",
+        "targetUrl": "http://localhost:5301/api/binary"
+      },
+      {
+        "id": "demo-06",
+        "name": "FAT → PROD（纯重写 · 仍受 CORS 约束）",
+        "enabled": false,
+        "matchType": "prefix",
+        "priority": 6,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/health",
+        "targetUrl": "http://localhost:5304/api/health"
+      },
+      {
+        "id": "demo-07",
+        "name": "PROD → PROD（加一项响应头 · 切后台通道）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 7,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5304/api/v1",
+        "targetUrl": "http://localhost:5304/api/v1",
+        "responseOverrides": {
+          "headers": {
+            "X-Cop-Proxied": "by-service-worker"
+          }
+        }
+      },
+      {
+        "id": "demo-08",
+        "name": "FAT → DEV（注入凭据头 {{API_TOKEN}}）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 8,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/user/profile",
+        "targetUrl": "http://localhost:5301/api/user/profile",
+        "headerOverrides": {
+          "Authorization": "Bearer {{API_TOKEN}}",
+          "X-Api-Key": "{{API_KEY}}"
+        }
+      },
+      {
+        "id": "demo-09",
+        "name": "FAT → UAT（注入查询参数）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 9,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/query",
+        "targetUrl": "http://localhost:5303/api/query",
+        "queryOverrides": {
+          "via": "proxy",
+          "tenant": "demo-tenant"
+        }
+      },
+      {
+        "id": "demo-10",
+        "name": "FAT → UAT（5xx 重试 2 次）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 10,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/flaky",
+        "targetUrl": "http://localhost:5303/api/flaky",
+        "retryCount": 2,
+        "retryDelay": 400
+      },
+      {
+        "id": "demo-11",
+        "name": "FAT → DEV（只代理 GET）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 11,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/text",
+        "targetUrl": "http://localhost:5301/api/text",
+        "methods": [
+          "GET"
+        ]
+      },
+      {
+        "id": "demo-12",
+        "name": "FAT → DEV（慢网络 +1500ms）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 12,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/slow",
+        "targetUrl": "http://localhost:5301/api/slow",
+        "delayMs": 1500
+      },
+      {
+        "id": "demo-13",
+        "name": "FAT → DEV（Mock 用户资料 · 条件化）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 13,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/v1/data",
+        "targetUrl": "http://localhost:5301/api/v1/data",
+        "mockResponse": {
+          "contentType": "application/json; charset=utf-8",
+          "status": 200,
+          "body": "{\"mock\":\"default\",\"env\":\"mock\",\"user\":{\"id\":42,\"name\":\"演示用户\",\"roles\":[\"admin\"]}}",
+          "conditions": [
+            {
+              "matchQuery": {
+                "p": "1"
+              },
+              "contentType": "application/json; charset=utf-8",
+              "status": 201,
+              "body": "{\"mock\":\"condition-p1\",\"env\":\"mock\",\"note\":\"这一份来自规则的条件分支，不是任何后端\"}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "demo-14",
+        "name": "FAT → DEV（正则捕获组 · 网络层）",
+        "enabled": true,
+        "matchType": "regex",
+        "priority": 14,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "^http://localhost:5302/api/v2/(.*)$",
+        "targetUrl": "http://localhost:5301/api/$1"
+      },
+      {
+        "id": "demo-15",
+        "name": "FAT → DEV（改中文 statusText 与响应头）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 15,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/edge/text",
+        "targetUrl": "http://localhost:5301/api/edge/text",
+        "responseOverrides": {
+          "statusText": "服务正常（中文描述）",
+          "headers": {
+            "X-Cop-Note": "中文头值",
+            "X-Cop-Ascii": "ascii-survives"
+          }
+        }
+      },
+      {
+        "id": "demo-16",
+        "name": "FAT → DEV（写越界状态码 999）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 16,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/edge/code",
+        "targetUrl": "http://localhost:5301/api/edge/code",
+        "responseOverrides": {
+          "status": 999
+        }
+      },
+      {
+        "id": "demo-17",
+        "name": "FAT → UAT（携带该环境 Cookie）",
+        "enabled": false,
+        "matchType": "prefix",
+        "priority": 17,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/cookies",
+        "targetUrl": "http://localhost:5303/api/cookies",
+        "sendCredentials": true
+      },
+      {
+        "id": "demo-18",
+        "name": "FAT → DEV（上传通道 · 10MB 请求体上限）",
+        "enabled": true,
+        "matchType": "prefix",
+        "priority": 18,
+        "createdAt": 1791849600000,
+        "updatedAt": 1791849600000,
+        "matchPattern": "http://localhost:5302/api/upload",
+        "targetUrl": "http://localhost:5301/api/upload",
+        "responseOverrides": {
+          "headers": {
+            "X-Cop-Upload": "via-service-worker"
+          }
+        }
+      }
+    ]
+  }
+}

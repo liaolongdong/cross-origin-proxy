@@ -48,6 +48,7 @@
     "assets:en": "node scripts/generate-store-assets.mjs --en",
     "promo": "node scripts/record-promo-video.mjs",
     "promo:en": "node scripts/record-promo-video.mjs --en",
+    "mock": "node scripts/mock-env/index.mjs",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "lint:style": "stylelint \"**/*.{css,vue}\"",
