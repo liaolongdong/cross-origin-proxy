@@ -318,6 +318,8 @@ Because it has a capability the network layer cannot express, or because it is a
 
 200 rules, the last 500 log entries (each stored body capped at 32K characters, with the original length annotated; URLs, methods, rule names and header values at 8K characters, at most 64 headers per map, and a 4M-character budget across the whole log), 10 MB request body, 0–60000 ms delay, and a 2 MB ceiling on imported files plus 5000 on HAR entries — over either limit the import is refused with the reason stated rather than partially read. Mocked and rewritten status codes are clamped to 200–599 so the page can always build a valid `Response`.
 
+One more hard boundary at the network layer (measured on Chrome 155): a pure URL rewrite that sends the request to a **different origin** arrives with `Origin: null` rather than your page's own origin, while a rewrite that stays inside the same origin is unaffected. So a backend that allowlists by origin will reject that request even if it already allows your frontend domain — the page sees `net::ERR_FAILED`; a backend answering `Access-Control-Allow-Origin: *` takes the cross-origin rewrite just fine. Add any advanced capability (a response header override is the cheapest) and the rule switches to background forwarding, where the extension itself makes the request and page CORS never enters the picture.
+
 </details>
 
 <details>
