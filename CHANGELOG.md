@@ -11,6 +11,11 @@ Version numbers still live in `package.json` only — but release-please now wri
 还没进版本的变更先记在这里，中英各一段。下一次 release-please 开出 `## [x.y.z]` 小节时，把这一段并进那个小节、然后清空这里：机器人只会列提交标题，而商店用户读到的说明需要这里的长文。**标题不要写成 `## [Unreleased]` 这种带方括号的形式**——release-please 找插入点用的正则（`\n###? v?[0-9[]`）会把那一行当成第一个版本小节，于是新生成的小节插在它**上面**，整份已发布历史被挪到「未发布」这个标题底下，读起来像上一版还没发。
 Collect changes that are not in a released version yet here, in Chinese and English, and fold the block into the new `## [x.y.z]` section when release-please opens it. Do not title this block `## [Unreleased]`: release-please locates its insertion point with a regex that matches a bracketed heading, so the generated section would land above it and push the entire released history under an "unreleased" heading.
 
+### Added
+
+- **README 与两份落地页 FAQ 多了一条「重写之后后端说 Origin 不对」**：把请求改写到**另一个原点**的纯 URL 重写规则，目标收到的 `Origin` 是 `null`（改写后仍落在同一原点内的不受影响，本机实测 Chrome 155），按来源白名单放行的后端会当场拒掉这一笔——哪怕它本来就允许你的前端域名——页面侧只留一句 `net::ERR_FAILED`。这件事此前只活在排查会话里，读者手上没有任何文档写着它，于是最容易被读成「代理没生效」。现在中文页、英文页、中英 README 与两份 `llms*.txt` 说的是同一句话；落地页那条挂在「通道、CORS 与性能」分类下，右栏目录的计数跟着从 5 变 6。
+  **The READMEs and both landing-page FAQ lists gained "Why does the backend reject my request after a rewrite (Origin null)?"** A pure URL rewrite that sends the request to a **different origin** arrives with `Origin: null` (a rewrite that stays inside the same origin is unaffected — measured locally on Chrome 155), so a backend that allowlists by origin turns the request down even when it already allows your frontend domain, and the page is left with `net::ERR_FAILED`. Until now this lived only in debugging sessions, with nothing a reader could hold, which made it easy to misread as "the proxy didn't work". The Chinese page, the English page, both READMEs and both `llms*.txt` files now say the same thing; the landing-page entry sits under "Channels, CORS and performance", whose sidebar count went 5 → 6.
+
 ## [1.5.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.4.0...v1.5.0) (2026-10-07)
 
 这一版有三件用户直接看得见的事：弹窗的诊断从「这一页没走代理」具体到「哪几个来源像是被跨域拦下了」，并把它们排在候选最前；配置页空态的一键模板从 4 张补到 7 张，把能力清单里一直写着、却从没演示过的 Mock / 慢网 / 阻断补成三张卡，而模板卡带进表单时那三个开关也不再以「关着」的状态出现。其余是产品站与商店素材的补齐，逐条列在下面。扩展的权限、URL 匹配与重写语义、消息协议与 `storage.local` 里数据的结构都没有变化。

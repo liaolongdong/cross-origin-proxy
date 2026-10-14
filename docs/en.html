@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-02"
+            "dateModified": "2026-10-14"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-02",
+            "dateModified": "2026-10-14",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -372,6 +372,14 @@
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Rules that use any advanced capability (header override, body override, response override, mock, delay, block, retry, method filter, query injection, sending cookies or WebSocket) are executed by the extension's background context, which holds host permissions, and the page receives a response the extension constructed — so page CORS checks do not apply. A pure URL rewrite is handled as a network-layer redirect instead, where the browser still validates Access-Control-Allow-Origin on the redirected response. If a target environment does not allow your origin, add any advanced capability (a response header override is the cheapest) and the rule switches to the background channel."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why does the backend reject my request after a rewrite (Origin null)?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A hard boundary of the network layer, measured on Chrome 155: a pure URL rewrite that sends the request to a different origin arrives with Origin: null instead of your page's own origin, while a rewrite that stays inside the same origin is unaffected. Once the origin is null, a backend that allowlists by origin turns the request down even if it already allows your frontend domain, and the page sees net::ERR_FAILED. Two ways out: let the target environment allow any origin, or add an advanced capability (a response header override is the cheapest one) so the rule switches to background forwarding — that request is made by the extension itself, so page CORS never enters the picture."
             }
           },
           {
@@ -2650,6 +2658,19 @@ pnpm assets       # regenerate store and landing images</code></pre>
               </p>
             </details>
             <details>
+              <summary>Why does the backend reject my request after a rewrite (Origin null)?</summary>
+              <p>
+                A hard boundary of the network layer, measured on Chrome 155: a pure URL rewrite that sends the request
+                to a <strong>different origin</strong> arrives with <code>Origin: null</code> instead of your page's own
+                origin, while a rewrite that stays inside the same origin is unaffected. Once the origin is
+                <code>null</code>, a backend that allowlists by origin turns the request down even if it already allows
+                your frontend domain, and the page sees <code>net::ERR_FAILED</code>. Two ways out: let the target
+                environment allow any origin, or add an advanced capability (a response header override is the cheapest
+                one) so the rule switches to background forwarding — that request is made by the extension itself, so
+                page CORS never enters the picture.
+              </p>
+            </details>
+            <details>
               <summary>Why do some rules use a different forwarding channel than I expected?</summary>
               <p>
                 Because the network layer cannot express what you asked for. A wildcard that does not end in
@@ -2872,7 +2893,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
                   <a href="#faq-basics">Basics and matching<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
-                  <a href="#faq-channels">Channels, CORS and performance<span class="faq-toc-n">5</span></a>
+                  <a href="#faq-channels">Channels, CORS and performance<span class="faq-toc-n">6</span></a>
                 </li>
                 <li>
                   <a href="#faq-mock">Mock and failure injection<span class="faq-toc-n">3</span></a>
@@ -3031,7 +3052,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.3.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-10-02</span>
+            <span>Last updated 2026-10-14</span>
             <span
               ><a
                 href="./"

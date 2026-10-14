@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-02"
+            "dateModified": "2026-10-14"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-02",
+            "dateModified": "2026-10-14",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -372,6 +372,14 @@
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "使用了任一高级能力（请求头覆盖、请求体覆盖、响应覆盖、Mock、延迟、阻断、重试、方法过滤、查询参数注入、携带 Cookie、WebSocket）的规则，由持有主机权限的扩展后台上下文发出请求，页面拿到的是扩展构造的响应，因此不会触发页面侧的 CORS 校验。仅重写 URL 的规则走网络层重定向，浏览器仍会校验重定向后响应的 Access-Control-Allow-Origin。若目标环境不允许你的源，给规则加上任一高级能力（加一个响应头覆盖代价最小）即可切到后台通道。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "重写之后后端说 Origin 不对，怎么解决？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "这是网络层的一条硬边界，实测 Chrome 155：把请求改写到 另一个原点 的纯 URL 重写规则，目标收到的 Origin 是 null，不是你页面自己的源；改写后仍落在同一原点内的规则不受影响。Origin 成了 null，按来源白名单放行的后端就会拒掉这一笔，哪怕它本来就允许你的前端域名，页面侧表现为 net::ERR_FAILED。两条解法：让落点环境放行任意来源，或者给规则加一项高级能力（响应头覆盖代价最小）切到后台代发——后台那一次请求由扩展自己发出，页面侧的 CORS 校验根本不参与。"
             }
           },
           {
@@ -2535,6 +2543,21 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
               </p>
             </details>
             <details>
+              <summary>重写之后后端说 Origin 不对，怎么解决？</summary>
+              <p>
+                这是网络层的一条硬边界，实测 Chrome 155：把请求改写到
+                <b>另一个原点</b>
+                的纯 URL 重写规则，目标收到的
+                <code>Origin</code>
+                是
+                <code>null</code>，不是你页面自己的源；改写后仍落在同一原点内的规则不受影响。<code>Origin</code>
+                成了 null，按来源白名单放行的后端就会拒掉这一笔，哪怕它本来就允许你的前端域名，页面侧表现为
+                <code>net::ERR_FAILED</code
+                >。两条解法：让落点环境放行任意来源，或者给规则加一项高级能力（响应头覆盖代价最小）切到后台代发——后台那一次请求由扩展自己发出，页面侧的
+                CORS 校验根本不参与。
+              </p>
+            </details>
+            <details>
               <summary>为什么某条规则实际走的通道和我预期的不一样？</summary>
               <p>
                 因为网络层表达不了你想要的行为。不以
@@ -2731,7 +2754,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                   <a href="#faq-basics">基础与匹配<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
-                  <a href="#faq-channels">通道、CORS 与性能<span class="faq-toc-n">5</span></a>
+                  <a href="#faq-channels">通道、CORS 与性能<span class="faq-toc-n">6</span></a>
                 </li>
                 <li>
                   <a href="#faq-mock">Mock 与故障注入<span class="faq-toc-n">3</span></a>
@@ -2886,7 +2909,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.3.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-10-02</span>
+            <span>最后更新 2026-10-14</span>
             <span
               ><a
                 href="en.html"
