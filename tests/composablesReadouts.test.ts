@@ -825,13 +825,15 @@ describe('两个旗标怎么被界面用（本环境测不到的那半）', () =
     expect(popupSrc).not.toMatch(/\{\{\s*swRequestCount\s*\}\}/);
   });
 
-  it('日志抽屉：空表与非空表各说各的那一句，而两个布尔都从父组件接进来', () => {
+  it('日志抽屉：那一句只在手里有行时出现，空表交给空态（同一句不许出现两遍）', () => {
     expect(drawerSrc).toContain('logsReadFailed: boolean;');
     expect(drawerSrc).toContain("{{ logsReadFailed ? t('logsReadFailed') : t('noLogs') }}");
-    // 非空时那一行必须同时说出「没读到」和「下面是上一次的记录」——只说前者，读者仍会拿旧账当现状
+    // 手里有行时那一行必须同时说出「没读到」和「下面是上一次的记录」——只说前者，读者仍会拿旧账当现状；
+    // 而空表时它必须整个不出现，否则与空态那句重复（2026-10-17 真 Chrome 实测到的正是这个重复）
     expect(drawerSrc).toMatch(
-      /props\.logs\.length > 0 \? `\$\{t\('logsReadFailed'\)\} · \$\{t\('logsReadStale'\)\}` : t\('logsReadFailed'\)/,
+      /props\.logsReadFailed && props\.logs\.length > 0 \? `\$\{t\('logsReadFailed'\)\} · \$\{t\('logsReadStale'\)\}` : ''/,
     );
+    expect(drawerSrc).not.toMatch(/: t\('logsReadFailed'\);\s*\}/);
     expect(drawerSrc).toContain('v-if="logsReadFailedText"');
     expect(optionsSrc).toContain(':logs-read-failed="logsReadFailed"');
   });

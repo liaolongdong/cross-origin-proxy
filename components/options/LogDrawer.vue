@@ -138,8 +138,8 @@
         </div>
       </div>
 
-      <!-- 读不到这一轮的日志：这句话必须在列表旁边说，不能只改空态——非空时表格看起来和平时
-           一模一样，没人会怀疑手里这几行是上一轮留下的 -->
+      <!-- 读不到这一轮、而手里还有行：这句话必须在列表旁边说——表格长得和平时一模一样，
+           不说就是让人拿旧账当现状。空表不写这一行，那一面交给下面空态的同一句，避免重复 -->
       <p
         v-if="logsReadFailedText"
         class="logs-read-failed"
@@ -645,16 +645,16 @@ const dnrStatsEmptyText = computed(() => {
 });
 
 /**
- * 「这一轮日志没读到」那一句
+ * 「这一轮日志没读到、手里这几行是旧账」那一句
  *
- * 空表与非空表说的是两件不同的事：空表只说「这一轮没有答案」（初值也是这个形状，于是首屏
- * 读失败时它替「暂无请求记录」说话，不再把未知画成一条结论）；非空表必须点破手里这几行是
- * **上一轮**的样本——表格长得和平时一模一样，不说就是让人拿旧账当现状。
+ * 两句话分工不重叠：空表由空态那一句说（`{{ logsReadFailed ? t('logsReadFailed') : t('noLogs') }}`），
+ * 这一行只在**手里确实有行**时出现，点破它们是**上一轮**的样本——表格长得和平时一模一样，
+ * 不说就是让人拿旧账当现状。判据里的 `logs.length > 0` 是承重的：2026-10-17 在真 Chrome 里量过，
+ * 去掉它就变成空表时同一句「日志没读到」在抽屉里上下出现两遍。
  */
-const logsReadFailedText = computed(() => {
-  if (!props.logsReadFailed) return '';
-  return props.logs.length > 0 ? `${t('logsReadFailed')} · ${t('logsReadStale')}` : t('logsReadFailed');
-});
+const logsReadFailedText = computed(() =>
+  props.logsReadFailed && props.logs.length > 0 ? `${t('logsReadFailed')} · ${t('logsReadStale')}` : '',
+);
 
 const filteredLogs = computed(() => {
   const keyword = urlKeyword.value.toLowerCase();
