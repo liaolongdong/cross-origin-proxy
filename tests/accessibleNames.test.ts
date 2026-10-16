@@ -24,6 +24,10 @@
  * 5. **焦点环看得见**（L-14）。「写了 `:focus-visible`」与「焦点看得见」是两件事：往外长的环会被
  *    带 `overflow: hidden` 的父级裁掉，而和它特异度相同、又写在后面的选中态规则会整条盖掉它用的属性。
  *    两条都是无报错的静默失效，判据只能落在「用的是哪个属性、排在哪一条之后」。
+ * 6. **只挂图标的按钮**（本轮 L 批）。`:icon` 的自闭合 `<el-button>` 渲染出来是
+ *    `<button><svg/></button>`——tooltip 只在指针悬停 400ms 后出现，读屏与键盘拿到的是「按钮」两个字。
+ *    规则表行尾那三枚（编辑 / 复制 / 删除）此前正是这个形状。这里按全仓横向扫，不逐个点名，
+ *    将来再加一枚同款按钮忘了配名字，红的就是这一格。
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -77,6 +81,36 @@ const switchTags = (src: string): { tag: string; named: boolean }[] =>
     tag: m[0],
     named: /:aria-label=|aria-label=/.test(m[1]),
   }));
+
+/**
+ * 取出 `<name ...>` 的起始段（引号内的 `>` 不算结束），并标出它是否自闭合。
+ *
+ * 不能用 `/<el-button\b([\s\S]*?)\/>/`：带插槽文字的按钮根本没有 `/>`，那种写法会一路越过
+ * 它的闭合括号、读到后面的兄弟元素，于是「这一枚有没有名字」其实是拿别处的名字答的。
+ */
+const openTags = (src: string, name: string): { attrs: string; selfClosing: boolean }[] => {
+  const out: { attrs: string; selfClosing: boolean }[] = [];
+  // 前瞻而不是 `\b`：`-` 不是单词字符，`<el-button\b` 会把 `<el-button-group>` 一起收进来
+  for (const m of src.matchAll(new RegExp(`<${name}(?=[\\s/>])`, 'g'))) {
+    let i = (m.index ?? 0) + m[0].length;
+    const start = i;
+    let quote: string | null = null;
+    while (i < src.length) {
+      const char = src[i];
+      if (quote) {
+        if (char === quote) quote = null;
+      } else if (char === '"' || char === "'") {
+        quote = char;
+      } else if (char === '>') {
+        break;
+      }
+      i += 1;
+    }
+    const attrs = src.slice(start, i);
+    out.push({ attrs, selfClosing: attrs.endsWith('/') });
+  }
+  return out;
+};
 
 describe('[开关的可访问名] 无标签可依托的 el-switch 必须显式 aria-label', () => {
   it('四处独立开关全部有名（它们不在 el-form-item 里，没有任何东西能替它命名）', () => {
@@ -149,6 +183,35 @@ describe('[复制按钮] 从 <i> 换成原生 button，显形跟着焦点走', (
     expect(logDrawerSrc).toContain('.log-table:focus-visible');
     expect(logDrawerSrc).toMatch(/\.log-table:focus-visible\s*\{[^}]*box-shadow:\s*inset/);
     expect(logDrawerSrc).not.toMatch(/\.log-table:focus-visible\s*\{[^}]*outline:/);
+  });
+});
+
+describe('[图标按钮] 只挂图标的自闭合 el-button 全部要有可访问名', () => {
+  it('全仓横向扫：自闭合且只带 `:icon` 的按钮一枚不留（属性里的引号按配对跳，`>` 才算标签结束）', () => {
+    const iconButtons = vueFiles
+      .flatMap(file => openTags(readFileSync(file, 'utf-8'), 'el-button').map(t => ({ file, ...t })))
+      .filter(t => t.selfClosing && /:icon=/.test(t.attrs));
+    // 先自证扫描成立：解析一坏这里就是「空对空全绿」，而规则表的三枚正是本批补的名字
+    expect(iconButtons.length, '一枚图标按钮都没扫到 = 这一格在空转').toBeGreaterThanOrEqual(3);
+    for (const { file, attrs } of iconButtons) {
+      expect(
+        /:aria-label="t\('/.test(attrs),
+        `${file}：「图标即全部」的按钮没有名字 → ${attrs.replace(/\s+/g, ' ')}`,
+      ).toBe(true);
+    }
+  });
+
+  it('规则表那三枚用的就是同行 tooltip 的键（不新造文案，中英两侧本来就在）', () => {
+    for (const key of ['edit', 'delete']) {
+      expect(zhCommon, key).toContain(`"${key}"`);
+      expect(enCommon, key).toContain(`"${key}"`);
+    }
+    expect(zhOptions, 'duplicateRule').toContain('"duplicateRule"');
+    expect(enOptions, 'duplicateRule').toContain('"duplicateRule"');
+    const named = openTags(ruleTableSrc, 'el-button')
+      .filter(t => t.selfClosing && /:icon=/.test(t.attrs))
+      .map(t => t.attrs.match(/:aria-label="t\('(\w+)'\)"/)?.[1]);
+    expect(named, '三枚按钮、三个键，一个都不能漏').toEqual(['edit', 'duplicateRule', 'delete']);
   });
 });
 
