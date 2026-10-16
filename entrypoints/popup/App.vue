@@ -652,6 +652,9 @@ const recentLogRows = computed(() => recentLogs.value.slice(0, 5));
  * 于是这两个数仍是初值 0——画出来是一句「活跃规则 0 · 经扩展 0」的结论，而这一刻压根没有任何读数。
  * 这一屏在别处早已立了规矩（`dnrTabHitsText`、自动关闭档位条：读不到就画 `—`、整条不画），
  * 这两格之前是漏的那两处。
+ *
+ * 那一圈数字动画的 `:key`（只挂在「活跃规则」这格）跟着文本走，见 `.metric-value-digit` 的注释：
+ * key 与渲染的文本同源，「读到了、而数恰好还是 0」这一步才会重挂载。留在原数上文字照样更新，只是不响。
  */
 const activeRulesText = computed(() => (statusEverRead.value ? String(activeRuleCount.value) : '—'));
 const swRequestsText = computed(() => (statusEverRead.value ? String(swRequestCount.value) : '—'));

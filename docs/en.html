@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-14"
+            "dateModified": "2026-10-17"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-14",
+            "dateModified": "2026-10-17",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -451,7 +451,7 @@
             "name": "What are the limits?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, delays between 0 and 60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second ceiling per proxied request, and response status codes clamped to 200–599 so the page can always construct a valid Response object."
+              "text": "Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, the same 10 MB ceiling on the response body (over it the proxied request fails and the page falls back to sending natively — the body is never truncated), delays between 0 and 60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second ceiling per proxied request, and response status codes clamped to 200–599 so the page can always construct a valid Response object."
             }
           },
           {
@@ -2819,9 +2819,11 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <details>
               <summary>What are the limits?</summary>
               <p>
-                Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, delays between 0 and
-                60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second ceiling per
-                proxied request, and response status codes clamped to 200–599 so the page can always construct a valid
+                Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, the same 10 MB ceiling
+                on the response body (over it the proxied request fails and the page falls back to sending natively —
+                the body is never truncated), delays between 0 and 60000 ms, retry off by default and then 1 to 5 extra
+                attempts at 100–30000 ms, a 30 second ceiling per proxied request, and response status codes clamped to
+                200–599 so the page can always construct a valid
                 <code>Response</code> object.
               </p>
             </details>
@@ -3052,7 +3054,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.3.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-10-14</span>
+            <span>Last updated 2026-10-17</span>
             <span
               ><a
                 href="./"
