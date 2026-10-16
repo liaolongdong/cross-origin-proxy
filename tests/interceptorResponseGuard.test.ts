@@ -13,8 +13,9 @@
  * 2. 抛出点在被 `pending.resolve()` 调用的回调里，且 `clearTimeout` 已经跑过——
  *    既不 reject 也不回退原生 ⇒ 页面 fetch/XHR **永久 pending**；所以构造 Response
  *    与 `atob` 必须整体落在 try 内、catch 里 reject；
- * 3. 该语义与 `utils/proxyResponse.ts` 的 headers 整形同源（镜像约定，见 AGENTS.md
- *    「MAIN world 镜像必须同步」）。
+ * 3. 「什么算一条合法的响应头」这份判据与 `utils/proxyResponse.ts` 镜像（CR/LF + 码点 ≤ 255），
+ *    非字符串值那一支**刻意不镜像**（桥接层整份退回空对象，这里逐条剔）——镜像约定见 AGENTS.md
+ *    「MAIN world 镜像必须同步」，两种情况各有一条用例，别把它们合成一句「同源」。
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -50,11 +51,30 @@ describe('MAIN world 响应构造守卫（源码契约）', () => {
     expect(/catch[\s\S]*reject\(/.test(after), 'catch 里没有 reject').toBe(true);
   });
 
-  it('桥接层与 MAIN world 用同一套 ByteString 判据（镜像同步约定）', () => {
-    expect(BRIDGE).toMatch(/0xff/);
-    expect(BRIDGE).toMatch(/0x0a|0x0d/);
-    // 两侧都必须把 headers 逐条判过再放行，而不是整体退回空对象了事
-    expect(SRC).toMatch(/toByteStringHeaders/);
-    expect(BRIDGE).toMatch(/isByteStringHeaderEntry|filter\(|for \(const \[name/);
+  it('两侧共用同一份「名与值都得是 ByteString」的判据', () => {
+    const helper = SRC.match(/function toByteStringHeaders\(raw: unknown\)[\s\S]*?\n {4}}\n/);
+    const bridge = BRIDGE.match(/function isByteStringHeaderEntry\([\s\S]*?\n}\n/);
+    expect(helper, 'MAIN world 侧的过滤器不见了').toBeTruthy();
+    expect(bridge, '桥接层侧的判据函数不见了').toBeTruthy();
+    // 同一对 CR/LF 测试 + 同一个码点上界：漏任何一边，约束就只在桥接层生效，页面侧照样抛
+    for (const [label, body] of [
+      ['MAIN world', helper![0]],
+      ['桥接层', bridge![0]],
+    ]) {
+      expect(body, `${label} 侧没有 CR/LF 判据`).toMatch(/\\r\\n/);
+      expect(body, `${label} 侧没有 0xff 上界`).toContain('0xff');
+      expect(body, `${label} 侧没有逐码点判`).toContain('codePointAt(0)');
+    }
+  });
+
+  it('非字符串响应值的处置刻意分家：桥接层整份退回空对象，MAIN world 逐条剔', () => {
+    // 上一用例守的是「判据同源」，这一条守的是它管不到的那一半：两侧对非字符串值的选法**不同**，
+    // 而且不是漏同步——`normalizeProxyResponse` 先跑，交到页面 world 的 `headers` 必然全是字符串，
+    // MAIN world 那一支只防消息被截断或伪造。任何一边被「顺手统一」都是改不可信回包的处理方式，
+    // 所以两边各钉一句原话。
+    expect(BRIDGE).toMatch(
+      /entries\.every\(\(entry\): entry is \[string, string\] => typeof entry\[1\] === 'string'\)\) return \{\};/,
+    );
+    expect(SRC).toMatch(/if \(typeof value !== 'string'\) continue;/);
   });
 });

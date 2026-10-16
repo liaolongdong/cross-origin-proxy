@@ -66,6 +66,35 @@ const nativeFetch = vi.fn(
 let posted: PostedMessage[];
 let listeners: Array<(event: MessageEvent) => void>;
 let win: FakeWindow;
+/** 本笔测试期间由拦截器挂上的原生定时器句柄，下一次挂载与 `afterEach` 一律掐掉 */
+let nativeTimers: ReturnType<typeof setTimeout>[] = [];
+/** 在第一次桩化之前取到的真 `setTimeout`，避免桩套桩地累加句柄 */
+const realSetTimeout = globalThis.setTimeout;
+
+/**
+ * 摘掉上一次挂载遗留的定时器，再把全局 `setTimeout` 换成「照常跑、但登记句柄」的一份。
+ *
+ * 与 `tests/interceptorXhr.test.ts` 同一份夹具，理由在那边写得更直白：`bump()` 那个约 1s 的
+ * 节流补报是**原生**定时器（只有 `proxyFetch` 的 35s 超时会被用例切到假时钟），而 `reportStats`
+ * 在触发那一刻才取 `window` 与 `posted`。旧句柄不清，两头都要付账——
+ * ① 它在新的一桩测试里到期，往**新** `posted` 里写上一笔的数（「自报统计只带那四个键」那条
+ * 因此变成按运行顺序抖动的用例）；
+ * ② 它活到 `afterEach` 摘完全局桩之后，`window` 已经不存在，于是整个测试文件退出后
+ * 冒出一串 `ReferenceError: window is not defined`——`pnpm test` 的断言全绿、退出码却是 1，
+ * 而 `.github/actions/verify` 就是被这个退出码挡住的。
+ */
+function takeNativeTimers(): void {
+  nativeTimers.forEach(handle => clearTimeout(handle));
+  nativeTimers = [];
+  vi.stubGlobal(
+    'setTimeout',
+    (handler: (...args: unknown[]) => void, ms?: number, ...args: unknown[]): ReturnType<typeof setTimeout> => {
+      const handle = realSetTimeout(handler, ms, ...args);
+      nativeTimers.push(handle);
+      return handle;
+    },
+  );
+}
 
 /** 造一份假 `window` 并清掉上一笔的观察记录；`fetch` 必须先就位，拦截器挂载时抓的就是它 */
 function prepareFakeWindow(): void {
@@ -91,6 +120,7 @@ async function mount(): Promise<void> {
   prepareFakeWindow();
   vi.stubGlobal('window', win);
   vi.stubGlobal('XMLHttpRequest', class FakeXHR {});
+  takeNativeTimers();
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   vi.resetModules();
   const definition = await import('@/entrypoints/main-interceptor.content');
@@ -177,6 +207,9 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.useRealTimers();
+  // 先摘假时钟再清原生句柄：这一笔没跑完的节流补报不能带着 `posted` 活到下一笔，
+  // 更不能活到全局桩摘掉之后（那串 `ReferenceError: window is not defined` 就是这么来的）
+  nativeTimers.forEach(handle => clearTimeout(handle));
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -714,6 +747,45 @@ describe('超时与自报口径', () => {
     expect(await response.text()).toBe('NATIVE');
     const stats = payloadOfType(INTERCEPTOR_STATS).map(payload => payload.data);
     expect(stats[stats.length - 1]).toEqual({ intercepted: 1, proxied: 1, fellBack: 1, timedOut: 1 });
+  });
+
+  it('代发等到期也掐掉后台那一笔：取消消息随超时落定一起发出', async () => {
+    // 与页面取消同一条理由：等不到回包之后这一笔没人读了，而后台那一次 fetch 还在握连接、
+    // 外发凭据、按 retryCount 追加尝试。漏了这一步，「回退原生」与「后台那笔」叠在一起，
+    // 服务端就把同一个请求收两遍——上面那条用例只观察结局（NATIVE），看不见这一笔有没有人收。
+    armProxy([rule()]);
+    vi.useFakeTimers();
+    const pending = send(API_URL);
+    const requestId = lastRequestId();
+
+    await vi.advanceTimersByTimeAsync(35000);
+    const response = await pending;
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(await response.text()).toBe('NATIVE');
+    expect(payloadOfType(CANCEL_REQUEST).map(payload => payload.data)).toEqual([{ requestId }]);
+  });
+
+  it('手改出来的负 delayMs 不会把每一笔都变成秒级超时（钳制真的进了定时器）', async () => {
+    // 负值原样进公式＝负超时，`setTimeout` 按 0 处理：代发出发的同一刻就「超时」，
+    // 页面随即按「代理失败」回退原生再发一次。后台那一侧的三项由 `normalizeRuleTimings` 钳过，
+    // 这一侧是手工副本，所以钳制有没有落地只能按定时器行为问，公式抄本（round3 B6）问不到这件事。
+    armProxy([rule({ delayMs: -1e9 })]);
+    vi.useFakeTimers();
+    let settled = false;
+    send(API_URL).then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+
+    await vi.advanceTimersByTimeAsync(34000);
+    expect(settled).toBe(false);
+    expect(nativeFetch).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(true);
+    expect(nativeFetch).toHaveBeenCalledTimes(1);
   });
 
   it('超时上限按规则配置算：配了 delayMs 的慢请求不会被固定 30s 误杀', async () => {

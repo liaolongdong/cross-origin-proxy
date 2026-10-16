@@ -433,20 +433,46 @@ export default defineContentScript({
     // ---- Proxy fetch via content script bridge ----
 
     /**
+     * 三项收口后的最大总时长（延迟 60s + 6 次尝试 × 30s + 5 次间隔 × 30s + 余量 5s ≈ 395s，取整到 400s）。
+     * 必须有个上界：`setTimeout` 的实参按 32 位整数截断，`retryCount: 1e9` 那种手改进 storage 的值
+     * 算出来会绕回一个小数，表现与负超时同样是「出发那一刻就超时」。
+     */
+    const PROXY_TIMEOUT_CEILING_MS = 400_000;
+
+    /** 非有限值与负数一律当「没配」，与 `normalizeRuleTimings` 的 `bounded()` 同向（0 是合法配置，保留） */
+    function proxyTiming(value: number | undefined, fallback: number): number {
+      return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+    }
+
+    /**
      * 计算代理超时上限：请求延迟 + 每次尝试 30s 超时 ×（重试次数+1）+ 重试间隔 × 重试次数 + 桥接余量。
      * 固定 30s 会误杀配置了延迟或重试的慢请求
+     *
+     * 三项各按 `proxyTiming` 收口、总时长按上界钳一次。后台那一侧用的是
+     * `utils/ruleValidation.ts` 的 `normalizeRuleTimings`（本 world 自包含，只能各自钳），
+     * 而手改过的 storage 给得出 `delayMs: -1e9`——负值原样进公式就是负超时，`setTimeout` 把负值当 0
+     * 处理，于是每一笔代发出发的同一刻「超时」，页面随即按「代理失败」回退原生再发一次。
+     * 收口后每一项都 ≥ 0，所以这里不必再写下界：结果天然不低于「单次尝试 + 桥接余量」那 35s。
      */
     function computeProxyTimeout(rule: ProxyRule): number {
-      const retries = rule.retryCount ?? 0;
-      return (rule.delayMs || 0) + 30000 * (retries + 1) + (rule.retryDelay ?? 1000) * retries + 5000;
+      const retries = proxyTiming(rule.retryCount, 0);
+      const retryDelay = proxyTiming(rule.retryDelay, 1000);
+      const total = proxyTiming(rule.delayMs, 0) + 30000 * (retries + 1) + retryDelay * retries + 5000;
+      return Math.min(total, PROXY_TIMEOUT_CEILING_MS);
     }
 
     /**
      * 逐条剔掉无法作为 ByteString 交给 `new Headers()` 的响应头。
      *
-     * 与 `utils/proxyResponse.ts` 的 `toStringRecord` 同源且必须保持一致（本 world
-     * 自包含，无法 import）：规则里手写的中文响应头只过头名字符集与 CR/LF，
-     * 值的码点没人管，而 `new Headers()` 抛出点在 resolve 回调里 = 页面永久 pending。
+     * 与 `utils/proxyResponse.ts` 的 `toStringRecord` 镜像（本 world 自包含，无法 import）：
+     * **同一套**的是「什么算一条合法的响应头」——名与值都不含 CR/LF、码点 ≤ 255；
+     * 规则里手写的中文响应头只过头名字符集与 CR/LF，值的码点没人管，而 `new Headers()`
+     * 抛出点在 resolve 回调里 = 页面永久 pending。
+     *
+     * **刻意不同**的那一处是非字符串值：桥接层整份退回空对象（那是不可信回包进来的地方，
+     * 不做逐项清洗），这里逐条 `continue`。真实链路上这个分叉够不着——`normalizeProxyResponse`
+     * 先跑，交到本 world 的 `headers` 必然是 `Record<string, string>`，这一支只防消息被截断
+     * 或伪造。改动判据时两边一起看，别把它当成「同步漏了」。
      */
     function toByteStringHeaders(raw: unknown): Record<string, string> {
       const safe: Record<string, string> = {};
@@ -502,6 +528,9 @@ export default defineContentScript({
           bump('timedOut');
           pendingRequests.delete(requestId);
           detachAbort();
+          // 与页面取消同一处置：等不到回包之后这一笔同样没人读了，而后台那一侧还在握连接、
+          // 外发凭据、按 retryCount 追加尝试。掐掉它，别让「页面已经放弃」变成「服务端收到两遍」。
+          window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);
           reject(new Error('Proxy request timeout'));
         }, computeProxyTimeout(rule));
 

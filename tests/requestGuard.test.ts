@@ -247,13 +247,9 @@ describe('被拒请求必须留下本地日志，但不改页面侧契约', () =
       priority: 10,
       requestBodyOverride: '{"replaced":true}',
     });
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'content-type': 'application/json' }),
-      text: async () => '{"done":1}',
-    });
+    fetchSpy.mockResolvedValue(
+      new Response('{"done":1}', { status: 200, statusText: 'OK', headers: { 'content-type': 'application/json' } }),
+    );
 
     const res = await handleProxyRequest(baseRequest);
 

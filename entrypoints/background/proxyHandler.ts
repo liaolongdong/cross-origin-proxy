@@ -55,6 +55,45 @@ export function exceedsBodyCap(text: string): boolean {
   return new TextEncoder().encode(text).length > MAX_BODY_SIZE;
 }
 
+/**
+ * 按 {@link MAX_BODY_SIZE} 流式读满一份响应体；越界时掐掉剩余部分并返回 `null`。
+ *
+ * 为什么不能继续用 `response.text()` / `arrayBuffer()`：那两者把整份正文一次性缓冲进 SW，
+ * 上限只管得住**出站请求**，回包这一侧却是敞开的——一个 500MB 的下载先按 1.3 倍的 base64
+ * 字符串再走一遍 `postMessage`（结构化克隆还要复制一份），SW 当场被回收，而同一时刻别的标签页
+ * 里在途的代理请求全部跟着遭殃；换一个后端就能稳定打进来，这不属于「用户自己承担」那一档。
+ * 数的是解码后的字节：gzip 由 fetch 透明解压，真正变成字符串的是解压后的那一份。
+ *
+ * 页面取消／30s 截止（`controller.abort()`）期间 `read()` 以 AbortError 落回：让它的拒绝原样冒出去，
+ * 调用处的 catch 仍按超时／取消处理，与改动前 `text()` 抛错同形——这里不吞，吞了就成了「静默空正文 200」。
+ */
+async function readBodyWithinCap(response: Response): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_BODY_SIZE) {
+      // 剩余部分不要了：不 cancel 就等于让那半截连接继续握着字节、继续占内存。
+      // 抛在 cancel 之后的错没有意义（这一笔的结局已经定了），所以只把拒绝摘掉。
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 // ─── SW 通道命中统计 ──────────────────────────────────────────────────────────
 
 const swHitStats = new Map<string, { ruleId: string; ruleName: string; hitCount: number }>();
@@ -611,23 +650,49 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
       // 5xx 且还有重试次数：重试
       if (response.status >= 500 && attempt < maxRetries) {
         lastError = `Server error ${response.status}`;
+        // 这一份回包不会再被任何人读。不掐掉它，那半截正文就继续握着连接与内存，
+        // 而紧接着还要为下一次尝试再开一条——5xx 恰好常发生在一个已经开了头的长响应上。
+        // `cancel()` 在「流已被别处消费」时是会拒绝的，这一笔的结局已定，摘掉拒绝即可。
+        await response.body?.cancel().catch(() => undefined);
         continue;
       }
 
       // Read response
       const contentType = response.headers.get('content-type') || '';
+      const bodyBytes = await readBodyWithinCap(response);
+      if (bodyBytes === null) {
+        // 与请求体超限同一处置：回失败信封，页面按「代理失败」回退原生自己发一次。
+        // 截断式返回是把正文改坏（JSON 少一截就是页面 `JSON.parse` 当场抛），
+        // 而静默失败让日志与页面各说各话——超限这件事必须说得出口。
+        const reason = `Response body exceeds ${MAX_BODY_SIZE} bytes`;
+        logger.warn(`${reason} (rule: ${rule.name})`);
+        await logRejectedRequest(rule, data.url, data.method, startTime, reason);
+        return {
+          requestId: data.requestId,
+          status: 0,
+          statusText: 'Body Too Large',
+          headers: {},
+          body: reason,
+          isBase64: false,
+        };
+      }
+
       let responseBody: string;
       let isBase64 = false;
 
       if (contentType.includes('application/json') || contentType.includes('text/')) {
-        responseBody = await response.text();
+        // 字符集这件事交给平台，不自己判：`Body.text()` 会按响应的 MIME type 取 charset
+        // （`charset=gbk` 的老后端在 Chrome 里真能解出中文，自己 `new TextDecoder()` 一律按 UTF-8
+        // 解就是把那类回包读成乱码）。把原始 content-type 挂回一份同形状的空体 Response 再 `.text()`，
+        // 走的正是改动前那条算法——只有 MIME type 参与解码，status 不参与，所以不必照抄。
+        const decoderHeaders: Record<string, string> = {};
+        if (contentType) decoderHeaders['content-type'] = contentType;
+        responseBody = await new Response(bodyBytes, { headers: decoderHeaders }).text();
       } else {
-        const buffer = await response.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
         let binary = '';
         const CHUNK_SIZE = 0x8000;
-        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+        for (let i = 0; i < bodyBytes.length; i += CHUNK_SIZE) {
+          binary += String.fromCharCode(...bodyBytes.subarray(i, i + CHUNK_SIZE));
         }
         responseBody = btoa(binary);
         isBase64 = true;

@@ -5,7 +5,8 @@ import type { ProxyRule } from '@/utils/types';
 // P1②：30s 截止时间必须覆盖到「body 读满」，而不是拿到响应头就撤掉
 //
 // `clearTimeout` 原本紧跟在 `await fetch()` 之后，而 `content-type` 含 `text/` 或
-// `application/json` 的响应接下来走的是 `await response.text()`。此后后台侧这笔请求
+// `application/json` 的响应接下来要把整份正文读满（逐块读流的实现见 `responseBodyCap.test.ts`）。
+// 此后后台侧这笔请求
 // 再没有任何截止：`text/event-stream` 这类不结束的流会把上游连接一直握到 SW 被回收，
 // 而日志是在 body 读满之后才落的，所以这条请求在日志里根本不存在；页面只能等它自己的
 // 兜底超时（延迟 + 30s×(重试+1) + 间隔×重试 + 5s），配了延迟或重试时是几分钟。
@@ -101,27 +102,30 @@ describe('handleProxyRequest — 截止时间覆盖 body 读取', () => {
     return done?.value;
   }
 
-  /** 响应头先到、body 拖到 fake time 40s 才落地的「慢流」；abort 让 body 读取 reject —— 真实 fetch 就是这个语义 */
+  /**
+   * 响应头先到、body 拖到 fake time 40s 才落地的「慢流」；abort 让 body 读取 reject —— 真实 fetch 就是这个语义
+   *
+   * 这里交出去的是**真的** `Response` + `ReadableStream`，不是手搓的 `{ text, arrayBuffer }` 桩：
+   * 实现现在按 `response.body` 那条流逐块读（体积上限见 `tests/responseBodyCap.test.ts`），
+   * 桩里没有 `body` 就等于这一笔压根没经过被测路径——「截止排到 body 读满」这句会变成自证。
+   */
   function stubSlowStream(onBodyLanded: () => void) {
     fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
       const signal = init?.signal;
-      return {
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers({ 'content-type': 'text/event-stream' }),
-        text: () =>
-          new Promise<string>((resolve, reject) => {
-            const timer = setTimeout(() => {
-              onBodyLanded();
-              resolve('data: late\n\n');
-            }, 40_000);
-            signal?.addEventListener('abort', () => {
-              clearTimeout(timer);
-              reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' }));
-            });
-          }),
-        arrayBuffer: () => Promise.reject(new Error('text/ 分支不该读二进制')),
-      };
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const timer = setTimeout(() => {
+            controller.enqueue(new TextEncoder().encode('data: late\n\n'));
+            controller.close();
+            onBodyLanded();
+          }, 40_000);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            controller.error(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' }));
+          });
+        },
+      });
+      return new Response(stream, { status: 200, statusText: 'OK', headers: { 'content-type': 'text/event-stream' } });
     });
   }
 
@@ -144,12 +148,9 @@ describe('handleProxyRequest — 截止时间覆盖 body 读取', () => {
 
   it('body 在截止时间前读满时照原样返回，快响应不受影响', async () => {
     store['proxy_config'] = { enabled: true, rules: [SSE_RULE] };
-    fetchMock.mockImplementation(async () => ({
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'content-type': 'text/plain' }),
-      text: () => Promise.resolve('hello'),
-    }));
+    fetchMock.mockImplementation(
+      async () => new Response('hello', { status: 200, headers: { 'content-type': 'text/plain' } }),
+    );
 
     const { pending } = await startRequest();
 

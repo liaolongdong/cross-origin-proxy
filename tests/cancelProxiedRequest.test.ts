@@ -130,12 +130,7 @@ describe('后台代发的取消通道', () => {
 
   it('登记表在请求落定后清掉：同一把 key 第二次取消返回 false', async () => {
     store['proxy_config'] = { enabled: true, rules: [BASE_RULE] };
-    fetchMock.mockImplementation(async () => ({
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'content-type': 'text/plain' }),
-      text: () => Promise.resolve('hello'),
-    }));
+    fetchMock.mockImplementation(async () => new Response('hello', { headers: { 'content-type': 'text/plain' } }));
 
     const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
     const key = proxyRequestKey(3, 0, 'req-ok');
@@ -197,12 +192,7 @@ describe('后台代发的取消通道', () => {
 
   it('不带登记键的调用方（旧路径）行为不变：照常返回响应，也不登记', async () => {
     store['proxy_config'] = { enabled: true, rules: [BASE_RULE] };
-    fetchMock.mockImplementation(async () => ({
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'content-type': 'text/plain' }),
-      text: () => Promise.resolve('hello'),
-    }));
+    fetchMock.mockImplementation(async () => new Response('hello', { headers: { 'content-type': 'text/plain' } }));
 
     const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
     const resp = await handleProxyRequest({
