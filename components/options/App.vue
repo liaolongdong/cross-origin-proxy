@@ -111,6 +111,7 @@
       :refresh-interval="logRefreshInterval"
       :logs="logs"
       :loading="logLoading"
+      :logs-read-failed="logsReadFailed"
       :auto-refresh="autoRefresh"
       :dnr-stats="dnrStats"
       :dnr-stats-state="dnrStatsState"
@@ -214,6 +215,7 @@ const {
   dnrStatsStale,
   dnrStatsState,
   swStats,
+  logsReadFailed,
   fetchLogs,
   clearLogs,
   toggleAutoRefresh,

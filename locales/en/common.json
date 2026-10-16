@@ -16,6 +16,7 @@
   "matchTypeRegex": "Regex",
   "statusEnabled": "Enabled",
   "statusDisabled": "Disabled",
+  "statusUnknown": "Unknown",
   "enableRuleA11y": "Enable rule $1",
   "diagnosisNoRules": "No proxy rules yet — create one first.",
   "diagnosisDisabledMatch": "Rule “$1” matches this address, but it is currently off — enable it.",

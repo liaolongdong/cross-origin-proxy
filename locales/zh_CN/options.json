@@ -78,6 +78,8 @@
   "colProxiedUrl": "代理URL",
   "colDuration": "耗时",
   "noLogs": "暂无请求记录",
+  "logsReadFailed": "日志没读到",
+  "logsReadStale": "以下是上一次读到的记录",
   "confirmClearLogs": "确定要清空所有日志吗？",
   "exportSectionTitle": "导出配置",
   "exportDesc": "将所有代理规则导出为 JSON 文件",

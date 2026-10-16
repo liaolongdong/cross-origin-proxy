@@ -33,7 +33,7 @@
               class="toggle-status"
               :class="{ 'is-active': enabled }"
             >
-              {{ enabled ? t('statusEnabled') : t('statusDisabled') }}
+              {{ statusEverRead ? (enabled ? t('statusEnabled') : t('statusDisabled')) : t('statusUnknown') }}
             </span>
           </div>
           <div
@@ -107,7 +107,7 @@
         @keydown.enter.space.prevent="rulesExpanded = !rulesExpanded"
       >
         <span class="rules-section-title">{{ t('quickToggleRules') }}</span>
-        <span class="rules-section-count">{{ rules.length }}</span>
+        <span class="rules-section-count">{{ statusEverRead ? rules.length : '—' }}</span>
         <el-icon
           class="rules-section-arrow"
           :class="{ 'is-expanded': rulesExpanded }"
@@ -130,7 +130,7 @@
             v-if="rules.length === 0"
             class="rules-empty"
           >
-            {{ t('noRulesInPopup') }}
+            {{ statusEverRead ? t('noRulesInPopup') : t('statusUnknown') }}
           </div>
           <!-- 不写成 v-for + v-else 同元素：那里 v-else 优先级更高，恰好条件不引用循环变量才「碰巧」对 -->
           <template v-else>
@@ -162,16 +162,16 @@
         <div class="metric">
           <span class="metric-value"
             ><span
-              :key="activeRuleCount"
+              :key="activeRulesText"
               class="metric-value-digit"
-              >{{ activeRuleCount }}</span
+              >{{ activeRulesText }}</span
             ></span
           >
           <span class="metric-label">{{ t('activeRules') }}</span>
         </div>
         <div class="metric-divider"></div>
         <div class="metric">
-          <span class="metric-value">{{ swRequestCount }}</span>
+          <span class="metric-value">{{ swRequestsText }}</span>
           <span class="metric-label">{{ t('todayRequests') }}</span>
         </div>
         <div class="metric-divider"></div>
@@ -257,7 +257,7 @@
           <code class="page-hit-rewritten">{{ truncateUrl(pageHitRewritten, 44) }}</code>
         </div>
         <div
-          v-if="!enabled"
+          v-if="!enabled && statusEverRead"
           class="page-hit-off"
         >
           {{ t('pageHitProxyOff') }}
@@ -506,7 +506,7 @@
         v-if="recentLogs.length === 0"
         class="recent-empty"
       >
-        {{ t('noRecentRequests') }}
+        {{ statusEverRead ? t('noRecentRequests') : t('statusUnknown') }}
       </div>
       <p
         v-if="recentLogs.length === 0 && hasEnabledSimpleRule"
@@ -630,6 +630,7 @@ const {
   rules,
   loading,
   autoOffAt,
+  statusEverRead,
   toggleProxy,
   toggleRule,
   fetchStatus,
@@ -643,6 +644,17 @@ const rulesExpanded = ref(false);
 
 /** 「最近请求」只露 5 行；模板里直接 slice 会每次渲染都新建一份数组 */
 const recentLogRows = computed(() => recentLogs.value.slice(0, 5));
+
+/**
+ * 首屏那两个数的「没有读数」那一档
+ *
+ * `GET_PROXY_STATUS` 回不上话时（SW 回收期回信封、扩展刚重载时抛错）`fetchStatus()` 一个字段都不覆盖，
+ * 于是这两个数仍是初值 0——画出来是一句「活跃规则 0 · 经扩展 0」的结论，而这一刻压根没有任何读数。
+ * 这一屏在别处早已立了规矩（`dnrTabHitsText`、自动关闭档位条：读不到就画 `—`、整条不画），
+ * 这两格之前是漏的那两处。
+ */
+const activeRulesText = computed(() => (statusEverRead.value ? String(activeRuleCount.value) : '—'));
+const swRequestsText = computed(() => (statusEverRead.value ? String(swRequestCount.value) : '—'));
 
 // ─── 本页网络层命中（DNR） ────────────────────────────────────────────────
 

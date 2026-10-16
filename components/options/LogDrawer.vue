@@ -138,6 +138,15 @@
         </div>
       </div>
 
+      <!-- 读不到这一轮的日志：这句话必须在列表旁边说，不能只改空态——非空时表格看起来和平时
+           一模一样，没人会怀疑手里这几行是上一轮留下的 -->
+      <p
+        v-if="logsReadFailedText"
+        class="logs-read-failed"
+      >
+        {{ logsReadFailedText }}
+      </p>
+
       <!-- DNR 命中统计（简单规则无逐条日志，展示规则级计数） -->
       <div class="dnr-stats">
         <div class="dnr-stats-header">
@@ -356,7 +365,7 @@
               :color="'var(--cop-text-color-placeholder)'"
               ><Document
             /></el-icon>
-            <p>{{ t('noLogs') }}</p>
+            <p>{{ logsReadFailed ? t('logsReadFailed') : t('noLogs') }}</p>
           </div>
         </template>
       </el-table>
@@ -568,6 +577,8 @@ const props = defineProps<{
   visible: boolean;
   logs: RequestLogEntry[];
   loading: boolean;
+  /** 最近一次读取没拿到答案：空表要说「没读到」而不是「暂无记录」，非空表要说它是上一轮的样本 */
+  logsReadFailed: boolean;
   autoRefresh: boolean;
   refreshInterval: number;
   dnrStats: DnrHitStat[];
@@ -631,6 +642,18 @@ const dnrStatsEmptyText = computed(() => {
   if (props.dnrStatsState === 'pending' || props.dnrStatsState === 'unavailable') return t('statsUnavailable');
   if (props.dnrStatsState === 'stale') return `${t('dnrStatsEmpty')} · ${t('statsMayLag')}`;
   return t('dnrStatsEmpty');
+});
+
+/**
+ * 「这一轮日志没读到」那一句
+ *
+ * 空表与非空表说的是两件不同的事：空表只说「这一轮没有答案」（初值也是这个形状，于是首屏
+ * 读失败时它替「暂无请求记录」说话，不再把未知画成一条结论）；非空表必须点破手里这几行是
+ * **上一轮**的样本——表格长得和平时一模一样，不说就是让人拿旧账当现状。
+ */
+const logsReadFailedText = computed(() => {
+  if (!props.logsReadFailed) return '';
+  return props.logs.length > 0 ? `${t('logsReadFailed')} · ${t('logsReadStale')}` : t('logsReadFailed');
 });
 
 const filteredLogs = computed(() => {
@@ -1013,6 +1036,15 @@ function copyAsCurl() {
 
 .stats-item--error .stats-value {
   color: var(--el-color-danger);
+}
+
+/* 这一轮没读到日志：贴在统计条与表格之间，说「下面这些不是这一轮的」——颜色之外还占一整行文字，
+   不只靠配色表意（同弹窗那两条读不到时的提示一个口径） */
+.logs-read-failed {
+  margin: 8px 16px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-color-warning);
 }
 
 /* DNR 命中统计 */

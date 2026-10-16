@@ -78,6 +78,8 @@
   "colProxiedUrl": "Proxied URL",
   "colDuration": "Duration",
   "noLogs": "No request logs",
+  "logsReadFailed": "Logs couldn't be read",
+  "logsReadStale": "Below are the last records that came through",
   "confirmClearLogs": "Clear all logs?",
   "exportSectionTitle": "Export Config",
   "exportDesc": "Export all proxy rules as a JSON file",

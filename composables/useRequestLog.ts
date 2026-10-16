@@ -54,6 +54,14 @@ export function useRequestLog() {
   /** 最近一次采样的可渲染状态：日志抽屉据此把「零命中」与「没有读数」分开说 */
   const dnrStatsState = ref<DnrSampleState>('pending');
   const swStats = ref<DnrHitStat[]>([]);
+  /**
+   * 最近一次日志读取**没拿到答案**
+   *
+   * 「没读到」与「读到 0 条」在界面上必须是两句话：把前者画成「暂无请求记录」，用户会以为
+   * 自己的记录被清了，而实际只是后台那一刻回不上话（SW 回收期回的是 `{success:false}` 信封，
+   * 抛错则连信封都没有）。这两条路径在这里现在走同一条：维持上一轮读数 + 置位这一格。
+   */
+  const logsReadFailed = ref(false);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   function stopTimer() {
@@ -74,9 +82,17 @@ export function useRequestLog() {
       const result: RequestLogEntry[] | undefined = await chrome.runtime.sendMessage({
         type: MessageType.GET_REQUEST_LOG,
       });
-      // SW 异常时响应可能为非标对象，仅接受数组结构
-      logs.value = Array.isArray(result) ? result : [];
+      // SW 异常时响应可能是 `{success:false}` 这类非标结构：那一条和抛错是同一件事——
+      // 这一轮没有答案，于是维持上一轮的读数并置位，而不是把「没读到」交成「一条都没有」
+      if (!Array.isArray(result)) {
+        logsReadFailed.value = true;
+        logger.warn('Failed to fetch logs: unexpected response shape', result);
+        return;
+      }
+      logs.value = result;
+      logsReadFailed.value = false;
     } catch (error) {
+      logsReadFailed.value = true;
       logger.error('Failed to fetch logs:', error);
     } finally {
       loading.value = false;
@@ -91,6 +107,8 @@ export function useRequestLog() {
       throw new Error(resp?.error || 'CLEAR_LOGS_FAILED');
     }
     logs.value = [];
+    // 清空是后台确认过的读数，「没读到」那句话到此为止
+    logsReadFailed.value = false;
   }
 
   /** 切换自动刷新；启用时会按当前 refreshInterval 启动定时器，关闭时清理 */
@@ -175,6 +193,7 @@ export function useRequestLog() {
     dnrStatsStale,
     dnrStatsState,
     swStats,
+    logsReadFailed,
     fetchLogs,
     clearLogs,
     toggleAutoRefresh,
