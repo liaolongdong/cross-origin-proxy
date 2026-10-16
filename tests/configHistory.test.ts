@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { ConfigHistoryEntry, ProxyRule } from '@/utils/types';
 import { MAX_CONFIG_HISTORY, MAX_CONFIG_HISTORY_TOTAL_SIZE, MAX_RULES, STORAGE_KEYS } from '@/utils/constants';
@@ -188,6 +188,85 @@ describe('恢复点何时落下 — 只有成套替换才记', () => {
     expect(result.success).toBe(true);
     expect((await getProxyConfig()).rules.map(r => r.id)).toEqual(['new']);
     expect(storedHistory()).toHaveLength(0);
+  });
+});
+
+describe('加载快照前先复核那一份规则集 — profiles 同样是 storage 里的原文', () => {
+  let warnSpy: ReturnType<typeof startWarnSpy>;
+
+  /** `logger.warn` 走的就是 `console.warn`；顺带把这一批用例的告警噪声收住 */
+  function startWarnSpy() {
+    return vi.spyOn(console, 'warn').mockImplementation(() => {});
+  }
+
+  beforeEach(() => {
+    reset();
+    warnSpy = startWarnSpy();
+  });
+  afterEach(() => warnSpy.mockRestore());
+
+  /** 直接铺一条快照（绕过 `saveProfile`，被测的那一步就是它自己的读取侧） */
+  function seedProfile(rules: unknown): void {
+    store[STORAGE_KEYS.PROFILES] = [{ id: 'p1', name: 'P1', rules, createdAt: 0 }];
+  }
+
+  /**
+   * 原因码只进日志。回包里的 `error` 会被两处界面原样 `ElMessage.error` 出来（`useProfiles` 的
+   * 文件头写明它是「给用户看的原文」），所以这里造的每一串都是未经 i18n 的可见文案——
+   * 界面回落到各自的通用失败文案，具体坏在哪一条由这句日志说。
+   */
+  function expectLoggedReason(code: string): void {
+    const logged = warnSpy.mock.calls.map(call => call.join(' ')).join('\n');
+    expect(logged).toContain(`Load profile skipped: ${code} (profile: p1)`);
+  }
+
+  it('rules 不是数组：拒绝加载、配置与总开关原样不动、也不落恢复点', async () => {
+    seedConfig([makeRule('old')], false);
+    seedProfile('https://api.example.com/*');
+
+    await expect(loadProfile('p1')).resolves.toEqual({ success: false });
+    expectLoggedReason('invalid-rules');
+    const config = await getProxyConfig();
+    expect(config.rules.map(r => r.id)).toEqual(['old']);
+    expect(config.enabled).toBe(false);
+    expect(storedHistory()).toHaveLength(0);
+  });
+
+  it('条目缺 matchPattern（或空到命中一切）：整包拒绝，而不是丢掉那几条之后谎报「加载好了」', async () => {
+    seedConfig([makeRule('old')]);
+    seedProfile([makeRule('ok'), { ...makeRule('bad'), matchPattern: '  ' }]);
+
+    await expect(loadProfile('p1')).resolves.toEqual({ success: false });
+    expectLoggedReason('invalid-rules');
+    expect((await getProxyConfig()).rules.map(r => r.id)).toEqual(['old']);
+  });
+
+  it('超过 MAX_RULES 的快照同样拒绝 —— 回退路径早就拒绝超限快照，这里是同一条上限的另一端', async () => {
+    seedConfig([makeRule('old')]);
+    seedProfile(Array.from({ length: MAX_RULES + 1 }, (_, i) => makeRule(`n${i}`)));
+
+    await expect(loadProfile('p1')).resolves.toEqual({ success: false });
+    expectLoggedReason('too-many-rules');
+    expect((await getProxyConfig()).rules.map(r => r.id)).toEqual(['old']);
+    expect(storedHistory()).toHaveLength(0);
+  });
+
+  it('合法快照照常整套替换并打开总开关（复核不该变成第二道闸门）', async () => {
+    seedConfig([makeRule('old')], false);
+    seedProfile([makeRule('from-profile')]);
+
+    await expect(loadProfile('p1')).resolves.toEqual({ success: true });
+    const config = await getProxyConfig();
+    expect(config.rules.map(r => r.id)).toEqual(['from-profile']);
+    expect(config.enabled).toBe(true);
+  });
+
+  it('空规则集是合法现状：加载它就是把规则清空，不该被当成坏数据', async () => {
+    seedConfig([makeRule('old')]);
+    seedProfile([]);
+
+    await expect(loadProfile('p1')).resolves.toEqual({ success: true });
+    expect((await getProxyConfig()).rules).toHaveLength(0);
   });
 });
 

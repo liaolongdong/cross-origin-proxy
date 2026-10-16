@@ -101,6 +101,7 @@
               :placeholder="t('variableNamePlaceholder')"
               :maxlength="MAX_VARIABLE_NAME_LENGTH"
               :aria-label="t('variableNamePlaceholder')"
+              :disabled="variablesLoading"
               @change="commitVariables"
             />
             <span class="variable-usage">{{ t('variableUsedBy', usageCount(row.name)) }}</span>
@@ -120,6 +121,7 @@
             :placeholder="t('variableValuePlaceholder')"
             :maxlength="MAX_VARIABLE_VALUE_LENGTH"
             :aria-label="t('variableValuePlaceholder')"
+            :disabled="variablesLoading"
             @change="commitVariables"
           />
         </div>
@@ -127,7 +129,7 @@
         <el-button
           type="primary"
           link
-          :disabled="variableRows.length >= MAX_VARIABLES"
+          :disabled="variablesLoading || variableRows.length >= MAX_VARIABLES"
           @click="addVariable"
         >
           <el-icon><Plus /></el-icon>
@@ -284,6 +286,15 @@ const variableRows = ref<VariableRow[]>([]);
 const { variables, loadVariables, saveVariables } = useVariables();
 /** 变量表没读出来就不能整表覆盖写：空列表一旦被当成现状，用户新填一把凭据就会抹掉已有的全部 */
 const variablesLoadFailed = ref(false);
+/**
+ * 这一次打开弹窗的变量读取还在路上。
+ *
+ * 与上面那一格是同一件事的两面：闸门要说的是「还没有成功读到」，而不是「读失败了」——在途期间
+ * `variableRows` 也可能是空的，而这一段窗口比想象的长（前面还排着自动关闭配置那一次往返，
+ * 后台 SW 冷启动时更久）。所以这里既拦提交，也把那一行的输入框与「新建变量」按钮一并禁掉：
+ * 只拦提交会留下一段「用户填进去的行马上被 `refillRows` 盖掉」的窗口，那比填不进更让人摸不着头脑。
+ */
+const variablesLoading = ref(false);
 
 /**
  * 变量名 → 被多少条规则引用（行内「被 N 条规则使用」与删除确认里的次数都读它）
@@ -392,14 +403,22 @@ watch(
   () => props.visible,
   async val => {
     if (!val) return;
+    // 从这一次打开起变量节就不可写：它前面还排着自动关闭配置那一次往返，而那段窗口里
+    // `variableRows` 同样是「还没读到」的空列表——闸门要盖住整段在途，不只是 `loadVariables()` 那一句
+    variablesLoading.value = true;
     try {
       autoOffMinutes.value = await readAutoOffMinutes();
     } catch {
       autoOffMinutes.value = 0;
     }
-    variablesLoadFailed.value = !(await loadVariables());
-    if (!variablesLoadFailed.value) {
-      refillRows(variables.value);
+    try {
+      variablesLoadFailed.value = !(await loadVariables());
+      if (!variablesLoadFailed.value) {
+        refillRows(variables.value);
+      }
+    } finally {
+      // 旗标必须落下：卡在 true 就把这一节永远变成只读，比那一次覆盖写更难发现
+      variablesLoading.value = false;
     }
     historyLoadFailed.value = !(await loadHistory());
   },
@@ -414,7 +433,9 @@ watch(
  * 两端空白由后台再裁一次，两侧判据同源（`utils/variables.ts`）。
  */
 async function commitVariables() {
-  if (variablesLoadFailed.value) {
+  // 闸门说的是「还没有成功读到」：读失败与还在路上是同一件事的两面，整表覆盖写在这两种情况下
+  // 都会把用户已有的凭据抹掉。界面上这两格各自禁掉了输入与新增，这里再兜一次——这条路径丢的是凭据
+  if (variablesLoading.value || variablesLoadFailed.value) {
     ElMessage.error(t('variablesWriteBlocked'));
     return;
   }

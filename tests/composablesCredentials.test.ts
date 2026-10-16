@@ -380,13 +380,26 @@ describe('这两个布尔被界面怎么用（组件层没有 DOM，只能按源
   });
 
   it('闸门排在整表写之前：先拒这次提交，再去遍历行', () => {
-    const gate = commit.indexOf('if (variablesLoadFailed.value)');
+    const gate = commit.indexOf('if (variablesLoading.value || variablesLoadFailed.value)');
     expect(gate).toBeGreaterThan(-1);
     // 遍历行、整表写都必须在闸门之后——闸门之前一旦读到 `variableRows`，那次点击就已经开始改数据了
     expect(commit.indexOf('variableRows.value')).toBeGreaterThan(gate);
     expect(commit.indexOf('saveVariables(')).toBeGreaterThan(gate);
     // 拒绝时必须说一句可理解的话，而不是静默吞掉这次点击
     expect(commit.slice(gate, commit.indexOf('}', gate))).toContain("ElMessage.error(t('variablesWriteBlocked')");
+  });
+
+  it('「还在路上」与「读失败」同样算没读到：置位早于第一次往返、落点只在 finally、那一节随之不可写', () => {
+    // 置位必须排在读变量之前：它前面还排着自动关闭配置那一次往返，那段窗口里行列表同样是空的，
+    // 而覆盖写要的恰恰是「这份空列表就是现状」这个错觉
+    const setAt = dialogSrc.indexOf('variablesLoading.value = true;');
+    expect(setAt).toBeGreaterThan(-1);
+    expect(setAt).toBeLessThan(dialogSrc.indexOf('await readAutoOffMinutes()'));
+    // 落点只能在 finally：卡在 true 就把这一节永远变成只读，比那一次覆盖写更难发现
+    expect(dialogSrc.slice(setAt)).toMatch(/finally \{[^}]*variablesLoading\.value = false;/);
+    // 界面上那两个输入框与「新建变量」按钮都归这一格管
+    expect(dialogSrc.match(/:disabled="variablesLoading"/g)).toHaveLength(2);
+    expect(dialogSrc).toContain(':disabled="variablesLoading || variableRows.length >= MAX_VARIABLES"');
   });
 
   it('恢复点列表同样把「读不到」留给界面一句独立的话，而且两处调用点都要说', () => {

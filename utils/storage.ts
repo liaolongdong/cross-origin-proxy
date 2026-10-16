@@ -746,6 +746,26 @@ export async function saveProfile(profile: EnvironmentProfile): Promise<void> {
 }
 
 /**
+ * 加载快照前的一道复核：`profiles` 与 `proxy_config` 一样是 storage 里的原文，手改或被截断的
+ * 旧数据能让 `rules` 不再是数组、让里面的条目缺 `matchPattern`。而加载快照是**整套替换 +
+ * 顺手打开总开关**——那份坏数据会当场成为生效配置，症状与「代理坏了」完全一致（非数组的规则
+ * 被 `configRules()` 当空，于是开关开着、一条规则没有、每个请求静默走原生）。
+ *
+ * 判据与导入、恢复点同一份（`isValidRuleShape`），条数上限同 `MAX_RULES`：回退路径早就拒绝
+ * 超限快照，这里曾是唯一一条「把 storage 内容原样写进生效配置」而不复核的路。
+ * 只**拒绝**不修补：这是用户点下去的一次整套替换，悄悄丢掉几条等于替他说「加载好了」。
+ *
+ * 返回的是**只进日志的原因码**，不是文案——回包里的 `error` 会被两处界面原样 `ElMessage.error` 出来，
+ * 所以这里造的新串就是未经 i18n 的可见文案。用户只需要知道「这次替换没发生」，界面因此回落到
+ * 各自本地的通用失败文案；坏在哪一条由这条日志说，`profileId` 一并写进去，便于对着快照名单定位。
+ */
+function profileRulesCode(profile: EnvironmentProfile): 'invalid-rules' | 'too-many-rules' | undefined {
+  const rules = profile.rules;
+  if (!Array.isArray(rules) || !rules.every(isValidRuleShape)) return 'invalid-rules';
+  return rules.length > MAX_RULES ? 'too-many-rules' : undefined;
+}
+
+/**
  * 加载环境配置：将指定 profile 的规则集替换当前配置
  *
  * 与替换式导入同属成套替换，落一份恢复点。「加载快照必然打开总开关」是既有语义，本轮不动。
@@ -756,6 +776,11 @@ export async function loadProfile(profileId: string): Promise<{ success: boolean
     const profile = profiles.find(p => p.id === profileId);
     if (!profile) {
       return { success: false, error: 'Profile not found' };
+    }
+    const rulesCode = profileRulesCode(profile);
+    if (rulesCode) {
+      logger.warn(`Load profile skipped: ${rulesCode} (profile: ${profileId})`);
+      return { success: false };
     }
     // 快照要在写之前拿到引用：写完再读回来拿到的就是 profile 那一份了
     const previous = await getProxyConfig();
