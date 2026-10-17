@@ -412,6 +412,21 @@ describe('日志表与 profile 表：非数组当空', () => {
     expect(await getProfiles()).toEqual([]);
   });
 
+  it('数组里混进不可寻址的条目：剔掉它们，保留可寻址但 rules 坏掉的快照', async () => {
+    // `null` 会让 `findIndex(p => p.id)` 当场抛；坏 rules 的条目仍要出现，用户才删得掉
+    store[STORAGE_KEYS.PROFILES] = [
+      null,
+      'oops',
+      { name: 'no id' },
+      { id: 'broken', name: 'Broken', rules: 'oops', createdAt: 0 },
+    ];
+    const profiles = await getProfiles();
+    expect(profiles.map(p => p.id)).toEqual(['broken']);
+    // 三条写入路径都能在这份列表上继续工作，而不是把错误信封说成「profile 不存在」
+    await expect(saveProfile({ id: 'p1', name: 'env', rules: [], createdAt: 0 })).resolves.toBeUndefined();
+    expect((store[STORAGE_KEYS.PROFILES] as Array<{ id: string }>).map(p => p.id)).toEqual(['broken', 'p1']);
+  });
+
   it('坏数据之上的第一次保存照样落盘成一份单条列表', async () => {
     store[STORAGE_KEYS.PROFILES] = 'oops';
     await saveProfile({ id: 'p1', name: 'env', rules: [], createdAt: 0 });

@@ -39,6 +39,7 @@
   "apiPickerBoundary": "只列这一页已经发出的请求来源（读的是页面自己的计时记录）；没列出来不等于没在调",
   "profilePickerTitle": "已保存的环境配置，点一下切换：",
   "profilePickerRuleCount": "$1 条",
+  "profilePickerDamaged": "快照损坏",
   "profilePickerManage": "管理快照",
   "profilePickerConfirm": "换成「$1」（$2 条规则）会整套替换当前规则集，并打开代理总开关；当前配置先记为一份恢复点。",
   "profilePickerApply": "切换",

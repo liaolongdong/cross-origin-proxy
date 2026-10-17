@@ -3,6 +3,7 @@ import type {
   ProxyRule,
   RequestLogEntry,
   EnvironmentProfile,
+  StoredProfile,
   ImportMode,
   VariableStore,
   ConfigHistoryEntry,
@@ -24,6 +25,7 @@ import { truncateForLog } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
+import { inspectProfileRules, isStoredProfileEntry } from '@/utils/profileValidation';
 import { sanitizeVariables } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 
@@ -722,11 +724,18 @@ async function doClearLogs(): Promise<void> {
  *
  * 非数组当空，与 {@link getRequestLogs} 同档：这个键不是数组时 `findIndex` / `filter` 当场抛，
  * 而三条写入路径抛出来的错误信封长得和「profile 不存在」一模一样，看不出是存储被改坏了。
+ * 数组里的条目同样逐条过闸：`null` 或字符串元素会让 `findIndex(p => p.id)` 抛，而它们既渲染
+ * 不了也删不掉。`rules` 坏掉的条目**保留**——它寻址得到、用户删得掉，加载那一步另行拒绝。
  */
-export async function getProfiles(): Promise<EnvironmentProfile[]> {
+export async function getProfiles(): Promise<StoredProfile[]> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.PROFILES);
   const stored = result[STORAGE_KEYS.PROFILES];
-  return Array.isArray(stored) ? (stored as EnvironmentProfile[]) : [];
+  if (!Array.isArray(stored)) return [];
+  const entries = stored.filter(isStoredProfileEntry);
+  if (entries.length !== stored.length) {
+    logger.warn(`Dropped ${stored.length - entries.length} unaddressable profile entries`);
+  }
+  return entries;
 }
 
 /**
@@ -749,6 +758,8 @@ export async function saveProfile(profile: EnvironmentProfile): Promise<void> {
  * 加载环境配置：将指定 profile 的规则集替换当前配置
  *
  * 与替换式导入同属成套替换，落一份恢复点。「加载快照必然打开总开关」是既有语义，本轮不动。
+ * 复核判据在 `utils/profileValidation.ts`：坏 `rules` 只拒绝、不修补——把字符串当空数组传下去，
+ * 等于替用户点了一次「清空规则并打开代理」。
  */
 export async function loadProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
   return withStorageLock(async () => {
@@ -757,9 +768,20 @@ export async function loadProfile(profileId: string): Promise<{ success: boolean
     if (!profile) {
       return { success: false, error: 'Profile not found' };
     }
+    const inspection = inspectProfileRules(profile);
+    if (inspection.code || !inspection.rules) {
+      // 原因码只进日志：回包里的 `error` 会被界面原样 `ElMessage.error` 出来，未经 i18n 的串
+      // 就是可见文案。条数与首个非法下标让手改过的 storage 在日志里定位得到。
+      logger.warn(
+        `Load profile skipped: ${inspection.code ?? 'invalid-rules'} (profile: ${profileId}, rules: ${
+          inspection.ruleCount ?? 'non-array'
+        }, firstInvalid: ${inspection.firstInvalidIndex})`,
+      );
+      return { success: false };
+    }
     // 快照要在写之前拿到引用：写完再读回来拿到的就是 profile 那一份了
     const previous = await getProxyConfig();
-    await saveProxyConfig({ enabled: true, rules: profile.rules });
+    await saveProxyConfig({ enabled: true, rules: inspection.rules });
     await pushConfigHistory('load-profile', previous);
     return { success: true };
   });

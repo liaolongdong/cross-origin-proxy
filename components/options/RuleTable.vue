@@ -323,6 +323,7 @@
                   circle
                   size="small"
                   :icon="EditPen"
+                  :aria-label="t('editRuleA11y', row.name)"
                   @click="$emit('edit', row as ProxyRule)"
                 />
               </el-tooltip>
@@ -335,6 +336,7 @@
                   circle
                   size="small"
                   :icon="CopyDocument"
+                  :aria-label="t('duplicateRuleA11y', row.name)"
                   @click="$emit('duplicate', row as ProxyRule)"
                 />
               </el-tooltip>
@@ -351,6 +353,7 @@
                     type="danger"
                     plain
                     :icon="Delete"
+                    :aria-label="t('deleteRuleA11y', row.name)"
                   />
                 </template>
               </el-popconfirm>

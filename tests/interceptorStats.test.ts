@@ -408,8 +408,14 @@ describe('[MAIN world] 计数点紧邻既有回退分支，且不参与控制流
     expect(interceptorSrc.match(/bump\('intercepted'\)/g)).toHaveLength(2); // fetch + XHR
     expect(interceptorSrc.match(/bump\('proxied'\)/g)).toHaveLength(1); // 两条通道都经 proxyFetch
     const timeoutAt = interceptorSrc.indexOf("bump('timedOut');");
+    const rejectAt = interceptorSrc.indexOf("reject(new Error('Proxy request timeout'))");
     expect(timeoutAt).toBeGreaterThan(-1);
-    expect(interceptorSrc.slice(timeoutAt, timeoutAt + 160)).toContain("reject(new Error('Proxy request timeout'))");
+    expect(rejectAt).toBeGreaterThan(timeoutAt);
+    // 到期那一笔也要掐掉后台：取消排在落定之前发，顺序反了就留下一段
+    // 「页面已回退原生、后台还在按 retryCount 追加重试」的窗口（行为面由 interceptorFetch 那组钉）
+    const cancelAt = interceptorSrc.indexOf('type: CANCEL_REQUEST', timeoutAt);
+    expect(cancelAt).toBeGreaterThan(timeoutAt);
+    expect(cancelAt).toBeLessThan(rejectAt);
   });
 
   it('超时计数住在两条通道共用的 proxyFetch 里，页面自设的 xhr.timeout 到期不计数', () => {

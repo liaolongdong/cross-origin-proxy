@@ -14,6 +14,16 @@ export function useProxyStatus() {
   const loading = ref(true);
   /** 自动关闭时间点（epoch ms），未配置自动关闭时为 undefined */
   const autoOffAt = ref<number | undefined>(undefined);
+  /**
+   * 至少成功采纳过一份状态读数
+   *
+   * 弹窗首屏那三个数（总开关位置、活跃规则、经扩展请求）在第一次读取回话之前全是默认值，
+   * 而默认值画出来就是「关着 / 0 / 0」——把「还没读到」说成一条读数，正是这套界面在
+   * `dnrSample`、`interceptorStats`、`configSync` 三处分别消灭过的那类谎报。后面几轮读不到时
+   * `fetchStatus()` 维持上一份采纳过的读数（那是最近一次的事实），所以界面上只有这一格
+   * 「从来没有过读数」需要一句话；它由 `fetchStatus()` 在采纳成功的那一刻置真，此后不再回落。
+   */
+  const statusEverRead = ref(false);
 
   async function fetchStatus() {
     loading.value = true;
@@ -29,6 +39,7 @@ export function useProxyStatus() {
       recentLogs.value = Array.isArray(status.recentLogs) ? status.recentLogs : [];
       rules.value = status.rules ?? [];
       autoOffAt.value = typeof status.autoOffAt === 'number' ? status.autoOffAt : undefined;
+      statusEverRead.value = true;
     } catch (error) {
       logger.error('Failed to fetch status:', error);
     } finally {
@@ -80,6 +91,7 @@ export function useProxyStatus() {
     rules,
     loading,
     autoOffAt,
+    statusEverRead,
     toggleProxy,
     toggleRule,
     fetchStatus,

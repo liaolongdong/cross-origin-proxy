@@ -472,7 +472,10 @@ describe('导入预览与恢复点界面契约（批次 B）', () => {
       settingsSrc.indexOf('watch(\n  () => props.visible'),
       settingsSrc.indexOf('/**\n * 把界面上的行整表写回'),
     );
-    expect(watcher).toContain('historyLoadFailed.value = !(await loadHistory())');
+    expect(watcher).toContain('const historyOk = await loadHistory();');
+    expect(watcher).toContain('historyLoadFailed.value = !historyOk;');
+    // 轮次令牌：关掉再打开时，上一轮晚到的失败不许盖在新一轮的读数上
+    expect(watcher).toContain('if (historyRoundAt !== historyRound) return;');
     expect(watcher).toContain('{ immediate: true }');
   });
 

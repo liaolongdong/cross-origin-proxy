@@ -122,21 +122,30 @@
         </div>
       </div>
 
-      <!-- 统计条 -->
+      <!-- 统计条：三格在没有有据读数时整体画「—」，判据见 displayStats -->
       <div class="stats-bar">
         <div class="stats-item">
           <span class="stats-label">{{ t('statsTotal') }}</span>
-          <span class="stats-value">{{ logStats.total }}</span>
+          <span class="stats-value">{{ displayStats.total }}</span>
         </div>
         <div class="stats-item stats-item--success">
           <span class="stats-label">{{ t('statsSuccess') }}</span>
-          <span class="stats-value">{{ logStats.success }}</span>
+          <span class="stats-value">{{ displayStats.success }}</span>
         </div>
         <div class="stats-item stats-item--error">
           <span class="stats-label">{{ t('statsError') }}</span>
-          <span class="stats-value">{{ logStats.error }}</span>
+          <span class="stats-value">{{ displayStats.error }}</span>
         </div>
       </div>
+
+      <!-- 读不到这一轮、而手里还有行：这句话必须在列表旁边说——表格长得和平时一模一样，
+           不说就是让人拿旧账当现状。空表不写这一行，那一面交给下面空态的同一句，避免重复 -->
+      <p
+        v-if="logsReadFailedText"
+        class="logs-read-failed"
+      >
+        {{ logsReadFailedText }}
+      </p>
 
       <!-- DNR 命中统计（简单规则无逐条日志，展示规则级计数） -->
       <div class="dnr-stats">
@@ -189,7 +198,7 @@
           v-if="swStats.length === 0"
           class="dnr-stats-empty"
         >
-          {{ t('swStatsEmpty') }}
+          {{ swStatsEmptyText }}
         </div>
         <ul
           v-else
@@ -356,7 +365,7 @@
               :color="'var(--cop-text-color-placeholder)'"
               ><Document
             /></el-icon>
-            <p>{{ t('noLogs') }}</p>
+            <p>{{ logsEmptyText }}</p>
           </div>
         </template>
       </el-table>
@@ -397,6 +406,7 @@
               </el-button>
               <el-button
                 size="small"
+                :aria-label="t('closeLogDetailA11y')"
                 @click="selectedLog = null"
               >
                 <el-icon><Close /></el-icon>
@@ -554,6 +564,7 @@ import { computeLogStats } from '@/utils/ruleStats';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
+import type { SwStatsState } from '@/composables/useRequestLog';
 import { useRenderWindow } from '@/composables/useRenderWindow';
 import { resolveLogRowKey } from '@/utils/logRowNavigation';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
@@ -568,12 +579,18 @@ const props = defineProps<{
   visible: boolean;
   logs: RequestLogEntry[];
   loading: boolean;
+  /** 最近一次读取没拿到答案：空表要说「没读到」而不是「暂无记录」，非空表要说它是上一轮的样本 */
+  logsReadFailed: boolean;
+  /** 有没有拿到过一份有据的读数（首屏那一次往返还在路上时为假）：统计条据此决定画数还是画「—」 */
+  logsEverRead: boolean;
   autoRefresh: boolean;
   refreshInterval: number;
   dnrStats: DnrHitStat[];
   /** 最近一次网络层采样的状态：空列表要分成「零命中」「没有读数」「无生效规则」三句话说 */
   dnrStatsState: DnrSampleState;
   swStats: DnrHitStat[];
+  /** SW 通道命中列表的读数状态：`fresh` 才是「确实没有命中」，其余两档只是「没有读数」 */
+  swStatsState: SwStatsState;
   methodFilter: string;
   statusFilter: string;
 }>();
@@ -633,6 +650,38 @@ const dnrStatsEmptyText = computed(() => {
   return t('dnrStatsEmpty');
 });
 
+/**
+ * SW 通道命中列表为空时该说哪一句
+ *
+ * 与 DNR 那一格同一口径：只有 `fresh` 才说得上「确实没有命中」；首轮还在路上或这一轮
+ * 读不到时都是「没有读数」，共用 `statsUnavailable`（该键住在 popup 命名空间，构建期扁平合并）。
+ */
+const swStatsEmptyText = computed(() => (props.swStatsState === 'fresh' ? t('swStatsEmpty') : t('statsUnavailable')));
+
+/**
+ * 空表那一句：三档事实，三句话
+ *
+ * 这一轮没读到 → 「日志没读到」；从来没有读到过（首屏那一次往返还在路上）→ 「未知」；
+ * 确实读到了空 → 「暂无请求记录」。合并前两档就是把「还不知道」说成「确实没有」。
+ */
+const logsEmptyText = computed(() => {
+  if (props.logsReadFailed) return t('logsReadFailed');
+  if (!props.logsEverRead) return t('statusUnknown');
+  return t('noLogs');
+});
+
+/**
+ * 「这一轮日志没读到、手里这几行是旧账」那一句
+ *
+ * 两句话分工不重叠：空表由空态那一句说（`logsEmptyText`），这一行只在**手里确实有行**时出现，
+ * 点破它们是**上一轮**的样本——表格长得和平时一模一样，不说就是让人拿旧账当现状。
+ * 判据里的 `logs.length > 0` 是承重的：2026-10-17 在真 Chrome 里量过，
+ * 去掉它就变成空表时同一句「日志没读到」在抽屉里上下出现两遍。
+ */
+const logsReadFailedText = computed(() =>
+  props.logsReadFailed && props.logs.length > 0 ? `${t('logsReadFailed')} · ${t('logsReadStale')}` : '',
+);
+
 const filteredLogs = computed(() => {
   const keyword = urlKeyword.value.toLowerCase();
   return props.logs.filter(log => {
@@ -653,6 +702,20 @@ const filteredLogs = computed(() => {
 
 // 统计（基于筛选后的数据，单次遍历）
 const logStats = computed(() => computeLogStats(filteredLogs.value));
+
+/**
+ * 统计条真正画出来的那三个数
+ *
+ * 只有「手里这份行集是有据的」才画数。两格不画：从来没有成功读到过（首屏那一次往返还在路上，或第一次读就失败），
+ * 以及这一轮没读到而手里一行都没有——后一种空态已经在说「日志没读到」，那三个 0 等于把这句话读成结论。
+ * 手里有行时照常数，因为那几个数描述的就是屏幕上这几行，上面那句「以下是上一次读到的记录」已经点破它是旧账。
+ * `—` 与弹窗首屏同一个口径，判据来自 `useRequestLog` 的 `logsEverRead`（置真后不回落）。
+ */
+const displayStats = computed(() =>
+  props.logsEverRead && !(props.logsReadFailed && props.logs.length === 0)
+    ? logStats.value
+    : { total: '—', success: '—', error: '—' },
+);
 
 // ─── 表格按帧续载 ────────────────────────────────────────────────────────────
 
@@ -1013,6 +1076,15 @@ function copyAsCurl() {
 
 .stats-item--error .stats-value {
   color: var(--el-color-danger);
+}
+
+/* 这一轮没读到日志：贴在统计条与表格之间，说「下面这些不是这一轮的」——颜色之外还占一整行文字，
+   不只靠配色表意（同弹窗那两条读不到时的提示一个口径） */
+.logs-read-failed {
+  margin: 8px 16px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-color-warning);
 }
 
 /* DNR 命中统计 */

@@ -73,8 +73,9 @@ scripts/mock-env/presets/demo-rules-*.json
 .git-backup/
 marketing/
 
-# 会话临时产物
+# 会话临时产物（画布那份报告与它的状态 sidecar 都不该进版本库）
 *.canvas.tsx
+*.canvas.status.json
 
 # `.qoder/` 只放行 `rules/`——那份 always-on 编码铁律是协作者都要读的，其余全是本地状态。
 # 被排除的三类各有理由：

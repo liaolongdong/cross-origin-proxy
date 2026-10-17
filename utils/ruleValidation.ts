@@ -25,6 +25,10 @@ const MATCH_TYPES: readonly string[] = ['wildcard', 'prefix', 'regex'];
  * NaN 归一化、重试与延迟的取值收口（{@link normalizeRuleTimings}）、请求头清洗与 id 重生成各有
  * 归属，不在这里顺手做。
  *
+ * **`methods` 必须缺席或为字符串数组**：`methodAllowed` 直接对它调 `.some()`，一条
+ * `methods: "GET"` 的导入规则会在匹配循环里抛 TypeError——而匹配循环在页面侧位于 try/catch
+ * 之外，抛错会打断**整份配置**的遍历，不是只让这一条失效。它此前是这道闸唯一没看的字段。
+ *
  * **`matchPattern` 不得为空白**：表单侧的必填只拦得住界面保存那一次，而「字段在但没内容」的
  * prefix 规则在两条通道上都是全流量命中——SW 侧 `url.startsWith('')` 恒真，DNR 侧
  * `buildRegexFilter` 编译出 `^(.*)`（`resourceTypes` 含 `main_frame`）。一份分享文件就能让
@@ -40,7 +44,8 @@ export function isValidRuleShape(rule: unknown): rule is ProxyRule {
     typeof r.matchPattern === 'string' &&
     r.matchPattern.trim() !== '' &&
     typeof r.targetUrl === 'string' &&
-    MATCH_TYPES.includes(r.matchType as string)
+    MATCH_TYPES.includes(r.matchType as string) &&
+    (r.methods === undefined || (Array.isArray(r.methods) && r.methods.every(method => typeof method === 'string')))
   );
 }
 

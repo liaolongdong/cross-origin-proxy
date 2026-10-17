@@ -47,11 +47,13 @@ describe('[XHR reuse] 只读属性回填必须可重复定义', () => {
 
   it('被回填的属性名只出现在既有那批只读属性上', () => {
     const names = new Set(defines.map(d => d.name));
+    // `responseXML` 只在 `responseType='document'` 且回包是 XML 时回填（HTML 与其余档位保持原生 null）
     expect([...names].sort()).toEqual([
       'readyState',
       'response',
       'responseText',
       'responseURL',
+      'responseXML',
       'status',
       'statusText',
     ]);

@@ -24,6 +24,12 @@
  * 5. **焦点环看得见**（L-14）。「写了 `:focus-visible`」与「焦点看得见」是两件事：往外长的环会被
  *    带 `overflow: hidden` 的父级裁掉，而和它特异度相同、又写在后面的选中态规则会整条盖掉它用的属性。
  *    两条都是无报错的静默失效，判据只能落在「用的是哪个属性、排在哪一条之后」。
+ * 6. **只挂图标的按钮**（本轮 L 批）。`:icon` 的自闭合 `<el-button>` 渲染出来是
+ *    `<button><svg/></button>`——tooltip 只在指针悬停 400ms 后出现，读屏与键盘拿到的是「按钮」两个字。
+ *    规则表行尾那三枚（编辑 / 复制 / 删除）此前正是这个形状。插槽里只放一个 `<el-icon>` 是等价写法、
+ *    同样的形状，本批一并按 `:aria-label` 收口。这里按全仓横向扫，不逐个点名，
+ *    将来再加一枚同款按钮忘了配名字，红的就是这一格。规则表那三枚的名字还要带行上下文，
+ *    否则一排「编辑」读屏用户分不出点的是哪条规则。
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -78,6 +84,61 @@ const switchTags = (src: string): { tag: string; named: boolean }[] =>
     named: /:aria-label=|aria-label=/.test(m[1]),
   }));
 
+/**
+ * 取出 `<name ...>` 的起始段（引号内的 `>` 不算结束），并标出它是否自闭合。
+ *
+ * 不能用 `/<el-button\b([\s\S]*?)\/>/`：带插槽文字的按钮根本没有 `/>`，那种写法会一路越过
+ * 它的闭合括号、读到后面的兄弟元素，于是「这一枚有没有名字」其实是拿别处的名字答的。
+ * `end` 是起始标签之后的位置，用来取出非自闭合按钮的插槽正文。
+ */
+const openTags = (src: string, name: string): { attrs: string; selfClosing: boolean; end: number }[] => {
+  const out: { attrs: string; selfClosing: boolean; end: number }[] = [];
+  // 前瞻而不是 `\b`：`-` 不是单词字符，`<el-button\b` 会把 `<el-button-group>` 一起收进来
+  for (const m of src.matchAll(new RegExp(`<${name}(?=[\\s/>])`, 'g'))) {
+    let i = (m.index ?? 0) + m[0].length;
+    const start = i;
+    let quote: string | null = null;
+    while (i < src.length) {
+      const char = src[i];
+      if (quote) {
+        if (char === quote) quote = null;
+      } else if (char === '"' || char === "'") {
+        quote = char;
+      } else if (char === '>') {
+        break;
+      }
+      i += 1;
+    }
+    const attrs = src.slice(start, i);
+    out.push({ attrs, selfClosing: attrs.endsWith('/'), end: i + 1 });
+  }
+  return out;
+};
+
+/**
+ * 「图标即全部」的按钮有两种等价写法：`:icon` 自闭合，以及插槽里只有一个 `<el-icon>`。
+ * 两者渲染出来都是 `<button><svg/></button>`，读屏拿到的只有「按钮」两个字。
+ */
+const iconOnlyButtons = (src: string): { attrs: string; form: 'icon-prop' | 'icon-slot' }[] => {
+  const out: { attrs: string; form: 'icon-prop' | 'icon-slot' }[] = [];
+  for (const tag of openTags(src, 'el-button')) {
+    if (tag.selfClosing) {
+      if (/:icon=/.test(tag.attrs)) out.push({ attrs: tag.attrs, form: 'icon-prop' });
+      continue;
+    }
+    const close = src.indexOf('</el-button>', tag.end);
+    // 源码里没有闭合标签就是解析坏了；当成空正文会让「一扫就空」变成假绿
+    if (close === -1) continue;
+    const body = src
+      .slice(tag.end, close)
+      .replace(/<el-icon\b[\s\S]*?<\/el-icon>/g, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .trim();
+    if (body === '') out.push({ attrs: tag.attrs, form: 'icon-slot' });
+  }
+  return out;
+};
+
 describe('[开关的可访问名] 无标签可依托的 el-switch 必须显式 aria-label', () => {
   it('四处独立开关全部有名（它们不在 el-form-item 里，没有任何东西能替它命名）', () => {
     const sites: [string, string][] = [
@@ -119,9 +180,9 @@ describe('[开关的可访问名] 无标签可依托的 el-switch 必须显式 a
       expect(zhOptions, key).toContain(`"${key}"`);
       expect(enOptions, key).toContain(`"${key}"`);
     }
-    const dollar = (json: string, key: string) =>
-      (json.match(new RegExp(`"${key}":\\s*"[^"]*"`, 'g'))?.[0].match(/\$\d/g) ?? []).length;
-    expect(dollar(enCommon, 'enableRuleA11y'), '$1 占位符个数必须中英一致').toBe(dollar(zhCommon, 'enableRuleA11y'));
+    expect(placeholderCount(enCommon, 'enableRuleA11y'), '$1 占位符个数必须中英一致').toBe(
+      placeholderCount(zhCommon, 'enableRuleA11y'),
+    );
   });
 });
 
@@ -149,6 +210,71 @@ describe('[复制按钮] 从 <i> 换成原生 button，显形跟着焦点走', (
     expect(logDrawerSrc).toContain('.log-table:focus-visible');
     expect(logDrawerSrc).toMatch(/\.log-table:focus-visible\s*\{[^}]*box-shadow:\s*inset/);
     expect(logDrawerSrc).not.toMatch(/\.log-table:focus-visible\s*\{[^}]*outline:/);
+  });
+});
+
+/** `$1..$9` 占位符的个数，用来核对中英两侧的实参契约 */
+const placeholderCount = (json: string, key: string) =>
+  (json.match(new RegExp(`"${key}":\\s*"[^"]*"`, 'g'))?.[0].match(/\$\d/g) ?? []).length;
+
+describe('[图标按钮] 只挂图标的 el-button 全部要有可访问名（自闭合与图标插槽两种写法）', () => {
+  it('全仓横向扫：两种写法一枚不留（属性里的引号按配对跳，`>` 才算标签结束）', () => {
+    const iconButtons = vueFiles.flatMap(file =>
+      iconOnlyButtons(readFileSync(file, 'utf-8')).map(form => ({ file, ...form })),
+    );
+    // 先自证两条解析路径都成立：解析一坏这里就是「空对空全绿」
+    expect(
+      iconButtons.filter(b => b.form === 'icon-prop').length,
+      '一枚 `:icon` 自闭合按钮都没扫到 = 这一格在空转',
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      iconButtons.filter(b => b.form === 'icon-slot').length,
+      '一枚 `<el-icon>` 插槽按钮都没扫到 = 这一格在空转',
+    ).toBeGreaterThanOrEqual(9);
+    for (const { file, attrs } of iconButtons) {
+      expect(
+        /:aria-label="t\('/.test(attrs),
+        `${file}：「图标即全部」的按钮没有名字 → ${attrs.replace(/\s+/g, ' ')}`,
+      ).toBe(true);
+      // 带 $1 的名字必须真的传实参：`t()` 缺实参时保留占位符本身，
+      // 读屏念出来的就是「删除第 $1 个请求头」——名字有了，却是一句半截话
+      const label = attrs.match(/:aria-label="t\('(\w+)'([^"]*)\)"/);
+      if (!label) continue;
+      const [, key, rest] = label;
+      const needsArgument = placeholderCount(zhOptions, key) > 0 || placeholderCount(zhCommon, key) > 0;
+      if (needsArgument) {
+        expect(rest, `${file}：${key} 带占位符却没用实参 → ${attrs.replace(/\s+/g, ' ')}`).toContain(',');
+      }
+    }
+  });
+
+  it('规则表那三枚的名字带上行上下文（只剩「编辑」时，读屏连自己在编辑哪条规则都不知道）', () => {
+    const labels = openTags(ruleTableSrc, 'el-button')
+      .filter(t => t.selfClosing && /:icon=/.test(t.attrs))
+      .map(t => t.attrs.match(/:aria-label="t\('(\w+)',\s*row\.name\)"/)?.[1]);
+    expect(labels, '三枚按钮、三个键，一个都不能漏').toEqual(['editRuleA11y', 'duplicateRuleA11y', 'deleteRuleA11y']);
+  });
+
+  it('新补的图标按钮名字中英两侧都在，占位符个数一致', () => {
+    const check = (zh: string, en: string, keys: string[]) => {
+      for (const key of keys) {
+        expect(zh, `zh_CN 缺 ${key}`).toContain(`"${key}"`);
+        expect(en, `en 缺 ${key}`).toContain(`"${key}"`);
+        expect(placeholderCount(en, key), `${key} 的 $1 占位符个数必须中英一致`).toBe(placeholderCount(zh, key));
+      }
+    };
+    check(zhCommon, enCommon, ['editRuleA11y', 'duplicateRuleA11y', 'deleteRuleA11y']);
+    check(zhOptions, enOptions, [
+      'removeQueryParamA11y',
+      'removeHeaderA11y',
+      'removeResponseHeaderA11y',
+      'removeBodyReplacementA11y',
+      'removeMockConditionA11y',
+      'removeMockQueryParamA11y',
+      'removeVariableA11y',
+      'closeTestPanelA11y',
+      'closeLogDetailA11y',
+    ]);
   });
 });
 

@@ -172,6 +172,7 @@
               <el-button
                 type="danger"
                 link
+                :aria-label="t('removeQueryParamA11y', index + 1)"
                 @click="removeQuery(index)"
               >
                 <el-icon><Delete /></el-icon>
@@ -209,6 +210,7 @@
               <el-button
                 type="danger"
                 link
+                :aria-label="t('removeHeaderA11y', index + 1)"
                 @click="removeHeader(index)"
               >
                 <el-icon><Delete /></el-icon>
@@ -315,6 +317,7 @@
                   <el-button
                     type="danger"
                     link
+                    :aria-label="t('removeResponseHeaderA11y', index + 1)"
                     @click="responseHeaderList.splice(index, 1)"
                   >
                     <el-icon><Delete /></el-icon>
@@ -349,6 +352,7 @@
                   <el-button
                     type="danger"
                     link
+                    :aria-label="t('removeBodyReplacementA11y', index + 1)"
                     @click="bodyReplacementList.splice(index, 1)"
                   >
                     <el-icon><Delete /></el-icon>
@@ -457,6 +461,7 @@
                     <el-button
                       type="danger"
                       link
+                      :aria-label="t('removeMockConditionA11y', index + 1)"
                       @click="mockConditions.splice(index, 1)"
                     >
                       <el-icon><Delete /></el-icon>
@@ -508,6 +513,7 @@
                     <el-button
                       type="danger"
                       link
+                      :aria-label="t('removeMockQueryParamA11y', qi + 1)"
                       @click="cond.queryPairs.splice(qi, 1)"
                     >
                       <el-icon><Delete /></el-icon>
@@ -651,6 +657,7 @@
             <el-button
               type="info"
               link
+              :aria-label="t('closeTestPanelA11y')"
               @click="showTestPanel = false"
             >
               <el-icon><Close /></el-icon>

@@ -55,6 +55,67 @@ export function exceedsBodyCap(text: string): boolean {
   return new TextEncoder().encode(text).length > MAX_BODY_SIZE;
 }
 
+/**
+ * 按 {@link MAX_BODY_SIZE} 流式读满一份响应体；越界时掐掉剩余部分并返回 `null`。
+ *
+ * 为什么不能继续用 `response.text()` / `arrayBuffer()`：那两者把整份正文一次性缓冲进 SW，
+ * 上限只管得住**出站请求**，回包这一侧却是敞开的——一个 500MB 的下载先按 1.3 倍的 base64
+ * 字符串再走一遍 `postMessage`（结构化克隆还要复制一份），SW 当场被回收，而同一时刻别的标签页
+ * 里在途的代理请求全部跟着遭殃；换一个后端就能稳定打进来，这不属于「用户自己承担」那一档。
+ * 数的是解码后的字节：gzip 由 fetch 透明解压，真正变成字符串的是解压后的那一份。
+ *
+ * 页面取消／30s 截止（`controller.abort()`）期间 `read()` 以 AbortError 落回：让它的拒绝原样冒出去，
+ * 调用处的 catch 仍按超时／取消处理，与改动前 `text()` 抛错同形——这里不吞，吞了就成了「静默空正文 200」。
+ */
+async function readBodyWithinCap(response: Response): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_BODY_SIZE) {
+      // 剩余部分不要了：不 cancel 就等于让那半截连接继续握着字节、继续占内存。
+      // 抛在 cancel 之后的错没有意义（这一笔的结局已经定了），所以只把拒绝摘掉。
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+/**
+ * 按 `Content-Type` 里的 charset 解码文本回包。
+ *
+ * 不能指望 `Response.text()`：它按 Fetch 规范一律 **UTF-8** 解码，MIME 里的 charset 根本不参与
+ * （旧注释说「`Body.text()` 会按响应的 MIME type 取 charset」是错的）。`charset=gbk` 的老后端
+ * 因此一直把中文读成乱码，而这类后端恰恰是跨环境调试里最常见的一类。
+ *
+ * charset 缺失、标签非法或平台不认识时回落 UTF-8——解码失败不该把整笔回包变成失败信封。
+ * `TextDecoder` 默认处理 BOM，带 BOM 的 UTF-16 回包顺手也能解对。
+ */
+export function decodeBodyText(bytes: Uint8Array<ArrayBuffer>, contentType: string): string {
+  const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1];
+  if (charset) {
+    try {
+      return new TextDecoder(charset).decode(bytes);
+    } catch {
+      // 未知编码：按 UTF-8 解，不中断这一笔
+    }
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 // ─── SW 通道命中统计 ──────────────────────────────────────────────────────────
 
 const swHitStats = new Map<string, { ruleId: string; ruleName: string; hitCount: number }>();
@@ -238,9 +299,12 @@ function applyResponseOverrides(
     }
   }
 
+  let bodyRewritten = false;
+
   if (overrides.bodyRaw !== undefined) {
     result.body = overrides.bodyRaw;
     result.isBase64 = false;
+    bodyRewritten = true;
   } else if (overrides.bodyReplacements && !isBase64) {
     try {
       const json = JSON.parse(body);
@@ -250,8 +314,19 @@ function applyResponseOverrides(
         }
       }
       result.body = JSON.stringify(json);
+      bodyRewritten = true;
     } catch {
       logger.warn('Response body is not valid JSON, skipping bodyReplacements');
+    }
+  }
+
+  if (bodyRewritten) {
+    // 这两颗头描述的是**上游原始正文**：`content-length` 是它的字节数，`content-encoding`
+    // 是它的压缩方式。正文被换掉之后照原样带下去，浏览器会按旧长度去读一段新正文
+    // （截断或挂起），或者再解压一次已经解开的字节。值不可信就整颗摘掉，让下游自己算。
+    for (const name of Object.keys(result.headers)) {
+      const lower = name.toLowerCase();
+      if (lower === 'content-length' || lower === 'content-encoding') delete result.headers[name];
     }
   }
 
@@ -328,23 +403,31 @@ export function cancelProxiedRequest(key: string): boolean {
  * @param data - `PROXY_REQUEST` 载荷
  * @param requestKey - 在途登记键（`proxyRequestKey` 拼出）；不传则这笔请求无法被页面取消，
  *   留给不经内容脚本的调用方
+ * @param onProxied - 这笔请求**真的命中规则并由 SW 接手**时回调一次（总开关关闭、没命中规则
+ *   都不到这里）。调用方拿它当「代发数」的交叉校验基线，所以时机必须晚于规则判定：
+ *   早一步的话，一条只有 `requestId` 的伪造消息也能抬高基线（见 `messageRouter`）。
  */
 export async function handleProxyRequest(
   data: ProxyRequestPayload,
   requestKey?: string,
+  onProxied?: () => void,
 ): Promise<ProxyResponsePayload> {
-  if (!requestKey) return runProxyRequest(data);
+  if (!requestKey) return runProxyRequest(data, undefined, onProxied);
 
   const controller = new AbortController();
   inFlightRequests.set(requestKey, controller);
   try {
-    return await runProxyRequest(data, controller.signal);
+    return await runProxyRequest(data, controller.signal, onProxied);
   } finally {
     inFlightRequests.delete(requestKey);
   }
 }
 
-async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal): Promise<ProxyResponsePayload> {
+async function runProxyRequest(
+  data: ProxyRequestPayload,
+  signal?: AbortSignal,
+  onProxied?: () => void,
+): Promise<ProxyResponsePayload> {
   const startTime = Date.now();
   const config = await getProxyConfig();
 
@@ -377,8 +460,9 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     };
   }
 
-  // 记录 SW 通道命中
+  // 记录 SW 通道命中；同时告诉调用方这一笔真的被 SW 接手了（交叉校验基线只认这一档）
   trackRuleHit(rule.id, rule.name);
+  onProxied?.();
 
   // 时序三项（`delayMs` / `retryCount` / `retryDelay`）钳制一份：入口侧（导入与恢复点）已在
   // `normalizeRuleTimings` 收口，这里挡的是**手改 storage 直接生效**那条路——`delayMs: 1e9`
@@ -591,6 +675,13 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     if (attempt > 0) {
       logger.info(`Retry ${attempt}/${maxRetries}: ${data.url} (rule: ${rule.name})`);
       await sleep(attemptDelay, signal);
+      // `sleep` 被取消时会提前落定，但循环体走到这里仍会照常打开下一次连接——
+      // 页面在重试间隔里放弃的那一笔，服务端因此会收到第二遍（写请求就是两张单）。
+      // 每轮开头那道检查只挡得住「上一轮结束时已取消」，挡不住「在本轮等待中取消」。
+      if (signal?.aborted) {
+        lastError = CANCELLED_BY_PAGE;
+        break;
+      }
     }
 
     const controller = new AbortController();
@@ -611,23 +702,46 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
       // 5xx 且还有重试次数：重试
       if (response.status >= 500 && attempt < maxRetries) {
         lastError = `Server error ${response.status}`;
+        // 这一份回包不会再被任何人读。不掐掉它，那半截正文就继续握着连接与内存，
+        // 而紧接着还要为下一次尝试再开一条——5xx 恰好常发生在一个已经开了头的长响应上。
+        // `cancel()` 在「流已被别处消费」时是会拒绝的，这一笔的结局已定，摘掉拒绝即可。
+        await response.body?.cancel().catch(() => undefined);
         continue;
       }
 
       // Read response
       const contentType = response.headers.get('content-type') || '';
+      const bodyBytes = await readBodyWithinCap(response);
+      if (bodyBytes === null) {
+        // 与请求体超限同一处置：回失败信封，页面按「代理失败」回退原生自己发一次。
+        // 截断式返回是把正文改坏（JSON 少一截就是页面 `JSON.parse` 当场抛），
+        // 而静默失败让日志与页面各说各话——超限这件事必须说得出口。
+        const reason = `Response body exceeds ${MAX_BODY_SIZE} bytes`;
+        logger.warn(`${reason} (rule: ${rule.name})`);
+        await logRejectedRequest(rule, data.url, data.method, startTime, reason);
+        return {
+          requestId: data.requestId,
+          status: 0,
+          statusText: 'Body Too Large',
+          headers: {},
+          body: reason,
+          isBase64: false,
+        };
+      }
+
       let responseBody: string;
       let isBase64 = false;
 
       if (contentType.includes('application/json') || contentType.includes('text/')) {
-        responseBody = await response.text();
+        // 文本回包按 MIME 里的 charset 解码（`charset=gbk` 的老后端靠这一条才不出乱码）。
+        // 判据与回落都收在 `decodeBodyText` 一处，别退回 `new Response(...).text()`——
+        // 那条路只认 UTF-8，charset 是摆设。
+        responseBody = decodeBodyText(bodyBytes, contentType);
       } else {
-        const buffer = await response.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
         let binary = '';
         const CHUNK_SIZE = 0x8000;
-        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+        for (let i = 0; i < bodyBytes.length; i += CHUNK_SIZE) {
+          binary += String.fromCharCode(...bodyBytes.subarray(i, i + CHUNK_SIZE));
         }
         responseBody = btoa(binary);
         isBase64 = true;

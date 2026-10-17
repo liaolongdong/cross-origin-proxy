@@ -128,14 +128,37 @@ describe('后台代发的取消通道', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('取消发生在两次尝试之间的重试等待里时，第二次尝试根本不再发出', async () => {
+    store['proxy_config'] = { enabled: true, rules: [RETRY_RULE] };
+    let callIndex = 0;
+    fetchMock.mockImplementation(async () => {
+      // 第一次是 5xx（进入重试等待），第二次若真发出去就是修好前的那条路径
+      return callIndex++ === 0 ? new Response('boom', { status: 500 }) : new Response('unexpected');
+    });
+
+    const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
+    const key = proxyRequestKey(9, 0, 'req-retry');
+    const pending = handleProxyRequest(
+      { requestId: 'req-retry', url: 'https://api.example.com/x', method: 'GET', headers: {} },
+      key,
+    );
+    // 第一笔 500 落定，循环进入 100ms 的重试等待（不是还在飞）
+    await vi.advanceTimersByTimeAsync(10);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    expect(cancelProxiedRequest(key)).toBe(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const resp = await pending;
+
+    // 等待中的取消必须掐掉「下一轮」：只让 sleep 提前结束是不够的
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(resp.statusText).toBe('Proxy Error');
+    expect(resp.body).toContain('ancel');
+  });
+
   it('登记表在请求落定后清掉：同一把 key 第二次取消返回 false', async () => {
     store['proxy_config'] = { enabled: true, rules: [BASE_RULE] };
-    fetchMock.mockImplementation(async () => ({
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'content-type': 'text/plain' }),
-      text: () => Promise.resolve('hello'),
-    }));
+    fetchMock.mockImplementation(async () => new Response('hello', { headers: { 'content-type': 'text/plain' } }));
 
     const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
     const key = proxyRequestKey(3, 0, 'req-ok');
@@ -197,12 +220,7 @@ describe('后台代发的取消通道', () => {
 
   it('不带登记键的调用方（旧路径）行为不变：照常返回响应，也不登记', async () => {
     store['proxy_config'] = { enabled: true, rules: [BASE_RULE] };
-    fetchMock.mockImplementation(async () => ({
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers({ 'content-type': 'text/plain' }),
-      text: () => Promise.resolve('hello'),
-    }));
+    fetchMock.mockImplementation(async () => new Response('hello', { headers: { 'content-type': 'text/plain' } }));
 
     const { handleProxyRequest, cancelProxiedRequest, proxyRequestKey } = await load();
     const resp = await handleProxyRequest({

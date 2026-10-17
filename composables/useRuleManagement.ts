@@ -20,6 +20,15 @@ export function useRuleManagement() {
   const configReadFailed = ref(false);
 
   /**
+   * 至少成功采纳过一份配置读数（规则为空也算）
+   *
+   * 与 `useProxyStatus` 的 `statusEverRead` 同一件事：置真之后不再回落，只回答「从来没有过读数」。
+   * 顶栏那盏信号灯与开关文案据此把首轮失败画成「未知」，而不是一盏红色的「已禁用」——
+   * 后者是一条结论，而这时手上根本没有读数。
+   */
+  const configEverRead = ref(false);
+
+  /**
    * 处于「删除可撤销」窗口（尚未提交到存储层）的规则 id
    *
    * 删除是乐观更新：UI 先移除，5 秒后才真正发 DELETE_RULE。这期间存储快照里规则还在，
@@ -76,6 +85,7 @@ export function useRuleManagement() {
         return;
       }
       configReadFailed.value = false;
+      configEverRead.value = true;
       rules.value = pendingDeleteIds.size > 0 ? config.rules.filter(r => !pendingDeleteIds.has(r.id)) : config.rules;
       enabled.value = config.enabled;
     } catch (error) {
@@ -286,6 +296,7 @@ export function useRuleManagement() {
     enabled,
     loading,
     configReadFailed,
+    configEverRead,
     shadowedRuleIds,
     fetchConfig,
     addRule,

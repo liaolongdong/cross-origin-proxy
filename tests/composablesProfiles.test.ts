@@ -108,7 +108,44 @@ describe('useProfiles.loadProfiles — 列表读数与「没读到」分开', ()
     respond({ [MessageType.GET_PROFILES]: list });
     const profiles = useProfiles();
     await expect(profiles.loadProfiles()).resolves.toBe(true);
-    expect(profiles.profiles.value).toEqual(list);
+    // 列表项额外带两个派生值：条数可读性与「能不能加载」，`rules` 本身保持原文形状
+    const expected = (list as EnvironmentProfile[]).map(profile => ({
+      ...profile,
+      damaged: false,
+      ruleCount: profile.rules.length,
+    }));
+    expect(profiles.profiles.value).toEqual(expected);
+  });
+
+  it('rules 坏掉时不抛：条数读不出给 null，规则数组坏掉标 damaged 但仍显示条数', async () => {
+    respond({
+      [MessageType.GET_PROFILES]: [
+        { ...makeProfile('str'), rules: 'oops' },
+        { ...makeProfile('mixed'), rules: [makeProfile('x').rules[0], { id: 'bad' }] },
+        makeProfile('good', 1),
+      ],
+    });
+    const profiles = useProfiles();
+    await expect(profiles.loadProfiles()).resolves.toBe(true);
+
+    expect(profiles.profiles.value.map(p => [p.id, p.damaged, p.ruleCount])).toEqual([
+      ['str', true, null],
+      ['mixed', true, 2],
+      ['good', false, 1],
+    ]);
+  });
+
+  it('不可寻址的条目被剔掉并记 warn；可寻址但 rules 坏的条目保留（用户删得掉）', async () => {
+    respond({
+      [MessageType.GET_PROFILES]: [null, 'oops', { ...makeProfile('broken'), rules: 'oops' }],
+    });
+    const profiles = useProfiles();
+    await expect(profiles.loadProfiles()).resolves.toBe(true);
+
+    expect(profiles.profiles.value).toHaveLength(1);
+    expect(profiles.profiles.value[0].id).toBe('broken');
+    expect(profiles.profiles.value[0].damaged).toBe(true);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
   it.each(UNREADABLE)('%s：返回失败', async (_label, payload) => {
@@ -248,6 +285,18 @@ describe('界面这一半：Options 弹窗与 popup 卡片怎么用这个出口�
     expect(popupSrc).not.toMatch(/\bElMessageBox\.(confirm|alert|prompt)\(/);
   });
 
+  it('列表不直接渲染 rules.length：坏快照标 damaged 并禁用「加载」', () => {
+    // 后台还没机会拒绝，界面渲染就先抛了——半年前那条 `profile.rules.length` 正是这么坏的
+    expect(dialogSrc).not.toContain('profile.rules.length');
+    expect(popupSrc).not.toContain('profile.rules.length');
+    expect(dialogSrc).toContain(':disabled="profile.damaged"');
+    expect(dialogSrc).toContain("t('profileDamaged')");
+    expect(popupSrc).toContain(':disabled="switchingProfile || profile.damaged"');
+    expect(popupSrc).toContain("t('profilePickerDamaged')");
+    // 禁用只是界面那一层：程序触发那条路径仍要自己拒绝，不把一次校验失败伪装成 IO 失败
+    expect(dialogSrc).toContain('if (profile.damaged) {');
+  });
+
   it('弹窗失败时后台原因优先、没有原因回落通用文案', () => {
     expect(dialogSrc).toContain("ElMessage.error(result.error || t('operationFailed'));");
   });
@@ -285,9 +334,13 @@ describe('界面这一半：Options 弹窗与 popup 卡片怎么用这个出口�
   it('确认那句必须点名两件副作用，而 storage 那一侧必须真的做这两件事', () => {
     // 措辞与 `utils/storage.ts` 的 `loadProfile` 同源：整套替换 + 打开总开关 + 先落恢复点
     const storageSrc = readFileSync('utils/storage.ts', 'utf-8');
-    const loadFn = storageSrc.slice(storageSrc.indexOf('export async function loadProfile'));
-    expect(loadFn.slice(0, 900)).toContain('enabled: true');
-    expect(loadFn.slice(0, 900)).toContain("pushConfigHistory('load-profile'");
+    // 整段取到下一个导出函数为止：按固定字数切片会在注释变长后把函数体截掉，断言静默失效
+    const loadFn = storageSrc.slice(
+      storageSrc.indexOf('export async function loadProfile'),
+      storageSrc.indexOf('export async function deleteProfile'),
+    );
+    expect(loadFn).toContain('enabled: true');
+    expect(loadFn).toContain("pushConfigHistory('load-profile'");
   });
 });
 
@@ -300,6 +353,7 @@ describe('新增文案：中英成对，且两边都说到总开关与恢复点'
   const newKeys = [
     'profilePickerTitle',
     'profilePickerRuleCount',
+    'profilePickerDamaged',
     'profilePickerManage',
     'profilePickerConfirm',
     'profilePickerApply',
@@ -312,6 +366,13 @@ describe('新增文案：中英成对，且两边都说到总开关与恢复点'
     expect(zh[key].length).toBeGreaterThan(0);
     expect(typeof en[key]).toBe('string');
     expect(en[key].length).toBeGreaterThan(0);
+  });
+
+  it.each(['profileRuleCountUnknown', 'profileDamaged'])('options.%s 两边都存在且非空', key => {
+    expect(typeof zhOptions[key]).toBe('string');
+    expect(zhOptions[key].length).toBeGreaterThan(0);
+    expect(typeof enOptions[key]).toBe('string');
+    expect(enOptions[key].length).toBeGreaterThan(0);
   });
 
   it.each([

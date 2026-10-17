@@ -36,10 +36,12 @@ export function isWebSocketRule(rule: Pick<ProxyRule, 'matchPattern' | 'targetUr
  * 另写一份判据就是让归因话与匹配结果有朝一日各说各的。
  */
 export function methodAllowed(rule: ProxyRule, method?: string): boolean {
-  if (!rule.methods || rule.methods.length === 0) return true;
+  if (rule.methods === undefined) return true;
+  if (!Array.isArray(rule.methods)) return false;
+  if (rule.methods.length === 0) return true;
   if (!method) return true;
   const upper = method.toUpperCase();
-  return rule.methods.some(m => m.toUpperCase() === upper);
+  return rule.methods.some(m => typeof m === 'string' && m.toUpperCase() === upper);
 }
 
 /**

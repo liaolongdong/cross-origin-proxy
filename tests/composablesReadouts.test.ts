@@ -29,7 +29,7 @@
  * `tests/pendingDeleteUndo.test.ts` 的同款处理）。那两句接线单独按源码契约钉住——
  * 它们没有运行时对应物，删掉 `onMounted(fetchLogs)` 时这里必须是红的。
  *
- * 承重与否是**量出来的**，不是推出来的（`.test-tmp/mutate-composables-readouts.py`）：
+ * 承重与否是**量出来的**，不是推出来的。第一轮（`.test-tmp/mutate-composables-readouts.py`）：
  * 39 个锚点各改一处 → 跑本文件 → 37 条咬住、2 条刻意存活、0 条锚点失效，跑完两个源文件
  * `git status` 干净。两条存活各有说法，别当冗余删掉判据：
  * - `L17`：`fetchDnrStats` 里 `view.hits === null || !isDnrSample(sample)` 的后半被前半**完全
@@ -42,6 +42,12 @@
  * 另一处是量出来之后回头修夹具的：`toggleProxy(false)` 对着初值 `false` 断言「本地已置位」
  * 是一句空话（改与不改都过），锚点 `P6` 当场存活暴露了它。开关方向的用例一律从 `false` 拨到
  * `true`，这一条对 `enabled` 之外的字段同样成立——断言的值必须与「这一轮什么都没发生」可区分。
+ *
+ * 第二轮量的是本批新加的这两格旗标怎么被界面用（`.test-tmp/mutate-readouts2.py`，14 个锚点跨
+ * `useRequestLog` / `useProxyStatus` / popup / 抽屉 / options 装配层）：14 条全咬住、0 条存活。
+ * 其中 `L4` 在第一轮活了下来，暴露的是 `P6` 同一类空话：`clearLogs` 那句「摘掉没读到」原先写在一份
+ * **本来就是 `false`** 的读数之后（`fetchLogs` 成功 → 直接清空），摘掉它断言照样过。现在那一格
+ * 先从失败的回包进 `true`，再让清空把它收回 `false`——方向才真的被钉住。
  *
  * 拦截器自包含、不 import 枚举；这里不是，所以消息类型一律经 `utils/types.ts` 取值。
  */
@@ -153,6 +159,7 @@ const HIT = [{ ruleId: 'r1', ruleName: 'fat→uat', hitCount: 12 }];
 beforeEach(() => {
   installLocalStorage();
   logger.error.mockReset();
+  logger.warn.mockReset();
   sendMessage.mockReset();
   openOptionsPage.mockReset();
   vi.useFakeTimers();
@@ -177,12 +184,122 @@ describe('useRequestLog — 回包形状决定界面读数', () => {
     expect(log.loading.value).toBe(false);
   });
 
-  it('SW 回了非标对象：这一轮当空，不把非标结构塞给界面', async () => {
-    respond({ [MessageType.GET_REQUEST_LOG]: { success: false }, [MessageType.CLEAR_REQUEST_LOG]: { success: true } });
+  it('SW 回了非标对象：这一轮当「没读到」——维持上一轮读数并置位，不再画成一条都没有', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: [makeLog('a')], [MessageType.CLEAR_REQUEST_LOG]: { success: true } });
     const log = useRequestLog();
     await log.fetchLogs();
-    expect(log.logs.value).toEqual([]);
+    expect(log.logsReadFailed.value).toBe(false);
+
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false } });
+    await log.fetchLogs();
+    // 非标回包与抛错是同一件事：这一轮没有答案。旧行为把它当「读到 0 条」清掉列表，
+    // 于是抽屉里出现「暂无请求记录」——用户读到的是「我的记录被清了」这句假话
+    expect(log.logs.value.map(entry => entry.id)).toEqual(['a']);
+    expect(log.logsReadFailed.value).toBe(true);
     expect(log.loading.value).toBe(false);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('非标结构里那份对象不许塞进界面：logs 仍是上一轮那份数组', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: [makeLog('a')] });
+    const log = useRequestLog();
+    await log.fetchLogs();
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false, error: 'BOOM' } });
+    await log.fetchLogs();
+    expect(log.logs.value).toEqual([makeLog('a')]);
+  });
+
+  it('告警只记形状，不记载荷：非标回包里夹着凭据也不能进日志', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false, token: 'SECRET-TOKEN-123' } });
+    const log = useRequestLog();
+    await log.fetchLogs();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const args = logger.warn.mock.calls[0] as unknown[];
+    // 整份回包可能是日志原文（URL/头/正文），把用户凭据抄进 SW 控制台是另一条泄漏路径
+    expect(JSON.stringify(args)).not.toContain('SECRET-TOKEN-123');
+    // 「只记形状」不是「什么都不记」：类型仍要留下，这一行告警才可诊断
+    expect(args[1]).toBe('object');
+  });
+
+  it('读到一次就摘掉「没读到」：这一格不许粘住', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false } });
+    const log = useRequestLog();
+    await log.fetchLogs();
+    expect(log.logsReadFailed.value).toBe(true);
+
+    respond({ [MessageType.GET_REQUEST_LOG]: [] });
+    await log.fetchLogs();
+    // 空数组是**真读数**：此后界面说的「暂无请求记录」有据可依，与上一轮的「没读到」必须分开
+    expect(log.logsReadFailed.value).toBe(false);
+    expect(log.logs.value).toEqual([]);
+  });
+
+  it('拉取抛错同样记「没读到」：两条失败路径在界面上必须是同一句话', async () => {
+    respond({
+      [MessageType.GET_REQUEST_LOG]: () => {
+        throw new Error('Extension context invalidated');
+      },
+    });
+    const log = useRequestLog();
+    await log.fetchLogs();
+    expect(log.logsReadFailed.value).toBe(true);
+  });
+
+  it('统计条那格的判据：只有读到过才算「有读数」，置真之后不再回落', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false } });
+    const log = useRequestLog();
+    // 首屏那一次往返还在路上：手里是空的，而空手不等于读到空
+    expect(log.logsEverRead.value).toBe(false);
+    await log.fetchLogs();
+    // 第一次读就失败，仍然是「从来没有过读数」——统计条据此画「—」而不是 0/0/0
+    expect(log.logsEverRead.value).toBe(false);
+
+    respond({ [MessageType.GET_REQUEST_LOG]: [] });
+    await log.fetchLogs();
+    expect(log.logsEverRead.value).toBe(true);
+
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false } });
+    await log.fetchLogs();
+    // 与 useProxyStatus 的 statusEverRead 同一族：它只回答「从来没有过读数」，此后读失败维持上一份读数
+    expect(log.logsEverRead.value).toBe(true);
+    expect(log.logsReadFailed.value).toBe(true);
+  });
+
+  it('后台确认清空才算拿到过读数；清空没成功不许替界面发通行证', async () => {
+    respond({
+      [MessageType.GET_REQUEST_LOG]: { success: false },
+      [MessageType.CLEAR_REQUEST_LOG]: { success: true },
+    });
+    const log = useRequestLog();
+    await log.fetchLogs();
+    expect(log.logsEverRead.value).toBe(false);
+    await log.clearLogs();
+    expect(log.logsEverRead.value).toBe(true);
+
+    respond({
+      [MessageType.GET_REQUEST_LOG]: { success: false },
+      [MessageType.CLEAR_REQUEST_LOG]: { success: false, error: 'QUOTA' },
+    });
+    const another = useRequestLog();
+    await another.fetchLogs();
+    await expect(another.clearLogs()).rejects.toThrow('QUOTA');
+    expect(another.logsEverRead.value).toBe(false);
+  });
+
+  it('清除成功才清空本地列表，并把「没读到」一并摘掉', async () => {
+    respond({
+      [MessageType.GET_REQUEST_LOG]: { success: false },
+      [MessageType.CLEAR_REQUEST_LOG]: { success: true },
+    });
+    const log = useRequestLog();
+    await log.fetchLogs();
+    // 先进「没读到」：清空那句断言只有从这一格出发才量得出方向
+    expect(log.logsReadFailed.value).toBe(true);
+    await log.clearLogs();
+    // 后台确认清空成功，这份「空」就是真读数，不是读不到
+    expect(log.logs.value).toEqual([]);
+    expect(log.logsReadFailed.value).toBe(false);
   });
 
   it('拉取抛错：维持上一轮的读数，但 loading 一定落回来', async () => {
@@ -450,15 +567,25 @@ describe('useRequestLog — 网络层命中数的五种状态不许塌成两句'
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
-  it('后台通道那一格：非数组当空，抛错时维持上一轮', async () => {
+  it('后台通道那一格：只有数组回包算 fresh，非数组与抛错都改口成 unavailable 并清掉上一轮', async () => {
     respond({ [MessageType.GET_SW_STATS]: HIT });
     const log = useRequestLog();
+    // 首轮还在路上：空手不等于读到空，空态据此说「统计暂不可用」
+    expect(log.swStatsState.value).toBe('pending');
     await log.fetchSwStats();
     expect(log.swStats.value).toEqual(HIT);
+    expect(log.swStatsState.value).toBe('fresh');
 
     respond({ [MessageType.GET_SW_STATS]: { success: false } });
     await log.fetchSwStats();
+    // 非标回包不是「读到 0 条」：列表清空是为了不让旧计数冒充现状，状态同时改口
     expect(log.swStats.value).toEqual([]);
+    expect(log.swStatsState.value).toBe('unavailable');
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+
+    respond({ [MessageType.GET_SW_STATS]: HIT });
+    await log.fetchSwStats();
+    expect(log.swStatsState.value).toBe('fresh');
 
     respond({
       [MessageType.GET_SW_STATS]: () => {
@@ -467,6 +594,7 @@ describe('useRequestLog — 网络层命中数的五种状态不许塌成两句'
     });
     await log.fetchSwStats();
     expect(log.swStats.value).toEqual([]);
+    expect(log.swStatsState.value).toBe('unavailable');
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 });
@@ -554,6 +682,47 @@ describe('useProxyStatus — 读不出来的那一轮，界面维持上一次的
     expect(status.swRequestCount.value).toBe(7);
     expect(status.loading.value).toBe(false);
     expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * 首屏那三个数（开关位置、活跃规则、经扩展请求）在第一次读取回话之前全是初值，
+   * 而初值画出来是一句「已关闭 · 0 · 0」的结论。`statusEverRead` 是界面唯一能分清
+   * 「从来没有过读数」与「读到过、这一轮没读到」的那一格：前者画 `—`／「未知」，
+   * 后者维持上一份采纳过的读数（那是最近一次的事实）。
+   */
+  it('从没读到过与读到过是两件事：初值 false，成功一轮才推开', async () => {
+    respond({ [MessageType.GET_PROXY_STATUS]: makeStatus() });
+    const status = useProxyStatus();
+    expect(status.statusEverRead.value).toBe(false);
+    await status.fetchStatus();
+    expect(status.statusEverRead.value).toBe(true);
+  });
+
+  it('三条「这一轮没答案」的路径都不许推开它：首屏失败时那一屏仍然只能画 —', async () => {
+    const noAnswer: unknown[] = [
+      { success: false },
+      undefined,
+      () => {
+        throw new Error('context invalidated');
+      },
+    ];
+    for (const raw of noAnswer) {
+      respond({ [MessageType.GET_PROXY_STATUS]: raw });
+      const status = useProxyStatus();
+      await status.fetchStatus();
+      expect(status.statusEverRead.value).toBe(false);
+      expect(status.loading.value).toBe(false);
+    }
+  });
+
+  it('读到过之后失败不再回落：那份读数仍是这一屏该说的话', async () => {
+    respond({ [MessageType.GET_PROXY_STATUS]: makeStatus() });
+    const status = useProxyStatus();
+    await status.fetchStatus();
+    respond({ [MessageType.GET_PROXY_STATUS]: { success: false } });
+    await status.fetchStatus();
+    expect(status.statusEverRead.value).toBe(true);
+    expect(status.activeRuleCount.value).toBe(3);
   });
 });
 
@@ -680,5 +849,98 @@ describe('两个 composable 与 Vue 生命周期的接线（本环境测不到�
 
   it('状态：挂载即拉一次', () => {
     expect(statusSrc).toContain('onMounted(fetchStatus)');
+  });
+});
+
+/**
+ * 「没读到」这一格怎么被界面用（组件层没有 DOM，只能按源码契约钉）
+ *
+ * 两个 composable 交出来的旗标若在消费端没人读，就什么也没修好：首屏照旧把初值画成结论，
+ * 日志照旧把非标回包念成「暂无请求记录」。这几条按源码钉住消费点，同时钉住「同一件事在
+ * 这一屏说的是同一句话」——`—` 与 `statusUnknown` 是本仓既有的口径（`dnrTabHitsText`、
+ * 自动关闭档位条），新读出的那几处不许各造一套说法。
+ */
+describe('几个读数旗标怎么被界面用（本环境测不到的那半）', () => {
+  const popupSrc = readFileSync('entrypoints/popup/App.vue', 'utf-8');
+  const drawerSrc = readFileSync('components/options/LogDrawer.vue', 'utf-8');
+  const optionsSrc = readFileSync('components/options/App.vue', 'utf-8');
+  const headerSrc = readFileSync('components/options/HeaderBar.vue', 'utf-8');
+
+  it('弹窗：开关位置与规则数在没有读数时改口，不再画「已关闭 / 0 / 还没有规则」', () => {
+    expect(popupSrc).toContain(
+      "{{ statusEverRead ? (enabled ? t('statusEnabled') : t('statusDisabled')) : t('statusUnknown') }}",
+    );
+    expect(popupSrc).toContain("{{ statusEverRead ? rules.length : '—' }}");
+    expect(popupSrc).toContain("{{ statusEverRead ? t('noRulesInPopup') : t('statusUnknown') }}");
+    expect(popupSrc).toContain("{{ statusEverRead ? t('noRecentRequests') : t('statusUnknown') }}");
+    // 「代理未开启，规则未生效」那句是结论：没有读数时整句不出现（不是换个说法）
+    expect(popupSrc).toContain('v-if="!enabled && statusEverRead"');
+  });
+
+  it('弹窗：那两个数字各有一个只认「读到过」的出口，模板里没有裸读 `activeRuleCount`', () => {
+    expect(popupSrc).toContain(
+      "const activeRulesText = computed(() => (statusEverRead.value ? String(activeRuleCount.value) : '—'));",
+    );
+    expect(popupSrc).toContain(
+      "const swRequestsText = computed(() => (statusEverRead.value ? String(swRequestCount.value) : '—'));",
+    );
+    // 渲染的是这两个 computed；`{{ activeRuleCount }}` 若被改回去，`—` 那一档当场消失
+    expect(popupSrc).toContain('{{ activeRulesText }}');
+    expect(popupSrc).toContain('{{ swRequestsText }}');
+    expect(popupSrc).not.toMatch(/\{\{\s*activeRuleCount\s*\}\}/);
+    expect(popupSrc).not.toMatch(/\{\{\s*swRequestCount\s*\}\}/);
+  });
+
+  it('日志抽屉：空表三档分说，那一句只在手里有行时出现（同一句不许出现两遍）', () => {
+    expect(drawerSrc).toContain('logsReadFailed: boolean;');
+    // 空表：这一轮没读到 / 从来没读到过（首屏还在路上）/ 确实读到空，三件事实三句话。
+    // 合并前两档就是把「还不知道」交成「确实没有」——正是本文件开头要消灭的那类谎报。
+    expect(drawerSrc).toContain('{{ logsEmptyText }}');
+    expect(drawerSrc).toContain("if (props.logsReadFailed) return t('logsReadFailed');");
+    expect(drawerSrc).toContain("if (!props.logsEverRead) return t('statusUnknown');");
+    expect(drawerSrc).toContain("return t('noLogs');");
+    // 手里有行时那一行必须同时说出「没读到」和「下面是上一次的记录」——只说前者，读者仍会拿旧账当现状；
+    // 而空表时它必须整个不出现，否则与空态那句重复（2026-10-17 真 Chrome 实测到的正是这个重复）
+    expect(drawerSrc).toMatch(
+      /props\.logsReadFailed && props\.logs\.length > 0 \? `\$\{t\('logsReadFailed'\)\} · \$\{t\('logsReadStale'\)\}` : ''/,
+    );
+    expect(drawerSrc).not.toMatch(/: t\('logsReadFailed'\);\s*\}/);
+    expect(drawerSrc).toContain('v-if="logsReadFailedText"');
+    expect(optionsSrc).toContain(':logs-read-failed="logsReadFailed"');
+  });
+
+  it('日志抽屉 SW 统计：没有读数时说「统计暂不可用」，只有 fresh 才说得上「暂无命中」', () => {
+    expect(drawerSrc).toContain('swStatsState: SwStatsState;');
+    expect(drawerSrc).toMatch(/props\.swStatsState === 'fresh' \? t\('swStatsEmpty'\) : t\('statsUnavailable'\)/);
+    // 模板渲染的是 computed；改回裸读 swStatsEmpty 就是把「读不到」重新念成「没有」
+    expect(drawerSrc).toContain('{{ swStatsEmptyText }}');
+    expect(drawerSrc).not.toContain("{{ t('swStatsEmpty') }}");
+    expect(optionsSrc).toContain(':sw-stats-state="swStatsState"');
+    expect(optionsSrc).toContain('swStatsState,');
+  });
+
+  it('顶栏：没有读到过配置时画「未知」与中性点，不画红色「已禁用」', () => {
+    expect(headerSrc).toContain('statusKnown: boolean;');
+    expect(headerSrc).toContain("'is-unknown': !statusKnown");
+    expect(headerSrc).toContain(
+      "!statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled')",
+    );
+    // 未知态必须有自己那条规则：只改文案、点仍是 `--el-color-danger`，等于仍在说「关着」
+    expect(headerSrc).toContain('.status-dot.is-unknown');
+    expect(optionsSrc).toContain(':status-known="configEverRead"');
+  });
+
+  it('日志抽屉统计条：没有有据读数时三格整体画「—」，不许交成 0/0/0', () => {
+    expect(drawerSrc).toContain('logsEverRead: boolean;');
+    // 判据只有一处，两格各管一头：「从来没读过」（首屏那一次往返还在路上）与「这一轮没读到而手里一行都没有」；
+    // 手里有行时照常数——那几个数描述的就是屏幕上这几行，上面那句「上一次读到的记录」已点破它是旧账
+    expect(drawerSrc).toMatch(/props\.logsEverRead && !\(props\.logsReadFailed && props\.logs\.length === 0\)/);
+    expect(drawerSrc).toContain("{ total: '—', success: '—', error: '—' }");
+    // 模板渲染的是 displayStats；改回 logStats 就是绕过判据把未知交成结论
+    expect(drawerSrc).toContain('{{ displayStats.total }}');
+    expect(drawerSrc).toContain('{{ displayStats.success }}');
+    expect(drawerSrc).toContain('{{ displayStats.error }}');
+    expect(drawerSrc).not.toMatch(/\{\{\s*logStats\.\w+\s*\}\}/);
+    expect(optionsSrc).toContain(':logs-ever-read="logsEverRead"');
   });
 });

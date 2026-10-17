@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { isSimpleRule } from '@/utils/urlMatcher';
 import {
   buildRegexFilter,
@@ -168,10 +169,20 @@ describe('B2: DNR 替换引用越界校验', () => {
 
 describe('B6: 代理超时上限公式', () => {
   // 与 entrypoints/main-interceptor.content.ts 的 computeProxyTimeout 保持一致
-  // （MAIN world 脚本自包含无法导入，此处复制公式以固化契约）
+  // （MAIN world 脚本自包含无法导入）。这份抄本不再「只测自己」：
+  // 最后那条把生产里的三行按源码钉住，改了一边忘了另一边会当场红——
+  // 否则「抄本说 35s、生产给 0s」这种分裂正好落在超时误杀回退原生那条最贵的路径上。
+  const CEILING = 400_000;
+
+  function proxyTiming(value: number | undefined, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+  }
+
   function computeProxyTimeout(rule: Partial<ProxyRule>): number {
-    const retries = rule.retryCount ?? 0;
-    return (rule.delayMs || 0) + 30000 * (retries + 1) + (rule.retryDelay ?? 1000) * retries + 5000;
+    const retries = proxyTiming(rule.retryCount, 0);
+    const retryDelay = proxyTiming(rule.retryDelay, 1000);
+    const total = proxyTiming(rule.delayMs, 0) + 30000 * (retries + 1) + retryDelay * retries + 5000;
+    return Math.min(total, CEILING);
   }
 
   it('无延迟无重试：单尝试 30s + 5s 桥接余量', () => {
@@ -189,6 +200,33 @@ describe('B6: 代理超时上限公式', () => {
 
   it('延迟 + 重试叠加', () => {
     expect(computeProxyTimeout({ delayMs: 5000, retryCount: 1, retryDelay: 2000 })).toBe(5000 + 60000 + 2000 + 5000);
+  });
+
+  it('显式 0 仍是 0（retryDelay: 0 是「立即重试」的合法配置，不许被当缺省抬成 1s）', () => {
+    expect(computeProxyTimeout({ retryCount: 1, retryDelay: 0 })).toBe(65000);
+  });
+
+  it('手改进 storage 的负延迟不得算出负超时', () => {
+    // 负值原样进公式 → `setTimeout` 按 0 处理 → 每一笔代发出发的同一刻「超时」，页面回退原生再发一次
+    expect(computeProxyTimeout({ delayMs: -1e9 })).toBe(35000);
+    expect(computeProxyTimeout({ retryCount: -3 })).toBe(35000);
+    expect(computeProxyTimeout({ delayMs: Number.NaN })).toBe(35000);
+  });
+
+  it('超大重试次数钳在上界内（越界值经 32 位截断会绕回小数，表现同样是秒级误杀）', () => {
+    expect(computeProxyTimeout({ retryCount: 1e9, retryDelay: 30000 })).toBe(CEILING);
+  });
+
+  it('抄本与生产同源', () => {
+    const src = readFileSync('entrypoints/main-interceptor.content.ts', 'utf-8');
+    expect(src).toContain('const PROXY_TIMEOUT_CEILING_MS = 400_000;');
+    expect(src).toContain(
+      "return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;",
+    );
+    expect(src).toContain(
+      'const total = proxyTiming(rule.delayMs, 0) + 30000 * (retries + 1) + retryDelay * retries + 5000;',
+    );
+    expect(src).toContain('return Math.min(total, PROXY_TIMEOUT_CEILING_MS);');
   });
 });
 
