@@ -233,6 +233,47 @@ describe('useRequestLog — 回包形状决定界面读数', () => {
     expect(log.logsReadFailed.value).toBe(true);
   });
 
+  it('统计条那格的判据：只有读到过才算「有读数」，置真之后不再回落', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false } });
+    const log = useRequestLog();
+    // 首屏那一次往返还在路上：手里是空的，而空手不等于读到空
+    expect(log.logsEverRead.value).toBe(false);
+    await log.fetchLogs();
+    // 第一次读就失败，仍然是「从来没有过读数」——统计条据此画「—」而不是 0/0/0
+    expect(log.logsEverRead.value).toBe(false);
+
+    respond({ [MessageType.GET_REQUEST_LOG]: [] });
+    await log.fetchLogs();
+    expect(log.logsEverRead.value).toBe(true);
+
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false } });
+    await log.fetchLogs();
+    // 与 useProxyStatus 的 statusEverRead 同一族：它只回答「从来没有过读数」，此后读失败维持上一份读数
+    expect(log.logsEverRead.value).toBe(true);
+    expect(log.logsReadFailed.value).toBe(true);
+  });
+
+  it('后台确认清空才算拿到过读数；清空没成功不许替界面发通行证', async () => {
+    respond({
+      [MessageType.GET_REQUEST_LOG]: { success: false },
+      [MessageType.CLEAR_REQUEST_LOG]: { success: true },
+    });
+    const log = useRequestLog();
+    await log.fetchLogs();
+    expect(log.logsEverRead.value).toBe(false);
+    await log.clearLogs();
+    expect(log.logsEverRead.value).toBe(true);
+
+    respond({
+      [MessageType.GET_REQUEST_LOG]: { success: false },
+      [MessageType.CLEAR_REQUEST_LOG]: { success: false, error: 'QUOTA' },
+    });
+    const another = useRequestLog();
+    await another.fetchLogs();
+    await expect(another.clearLogs()).rejects.toThrow('QUOTA');
+    expect(another.logsEverRead.value).toBe(false);
+  });
+
   it('清除成功才清空本地列表，并把「没读到」一并摘掉', async () => {
     respond({
       [MessageType.GET_REQUEST_LOG]: { success: false },
@@ -836,5 +877,19 @@ describe('两个旗标怎么被界面用（本环境测不到的那半）', () =
     expect(drawerSrc).not.toMatch(/: t\('logsReadFailed'\);\s*\}/);
     expect(drawerSrc).toContain('v-if="logsReadFailedText"');
     expect(optionsSrc).toContain(':logs-read-failed="logsReadFailed"');
+  });
+
+  it('日志抽屉统计条：没有有据读数时三格整体画「—」，不许交成 0/0/0', () => {
+    expect(drawerSrc).toContain('logsEverRead: boolean;');
+    // 判据只有一处，两格各管一头：「从来没读过」（首屏那一次往返还在路上）与「这一轮没读到而手里一行都没有」；
+    // 手里有行时照常数——那几个数描述的就是屏幕上这几行，上面那句「上一次读到的记录」已点破它是旧账
+    expect(drawerSrc).toMatch(/props\.logsEverRead && !\(props\.logsReadFailed && props\.logs\.length === 0\)/);
+    expect(drawerSrc).toContain("{ total: '—', success: '—', error: '—' }");
+    // 模板渲染的是 displayStats；改回 logStats 就是绕过判据把未知交成结论
+    expect(drawerSrc).toContain('{{ displayStats.total }}');
+    expect(drawerSrc).toContain('{{ displayStats.success }}');
+    expect(drawerSrc).toContain('{{ displayStats.error }}');
+    expect(drawerSrc).not.toMatch(/\{\{\s*logStats\.\w+\s*\}\}/);
+    expect(optionsSrc).toContain(':logs-ever-read="logsEverRead"');
   });
 });

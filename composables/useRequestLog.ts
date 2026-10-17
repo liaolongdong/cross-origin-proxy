@@ -62,6 +62,14 @@ export function useRequestLog() {
    * 抛错则连信封都没有）。这两条路径在这里现在走同一条：维持上一轮读数 + 置位这一格。
    */
   const logsReadFailed = ref(false);
+  /**
+   * 这一次打开抽屉里，有没有拿到过一份**有据**的日志读数
+   *
+   * 与 `useProxyStatus` 的 `statusEverRead` 同一件事：置真之后不再回落，所以它只回答
+   * 「从来没有过读数」这一件事。首屏那一次往返还在路上时手里是空的，而空手不等于读到空——
+   * 统计条据此在「一句都没读过」与「确实一条都没有」之间分开说话（`—` 与 `0`）。
+   */
+  const logsEverRead = ref(false);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   function stopTimer() {
@@ -91,6 +99,7 @@ export function useRequestLog() {
       }
       logs.value = result;
       logsReadFailed.value = false;
+      logsEverRead.value = true;
     } catch (error) {
       logsReadFailed.value = true;
       logger.error('Failed to fetch logs:', error);
@@ -107,8 +116,9 @@ export function useRequestLog() {
       throw new Error(resp?.error || 'CLEAR_LOGS_FAILED');
     }
     logs.value = [];
-    // 清空是后台确认过的读数，「没读到」那句话到此为止
+    // 清空是后台确认过的读数，「没读到」那句话到此为止；这份「空」也是有据的，统计条据此照常画数
     logsReadFailed.value = false;
+    logsEverRead.value = true;
   }
 
   /** 切换自动刷新；启用时会按当前 refreshInterval 启动定时器，关闭时清理 */
@@ -194,6 +204,7 @@ export function useRequestLog() {
     dnrStatsState,
     swStats,
     logsReadFailed,
+    logsEverRead,
     fetchLogs,
     clearLogs,
     toggleAutoRefresh,

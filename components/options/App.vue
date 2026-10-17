@@ -112,6 +112,7 @@
       :logs="logs"
       :loading="logLoading"
       :logs-read-failed="logsReadFailed"
+      :logs-ever-read="logsEverRead"
       :auto-refresh="autoRefresh"
       :dnr-stats="dnrStats"
       :dnr-stats-state="dnrStatsState"
@@ -216,6 +217,7 @@ const {
   dnrStatsState,
   swStats,
   logsReadFailed,
+  logsEverRead,
   fetchLogs,
   clearLogs,
   toggleAutoRefresh,
