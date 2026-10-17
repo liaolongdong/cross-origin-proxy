@@ -1,0 +1,14 @@
+# 云端安全扫描的上传范围。语法与 .gitignore 相同。
+#
+# 这里的每一条都是「体积大或与源码安全评审无关」的本地产物：全仓 2.0G 里
+# .test-tmp/（1.3G，Chrome for Testing）、两份 git 备份（178M × 2）与
+# node_modules/（268M）占了近九成。把它们打进上传包会让任务在云端被取消，
+# 既不产出任何 findings，也照样消耗一次提交。
+.test-tmp/
+.git-backup/
+*.bundle
+node_modules/
+.output/
+.wxt/
+store-assets/
+marketing/

@@ -279,8 +279,9 @@
 
 ### 仓库体积
 
-- `.test-tmp/`（含下载的 Chrome for Testing，约 558MB）只能留在磁盘、绝不能入库；已进 `.gitignore`，历史已于 2026-09 用 `filter-branch` 清除（`.git` 195MB → 2.2MB）。
+- `.test-tmp/`（含下载的 Chrome for Testing，探针跑过几轮后已长到约 1.3GB）只能留在磁盘、绝不能入库；已进 `.gitignore`，历史已于 2026-09 用 `filter-branch` 清除（`.git` 195MB → 2.2MB）。
 - GitHub 单文件硬上限 100MB；任何二进制、抓包产物、浏览器下载件都不得提交，新增图片前先确认体积与必要性。
+- 全仓体积还有一条**非 git 的下游影响**：整仓云端安全扫描会把工作区打进上传包，本仓 2.0GB 里约 1.9GB 是 `.test-tmp/`、两份 git 备份与 `node_modules/`，上传包因此被云端判死，任务落在 `canceled` 而不产出任何结果（2026-10-17 连着两次如此，加了 `.qodersecignore` 之后第三次才进入排队）。`.qodersecignore` 用 `.gitignore` 语法收口这些本地产物，将来新增大体积可再生目录（截图原片、抓包产物）时回来补一行。
 
 ### WXT 构建
 
