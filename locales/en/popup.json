@@ -39,6 +39,7 @@
   "apiPickerBoundary": "Lists only origins this page already requested, read from its own timing records — not listed is not proof it made no such call",
   "profilePickerTitle": "Saved environments — pick one to switch:",
   "profilePickerRuleCount": "$1 rules",
+  "profilePickerDamaged": "Snapshot damaged",
   "profilePickerManage": "Manage snapshots",
   "profilePickerConfirm": "Switching to \"$1\" ($2 rules) replaces the whole rule set and turns the proxy switch on. Your current config is saved first as a restore point.",
   "profilePickerApply": "Switch",

@@ -121,6 +121,35 @@ describe('configReadFailed — 三种失败形状都只置旗标，不清空列�
   });
 });
 
+describe('configEverRead — 只回答「从来没有过读数」', () => {
+  it('首轮失败仍是 false；读到一份空表也算读到过', async () => {
+    stubResponses([undefined, okConfig([])]);
+    const mgmt = useRuleManagement();
+    expect(mgmt.configEverRead.value).toBe(false);
+
+    await mgmt.fetchConfig();
+    expect(mgmt.configReadFailed.value).toBe(true);
+    // 「没读到」与「读到空」在这一格上必须分开：顶栏画「未知」只在真的没有读数时成立
+    expect(mgmt.configEverRead.value).toBe(false);
+
+    await mgmt.fetchConfig();
+    expect(mgmt.configEverRead.value).toBe(true);
+  });
+
+  it('成功读过之后再失败不回落：界面上留着最近一次的事实', async () => {
+    stubResponses([okConfig(['a']), new Error('SW recycling')]);
+    const mgmt = useRuleManagement();
+    await mgmt.fetchConfig();
+    expect(mgmt.configEverRead.value).toBe(true);
+    expect(mgmt.enabled.value).toBe(true);
+
+    await mgmt.fetchConfig();
+    expect(mgmt.configReadFailed.value).toBe(true);
+    expect(mgmt.configEverRead.value).toBe(true);
+    expect(mgmt.enabled.value).toBe(true);
+  });
+});
+
 describe('读取失败面板排在空态引导之前（源码契约）', () => {
   // 与仓内其他源码契约同一读法（`tests/full-verification.test.ts` 用 `fs.readFileSync` 相对路径）：
   // 本环境无 DOM，`.vue` 只能按文本核对，不能 import。

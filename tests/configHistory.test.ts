@@ -217,7 +217,8 @@ describe('加载快照前先复核那一份规则集 — profiles 同样是 stor
    */
   function expectLoggedReason(code: string): void {
     const logged = warnSpy.mock.calls.map(call => call.join(' ')).join('\n');
-    expect(logged).toContain(`Load profile skipped: ${code} (profile: p1)`);
+    // 条数与首个非法下标跟在原因码后面：手改过的 storage 里那份快照要定位得到
+    expect(logged).toContain(`Load profile skipped: ${code} (profile: p1, rules:`);
   }
 
   it('rules 不是数组：拒绝加载、配置与总开关原样不动、也不落恢复点', async () => {
@@ -238,6 +239,8 @@ describe('加载快照前先复核那一份规则集 — profiles 同样是 stor
 
     await expect(loadProfile('p1')).resolves.toEqual({ success: false });
     expectLoggedReason('invalid-rules');
+    // 日志点名第一个非法条目，别让人对着整包规则一条条猜
+    expect(warnSpy.mock.calls.map(call => call.join(' ')).join('\n')).toContain('firstInvalid: 1');
     expect((await getProxyConfig()).rules.map(r => r.id)).toEqual(['old']);
   });
 

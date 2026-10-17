@@ -17,6 +17,14 @@ export const REFRESH_INTERVAL_PRESETS: readonly { value: number; label: string }
 /** 默认刷新频率（5s，平衡实时性与 SW 压力） */
 const DEFAULT_REFRESH_INTERVAL = 5000;
 
+/**
+ * SW 通道命中列表最近一次的读数状态
+ *
+ * `fresh` 才是「确实没有命中」；`pending`（首轮还在路上）与 `unavailable`（回包非数组或抛错）
+ * 都只是「没有读数」。空列表的措辞据此分两句话说，与 DNR 采样那一格同一口径。
+ */
+export type SwStatsState = 'pending' | 'fresh' | 'unavailable';
+
 /** 持久化键：跨会话记住用户选择的刷新频率（`cop_` 前缀与 i18n 的 `cop_locale` 镜像键同族） */
 const REFRESH_INTERVAL_STORAGE_KEY = 'cop_log_refresh_interval';
 
@@ -54,6 +62,14 @@ export function useRequestLog() {
   /** 最近一次采样的可渲染状态：日志抽屉据此把「零命中」与「没有读数」分开说 */
   const dnrStatsState = ref<DnrSampleState>('pending');
   const swStats = ref<DnrHitStat[]>([]);
+  /**
+   * SW 通道命中列表的读数状态
+   *
+   * 这一格此前和日志表的旧实现犯同一个错：读失败时 `swStats` 停在空数组，抽屉于是把
+   * 「没读到」念成「暂无 SW 通道命中记录」——一句有把握的结论。失败时清空列表并置
+   * `unavailable`，让空态改口说「统计暂不可用」；`fresh` 只由一份数组回包置位。
+   */
+  const swStatsState = ref<SwStatsState>('pending');
   /**
    * 最近一次日志读取**没拿到答案**
    *
@@ -94,7 +110,9 @@ export function useRequestLog() {
       // 这一轮没有答案，于是维持上一轮的读数并置位，而不是把「没读到」交成「一条都没有」
       if (!Array.isArray(result)) {
         logsReadFailed.value = true;
-        logger.warn('Failed to fetch logs: unexpected response shape', result);
+        // 只记形状，不记载荷：非标回包可能带着日志原文（URL、头、正文），而那里面正是
+        // `{{变量}}` 展开后的位置。`logger` 的输出会进 SW 控制台，凭据不该为一条告警再走一遍。
+        logger.warn('Failed to fetch logs: unexpected response shape', result === null ? 'null' : typeof result);
         return;
       }
       logs.value = result;
@@ -181,11 +199,22 @@ export function useRequestLog() {
 
   async function fetchSwStats() {
     try {
-      const result: DnrHitStat[] = await chrome.runtime.sendMessage({
+      const result: unknown = await chrome.runtime.sendMessage({
         type: MessageType.GET_SW_STATS,
       });
-      swStats.value = Array.isArray(result) ? result : [];
+      // 非数组回包与抛错是同一件事：这一轮没有答案。清掉上一轮列表，空态据此说「读不到」
+      // 而不是拿一份可能已经过期的计数冒充现状（SW 回收后那份内存 Map 本来就归零了）。
+      if (!Array.isArray(result)) {
+        swStats.value = [];
+        swStatsState.value = 'unavailable';
+        logger.warn('Failed to fetch SW stats: unexpected response shape', result);
+        return;
+      }
+      swStats.value = result as DnrHitStat[];
+      swStatsState.value = 'fresh';
     } catch (error) {
+      swStats.value = [];
+      swStatsState.value = 'unavailable';
       logger.error('Failed to fetch SW stats:', error);
     }
   }
@@ -203,6 +232,7 @@ export function useRequestLog() {
     dnrStatsStale,
     dnrStatsState,
     swStats,
+    swStatsState,
     logsReadFailed,
     logsEverRead,
     fetchLogs,

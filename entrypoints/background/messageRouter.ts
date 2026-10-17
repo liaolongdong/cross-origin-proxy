@@ -40,6 +40,7 @@ import { logsToHar, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
+import { inspectProfileRules, isStoredProfileEntry } from '@/utils/profileValidation';
 import { planImport } from '@/utils/importPlan';
 import { generateId } from '@/utils/generateId';
 import { logger } from '@/utils/logger';
@@ -282,13 +283,8 @@ export function setupMessageRouter(): void {
 
     switch (message.type) {
       case MessageType.PROXY_REQUEST: {
-        // 载荷判据排在**计数与解引用之前**，两件事一起收：
-        // 1. `countProxyRequestForTab` 是拦截器自报计数的交叉校验基线，而它只涨不回。同页脚本
-        //    循环发 `{ requestId: 'x' }`（`CANCEL_REQUEST` 有这道校验，这一格此前没有）就能把
-        //    本 frame 的基线抬到真实自报数永远追不上，`interceptorStats` 从此整包丢弃这一页的
-        //    诚实读数——弹窗那一行冻结在旧值，且现场看不出是被污染的。
-        // 2. 原来那句 `message.data.requestId` 在 `data` 缺失时当场抛 TypeError，抛在监听器里
-        //    （不走 `respondAsync` 的接手人），页面那一侧的通道就此无人应答。
+        // 载荷判据排在解引用之前：缺 `data` 的消息会让 `message.data.requestId` 在监听器里
+        // 当场抛 TypeError（不走 `respondAsync` 的接手人），页面那一侧的通道就此无人应答。
         // 拒绝时回的是「Proxy Bypass」那一份信封，与「没命中规则」同一个结局：页面回退原生请求。
         const payload = message.data as { requestId?: unknown } | undefined;
         if (!payload || typeof payload.requestId !== 'string' || !payload.requestId) {
@@ -302,12 +298,18 @@ export function setupMessageRouter(): void {
           });
           return false;
         }
-        // 顺手累加这个 frame 的代发数，作为拦截器自报计数的交叉校验基准（`sender.tab` 与
-        // `sender.frameId` 都由 Chrome 写入，页面伪造不了；四个自报数字本身可以，见 `interceptorStats`）
-        countProxyRequestForTab(sender.tab?.id, sender.frameId);
+        // 代发数作为拦截器自报计数的交叉校验基线（`sender.tab` 与 `sender.frameId` 都由 Chrome
+        // 写入，页面伪造不了；四个自报数字本身可以，见 `interceptorStats`）。
+        // 计数**不在收到消息时**做，而是由 `handleProxyRequest` 在总开关开启且规则真的命中之后
+        // 回调一次：同页脚本循环发「形状合法但根本没命中任何规则」的消息，否则同样能把这个只涨
+        // 不回的数抬到诚实自报追不上的高度，`interceptorStats` 从此整包丢弃这一页的读数。
+        // 残余边界：伪造一条**确实命中**的 URL 仍会记一笔——那一笔在 SW 侧与真实代发无法区分，
+        // 而它至少被压到「每伪造一次要付一次规则匹配」，不再是无成本地空转。
         return respondAsync(
           sendResponse,
-          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId)),
+          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId), () =>
+            countProxyRequestForTab(sender.tab?.id, sender.frameId),
+          ),
         );
       }
 
@@ -571,15 +573,20 @@ export function setupMessageRouter(): void {
       case MessageType.GET_PROFILES:
         return respondAsync(sendResponse, getProfiles());
 
-      case MessageType.SAVE_PROFILE:
-        if (!message.data || typeof message.data !== 'object') {
+      case MessageType.SAVE_PROFILE: {
+        // 消息体同属不可信输入：形状不全的快照落库之后，列表渲染会在 `rules.length` 上抛、
+        // 加载那一步又会拒绝，用户只剩「删掉它」一条路。闸门放在写入之前。
+        const candidate = message.data;
+        const inspection = isStoredProfileEntry(candidate) ? inspectProfileRules(candidate) : undefined;
+        if (!inspection?.rules) {
           sendResponse({ success: false, error: 'Invalid profile' });
           return false;
         }
         return respondAsync(
           sendResponse,
-          saveProfile(message.data).then(() => ({ success: true })),
+          saveProfile({ ...candidate, rules: inspection.rules }).then(() => ({ success: true })),
         );
+      }
 
       case MessageType.LOAD_PROFILE:
         if (!message.data || typeof message.data.profileId !== 'string') {

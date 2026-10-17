@@ -3,6 +3,7 @@ import type {
   ProxyRule,
   RequestLogEntry,
   EnvironmentProfile,
+  StoredProfile,
   ImportMode,
   VariableStore,
   ConfigHistoryEntry,
@@ -24,6 +25,7 @@ import { truncateForLog } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
+import { inspectProfileRules, isStoredProfileEntry } from '@/utils/profileValidation';
 import { sanitizeVariables } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 
@@ -722,11 +724,18 @@ async function doClearLogs(): Promise<void> {
  *
  * 非数组当空，与 {@link getRequestLogs} 同档：这个键不是数组时 `findIndex` / `filter` 当场抛，
  * 而三条写入路径抛出来的错误信封长得和「profile 不存在」一模一样，看不出是存储被改坏了。
+ * 数组里的条目同样逐条过闸：`null` 或字符串元素会让 `findIndex(p => p.id)` 抛，而它们既渲染
+ * 不了也删不掉。`rules` 坏掉的条目**保留**——它寻址得到、用户删得掉，加载那一步另行拒绝。
  */
-export async function getProfiles(): Promise<EnvironmentProfile[]> {
+export async function getProfiles(): Promise<StoredProfile[]> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.PROFILES);
   const stored = result[STORAGE_KEYS.PROFILES];
-  return Array.isArray(stored) ? (stored as EnvironmentProfile[]) : [];
+  if (!Array.isArray(stored)) return [];
+  const entries = stored.filter(isStoredProfileEntry);
+  if (entries.length !== stored.length) {
+    logger.warn(`Dropped ${stored.length - entries.length} unaddressable profile entries`);
+  }
+  return entries;
 }
 
 /**
@@ -746,29 +755,11 @@ export async function saveProfile(profile: EnvironmentProfile): Promise<void> {
 }
 
 /**
- * 加载快照前的一道复核：`profiles` 与 `proxy_config` 一样是 storage 里的原文，手改或被截断的
- * 旧数据能让 `rules` 不再是数组、让里面的条目缺 `matchPattern`。而加载快照是**整套替换 +
- * 顺手打开总开关**——那份坏数据会当场成为生效配置，症状与「代理坏了」完全一致（非数组的规则
- * 被 `configRules()` 当空，于是开关开着、一条规则没有、每个请求静默走原生）。
- *
- * 判据与导入、恢复点同一份（`isValidRuleShape`），条数上限同 `MAX_RULES`：回退路径早就拒绝
- * 超限快照，这里曾是唯一一条「把 storage 内容原样写进生效配置」而不复核的路。
- * 只**拒绝**不修补：这是用户点下去的一次整套替换，悄悄丢掉几条等于替他说「加载好了」。
- *
- * 返回的是**只进日志的原因码**，不是文案——回包里的 `error` 会被两处界面原样 `ElMessage.error` 出来，
- * 所以这里造的新串就是未经 i18n 的可见文案。用户只需要知道「这次替换没发生」，界面因此回落到
- * 各自本地的通用失败文案；坏在哪一条由这条日志说，`profileId` 一并写进去，便于对着快照名单定位。
- */
-function profileRulesCode(profile: EnvironmentProfile): 'invalid-rules' | 'too-many-rules' | undefined {
-  const rules = profile.rules;
-  if (!Array.isArray(rules) || !rules.every(isValidRuleShape)) return 'invalid-rules';
-  return rules.length > MAX_RULES ? 'too-many-rules' : undefined;
-}
-
-/**
  * 加载环境配置：将指定 profile 的规则集替换当前配置
  *
  * 与替换式导入同属成套替换，落一份恢复点。「加载快照必然打开总开关」是既有语义，本轮不动。
+ * 复核判据在 `utils/profileValidation.ts`：坏 `rules` 只拒绝、不修补——把字符串当空数组传下去，
+ * 等于替用户点了一次「清空规则并打开代理」。
  */
 export async function loadProfile(profileId: string): Promise<{ success: boolean; error?: string }> {
   return withStorageLock(async () => {
@@ -777,14 +768,20 @@ export async function loadProfile(profileId: string): Promise<{ success: boolean
     if (!profile) {
       return { success: false, error: 'Profile not found' };
     }
-    const rulesCode = profileRulesCode(profile);
-    if (rulesCode) {
-      logger.warn(`Load profile skipped: ${rulesCode} (profile: ${profileId})`);
+    const inspection = inspectProfileRules(profile);
+    if (inspection.code || !inspection.rules) {
+      // 原因码只进日志：回包里的 `error` 会被界面原样 `ElMessage.error` 出来，未经 i18n 的串
+      // 就是可见文案。条数与首个非法下标让手改过的 storage 在日志里定位得到。
+      logger.warn(
+        `Load profile skipped: ${inspection.code ?? 'invalid-rules'} (profile: ${profileId}, rules: ${
+          inspection.ruleCount ?? 'non-array'
+        }, firstInvalid: ${inspection.firstInvalidIndex})`,
+      );
       return { success: false };
     }
     // 快照要在写之前拿到引用：写完再读回来拿到的就是 profile 那一份了
     const previous = await getProxyConfig();
-    await saveProxyConfig({ enabled: true, rules: profile.rules });
+    await saveProxyConfig({ enabled: true, rules: inspection.rules });
     await pushConfigHistory('load-profile', previous);
     return { success: true };
   });

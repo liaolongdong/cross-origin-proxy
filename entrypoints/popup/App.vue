@@ -454,7 +454,8 @@
             class="api-picker-row"
             :class="{ 'is-pending': pendingProfileId === profile.id }"
             :aria-expanded="pendingProfileId === profile.id ? 'true' : 'false'"
-            :disabled="switchingProfile"
+            :disabled="switchingProfile || profile.damaged"
+            :title="profile.damaged ? t('profilePickerDamaged') : undefined"
             @click="chooseProfile(profile.id)"
           >
             <span
@@ -462,13 +463,24 @@
               :title="profile.name"
               >{{ profile.name }}</span
             >
-            <span class="api-picker-count">{{ t('profilePickerRuleCount', String(profile.rules.length)) }}</span>
+            <span
+              v-if="profile.damaged"
+              class="api-picker-count api-picker-count--damaged"
+              >{{ t('profilePickerDamaged') }}</span
+            >
+            <span
+              v-else
+              class="api-picker-count"
+              >{{ t('profilePickerRuleCount', String(profile.ruleCount ?? 0)) }}</span
+            >
           </button>
           <div
             v-if="pendingProfileId === profile.id"
             class="profile-confirm"
           >
-            <p class="profile-confirm-text">{{ t('profilePickerConfirm', [profile.name, profile.rules.length]) }}</p>
+            <p class="profile-confirm-text">
+              {{ t('profilePickerConfirm', [profile.name, profile.ruleCount ?? 0]) }}
+            </p>
             <div class="profile-confirm-actions">
               <button
                 type="button"
@@ -1860,6 +1872,11 @@ async function openOptionsPage(hash = '') {
 /* 「疑似 N 笔」那一格：与 options 规则列表的「未生效」同一套危险色通道。
    状态由文字说出来，颜色只是让它在这一列里更醒目（无障碍基线：不只用颜色表达状态）。 */
 .api-picker-count--suspect {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+/* 快照损坏：这一格替代条数，和「疑似」共用同一条危险色通道；行本身已禁用 */
+.api-picker-count--damaged {
   color: var(--el-color-danger, #f56c6c);
 }
 

@@ -91,6 +91,17 @@ export interface EnvironmentProfile {
 }
 
 /**
+ * `profiles` 键里的原文形状：`rules` 保持 `unknown`
+ *
+ * `storage.local` 是可被手改的地方，快照里的 `rules` 因此可能是字符串、对象或缺失。读取侧
+ * 不能在类型上把它当成 `ProxyRule[]`——界面渲染 `rules.length` 会当场抛，后台 `findIndex`
+ * 也会因为数组里混进 `null` 而抛。判据统一走 `utils/profileValidation.ts`。
+ */
+export interface StoredProfile extends Omit<EnvironmentProfile, 'rules'> {
+  rules: unknown;
+}
+
+/**
  * 凭据变量表（变量名 → 真值）
  *
  * 规则里的凭据位点写成 `{{名称}}`，真值只存在这一份（`storage.local` 的 `variables` 键），

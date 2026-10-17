@@ -198,7 +198,7 @@
           v-if="swStats.length === 0"
           class="dnr-stats-empty"
         >
-          {{ t('swStatsEmpty') }}
+          {{ swStatsEmptyText }}
         </div>
         <ul
           v-else
@@ -365,7 +365,7 @@
               :color="'var(--cop-text-color-placeholder)'"
               ><Document
             /></el-icon>
-            <p>{{ logsReadFailed ? t('logsReadFailed') : t('noLogs') }}</p>
+            <p>{{ logsEmptyText }}</p>
           </div>
         </template>
       </el-table>
@@ -406,6 +406,7 @@
               </el-button>
               <el-button
                 size="small"
+                :aria-label="t('closeLogDetailA11y')"
                 @click="selectedLog = null"
               >
                 <el-icon><Close /></el-icon>
@@ -563,6 +564,7 @@ import { computeLogStats } from '@/utils/ruleStats';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
 import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
+import type { SwStatsState } from '@/composables/useRequestLog';
 import { useRenderWindow } from '@/composables/useRenderWindow';
 import { resolveLogRowKey } from '@/utils/logRowNavigation';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
@@ -587,6 +589,8 @@ const props = defineProps<{
   /** 最近一次网络层采样的状态：空列表要分成「零命中」「没有读数」「无生效规则」三句话说 */
   dnrStatsState: DnrSampleState;
   swStats: DnrHitStat[];
+  /** SW 通道命中列表的读数状态：`fresh` 才是「确实没有命中」，其余两档只是「没有读数」 */
+  swStatsState: SwStatsState;
   methodFilter: string;
   statusFilter: string;
 }>();
@@ -647,11 +651,31 @@ const dnrStatsEmptyText = computed(() => {
 });
 
 /**
+ * SW 通道命中列表为空时该说哪一句
+ *
+ * 与 DNR 那一格同一口径：只有 `fresh` 才说得上「确实没有命中」；首轮还在路上或这一轮
+ * 读不到时都是「没有读数」，共用 `statsUnavailable`（该键住在 popup 命名空间，构建期扁平合并）。
+ */
+const swStatsEmptyText = computed(() => (props.swStatsState === 'fresh' ? t('swStatsEmpty') : t('statsUnavailable')));
+
+/**
+ * 空表那一句：三档事实，三句话
+ *
+ * 这一轮没读到 → 「日志没读到」；从来没有读到过（首屏那一次往返还在路上）→ 「未知」；
+ * 确实读到了空 → 「暂无请求记录」。合并前两档就是把「还不知道」说成「确实没有」。
+ */
+const logsEmptyText = computed(() => {
+  if (props.logsReadFailed) return t('logsReadFailed');
+  if (!props.logsEverRead) return t('statusUnknown');
+  return t('noLogs');
+});
+
+/**
  * 「这一轮日志没读到、手里这几行是旧账」那一句
  *
- * 两句话分工不重叠：空表由空态那一句说（`{{ logsReadFailed ? t('logsReadFailed') : t('noLogs') }}`），
- * 这一行只在**手里确实有行**时出现，点破它们是**上一轮**的样本——表格长得和平时一模一样，
- * 不说就是让人拿旧账当现状。判据里的 `logs.length > 0` 是承重的：2026-10-17 在真 Chrome 里量过，
+ * 两句话分工不重叠：空表由空态那一句说（`logsEmptyText`），这一行只在**手里确实有行**时出现，
+ * 点破它们是**上一轮**的样本——表格长得和平时一模一样，不说就是让人拿旧账当现状。
+ * 判据里的 `logs.length > 0` 是承重的：2026-10-17 在真 Chrome 里量过，
  * 去掉它就变成空表时同一句「日志没读到」在抽屉里上下出现两遍。
  */
 const logsReadFailedText = computed(() =>

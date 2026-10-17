@@ -69,15 +69,22 @@
             {{ profile.name }}
           </div>
           <div class="profile-meta">
-            {{ t('profileRuleCount', profile.rules.length) }}
+            {{ profile.ruleCount === null ? t('profileRuleCountUnknown') : t('profileRuleCount', profile.ruleCount) }}
             <span class="profile-meta-divider">·</span>
             {{ t('profileCreatedAt', formatTime(profile.createdAt)) }}
+          </div>
+          <div
+            v-if="profile.damaged"
+            class="profile-damaged"
+          >
+            {{ t('profileDamaged') }}
           </div>
         </div>
         <div class="profile-actions">
           <el-button
             type="primary"
             size="small"
+            :disabled="profile.damaged"
             @click="handleLoadProfile(profile)"
           >
             {{ t('profileLoad') }}
@@ -108,6 +115,7 @@ import { isFailureEnvelope } from '@/utils/messageResult';
 import { logger } from '@/utils/logger';
 import { useI18n } from '@/composables/useI18n';
 import { useProfiles } from '@/composables/useProfiles';
+import type { ProfileView } from '@/composables/useProfiles';
 
 /**
  * 环境配置管理弹窗
@@ -207,10 +215,15 @@ async function handleSaveProfile() {
   }
 }
 
-async function handleLoadProfile(profile: EnvironmentProfile) {
+async function handleLoadProfile(profile: ProfileView) {
+  // 按钮已禁用，但这条路径还有键盘/程序触发两个入口：后台同样会拒绝，这里先把原因说出来
+  if (profile.damaged) {
+    ElMessage.error(t('profileDamaged'));
+    return;
+  }
   try {
     await ElMessageBox.confirm(
-      t('confirmLoadProfile', [profile.name, profile.rules.length]),
+      t('confirmLoadProfile', [profile.name, profile.ruleCount ?? 0]),
       t('confirmLoadProfileTitle'),
       {
         confirmButtonText: t('confirm'),
@@ -233,7 +246,7 @@ async function handleLoadProfile(profile: EnvironmentProfile) {
   emit('update:visible', false);
 }
 
-async function handleDeleteProfile(profile: EnvironmentProfile) {
+async function handleDeleteProfile(profile: ProfileView) {
   try {
     await ElMessageBox.confirm(t('confirmDeleteProfile', profile.name), t('confirmDeleteProfileTitle'), {
       confirmButtonText: t('confirm'),
@@ -368,6 +381,12 @@ async function handleDeleteProfile(profile: EnvironmentProfile) {
   margin-top: 2px;
   font-size: 12px;
   color: var(--cop-text-color-secondary);
+}
+
+.profile-damaged {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--el-color-danger, #f56c6c);
 }
 
 .profile-meta-divider {

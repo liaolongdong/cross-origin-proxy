@@ -58,21 +58,26 @@ describe('[MAIN world] 取消消息要先于响应写回发出去', () => {
     expect(src).toContain("addEventListener('abort', onPageAbort");
     expect(src).toContain('{ once: true }');
 
-    // 处理器体单独切出来钉：`clearTimeout(timeout);` 在 `proxyFetch` 里有四处，
-    // 整片 `toContain` 等于没钉（实测删掉处理器里那一句照样绿）。
-    const handlerAt = src.indexOf('const onPageAbort = () => {');
-    expect(handlerAt, '取消处理器不再是具名的 onPageAbort 了——把上面的锚点一起改掉，别删断言').toBeGreaterThan(-1);
+    // 清理动作住在 `cancel` 里（页面 signal、XHR 的 abort/timeout 共用这一个出口），
+    // `onPageAbort` 只负责把 `signal.reason` 交进去。两者必须分别钉住：
+    // 只钉委托那一句，`cancel` 里的定时器/登记项被删掉照样绿；只钉 `cancel`，
+    // 处理器改回裸 reject 就不再发取消。
+    const cancelAt = src.indexOf('const cancel = (reason?: unknown) => {');
+    expect(cancelAt, '取消的统一出口不再是具名的 cancel 了——把上面的锚点一起改掉，别删断言').toBeGreaterThan(-1);
     // 终止锚也要单独钉：找不到时 `indexOf` 给 -1，`slice(start, -1)` 会切到「整段末尾减一字符」，
     // 于是下面每一条 `toContain` 都在拿全文比——全都绿，却什么都没钉住。
-    const handlerEnd = src.indexOf('\n        };', handlerAt);
-    expect(handlerEnd, '取消处理器的收尾形状变了——换掉这里的终止锚，别删断言').toBeGreaterThan(handlerAt);
-    const handler = src.slice(handlerAt, handlerEnd);
+    const cancelEnd = src.indexOf('\n        };', cancelAt);
+    expect(cancelEnd, 'cancel 的收尾形状变了——换掉这里的终止锚，别删断言').toBeGreaterThan(cancelAt);
+    const handler = src.slice(cancelAt, cancelEnd);
     expect(handler).toContain('if (!pendingRequests.has(requestId)) return;');
+    expect(handler).toContain('pendingRequests.delete(requestId);');
     expect(handler).toContain('clearTimeout(timeout);');
+    expect(handler).toContain('detachAbort();');
     expect(handler).toContain(
       'window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);',
     );
-    expect(handler).toContain('reject(pageSignal?.reason);');
+    expect(handler).toContain('reject(reason);');
+    expect(src).toContain('const onPageAbort = () => cancel(pageSignal?.reason);');
 
     // 摘钩本身：只在页面给的那个 signal 真支持时才去调（`signal` 属页面传入物，只有
     // `addEventListener` 的 polyfill 并不少见），且抛错也得吞掉——它在落定路径上。
@@ -131,14 +136,15 @@ describe('[XHR 路径] abort() 与 xhr.timeout 到期都要转成后台的取消
     expect(open).toContain("(this as any).__proxyRequestId = '';");
   });
 
-  it('取消一个已交给后台的 XHR：有 requestId 才发 CANCEL_REQUEST', () => {
+  it('取消一个已交给后台的 XHR：有 requestId 才走登记项落定，取消消息只由 cancel 发一次', () => {
     const helperAt = interceptor.indexOf('function cancelProxiedXhr(');
     expect(helperAt).toBeGreaterThan(-1);
     const helper = interceptor.slice(helperAt, interceptor.indexOf('\n    }', helperAt));
     expect(helper).toContain('if (!requestId) return;');
-    expect(helper).toContain(
-      'window.postMessage({ channel: CHANNEL, type: CANCEL_REQUEST, data: { requestId } }, window.location.origin);',
-    );
+    // 登记项自己那份 cancel 会摘掉内部定时器与闭包，再发一条取消。
+    expect(helper).toContain('pendingRequests.get(requestId)?.cancel(');
+    // 这里再直发一条就是重复取消，且本 world 的定时器照样活到 35s 后补发第三条。
+    expect(helper, '取消消息只能由 cancel 发一次，cancelProxiedXhr 不得自己再发').not.toContain('window.postMessage(');
   });
 
   it('abort() 与 xhr.timeout 到期各调一次 cancelProxiedXhr', () => {

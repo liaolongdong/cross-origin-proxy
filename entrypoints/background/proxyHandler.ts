@@ -94,6 +94,28 @@ async function readBodyWithinCap(response: Response): Promise<Uint8Array<ArrayBu
   return bytes;
 }
 
+/**
+ * 按 `Content-Type` 里的 charset 解码文本回包。
+ *
+ * 不能指望 `Response.text()`：它按 Fetch 规范一律 **UTF-8** 解码，MIME 里的 charset 根本不参与
+ * （旧注释说「`Body.text()` 会按响应的 MIME type 取 charset」是错的）。`charset=gbk` 的老后端
+ * 因此一直把中文读成乱码，而这类后端恰恰是跨环境调试里最常见的一类。
+ *
+ * charset 缺失、标签非法或平台不认识时回落 UTF-8——解码失败不该把整笔回包变成失败信封。
+ * `TextDecoder` 默认处理 BOM，带 BOM 的 UTF-16 回包顺手也能解对。
+ */
+export function decodeBodyText(bytes: Uint8Array<ArrayBuffer>, contentType: string): string {
+  const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1];
+  if (charset) {
+    try {
+      return new TextDecoder(charset).decode(bytes);
+    } catch {
+      // 未知编码：按 UTF-8 解，不中断这一笔
+    }
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 // ─── SW 通道命中统计 ──────────────────────────────────────────────────────────
 
 const swHitStats = new Map<string, { ruleId: string; ruleName: string; hitCount: number }>();
@@ -277,9 +299,12 @@ function applyResponseOverrides(
     }
   }
 
+  let bodyRewritten = false;
+
   if (overrides.bodyRaw !== undefined) {
     result.body = overrides.bodyRaw;
     result.isBase64 = false;
+    bodyRewritten = true;
   } else if (overrides.bodyReplacements && !isBase64) {
     try {
       const json = JSON.parse(body);
@@ -289,8 +314,19 @@ function applyResponseOverrides(
         }
       }
       result.body = JSON.stringify(json);
+      bodyRewritten = true;
     } catch {
       logger.warn('Response body is not valid JSON, skipping bodyReplacements');
+    }
+  }
+
+  if (bodyRewritten) {
+    // 这两颗头描述的是**上游原始正文**：`content-length` 是它的字节数，`content-encoding`
+    // 是它的压缩方式。正文被换掉之后照原样带下去，浏览器会按旧长度去读一段新正文
+    // （截断或挂起），或者再解压一次已经解开的字节。值不可信就整颗摘掉，让下游自己算。
+    for (const name of Object.keys(result.headers)) {
+      const lower = name.toLowerCase();
+      if (lower === 'content-length' || lower === 'content-encoding') delete result.headers[name];
     }
   }
 
@@ -367,23 +403,31 @@ export function cancelProxiedRequest(key: string): boolean {
  * @param data - `PROXY_REQUEST` 载荷
  * @param requestKey - 在途登记键（`proxyRequestKey` 拼出）；不传则这笔请求无法被页面取消，
  *   留给不经内容脚本的调用方
+ * @param onProxied - 这笔请求**真的命中规则并由 SW 接手**时回调一次（总开关关闭、没命中规则
+ *   都不到这里）。调用方拿它当「代发数」的交叉校验基线，所以时机必须晚于规则判定：
+ *   早一步的话，一条只有 `requestId` 的伪造消息也能抬高基线（见 `messageRouter`）。
  */
 export async function handleProxyRequest(
   data: ProxyRequestPayload,
   requestKey?: string,
+  onProxied?: () => void,
 ): Promise<ProxyResponsePayload> {
-  if (!requestKey) return runProxyRequest(data);
+  if (!requestKey) return runProxyRequest(data, undefined, onProxied);
 
   const controller = new AbortController();
   inFlightRequests.set(requestKey, controller);
   try {
-    return await runProxyRequest(data, controller.signal);
+    return await runProxyRequest(data, controller.signal, onProxied);
   } finally {
     inFlightRequests.delete(requestKey);
   }
 }
 
-async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal): Promise<ProxyResponsePayload> {
+async function runProxyRequest(
+  data: ProxyRequestPayload,
+  signal?: AbortSignal,
+  onProxied?: () => void,
+): Promise<ProxyResponsePayload> {
   const startTime = Date.now();
   const config = await getProxyConfig();
 
@@ -416,8 +460,9 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     };
   }
 
-  // 记录 SW 通道命中
+  // 记录 SW 通道命中；同时告诉调用方这一笔真的被 SW 接手了（交叉校验基线只认这一档）
   trackRuleHit(rule.id, rule.name);
+  onProxied?.();
 
   // 时序三项（`delayMs` / `retryCount` / `retryDelay`）钳制一份：入口侧（导入与恢复点）已在
   // `normalizeRuleTimings` 收口，这里挡的是**手改 storage 直接生效**那条路——`delayMs: 1e9`
@@ -630,6 +675,13 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
     if (attempt > 0) {
       logger.info(`Retry ${attempt}/${maxRetries}: ${data.url} (rule: ${rule.name})`);
       await sleep(attemptDelay, signal);
+      // `sleep` 被取消时会提前落定，但循环体走到这里仍会照常打开下一次连接——
+      // 页面在重试间隔里放弃的那一笔，服务端因此会收到第二遍（写请求就是两张单）。
+      // 每轮开头那道检查只挡得住「上一轮结束时已取消」，挡不住「在本轮等待中取消」。
+      if (signal?.aborted) {
+        lastError = CANCELLED_BY_PAGE;
+        break;
+      }
     }
 
     const controller = new AbortController();
@@ -681,13 +733,10 @@ async function runProxyRequest(data: ProxyRequestPayload, signal?: AbortSignal):
       let isBase64 = false;
 
       if (contentType.includes('application/json') || contentType.includes('text/')) {
-        // 字符集这件事交给平台，不自己判：`Body.text()` 会按响应的 MIME type 取 charset
-        // （`charset=gbk` 的老后端在 Chrome 里真能解出中文，自己 `new TextDecoder()` 一律按 UTF-8
-        // 解就是把那类回包读成乱码）。把原始 content-type 挂回一份同形状的空体 Response 再 `.text()`，
-        // 走的正是改动前那条算法——只有 MIME type 参与解码，status 不参与，所以不必照抄。
-        const decoderHeaders: Record<string, string> = {};
-        if (contentType) decoderHeaders['content-type'] = contentType;
-        responseBody = await new Response(bodyBytes, { headers: decoderHeaders }).text();
+        // 文本回包按 MIME 里的 charset 解码（`charset=gbk` 的老后端靠这一条才不出乱码）。
+        // 判据与回落都收在 `decodeBodyText` 一处，别退回 `new Response(...).text()`——
+        // 那条路只认 UTF-8，charset 是摆设。
+        responseBody = decodeBodyText(bodyBytes, contentType);
       } else {
         let binary = '';
         const CHUNK_SIZE = 0x8000;

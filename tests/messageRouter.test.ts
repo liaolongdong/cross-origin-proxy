@@ -313,6 +313,28 @@ describe('可信 sender 与未被 gate 的消息 — 路由照常往下走', () 
   }
 });
 
+describe('SAVE_PROFILE — 坏快照不得在写入前混进列表', () => {
+  const valid = { id: 'p1', name: 'P1', rules: [importableRule('r1')], createdAt: 1 };
+
+  it('合法快照照常落库', async () => {
+    const { sendResponse } = dispatch(MessageType.SAVE_PROFILE, TRUSTED_PAGE_URL, valid);
+    await flush();
+    expect(lastResponse(sendResponse)).toEqual({ success: true });
+    expect(store[STORAGE_KEYS.PROFILES]).toEqual([valid]);
+  });
+
+  it.each([
+    ['rules 不是数组', { ...valid, rules: 'oops' }],
+    ['规则形状不合法', { ...valid, rules: [{ id: 'bad' }] }],
+    ['缺 createdAt', { id: 'p1', name: 'P1', rules: [] }],
+  ])('%s：同步拒绝且不写存储', (_label, data) => {
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.SAVE_PROFILE, TRUSTED_PAGE_URL, data);
+    expect(keepChannelOpen).toBe(false);
+    expect(lastResponse(sendResponse)).toEqual({ success: false, error: 'Invalid profile' });
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('GET_DNR_STATS — 只读、可带 tabId、采样失败不拖垮消息', () => {
   /** 取本次响应的 Promise 结果（`dispatch` 已把响应灌进 mock 的 sendResponse） */
   async function respondWith(data: unknown) {
@@ -673,6 +695,33 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
     return { sendResponse, keepChannelOpen };
   }
 
+  /**
+   * 开总开关并给 `EXTERNAL_PAGE_URL` 一条命中规则。
+   *
+   * `blocked: true` 是刻意的：被阻断的请求同样算「SW 接手了这一笔」（拦截器的 `proxied`
+   * 在发出 `PROXY_REQUEST` 时就涨了），但不真发 `fetch`，这些只测基线的用例因此不依赖网络桩。
+   * 必须在**本用例第一次派发之前**调用——存储门面会缓存配置，直接改 `store` 不会触发失效。
+   */
+  function armMatchingRule(matchPattern = 'https://evil.example.com/*') {
+    store[STORAGE_KEYS.PROXY_CONFIG] = {
+      enabled: true,
+      rules: [
+        {
+          id: 'r-baseline',
+          name: 'baseline',
+          enabled: true,
+          matchType: 'wildcard',
+          matchPattern,
+          targetUrl: 'https://uat.example.com/',
+          priority: 10,
+          createdAt: 0,
+          updatedAt: 0,
+          blocked: true,
+        },
+      ],
+    };
+  }
+
   /** 与真实现同一份模块实例（router 已把它拉进注册表），因此读到的是 router 写进去的状态 */
   async function statsMod() {
     return import('@/entrypoints/background/interceptorStats');
@@ -700,6 +749,7 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
   });
 
   it('同一标签页经 PROXY_REQUEST 建立基准后，低于基准的自报一律不采信', async () => {
+    armMatchingRule();
     const stats = await statsMod();
     dispatch(MessageType.PROXY_REQUEST, EXTERNAL_PAGE_URL, { requestId: 'r1', url: EXTERNAL_PAGE_URL, method: 'GET' });
     await flush();
@@ -728,16 +778,18 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
   });
 
   /**
-   * L-2（2026-09-26 评审轮）：载荷判据排在计数与解引用之前
+   * L-2（2026-09-26 评审轮）：载荷判据排在解引用之前，计数排在规则命中之后
    *
-   * `swProxied` 基线是页面自报唯一追不上的那道校验，所以它自己得先被守住。旧写法把计数排在
-   * 解引用 `data.requestId` 之前且不校验形状：同页脚本反复发一条 `{ requestId: 'x' }`
-   * （连 `url` 都不带，`CANCEL_REQUEST` 有这道校验）就能把该 frame 的基线抬到任何诚实自报
-   * 都追不上的高度，`interceptorStats` 从此整包丢弃这一页的读数——弹窗那一行冻结在旧值，
-   * 现场还看不出是被污染的。另一头，缺 `data` 的消息会在监听器里当场抛 TypeError，
-   * 不走 `respondAsync` 的接手人，页面那一侧的通道无人应答。
+   * `swProxied` 基线是页面自报唯一追不上的那道校验，所以它自己得先被守住。两道缺一不可：
+   * ① 缺 `data` / `requestId` 不合法的消息必须在触碰任何东西之前回 Bypass 信封——旧写法
+   * 在 `data` 缺失时当场抛 TypeError，不走 `respondAsync` 的接手人，页面那一侧的通道无人应答；
+   * ② 计数不能收到消息就做，否则同页脚本发一条形状合法、URL 根本没命中规则的
+   * `{ requestId: 'x', url: 'https://nowhere.example.com' }` 就能把这个只涨不回的基线抬到
+   * 任何诚实自报都追不上的高度，`interceptorStats` 从此整包丢弃这一页的读数——弹窗那一行
+   * 冻结在旧值，现场还看不出是被污染的。现在回调只在总开关开启且规则真的命中后触发一次。
    */
   it('PROXY_REQUEST 载荷不合法时回 Bypass 信封、不抬基线、也不留未处理拒绝', async () => {
+    armMatchingRule();
     const stats = await statsMod();
 
     const noPayload = dispatchFromTab(MessageType.PROXY_REQUEST, undefined, 14, 0);
@@ -769,7 +821,37 @@ describe('拦截器自报消息 — 不 gate、不落盘，但会与代发数交
     expect(await stats.getInterceptorStats(17)).toMatchObject({ swProxied: 1 });
   });
 
+  it('总开关关闭时不抬基线：形状合法的一笔也只是 Bypass 信封', async () => {
+    // 不调用 `armMatchingRule`：beforeEach 的配置就是「关闭 + 无规则」
+    const stats = await statsMod();
+
+    dispatchFromTab(MessageType.PROXY_REQUEST, { requestId: 'off', url: EXTERNAL_PAGE_URL, method: 'GET' }, 18, 0);
+    await flush();
+
+    expect(await stats.getInterceptorStats(18)).toBeNull();
+  });
+
+  it('没命中规则时不抬基线：伪造的合法形状不再是无成本空转', async () => {
+    armMatchingRule();
+    const stats = await statsMod();
+
+    dispatchFromTab(
+      MessageType.PROXY_REQUEST,
+      { requestId: 'miss', url: 'https://other.example.com/x', method: 'GET' },
+      19,
+      0,
+    );
+    await flush();
+    expect(await stats.getInterceptorStats(19)).toBeNull();
+
+    // 对照：同一条规则下命中 URL 的那一笔照常记基准，证明上一格不是「计数整个失效」
+    dispatchFromTab(MessageType.PROXY_REQUEST, { requestId: 'hit', url: EXTERNAL_PAGE_URL, method: 'GET' }, 20, 0);
+    await flush();
+    expect(await stats.getInterceptorStats(20)).toMatchObject({ swProxied: 1 });
+  });
+
   it('基准与自报两侧都带着 frameId：iframe 的诚实自报不被顶层的代发数误杀', async () => {
+    armMatchingRule();
     const stats = await statsMod();
     // 顶层代发 3 笔、iframe 代发 1 笔（requestId 各自从 1 数起，跨 frame 会重名）
     for (let i = 0; i < 3; i++) {

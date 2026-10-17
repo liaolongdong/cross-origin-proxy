@@ -21,8 +21,9 @@
  * 夹具与 `tests/composablesReadouts.test.ts` 同一套：只 stub `chrome` 与 `logger`，
  * 回包按类型登记（`respond` 里那句 `message.type in map` 是让「显式回 undefined」与
  * 「这条消息压根不该出现」可区分的那一格）；组件实例外 `onMounted` 不触发，所以那两句接线
- * 按源码契约钉。最后一组钉的是 `SettingsDialog.vue` 里那个布尔**被怎么用**——它没有 DOM 等价物，
- * 「读失败 → 拦下一次提交」这条链的两岸各钉一半，中间那根线一断，两边单独看都还是对的。
+ * 按源码契约钉。最后一组钉的是 `SettingsDialog.vue` 里那两个布尔、轮次令牌与删除回滚
+ * **被怎么用**——它没有 DOM 等价物，「读失败 → 拦下一次提交」「写没成 → 行放回去」这两条链的
+ * 两岸各钉一半，中间那根线一断，两边单独看都还是对的。
  *
  * 承重情况已用单点变异量过（`.test-tmp/mutate-composables-credentials.py`）：38 个锚点各改一处
  * → 跑本文件 → **38 条全部咬住、0 存活、0 锚点失效**，跑完三个源文件 `git status` 干净。
@@ -365,22 +366,30 @@ describe('useConfigHistory.restore — 三类失败各有各的码', () => {
   });
 });
 
-describe('这两个布尔被界面怎么用（组件层没有 DOM，只能按源码契约钉）', () => {
+describe('这两格「没读到」被界面怎么用（组件层没有 DOM，只能按源码契约钉）', () => {
   const dialogSrc = readFileSync('components/options/SettingsDialog.vue', 'utf-8');
   const commit = dialogSrc.slice(dialogSrc.indexOf('async function commitVariables'));
+  const loadInto = dialogSrc.slice(
+    dialogSrc.indexOf('async function loadVariablesInto'),
+    dialogSrc.indexOf('async function retryLoadVariables'),
+  );
 
-  it('设置页把 `loadVariables()` 的返回值直接当闸门：失败即置位', () => {
-    expect(dialogSrc).toContain('variablesLoadFailed.value = !(await loadVariables());');
-  });
-
-  it('读失败时不许把空表灌进界面行（那正是「抹掉凭据」的前一步）', () => {
-    expect(dialogSrc).toMatch(
-      /variablesLoadFailed\.value = !\(await loadVariables\(\)\);\s*if \(!variablesLoadFailed\.value\) \{\s*refillRows\(variables\.value\);/,
+  it('在读与读失败合成同一个不可写出口', () => {
+    expect(dialogSrc).toContain(
+      'const variablesLocked = computed(() => variablesLoading.value || variablesLoadFailed.value);',
     );
   });
 
+  it('设置页把 `loadVariables()` 的结果交给同一个出口：失败即置位', () => {
+    expect(loadInto).toContain('variablesLoadFailed.value = !ok;');
+  });
+
+  it('读失败时不许把空表灌进界面行（那正是「抹掉凭据」的前一步）', () => {
+    expect(loadInto).toMatch(/variablesLoadFailed\.value = !ok;\s*if \(ok\) refillRows\(variables\.value\);/);
+  });
+
   it('闸门排在整表写之前：先拒这次提交，再去遍历行', () => {
-    const gate = commit.indexOf('if (variablesLoading.value || variablesLoadFailed.value)');
+    const gate = commit.indexOf('if (variablesLocked.value)');
     expect(gate).toBeGreaterThan(-1);
     // 遍历行、整表写都必须在闸门之后——闸门之前一旦读到 `variableRows`，那次点击就已经开始改数据了
     expect(commit.indexOf('variableRows.value')).toBeGreaterThan(gate);
@@ -389,24 +398,64 @@ describe('这两个布尔被界面怎么用（组件层没有 DOM，只能按源
     expect(commit.slice(gate, commit.indexOf('}', gate))).toContain("ElMessage.error(t('variablesWriteBlocked')");
   });
 
-  it('「还在路上」与「读失败」同样算没读到：置位早于第一次往返、落点只在 finally、那一节随之不可写', () => {
+  it('「还在路上」与「读失败」同样算没读到：置位早于第一次往返、落点只在 finally、那一节整体不可写', () => {
     // 置位必须排在读变量之前：它前面还排着自动关闭配置那一次往返，那段窗口里行列表同样是空的，
     // 而覆盖写要的恰恰是「这份空列表就是现状」这个错觉
     const setAt = dialogSrc.indexOf('variablesLoading.value = true;');
     expect(setAt).toBeGreaterThan(-1);
     expect(setAt).toBeLessThan(dialogSrc.indexOf('await readAutoOffMinutes()'));
     // 落点只能在 finally：卡在 true 就把这一节永远变成只读，比那一次覆盖写更难发现
-    expect(dialogSrc.slice(setAt)).toMatch(/finally \{[^}]*variablesLoading\.value = false;/);
-    // 界面上那两个输入框与「新建变量」按钮都归这一格管
-    expect(dialogSrc.match(/:disabled="variablesLoading"/g)).toHaveLength(2);
-    expect(dialogSrc).toContain(':disabled="variablesLoading || variableRows.length >= MAX_VARIABLES"');
+    expect(dialogSrc.slice(setAt)).toMatch(
+      /finally \{[^}]*if \(round === variablesRound\) variablesLoading\.value = false;/,
+    );
+    // 两个输入框与每行的删除按钮都归这一格管——读失败时删掉一行同样会触发一次覆盖写
+    expect(dialogSrc.match(/:disabled="variablesLocked"/g)).toHaveLength(3);
+    expect(dialogSrc).toContain(':disabled="variablesLocked || variableRows.length >= MAX_VARIABLES"');
+  });
+
+  it('轮次令牌：晚到的那一轮不许改新一轮的读数，也不许替它放下闸门', () => {
+    expect(dialogSrc).toContain('let variablesRound = 0;');
+    expect(dialogSrc).toContain('const round = ++variablesRound;');
+    // 判据必须排在写入之前：先判再写，晚到的回包就一个字段都碰不到
+    const guardAt = loadInto.indexOf('if (round !== variablesRound) return false;');
+    expect(guardAt).toBeGreaterThan(-1);
+    expect(loadInto.indexOf('variablesLoadFailed.value = !ok;')).toBeGreaterThan(guardAt);
+    expect(loadInto.indexOf('refillRows(variables.value);')).toBeGreaterThan(guardAt);
+    // 两处 finally 都只落自己那一轮（打开弹窗与就地重试各一处）
+    expect(dialogSrc.match(/if \(round === variablesRound\) variablesLoading\.value = false;/g)).toHaveLength(2);
+  });
+
+  it('读失败旁边就有就地重试，不必关掉弹窗', () => {
+    expect(dialogSrc).toContain('async function retryLoadVariables(): Promise<void> {');
+    expect(dialogSrc).toContain('@click="retryLoadVariables"');
+    expect(dialogSrc).toContain(':loading="variablesLoading"');
+    expect(dialogSrc).toContain("{{ t('variablesRetry') }}");
+  });
+
+  it('删除先摘行、写没成要放回原位（否则界面说删了、存储里那把凭据还在用）', () => {
+    const remove = dialogSrc.slice(dialogSrc.indexOf('async function removeVariable'));
+    expect(remove).toContain('variableRows.value.splice(index, 1);');
+    expect(remove).toContain('if (!(await commitVariables())) {');
+    expect(remove).toContain('variableRows.value.splice(Math.min(index, variableRows.value.length), 0, row);');
+  });
+
+  it('后台丢过条目就必须回读：不回读等于把被丢的行一直画成「已保存」', () => {
+    const droppedAt = commit.indexOf('if (result.dropped > 0) {');
+    expect(droppedAt).toBeGreaterThan(-1);
+    const dropped = commit.slice(droppedAt);
+    expect(dropped).toContain('if (await loadVariables()) {');
+    expect(dropped).toContain('refillRows(variables.value);');
+    // 回读失败不能假装回填成功：闸门重新落下，这一节随之不可写
+    expect(dropped).toContain('variablesLoadFailed.value = true;');
   });
 
   it('恢复点列表同样把「读不到」留给界面一句独立的话，而且两处调用点都要说', () => {
     // 打开弹窗拉一次、回退成功之后再拉一次（回退会留下 `before-restore`）。
     // 只钉一处就是漏一半：漏掉后一处，回退完那次读到信封也会画成「还没有恢复点」。
-    const sites = dialogSrc.match(/historyLoadFailed\.value = !\(await loadHistory\(\)\);/g) ?? [];
-    expect(sites).toHaveLength(2);
+    expect(dialogSrc.match(/historyLoadFailed\.value = !\(await loadHistory\(\)\);/g) ?? []).toHaveLength(1);
+    expect(dialogSrc.match(/historyLoadFailed\.value = !historyOk;/g) ?? []).toHaveLength(1);
+    // 打开弹窗那一次同样带轮次：快速关掉再打开时，上一轮的失败不许盖在新一轮的读数上
+    expect(dialogSrc).toContain('if (historyRoundAt !== historyRound) return;');
   });
 });
 

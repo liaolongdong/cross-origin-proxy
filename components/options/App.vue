@@ -4,6 +4,7 @@
     <HeaderBar
       :current-version="currentVersion"
       :proxy-enabled="proxyEnabled"
+      :status-known="configEverRead"
       @add-rule="handleAddRule"
       @open-logs="openLogs"
       @open-url-test="showUrlTest = true"
@@ -117,6 +118,7 @@
       :dnr-stats="dnrStats"
       :dnr-stats-state="dnrStatsState"
       :sw-stats="swStats"
+      :sw-stats-state="swStatsState"
       @clear="handleClearLogs"
       @refresh="toggleAutoRefresh"
       @update:refresh-interval="setRefreshInterval"
@@ -185,6 +187,7 @@ const {
   enabled: proxyEnabled,
   loading: ruleLoading,
   configReadFailed,
+  configEverRead,
   shadowedRuleIds,
   fetchConfig,
   addRule,
@@ -216,6 +219,7 @@ const {
   dnrStatsStale,
   dnrStatsState,
   swStats,
+  swStatsState,
   logsReadFailed,
   logsEverRead,
   fetchLogs,

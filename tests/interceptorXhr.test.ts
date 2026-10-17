@@ -235,6 +235,26 @@ function newXhr(): FakeXhr {
   return new XhrClass();
 }
 
+/**
+ * `responseType='document'` 的解析器桩：拦截器在 MAIN world 里直接用平台的 `DOMParser`，
+ * 这里在**挂载之后**换掉全局即可（它是在回包那一刻才取这个全局的）。
+ * 返回的两份数组分别用于断言「用什么 MIME 解析了什么」与「response / responseXML 是不是同一份」。
+ */
+function stubDomParser(): { calls: Array<{ text: string; mime: string }>; docs: Document[] } {
+  const calls: Array<{ text: string; mime: string }> = [];
+  const docs: Document[] = [];
+  class ParserStub {
+    parseFromString(text: string, mime: string): Document {
+      const doc = { parsedText: text, parsedMime: mime } as unknown as Document;
+      calls.push({ text, mime });
+      docs.push(doc);
+      return doc;
+    }
+  }
+  vi.stubGlobal('DOMParser', ParserStub);
+  return { calls, docs };
+}
+
 /** 真的跑一遍 `main()`：每笔测试拿到一份干净的闭包状态（含新的 XHR 桩） */
 async function mount(): Promise<void> {
   posted = [];
@@ -602,6 +622,67 @@ describe('代理成功：属性回填、头读取与事件顺序', () => {
     // 二进制那一支压根不填 responseText：真实 XHR 读它是抛 InvalidStateError
     expect(shadowed(xhr, 'responseText')).toBeUndefined();
   });
+
+  it('responseType 为 document：XML 回包解析成 Document，response 与 responseXML 是同一份', async () => {
+    armProxy([rule()]);
+    const xhr = newXhr();
+    xhr.responseType = 'document';
+    request(xhr);
+    const parser = stubDomParser();
+
+    respond(lastRequestId(), {
+      status: 200,
+      body: '<root><v>1</v></root>',
+      headers: { 'content-type': 'application/xml; charset=utf-8' },
+    });
+    await settle();
+
+    expect(parser.calls).toEqual([{ text: '<root><v>1</v></root>', mime: 'application/xml' }]);
+    expect(xhr.response).toBe(parser.docs[0]);
+    // XML 是唯一 responseXML 有值的档位；两份引用必须相同（页面会两种读法混用）
+    expect((xhr as unknown as Record<string, unknown>).responseXML).toBe(parser.docs[0]);
+    // document 档不填 responseText：原生 XHR 在非 text 的 responseType 下读它要抛
+    expect(shadowed(xhr, 'responseText')).toBeUndefined();
+  });
+
+  it('responseType 为 document：HTML 回包按 HTML 解析，responseXML 保持 null', async () => {
+    armProxy([rule()]);
+    const xhr = newXhr();
+    xhr.responseType = 'document';
+    request(xhr);
+    const parser = stubDomParser();
+
+    respond(lastRequestId(), {
+      status: 200,
+      body: '<!doctype html><p>hi</p>',
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+    await settle();
+
+    expect(parser.calls).toEqual([{ text: '<!doctype html><p>hi</p>', mime: 'text/html' }]);
+    expect(xhr.response).toBe(parser.docs[0]);
+    expect((xhr as unknown as Record<string, unknown>).responseXML).toBeNull();
+  });
+
+  it('responseType 为 document：既非 HTML 也非 XML 的正文按 null 落，解析器一次都不跑', async () => {
+    armProxy([rule()]);
+    const xhr = newXhr();
+    xhr.responseType = 'document';
+    request(xhr);
+    const parser = stubDomParser();
+
+    respond(lastRequestId(), {
+      status: 200,
+      body: '{"a":1}',
+      headers: { 'content-type': 'application/json' },
+    });
+    await settle();
+
+    expect(parser.calls).toEqual([]);
+    expect(xhr.response).toBeNull();
+    expect((xhr as unknown as Record<string, unknown>).responseXML).toBeNull();
+    expect(xhr.events).toEqual(['readystatechange', 'load', 'loadend']);
+  });
 });
 
 describe('代理失败、超时与取消：三条兜底各自落到哪个结局', () => {
@@ -691,6 +772,38 @@ describe('代理失败、超时与取消：三条兜底各自落到哪个结局'
     respond(requestId, { status: 200, body: 'late' });
     await settle();
     expect(xhr.events).toEqual(['readystatechange', 'timeout', 'loadend']);
+  });
+
+  it('页面超时/abort 之后本 world 不再补发取消：内部代发计时器随登记项一起收掉，也不多记 timedOut', async () => {
+    // 页面放弃（`xhr.timeout` 或 `abort()`）此前只发一条 CANCEL_REQUEST，`proxyFetch` 里那个
+    // ≥35s 的内部定时器与 `pendingRequests` 登记项照旧挂着：到期后它会再发一条无主的取消，
+    // 并 bump 一笔 `timedOut`——而正确口径是「扩展侧代发等待回包到期」，页面自己设的超时不算。
+    vi.useFakeTimers();
+    armProxy([rule()]);
+
+    const timedOutXhr = newXhr();
+    timedOutXhr.timeout = 5;
+    request(timedOutXhr);
+    const timeoutId = lastRequestId();
+    await vi.advanceTimersByTimeAsync(5);
+    expect(timedOutXhr.events).toEqual(['readystatechange', 'timeout', 'loadend']);
+
+    const abortedXhr = newXhr();
+    request(abortedXhr);
+    const abortId = lastRequestId();
+    abortedXhr.abort();
+
+    expect(payloadOfType(CANCEL_REQUEST).map(post => post.data)).toEqual([
+      { requestId: timeoutId },
+      { requestId: abortId },
+    ]);
+
+    // 走过内部代发超时那一刻（单次尝试 + 桥接余量 = 35s）：两条取消各只有一条，
+    // 自报里也不该多出两笔 `timedOut`（旧实现会再补两条取消、并把 timedOut 记成 2）
+    await vi.advanceTimersByTimeAsync(36_000);
+
+    expect(payloadOfType(CANCEL_REQUEST)).toHaveLength(2);
+    expect(statsSnapshot()).toEqual({ intercepted: 2, proxied: 2, fellBack: 0, timedOut: 0 });
   });
 
   it('响应先到、timeout 后到期：那个定时器不再补发 timeout，也不覆写已经交回的结果', async () => {

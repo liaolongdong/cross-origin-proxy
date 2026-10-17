@@ -451,7 +451,7 @@
             "name": "What are the limits?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, the same 10 MB ceiling on the response body (over it the proxied request fails and the page falls back to sending natively — the body is never truncated), delays between 0 and 60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second ceiling per proxied request, and response status codes clamped to 200–599 so the page can always construct a valid Response object."
+              "text": "Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, the same 10 MB ceiling on the response body (over it the proxied request fails without truncation: fetch falls back to sending natively, while XHR does not fall back and fails with status 0), delays between 0 and 60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second ceiling per proxied request, and response status codes clamped to 200–599 so the page can always construct a valid Response object."
             }
           },
           {
@@ -459,7 +459,7 @@
             "name": "What happens if the extension fails to handle a request?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "The page falls back to the browser's native fetch, XMLHttpRequest or WebSocket, so the request goes out as it normally would. Synchronous XHR (open() with false as its third argument) falls back the same way, as do non-string bodies such as FormData, Blob and ArrayBuffer: proxying means a round trip through other contexts, which cannot deliver the \"the result is ready when send() returns\" contract — making it async would only hand the page an empty response. The single exception is a block rule: a blocked request is never replayed natively."
+              "text": "Fallback differs by channel. fetch falls back to the native request whenever interception or proxying fails (timeout, over-cap, a background error); XHR falls back only where proxying cannot deliver at all — a synchronous request or a non-string body — and on a failed hand-off it does not replay, it sets status to 0 and dispatches error, so a write is not executed twice; WebSocket is always opened natively, with the extension only rewriting the address. Synchronous XHR and non-string bodies have to fall back because proxying means a round trip through other contexts, which cannot deliver the \"the result is ready when send() returns\" contract — making it async would only hand the page an empty response. The single exception is a block rule: a blocked request is never replayed natively."
             }
           },
           {
@@ -2499,6 +2499,13 @@ pnpm assets       # regenerate store and landing images</code></pre>
                   <td>10 MB maximum</td>
                 </tr>
                 <tr>
+                  <td>Response body</td>
+                  <td>
+                    10 MB maximum; over it the request fails without truncation (fetch falls back to sending natively,
+                    XHR fails with status 0)
+                  </td>
+                </tr>
+                <tr>
                   <td>Injected delay</td>
                   <td>0 – 60000 ms</td>
                 </tr>
@@ -2820,25 +2827,25 @@ pnpm assets       # regenerate store and landing images</code></pre>
               <summary>What are the limits?</summary>
               <p>
                 Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, the same 10 MB ceiling
-                on the response body (over it the proxied request fails and the page falls back to sending natively —
-                the body is never truncated), delays between 0 and 60000 ms, retry off by default and then 1 to 5 extra
-                attempts at 100–30000 ms, a 30 second ceiling per proxied request, and response status codes clamped to
-                200–599 so the page can always construct a valid
-                <code>Response</code> object.
+                on the response body (over it the proxied request fails without truncation: <code>fetch</code> falls
+                back to sending natively, while <code>XHR</code> does not fall back and fails with status 0), delays
+                between 0 and 60000 ms, retry off by default and then 1 to 5 extra attempts at 100–30000 ms, a 30 second
+                ceiling per proxied request, and response status codes clamped to 200–599 so the page can always
+                construct a valid <code>Response</code> object.
               </p>
             </details>
             <details>
               <summary>What happens if the extension fails to handle a request?</summary>
               <p>
-                The page falls back to the browser's native <code>fetch</code>, <code>XMLHttpRequest</code> or
-                <code>WebSocket</code>, so the request goes out as it normally would. Synchronous XHR (<code
-                  >open()</code
-                >
-                with <code>false</code> as its third argument) falls back the same way, as do non-string bodies such as
-                FormData, Blob and ArrayBuffer: proxying means a round trip through other contexts, which cannot deliver
-                the "the result is ready when <code>send()</code> returns" contract — making it async would only hand
-                the page an empty response. The single exception is a block rule: a blocked request is never replayed
-                natively.
+                Fallback differs by channel. <code>fetch</code> falls back to the native request whenever interception
+                or proxying fails (timeout, over-cap, a background error); <code>XHR</code> falls back only where
+                proxying cannot deliver at all — a synchronous request or a non-string body — and on a failed hand-off
+                it does not replay, it sets <code>status</code> to 0 and dispatches <code>error</code>, so a write is
+                not executed twice; <code>WebSocket</code> is always opened natively, with the extension only rewriting
+                the address. Synchronous XHR and non-string bodies have to fall back because proxying means a round trip
+                through other contexts, which cannot deliver the "the result is ready when <code>send()</code> returns"
+                contract — making it async would only hand the page an empty response. The single exception is a block
+                rule: a blocked request is never replayed natively.
               </p>
             </details>
 

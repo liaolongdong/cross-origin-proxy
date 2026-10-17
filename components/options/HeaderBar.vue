@@ -13,9 +13,9 @@
         >
         <span
           class="status-dot"
-          :class="{ 'is-on': proxyEnabled }"
+          :class="{ 'is-on': statusKnown && proxyEnabled, 'is-unknown': !statusKnown }"
           role="img"
-          :aria-label="proxyEnabled ? t('statusEnabled') : t('statusDisabled')"
+          :aria-label="!statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled')"
         ></span>
       </h1>
     </div>
@@ -65,7 +65,7 @@
       <!-- 代理总开关：毛玻璃 pill -->
       <div class="proxy-toggle-pill">
         <span class="proxy-toggle-label">
-          {{ proxyEnabled ? t('statusEnabled') : t('statusDisabled') }}
+          {{ !statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled') }}
         </span>
         <el-switch
           :model-value="proxyEnabled"
@@ -92,6 +92,8 @@ defineProps<{
   currentVersion: string;
   /** 代理总开关状态 */
   proxyEnabled: boolean;
+  /** 有没有成功读到过配置：false 时信号灯与文案画「未知」，不把首轮失败说成「已禁用」 */
+  statusKnown: boolean;
 }>();
 
 defineEmits<{
@@ -181,6 +183,11 @@ const { t } = useI18n();
 .status-dot.is-on {
   background: var(--el-color-success, #67c23a);
   animation: dot-flare var(--cop-duration-slow) var(--cop-ease-standard) 1;
+}
+
+/* 还没有读到过总开关状态：红点是「已关闭」这条结论，这时不画它，改用中性半透明点 */
+.status-dot.is-unknown {
+  background: rgb(var(--cop-on-primary-rgb) / 45%);
 }
 
 @keyframes dot-flare {

@@ -209,6 +209,19 @@ describe('useRequestLog — 回包形状决定界面读数', () => {
     expect(log.logs.value).toEqual([makeLog('a')]);
   });
 
+  it('告警只记形状，不记载荷：非标回包里夹着凭据也不能进日志', async () => {
+    respond({ [MessageType.GET_REQUEST_LOG]: { success: false, token: 'SECRET-TOKEN-123' } });
+    const log = useRequestLog();
+    await log.fetchLogs();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const args = logger.warn.mock.calls[0] as unknown[];
+    // 整份回包可能是日志原文（URL/头/正文），把用户凭据抄进 SW 控制台是另一条泄漏路径
+    expect(JSON.stringify(args)).not.toContain('SECRET-TOKEN-123');
+    // 「只记形状」不是「什么都不记」：类型仍要留下，这一行告警才可诊断
+    expect(args[1]).toBe('object');
+  });
+
   it('读到一次就摘掉「没读到」：这一格不许粘住', async () => {
     respond({ [MessageType.GET_REQUEST_LOG]: { success: false } });
     const log = useRequestLog();
@@ -554,15 +567,25 @@ describe('useRequestLog — 网络层命中数的五种状态不许塌成两句'
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
-  it('后台通道那一格：非数组当空，抛错时维持上一轮', async () => {
+  it('后台通道那一格：只有数组回包算 fresh，非数组与抛错都改口成 unavailable 并清掉上一轮', async () => {
     respond({ [MessageType.GET_SW_STATS]: HIT });
     const log = useRequestLog();
+    // 首轮还在路上：空手不等于读到空，空态据此说「统计暂不可用」
+    expect(log.swStatsState.value).toBe('pending');
     await log.fetchSwStats();
     expect(log.swStats.value).toEqual(HIT);
+    expect(log.swStatsState.value).toBe('fresh');
 
     respond({ [MessageType.GET_SW_STATS]: { success: false } });
     await log.fetchSwStats();
+    // 非标回包不是「读到 0 条」：列表清空是为了不让旧计数冒充现状，状态同时改口
     expect(log.swStats.value).toEqual([]);
+    expect(log.swStatsState.value).toBe('unavailable');
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+
+    respond({ [MessageType.GET_SW_STATS]: HIT });
+    await log.fetchSwStats();
+    expect(log.swStatsState.value).toBe('fresh');
 
     respond({
       [MessageType.GET_SW_STATS]: () => {
@@ -571,6 +594,7 @@ describe('useRequestLog — 网络层命中数的五种状态不许塌成两句'
     });
     await log.fetchSwStats();
     expect(log.swStats.value).toEqual([]);
+    expect(log.swStatsState.value).toBe('unavailable');
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 });
@@ -836,10 +860,11 @@ describe('两个 composable 与 Vue 生命周期的接线（本环境测不到�
  * 这一屏说的是同一句话」——`—` 与 `statusUnknown` 是本仓既有的口径（`dnrTabHitsText`、
  * 自动关闭档位条），新读出的那几处不许各造一套说法。
  */
-describe('两个旗标怎么被界面用（本环境测不到的那半）', () => {
+describe('几个读数旗标怎么被界面用（本环境测不到的那半）', () => {
   const popupSrc = readFileSync('entrypoints/popup/App.vue', 'utf-8');
   const drawerSrc = readFileSync('components/options/LogDrawer.vue', 'utf-8');
   const optionsSrc = readFileSync('components/options/App.vue', 'utf-8');
+  const headerSrc = readFileSync('components/options/HeaderBar.vue', 'utf-8');
 
   it('弹窗：开关位置与规则数在没有读数时改口，不再画「已关闭 / 0 / 还没有规则」', () => {
     expect(popupSrc).toContain(
@@ -866,9 +891,14 @@ describe('两个旗标怎么被界面用（本环境测不到的那半）', () =
     expect(popupSrc).not.toMatch(/\{\{\s*swRequestCount\s*\}\}/);
   });
 
-  it('日志抽屉：那一句只在手里有行时出现，空表交给空态（同一句不许出现两遍）', () => {
+  it('日志抽屉：空表三档分说，那一句只在手里有行时出现（同一句不许出现两遍）', () => {
     expect(drawerSrc).toContain('logsReadFailed: boolean;');
-    expect(drawerSrc).toContain("{{ logsReadFailed ? t('logsReadFailed') : t('noLogs') }}");
+    // 空表：这一轮没读到 / 从来没读到过（首屏还在路上）/ 确实读到空，三件事实三句话。
+    // 合并前两档就是把「还不知道」交成「确实没有」——正是本文件开头要消灭的那类谎报。
+    expect(drawerSrc).toContain('{{ logsEmptyText }}');
+    expect(drawerSrc).toContain("if (props.logsReadFailed) return t('logsReadFailed');");
+    expect(drawerSrc).toContain("if (!props.logsEverRead) return t('statusUnknown');");
+    expect(drawerSrc).toContain("return t('noLogs');");
     // 手里有行时那一行必须同时说出「没读到」和「下面是上一次的记录」——只说前者，读者仍会拿旧账当现状；
     // 而空表时它必须整个不出现，否则与空态那句重复（2026-10-17 真 Chrome 实测到的正是这个重复）
     expect(drawerSrc).toMatch(
@@ -877,6 +907,27 @@ describe('两个旗标怎么被界面用（本环境测不到的那半）', () =
     expect(drawerSrc).not.toMatch(/: t\('logsReadFailed'\);\s*\}/);
     expect(drawerSrc).toContain('v-if="logsReadFailedText"');
     expect(optionsSrc).toContain(':logs-read-failed="logsReadFailed"');
+  });
+
+  it('日志抽屉 SW 统计：没有读数时说「统计暂不可用」，只有 fresh 才说得上「暂无命中」', () => {
+    expect(drawerSrc).toContain('swStatsState: SwStatsState;');
+    expect(drawerSrc).toMatch(/props\.swStatsState === 'fresh' \? t\('swStatsEmpty'\) : t\('statsUnavailable'\)/);
+    // 模板渲染的是 computed；改回裸读 swStatsEmpty 就是把「读不到」重新念成「没有」
+    expect(drawerSrc).toContain('{{ swStatsEmptyText }}');
+    expect(drawerSrc).not.toContain("{{ t('swStatsEmpty') }}");
+    expect(optionsSrc).toContain(':sw-stats-state="swStatsState"');
+    expect(optionsSrc).toContain('swStatsState,');
+  });
+
+  it('顶栏：没有读到过配置时画「未知」与中性点，不画红色「已禁用」', () => {
+    expect(headerSrc).toContain('statusKnown: boolean;');
+    expect(headerSrc).toContain("'is-unknown': !statusKnown");
+    expect(headerSrc).toContain(
+      "!statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled')",
+    );
+    // 未知态必须有自己那条规则：只改文案、点仍是 `--el-color-danger`，等于仍在说「关着」
+    expect(headerSrc).toContain('.status-dot.is-unknown');
+    expect(optionsSrc).toContain(':status-known="configEverRead"');
   });
 
   it('日志抽屉统计条：没有有据读数时三格整体画「—」，不许交成 0/0/0', () => {

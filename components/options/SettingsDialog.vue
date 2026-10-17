@@ -87,6 +87,14 @@
           class="variable-load-failed"
         >
           {{ t('variablesLoadFailed') }}
+          <el-button
+            type="primary"
+            link
+            :loading="variablesLoading"
+            @click="retryLoadVariables"
+          >
+            {{ t('variablesRetry') }}
+          </el-button>
         </p>
 
         <div
@@ -101,14 +109,15 @@
               :placeholder="t('variableNamePlaceholder')"
               :maxlength="MAX_VARIABLE_NAME_LENGTH"
               :aria-label="t('variableNamePlaceholder')"
-              :disabled="variablesLoading"
+              :disabled="variablesLocked"
               @change="commitVariables"
             />
             <span class="variable-usage">{{ t('variableUsedBy', usageCount(row.name)) }}</span>
             <el-button
               type="danger"
               link
-              :aria-label="t('delete')"
+              :aria-label="t('removeVariableA11y', row.name.trim() || index + 1)"
+              :disabled="variablesLocked"
               @click="removeVariable(index)"
             >
               <el-icon><Delete /></el-icon>
@@ -121,7 +130,7 @@
             :placeholder="t('variableValuePlaceholder')"
             :maxlength="MAX_VARIABLE_VALUE_LENGTH"
             :aria-label="t('variableValuePlaceholder')"
-            :disabled="variablesLoading"
+            :disabled="variablesLocked"
             @change="commitVariables"
           />
         </div>
@@ -129,7 +138,7 @@
         <el-button
           type="primary"
           link
-          :disabled="variablesLoading || variableRows.length >= MAX_VARIABLES"
+          :disabled="variablesLocked || variableRows.length >= MAX_VARIABLES"
           @click="addVariable"
         >
           <el-icon><Plus /></el-icon>
@@ -297,6 +306,14 @@ const variablesLoadFailed = ref(false);
 const variablesLoading = ref(false);
 
 /**
+ * 凭据变量这一节此刻不可写：在读（`variablesLoading`）或没读到（`variablesLoadFailed`）都算
+ *
+ * 合成一个出口给模板：两档各漏一处，界面上就会出现「行改得动、整表却不会写」的假象——
+ * 读失败时那几行不代表现状，改完一提交就是拿它覆盖真凭据。删除同样归这一格管。
+ */
+const variablesLocked = computed(() => variablesLoading.value || variablesLoadFailed.value);
+
+/**
  * 变量名 → 被多少条规则引用（行内「被 N 条规则使用」与删除确认里的次数都读它）
  *
  * 用 `Map` 而不是对象：`constructor` / `toString` 都是合法变量名（`isVariableName` 只约束字法），
@@ -396,6 +413,38 @@ function refillRows(store: VariableStore): void {
   variableRows.value = [...rows, ...blanks];
 }
 
+/** 变量表读取的轮次：关掉再打开会让上一轮的往返晚到，晚到的答案必须整包作废 */
+let variablesRound = 0;
+/** 恢复点列表读取的轮次（与变量表分开：就地重试变量不该连带吞掉恢复点那一轮的读数） */
+let historyRound = 0;
+
+/**
+ * 读一张变量表进界面
+ *
+ * 轮次对不上就整包作废：晚到的回包会把新一轮刚读到的表、刚放下的闸门又改回去，
+ * 界面上却只表现为「列表闪了一下」。
+ *
+ * @returns 这一轮是否仍然有效且读成功
+ */
+async function loadVariablesInto(round: number): Promise<boolean> {
+  const ok = await loadVariables();
+  if (round !== variablesRound) return false;
+  variablesLoadFailed.value = !ok;
+  if (ok) refillRows(variables.value);
+  return ok;
+}
+
+/** 就地把变量表再读一次：读失败时那行提示旁边的「重试」走这里，不必关掉弹窗再打开 */
+async function retryLoadVariables(): Promise<void> {
+  const round = ++variablesRound;
+  variablesLoading.value = true;
+  try {
+    await loadVariablesInto(round);
+  } finally {
+    if (round === variablesRound) variablesLoading.value = false;
+  }
+}
+
 /** 打开弹窗时读取自动关闭配置、变量表与恢复点列表。`immediate` 不可省：本组件是异步分片，可能直到
  * visible 已为 true 才挂载（首次点击时分片尚未取回），那时 watcher 永不触发，倒计时会静默显示为
  * 「不自动关闭」，恢复点列表同样是空的。 */
@@ -403,24 +452,30 @@ watch(
   () => props.visible,
   async val => {
     if (!val) return;
+    const round = ++variablesRound;
+    const historyRoundAt = ++historyRound;
     // 从这一次打开起变量节就不可写：它前面还排着自动关闭配置那一次往返，而那段窗口里
     // `variableRows` 同样是「还没读到」的空列表——闸门要盖住整段在途，不只是 `loadVariables()` 那一句
     variablesLoading.value = true;
     try {
-      autoOffMinutes.value = await readAutoOffMinutes();
-    } catch {
-      autoOffMinutes.value = 0;
-    }
-    try {
-      variablesLoadFailed.value = !(await loadVariables());
-      if (!variablesLoadFailed.value) {
-        refillRows(variables.value);
+      let minutes = 0;
+      try {
+        minutes = await readAutoOffMinutes();
+      } catch {
+        minutes = 0;
       }
+      if (round !== variablesRound) return;
+      autoOffMinutes.value = minutes;
+      await loadVariablesInto(round);
+      if (round !== variablesRound) return;
     } finally {
-      // 旗标必须落下：卡在 true 就把这一节永远变成只读，比那一次覆盖写更难发现
-      variablesLoading.value = false;
+      // 旗标必须落下：卡在 true 就把这一节永远变成只读，比那一次覆盖写更难发现。
+      // 只落自己那一轮：晚到的那一轮若清掉新一轮在途的闸门，界面就会在真正读到之前允许提交
+      if (round === variablesRound) variablesLoading.value = false;
     }
-    historyLoadFailed.value = !(await loadHistory());
+    const historyOk = await loadHistory();
+    if (historyRoundAt !== historyRound) return;
+    historyLoadFailed.value = !historyOk;
   },
   { immediate: true },
 );
@@ -431,13 +486,15 @@ watch(
  * 每次改动都整表提交（与规则配置的写入形态一致），因此没有「忘了保存」这个状态。
  * 校验不过就**一个都不写**：只存下一半凭据比全都没存更难发现。
  * 两端空白由后台再裁一次，两侧判据同源（`utils/variables.ts`）。
+ *
+ * @returns 这一笔是否真的落盘（删除方据此决定要不要把行放回去）
  */
-async function commitVariables() {
+async function commitVariables(): Promise<boolean> {
   // 闸门说的是「还没有成功读到」：读失败与还在路上是同一件事的两面，整表覆盖写在这两种情况下
-  // 都会把用户已有的凭据抹掉。界面上这两格各自禁掉了输入与新增，这里再兜一次——这条路径丢的是凭据
-  if (variablesLoading.value || variablesLoadFailed.value) {
+  // 都会把用户已有的凭据抹掉。界面上这一节整体禁写，这里再兜一次——这条路径丢的是凭据
+  if (variablesLocked.value) {
     ElMessage.error(t('variablesWriteBlocked'));
-    return;
+    return false;
   }
   const next: VariableStore = {};
   for (const row of variableRows.value) {
@@ -446,17 +503,17 @@ async function commitVariables() {
     if (!name && !value) continue;
     if (!isVariableName(name)) {
       ElMessage.warning(t('variableNameInvalid'));
-      return;
+      return false;
     }
     if (!value) {
       ElMessage.warning(t('variableValueRequired', name));
-      return;
+      return false;
     }
     // 「重名」只问这张表自己的键：`constructor` 是合法变量名，裸下标会顺原型链在**第一行**
     // 就判成重复，于是这个名字永远存不进去
     if (Object.prototype.hasOwnProperty.call(next, name)) {
       ElMessage.warning(t('variableNameDuplicate', name));
-      return;
+      return false;
     }
     next[name] = value;
   }
@@ -464,14 +521,23 @@ async function commitVariables() {
   const result = await saveVariables(next);
   if (!result.success) {
     ElMessage.error(t('variablesSaveFailed'));
-    return;
+    return false;
   }
   if (result.dropped > 0) {
     ElMessage.warning(t('variablesDropped', result.dropped));
+    // 后台丢掉了条目，此刻 `variables` 只是界面的 `next`，不是后台的真值：回读一次再回填，
+    // 否则被丢的那几行会一直画成「已保存」；读不到就把闸门重新落下，下一次提交不许再拿它覆盖写
+    if (await loadVariables()) {
+      refillRows(variables.value);
+    } else {
+      variablesLoadFailed.value = true;
+    }
+    return true;
   }
   // 回填一次：把「两端空白被裁掉」「未填完的行不算存进去」如实反映到界面（判据在后台，
   // 界面只负责说真话），已有行的 key 不变，见 refillRows 的注释
   refillRows(variables.value);
+  return true;
 }
 
 function addVariable() {
@@ -480,7 +546,8 @@ function addVariable() {
 
 async function removeVariable(index: number) {
   const row = variableRows.value[index];
-  const used = usageCount(row?.name ?? '');
+  if (!row) return;
+  const used = usageCount(row.name);
   if (used > 0) {
     try {
       await ElMessageBox.confirm(t('confirmDeleteVariable', used), t('confirmDeleteVariableTitle'), {
@@ -493,7 +560,11 @@ async function removeVariable(index: number) {
     }
   }
   variableRows.value.splice(index, 1);
-  await commitVariables();
+  // 行先摘掉，整表写才是「删掉之后的样子」；写没成就要放回原位——界面说「已删除」
+  // 而存储里那把凭据还在，比删不掉更糟（以后每次请求仍在用一把用户以为没了的凭据）
+  if (!(await commitVariables())) {
+    variableRows.value.splice(Math.min(index, variableRows.value.length), 0, row);
+  }
 }
 
 /**

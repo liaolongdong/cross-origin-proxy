@@ -34,6 +34,12 @@ It holds the `<all_urls>` host permission, can issue requests on behalf of any p
 - 修复会写进 [CHANGELOG.md](./CHANGELOG.md)；是否署名致谢完全尊重报告者意愿，不公开未修复的细节。
   Fixes are listed in `CHANGELOG.md`; attribution follows the reporter's preference, and unpatched details stay undisclosed.
 
+## 一条刻意接受的边界 · One boundary accepted by design
+
+内容脚本注入每个页面，因此任意 http(s) 页面上的脚本都能借桥接层发出 `PROXY_REQUEST`——扩展对页面而言是一个潜在的 **confused deputy**。约束不在来源门禁（内容脚本的 `sender.url` 就是页面 URL，加上去代理当场失效），而在「只按规则代发」：页面不能指定目标地址，请求只会落到用户已配置、且此刻仍匹配该 URL 与方法的规则上；页面传来的 `ruleId` 只是候选，由后台复核（存在、启用、仍匹配），能注入的头与能改写的响应都来自规则本身。这条边界有一个已知代价：如果一条规则的匹配面足够宽（例如 `https://*/*`）且注入了凭据头或打开了「携带 Cookie」，那么任意页面都能借它读到目标环境的响应。这正是规则应当写得足够窄、凭据位点优先用 `{{名称}}` 引用的理由；扩展刻意不附加「发起页必须与规则相关」这层校验，因为规则本就以请求地址而不是发起页为作用域。
+
+Content scripts run in every page, so any script on an http(s) page can emit a `PROXY_REQUEST` through the bridge — the extension is a potential **confused deputy** for the page. The constraint is not an origin gate (a content script's `sender.url` is the page's own URL, so gating it would disable proxying) but the rule-only contract: the page cannot name a destination, and a request is forwarded only under a rule the user already configured that still matches that URL and method. The page-supplied `ruleId` is a candidate the background re-validates (exists, enabled, still matches), and every injected header or rewritten response comes from the rule itself. The known cost of this boundary: if a rule's match surface is broad enough (say `https://*/*`) and it injects a credential header or turns on Send cookies, any page can use it to read responses from the target. That is why rules should be written narrow, and why credential slots belong in `{{NAME}}` references; the extension deliberately adds no "the initiating page must relate to the rule" check, because rules are scoped by request URL, not by initiating page.
+
 ## 已有的基线 · Existing baseline
 
 请求头名校验且拒绝 CRLF、状态码钳制在 200–599、请求体 10 MB 上限（按 UTF-8 字节量最终出站 body，规则覆盖的 body 同样计入）、被规则拒绝的请求在本地日志留下原因、用户正则的嵌套量词（ReDoS）筛查、送给网络层的正则必须过 Chrome 的 RE2 校验且替换引用越界检查、跨 world 消息一律以 `window.location.origin` 为目标源、跨 world 的代理响应在桥接层整形（失败信封补齐 `requestId` 与数值 `status`，后台内部错误文案不外泄给页面）、响应体改写的路径写入拒绝 `__proto__` / `constructor` / `prototype` 键名、修改状态的消息需过 `isTrustedSender`、导入的 HAR/cURL/JSON 在边界处过滤非法项（导入与抓包路径上的头映射还会逐条丢弃非法项）、导出默认剔除凭据（`Authorization` / `Cookie` 等头，配置导出另含 token 类查询参数覆盖，取消勾选才做原样本地备份）、搜索高亮按文本节点分段渲染（此前的 `v-html` 逃生通道已删除）、无 `eval` / 远程代码、无遥测与埋点。

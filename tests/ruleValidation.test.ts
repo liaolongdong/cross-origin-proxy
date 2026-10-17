@@ -46,7 +46,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { isValidRuleShape, normalizeRuleTimings, MAX_RULE_RETRY_COUNT, MAX_RULE_DELAY } from '@/utils/ruleValidation';
-import { isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
+import { isSimpleRule, methodAllowed, rewriteUrl } from '@/utils/urlMatcher';
 import { ruleMergeKey, deduplicateRules } from '@/utils/ruleConflicts';
 import type { ProxyRule } from '@/utils/types';
 
@@ -175,6 +175,40 @@ describe('isValidRuleShape — 拦下的是形状，不是它不认识的取值'
     expect(isValidRuleShape(shape({ matchType: undefined }))).toBe(false);
     // 枚举没有一份「什么都不认」的失败模式：白名单若被清空，三种类型会一起变非法
     expect(declaredMatchTypes().length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('methods 缺省或字符串数组才过闸：字符串、null、混入非字符串一律拦', () => {
+    expect(isValidRuleShape(shape())).toBe(true);
+    expect(isValidRuleShape(shape({ methods: [] }))).toBe(true);
+    expect(isValidRuleShape(shape({ methods: ['GET', 'post'] }))).toBe(true);
+    expect(isValidRuleShape(shape({ methods: 'GET' }))).toBe(false);
+    expect(isValidRuleShape(shape({ methods: null }))).toBe(false);
+    expect(isValidRuleShape(shape({ methods: [1] }))).toBe(false);
+    expect(isValidRuleShape(shape({ methods: ['GET', null] }))).toBe(false);
+    expect(isValidRuleShape(shape({ methods: { 0: 'GET' } }))).toBe(false);
+  });
+});
+
+describe('methods 形状 — 两道数据入口与匹配层同一条判据', () => {
+  it('导入与恢复点都丢弃坏 methods；合法 methods 原样保留', () => {
+    const [kept] = normalizeImportedRules([shape({ methods: ['GET', 'post'] })]);
+    expect(kept.methods).toEqual(['GET', 'post']);
+    expect(normalizeImportedRules([shape({ methods: 'GET' })])).toHaveLength(0);
+    expect(normalizeImportedRules([shape({ methods: [1] })])).toHaveLength(0);
+    const [entry] = sanitizeConfigHistory([snapshot([shape({ methods: [1] })])]);
+    expect(entry.config.rules).toEqual([]);
+  });
+
+  it('methodAllowed 对坏形状 fail closed，对缺省/空数组维持放行', () => {
+    const malformed = typedShape({ methods: 'GET' as unknown as string[] });
+    // 关键不是「返回 false」，而是「不抛」：匹配循环在页面侧位于 try/catch 之外
+    expect(() => methodAllowed(malformed, 'GET')).not.toThrow();
+    expect(methodAllowed(malformed, 'GET')).toBe(false);
+    expect(methodAllowed(typedShape(), 'GET')).toBe(true);
+    expect(methodAllowed(typedShape({ methods: [] }), 'GET')).toBe(true);
+    expect(methodAllowed(typedShape({ methods: ['post'] }), 'POST')).toBe(true);
+    expect(methodAllowed(typedShape({ methods: ['post'] }), undefined)).toBe(true);
+    expect(methodAllowed(typedShape({ methods: [1] as unknown as string[] }), 'GET')).toBe(false);
   });
 });
 

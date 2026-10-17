@@ -216,4 +216,84 @@ describe('回包按字节流读取，越界即停', () => {
     expect(probes[0].cancelled).toBe(true);
     expect(probes[1].cancelled).toBe(false);
   });
+
+  it('覆盖正文后摘掉上游的 content-length / content-encoding：旧头描述的是旧正文', async () => {
+    useRule({ responseOverrides: { bodyRaw: '{"replaced":true}' } });
+    fetchMock.mockResolvedValue(
+      new Response('{"original":true}', {
+        headers: {
+          'content-type': 'application/json',
+          'content-length': '17',
+          'content-encoding': 'gzip',
+        },
+      }),
+    );
+
+    const res = await handleProxyRequest(REQUEST);
+
+    expect(res.body).toBe('{"replaced":true}');
+    // 旧长度会让页面按 17 字节去读一段 17 字节的新正文，恰好这里长度相同——所以断言「头没了」，
+    // 不是「值对不对」。压缩方式同理：再解压一次已经解开的字节只会得到乱码。
+    expect(res.headers['content-length']).toBeUndefined();
+    expect(res.headers['content-encoding']).toBeUndefined();
+    // 摘的只是这两颗：content-type 仍由上游决定，覆盖正文不改变它
+    expect(res.headers['content-type']).toBe('application/json');
+  });
+
+  it('bodyReplacements 改完正文同样摘掉那两颗头', async () => {
+    useRule({ responseOverrides: { bodyReplacements: { 'data.total': 7 } } });
+    fetchMock.mockResolvedValue(
+      new Response('{"data":{"total":1}}', {
+        headers: { 'content-type': 'application/json', 'content-length': '19' },
+      }),
+    );
+
+    const res = await handleProxyRequest(REQUEST);
+
+    expect(JSON.parse(String(res.body))).toEqual({ data: { total: 7 } });
+    expect(res.headers['content-length']).toBeUndefined();
+  });
+
+  it('只改头、不动正文时旧的长度头照常保留（摘头不能摘过头）', async () => {
+    useRule({ responseOverrides: { headers: { 'x-extra': '1' } } });
+    fetchMock.mockResolvedValue(
+      new Response('{"data":1}', {
+        headers: { 'content-type': 'application/json', 'content-length': '10' },
+      }),
+    );
+
+    const res = await handleProxyRequest(REQUEST);
+
+    expect(res.body).toBe('{"data":1}');
+    expect(res.headers['content-length']).toBe('10');
+    expect(res.headers['x-extra']).toBe('1');
+  });
+
+  it('charset=GBK 的文本回包按声明解码，不一律当 UTF-8 读出乱码', async () => {
+    useRule();
+    // 「中文」的 GBK 字节：D6 D0 CE C4。按 UTF-8 解是替换字符，按 gbk 解才是这两个字。
+    // 引号与大写是刻意带的：header 参数的两种写法都得被认出来。
+    const gbkBytes = new Uint8Array([0xd6, 0xd0, 0xce, 0xc4]);
+    fetchMock.mockResolvedValue(new Response(gbkBytes, { headers: { 'content-type': 'text/plain; charset="GBK"' } }));
+
+    const res = await handleProxyRequest(REQUEST);
+
+    expect(res.status).toBe(200);
+    expect(res.isBase64).toBe(false);
+    expect(res.body).toBe('中文');
+  });
+
+  it('charset 不认识时回落 UTF-8，而不是把整笔回包变成失败', async () => {
+    useRule();
+    fetchMock.mockResolvedValue(
+      new Response(new TextEncoder().encode('héllo'), {
+        headers: { 'content-type': 'text/plain; charset=x-not-a-real-charset' },
+      }),
+    );
+
+    const res = await handleProxyRequest(REQUEST);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toBe('héllo');
+  });
 });
