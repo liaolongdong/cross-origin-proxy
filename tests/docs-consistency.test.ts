@@ -1539,6 +1539,69 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     };
     const CALL_TYPES = ['boolean', 'number', 'string'];
 
+    /**
+     * 把一份 YAML 里的步骤按文件顺序切成「步名 + 那一步的原文」。
+     *
+     * 不引 YAML 解析器（文件头那句「只依赖 fs 与正则」在这条上同样成立），按 `- name:` 的缩进
+     * 切：`release.yml` 里是 6 个空格，`actions/verify` 里是 4 个，两者共用一套口径。
+     * 切步是为了把断言绑到**具体那一步**——整文件 grep 一次 `pnpm exec wxt` 拦不住
+     * 「装载挪到了别的档」或「新加一格跑 pnpm 却落在没装载的档上」。
+     */
+    const stepsOf = (yaml: string): Array<{ name: string; body: string }> => {
+      const lines = yaml.split('\n');
+      const starts: number[] = [];
+      lines.forEach((line, index) => {
+        if (/^ {4,}- name: \S/.test(line)) starts.push(index);
+      });
+      return starts.map((start, index) => ({
+        name: String(lines[Number(start)].match(/- name: (.+)$/)?.[1]).trim(),
+        body: lines.slice(start, index + 1 < starts.length ? starts[Number(index) + 1] : lines.length).join('\n'),
+      }));
+    };
+
+    /** 取出某一步里 `if:`、`run:` 或 `with:` 的完整值——三者都可能折成多行（`>-`、`|`）。 */
+    const stepField = (body: string, key: string): string => {
+      const lines = body.split('\n');
+      const pattern = new RegExp(`^ +${key}: ?(.*)$`);
+      const start = lines.findIndex(line => pattern.test(line));
+      if (start < 0) return '';
+      const inline = String(lines[Number(start)].match(pattern)?.[1]).trim();
+      if (inline !== '' && !/^[>|][-+0-9]*$/.test(inline)) return inline;
+      const headIndent = (lines[Number(start)].match(/^ +/)?.[0] ?? '').length;
+      const collected: string[] = [];
+      for (let index = start + 1; index < lines.length; index += 1) {
+        const line = lines[Number(index)];
+        if (line.trim() === '') continue;
+        if ((line.match(/^ +/)?.[0] ?? '').length <= headIndent) break;
+        collected.push(line.trim());
+      }
+      return collected.join(' ');
+    };
+
+    /**
+     * 「跑 `pnpm` 的那一步，必须落在装载过 `pnpm` 的那一档」。
+     *
+     * 这条判据是被一次真跑逼出来的：`mode=status` 不落 `builds`，于是 `Verify` 整个不跑，
+     * 而 pnpm、Node 与 `node_modules` 全住在 `Verify` 里面——那一档的
+     * `pnpm exec wxt submit status` 以 **exit 127** 收场（2026-10-18 首跑现量），红字里
+     * 没有任何一行提到装载。`uses: pnpm/action-setup` 与 `cache: pnpm` 刻意不算「跑 pnpm」，
+     * 它们本身就是装载。
+     */
+    const pnpmStepsOutsideLoad = (yaml: string, loaded: string[]): string[] => {
+      const violations: string[] = [];
+      for (const step of stepsOf(yaml)) {
+        if (!/(^|\s)pnpm(\s|$)/.test(stepField(step.body, 'run'))) continue;
+        const gate = stepField(step.body, 'if');
+        const modes = [...gate.matchAll(/mode == '([\w-]+)'/g)].map(match => String(match[1]));
+        if (modes.length === 0) {
+          if (!gate.includes("builds == 'true'")) violations.push(step.name);
+          continue;
+        }
+        if (modes.some(mode => !loaded.includes(mode))) violations.push(step.name);
+      }
+      return violations;
+    };
+
     it('被调用的工作流只声明 boolean / number / string 三种输入类型', () => {
       const types = workflowCallTypes(release);
       // 先证明这一块里真的数得到东西：整体失配时（比如 `workflow_call:` 的缩进或写法变了，
@@ -1599,6 +1662,93 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       // 点头之前那一格也必须走同一份清单，否则「CI 绿」与「审批人看到的绿」是两件事。
       expect(publishJobs.prepare ?? '').toContain('uses: ./.github/actions/verify');
       expect(publishJobs.prepare ?? '').toContain('build-mode: zip');
+    });
+
+    it('status 档自带那份工具链装载副本，且与 verify 那一侧逐项对齐', () => {
+      // 装载过 pnpm 与 `node_modules` 的档位只有这三档：`publish-dry` / `publish` 经 `Verify`
+      // （那一格的门是 `builds == 'true'`，而 `builds` 恰好只给这两个值置真），`status` 经
+      // 下面这三步。第四档 `preflight` 谁都不装——它跑的是 `node scripts/store-preflight.mjs`，
+      // Node 在 runner 镜像里，这正是它 2026-10-18 能绿、`status` 却 127 的唯一区别。
+      expect(release).toContain('publish-dry | publish) echo "builds=true"');
+      const LOADED = ['status', 'publish-dry', 'publish'];
+
+      const names = ['Setup pnpm', 'Setup Node.js', 'Install dependencies'];
+      const source = stepsOf(verify).filter(step => names.includes(step.name));
+      expect(
+        source.map(step => step.name),
+        'verify 那三步的名字或顺序动了',
+      ).toEqual(names);
+
+      const copy = stepsOf(release).filter(step => step.name.endsWith('(status)'));
+      expect(copy.map(step => step.name)).toEqual(names.map(name => `${name} (status)`));
+
+      // 顺序也得管：`pnpm/action-setup` 排在 `setup-node` 之后就拿不到 pnpm 缓存目录，
+      // 那一侧的注释写着这条，副本这一侧同样成立。
+      copy.forEach((step, index) => {
+        const origin = source[Number(index)];
+        expect(origin, `verify 那一侧少了 ${step.name.replace(' (status)', '')}`).toBeDefined();
+        expect(stepField(step.body, 'if'), `${step.name} 的门没收拢在 status 档`).toBe(
+          "steps.inputs.outputs.mode == 'status'",
+        );
+        expect(step.body.match(/uses: (\S+)/)?.[1], `${step.name} 换的动作与 verify 那一侧不同源`).toBe(
+          origin.body.match(/uses: (\S+)/)?.[1],
+        );
+        expect(stepField(step.body, 'run'), `${step.name} 的命令与 verify 那一侧不同源`).toBe(
+          stepField(origin.body, 'run'),
+        );
+      });
+
+      // Node 版本这一处**不能**同源到字面量：`Verify` 收的是 `inputs.node-version`（默认 '22'），
+      // 而 status 这一侧没有输入可传，只能写死。写死就意味着会漂，所以拿默认值当基准现比。
+      const declared = stepField(copy[Number(1)].body, 'with');
+      expect(declared).toContain('cache: pnpm');
+      expect(stepField(source[Number(1)].body, 'with')).toContain('cache: pnpm');
+      const nodeDefault = verify.match(/node-version:\s*\n(?:.*\n)*?\s*default: '?([\d.]+)'?/)?.[1];
+      expect(nodeDefault, '读不到 verify 动作的 node-version 默认值——那段 inputs 动了').toBeTruthy();
+      expect(declared, `status 档的 Node 版本仍写死 '${nodeDefault}' 之外的值`).toContain(
+        `node-version: '${nodeDefault}'`,
+      );
+
+      // 三步必须排在 `Query store status` **之前**：127 那一次的形状就是「命令在，装载没跑」。
+      const order = stepsOf(release).map(step => step.name);
+      const query = order.indexOf('Query store status');
+      expect(query, 'Query store status 那一格不见了').toBeGreaterThan(-1);
+      copy.forEach(step => {
+        expect(order.indexOf(step.name), `${step.name} 排到了 status 那一步之后`).toBeLessThan(query);
+      });
+
+      // 泛化那条判据本身：跑 pnpm 的步骤一个都不许落在没装载的档上。
+      expect(pnpmStepsOutsideLoad(release, LOADED), '这几步跑 pnpm 却没有装载').toEqual([]);
+      // 提取口径的自检——整文件真的数得到跑 pnpm 的步骤，否则上面那句「空数组」是假绿。
+      const pnpmStepCount = stepsOf(release).filter(step =>
+        /(^|\s)pnpm(\s|$)/.test(stepField(step.body, 'run')),
+      ).length;
+      expect(pnpmStepCount, '一条跑 pnpm 的步骤都没抓到——提取口径坏了').toBeGreaterThanOrEqual(4);
+
+      // 阳性对照：把一格「只在 preflight 跑 pnpm」的步骤喂给同一个判据，它必须点名。
+      const poisoned = [
+        'jobs:',
+        '  release:',
+        '    steps:',
+        '      - name: Query store status',
+        "        if: steps.inputs.outputs.mode == 'status'",
+        '        run: pnpm install --frozen-lockfile',
+        '      - name: Sneaky preflight CLI',
+        "        if: steps.inputs.outputs.mode == 'preflight'",
+        '        run: pnpm exec wxt submit status',
+      ].join('\n');
+      expect(pnpmStepsOutsideLoad(poisoned, LOADED), '判据放过了没装载的那一档').toEqual(['Sneaky preflight CLI']);
+      // 另一侧的对照：`builds` 那两档由 Verify 装载，判据不许把它们误报。
+      expect(
+        pnpmStepsOutsideLoad(
+          [
+            '      - name: Submit to Chrome Web Store',
+            "        if: steps.inputs.outputs.mode == 'publish' && steps.credentials.outputs.ready == 'true'",
+            '        run: pnpm exec wxt submit',
+          ].join('\n'),
+          LOADED,
+        ),
+      ).toEqual([]);
     });
 
     it('verify 动作覆盖 package.json 里定义的全部检查脚本', () => {

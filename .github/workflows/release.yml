@@ -394,6 +394,34 @@ jobs:
       # 凭据一律不进 argv：私钥是经 `env:` 交给进程的（文件头那段实测），`--chrome-*` 只出现
       # zip 路径与两个布尔开关。三档都不需要 `--chrome-publish-target`——那是 v1.1 的废弃参数，
       # v2 的 schema 里没有这个键，传进去会被 mask 掉（选了等于没选）。
+      # `mode=status` 不落 `builds`，所以 `Verify` 那个复合动作整个不跑。而 pnpm、Node 与
+      # `node_modules` **恰好全住在 `Verify` 里面**——`Setup pnpm` → `Setup Node.js` →
+      # `Install dependencies` 那三步是它的开头，不是作业的开头。于是这一档拿到的是 exit 127：
+      # `pnpm exec wxt submit status` 里连 `pnpm` 这个命令本身都还不存在（2026-10-18 首跑现量：
+      # 同一棵树、同一份凭据，`preflight` 绿而 `status` 红，差别就在这三步——那一档跑的是
+      # `node scripts/store-preflight.mjs`，Node 在 runner 镜像里，不需要装载）。
+      #
+      # 下面三步是 `.github/actions/verify` 那份装载的**手工副本**，与本仓库 MAIN-world 拦截器
+      # 镜像同一族取舍：把装载从 `Verify` 里搬出来会让那份复合动作不再是「CI 与发布共用的唯一
+      # 入口」，代价换来的是复制可漂移，所以漂移由 `tests/docs-consistency.test.ts` 的
+      # 「status 档那份工具链副本」钉住——动作名、`cache: pnpm`、Node 版本与安装命令逐项比对，
+      # 任一侧改动而另一侧没跟就红。三步的**顺序**也是契约的一部分：`pnpm/action-setup` 必须排在
+      # `setup-node` 之前，否则 pnpm 的缓存目录探测不到（那条注释就写在那一侧）。
+      - name: Setup pnpm (status)
+        if: steps.inputs.outputs.mode == 'status'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js (status)
+        if: steps.inputs.outputs.mode == 'status'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies (status)
+        if: steps.inputs.outputs.mode == 'status'
+        run: pnpm install --frozen-lockfile
+
       - name: Query store status
         if: steps.inputs.outputs.mode == 'status'
         env:

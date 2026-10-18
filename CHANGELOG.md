@@ -35,16 +35,15 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
 ## [1.5.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.5.0...v1.5.1) (2026-10-17)
 
-
 ### Fixed
 
-* **a11y:** 规则表行尾那三枚「图标即全部」的按钮有了可访问名 ([053cba2](https://github.com/liaolongdong/cross-origin-proxy/commit/053cba279735d08c871520f3964b9e738d682c18))
-* harden rule/profile validation, cancellation, and readout states ([4ab8478](https://github.com/liaolongdong/cross-origin-proxy/commit/4ab8478b856b00a465aa411ca898106898ef2ef1))
-* **proxy:** 回包也有 10MB 上限，并且页面放弃之后后台不再接着发第二遍 ([9d035c4](https://github.com/liaolongdong/cross-origin-proxy/commit/9d035c48ffe047b46c7464de05e3a4c086a2c3fa))
-* **security:** 加载快照与凭据覆盖写这两处「坏数据当场生效」的路径补上闸门 ([d8c02f6](https://github.com/liaolongdong/cross-origin-proxy/commit/d8c02f6f68ead9a17a5f7930ed58c071463b4489))
-* **ui:** 弹窗首屏与日志抽屉不再把「读不到」画成一条结论 ([4699f04](https://github.com/liaolongdong/cross-origin-proxy/commit/4699f041e4815b988971ce8047f88a1ff6d93883))
-* **ui:** 日志抽屉的统计条不再把「没读到」报成 0/0/0 ([01c7dae](https://github.com/liaolongdong/cross-origin-proxy/commit/01c7daec9dcf5b7d027fea762d65f8e67b405f35))
-* **ui:** 真 Chrome 量出来的一处重复——空表时那句「日志没读到」只说一遍 ([9b42cc4](https://github.com/liaolongdong/cross-origin-proxy/commit/9b42cc472773be29b1bdc664534105b565e1b967))
+- **a11y:** 规则表行尾那三枚「图标即全部」的按钮有了可访问名 ([053cba2](https://github.com/liaolongdong/cross-origin-proxy/commit/053cba279735d08c871520f3964b9e738d682c18))
+- harden rule/profile validation, cancellation, and readout states ([4ab8478](https://github.com/liaolongdong/cross-origin-proxy/commit/4ab8478b856b00a465aa411ca898106898ef2ef1))
+- **proxy:** 回包也有 10MB 上限，并且页面放弃之后后台不再接着发第二遍 ([9d035c4](https://github.com/liaolongdong/cross-origin-proxy/commit/9d035c48ffe047b46c7464de05e3a4c086a2c3fa))
+- **security:** 加载快照与凭据覆盖写这两处「坏数据当场生效」的路径补上闸门 ([d8c02f6](https://github.com/liaolongdong/cross-origin-proxy/commit/d8c02f6f68ead9a17a5f7930ed58c071463b4489))
+- **ui:** 弹窗首屏与日志抽屉不再把「读不到」画成一条结论 ([4699f04](https://github.com/liaolongdong/cross-origin-proxy/commit/4699f041e4815b988971ce8047f88a1ff6d93883))
+- **ui:** 日志抽屉的统计条不再把「没读到」报成 0/0/0 ([01c7dae](https://github.com/liaolongdong/cross-origin-proxy/commit/01c7daec9dcf5b7d027fea762d65f8e67b405f35))
+- **ui:** 真 Chrome 量出来的一处重复——空表时那句「日志没读到」只说一遍 ([9b42cc4](https://github.com/liaolongdong/cross-origin-proxy/commit/9b42cc472773be29b1bdc664534105b565e1b967))
 
 ## [1.5.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.4.0...v1.5.0) (2026-10-07)
 
