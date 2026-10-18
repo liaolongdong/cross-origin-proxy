@@ -11,6 +11,8 @@ Version numbers still live in `package.json` only — but release-please now wri
 还没进版本的变更先记在这里，中英各一段。下一次 release-please 开出 `## [x.y.z]` 小节时，把这一段并进那个小节、然后清空这里：机器人只会列提交标题，而商店用户读到的说明需要这里的长文。**标题不要写成 `## [Unreleased]` 这种带方括号的形式**——release-please 找插入点用的正则（`\n###? v?[0-9[]`）会把那一行当成第一个版本小节，于是新生成的小节插在它**上面**，整份已发布历史被挪到「未发布」这个标题底下，读起来像上一版还没发。
 Collect changes that are not in a released version yet here, in Chinese and English, and fold the block into the new `## [x.y.z]` section when release-please opens it. Do not title this block `## [Unreleased]`: release-please locates its insertion point with a regex that matches a bracketed heading, so the generated section would land above it and push the entire released history under an "unreleased" heading.
 
+## [1.5.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.5.0...v1.5.1) (2026-10-17)
+
 ### Added
 
 - **README 与两份落地页 FAQ 多了一条「重写之后后端说 Origin 不对」**：把请求改写到**另一个原点**的纯 URL 重写规则，目标收到的 `Origin` 是 `null`（改写后仍落在同一原点内的不受影响，本机实测 Chrome 155），按来源白名单放行的后端会当场拒掉这一笔——哪怕它本来就允许你的前端域名——页面侧只留一句 `net::ERR_FAILED`。这件事此前只活在排查会话里，读者手上没有任何文档写着它，于是最容易被读成「代理没生效」。现在中文页、英文页、中英 README 与两份 `llms*.txt` 说的是同一句话；落地页那条挂在「通道、CORS 与性能」分类下，右栏目录的计数跟着从 5 变 6。
@@ -32,18 +34,6 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
   **The credentials table refuses to save when it failed to load.** That dialog writes the whole table on every change, so a failed read used to leave an empty list and the next blur would delete the user's existing credentials; the read failure now blocks the submit and says so.
 - **规则行尾那三枚图标按钮有了可访问名**：编辑 / 复制 / 删除此前只有悬停 400ms 才出现的 tooltip，读屏与键盘拿到的是「按钮」两个字（WCAG 4.1.2）。名字复用同一行 tooltip 已有的文案，没有新增可见文字。
   **The three icon-only buttons at the end of each rule row now have accessible names.** Edit, duplicate and delete were only labelled by a tooltip that appears after a 400 ms hover, so screen readers and keyboard users got "button" (WCAG 4.1.2). The labels reuse the strings the tooltips already used; no new visible text.
-
-## [1.5.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.5.0...v1.5.1) (2026-10-17)
-
-### Fixed
-
-- **a11y:** 规则表行尾那三枚「图标即全部」的按钮有了可访问名 ([053cba2](https://github.com/liaolongdong/cross-origin-proxy/commit/053cba279735d08c871520f3964b9e738d682c18))
-- harden rule/profile validation, cancellation, and readout states ([4ab8478](https://github.com/liaolongdong/cross-origin-proxy/commit/4ab8478b856b00a465aa411ca898106898ef2ef1))
-- **proxy:** 回包也有 10MB 上限，并且页面放弃之后后台不再接着发第二遍 ([9d035c4](https://github.com/liaolongdong/cross-origin-proxy/commit/9d035c48ffe047b46c7464de05e3a4c086a2c3fa))
-- **security:** 加载快照与凭据覆盖写这两处「坏数据当场生效」的路径补上闸门 ([d8c02f6](https://github.com/liaolongdong/cross-origin-proxy/commit/d8c02f6f68ead9a17a5f7930ed58c071463b4489))
-- **ui:** 弹窗首屏与日志抽屉不再把「读不到」画成一条结论 ([4699f04](https://github.com/liaolongdong/cross-origin-proxy/commit/4699f041e4815b988971ce8047f88a1ff6d93883))
-- **ui:** 日志抽屉的统计条不再把「没读到」报成 0/0/0 ([01c7dae](https://github.com/liaolongdong/cross-origin-proxy/commit/01c7daec9dcf5b7d027fea762d65f8e67b405f35))
-- **ui:** 真 Chrome 量出来的一处重复——空表时那句「日志没读到」只说一遍 ([9b42cc4](https://github.com/liaolongdong/cross-origin-proxy/commit/9b42cc472773be29b1bdc664534105b565e1b967))
 
 ## [1.5.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.4.0...v1.5.0) (2026-10-07)
 
