@@ -210,3 +210,30 @@ describe('日志转 Mock — 判据唯一出口与文案分档', () => {
     expect(logDrawer).not.toContain('saveProxyConfig');
   });
 });
+
+describe('HAR 面板的确认按钮 — 不得复用「导入配置」那枚标签（2026-10-19 真机量出来的）', () => {
+  // 这一格是本轮在真 Chrome 里点出来的：HAR 段那颗确认按钮写着 `importButton`（中文「导入配置」），
+  // 而它做的是「从抓包创建规则」。同一弹窗里两颗按钮同名、其中一颗还说错自己干什么，
+  // 用户按标签找入口就会点错——渲染与文案都不报错，只有读过界面的人才会发现。
+  it("`t('importButton')` 在整个弹窗里只出现一次（配置导入那一节）", () => {
+    expect(importExport.match(/t\('importButton'\)/g)).toHaveLength(1);
+  });
+
+  it('HAR 段用专属标签，且仍由 `harFileContent` 决定出不出', () => {
+    expect(importExport).toContain("t('importHarCreateRules')");
+    const harButton = importExport.slice(
+      importExport.indexOf('v-if="harFileContent"'),
+      importExport.indexOf('importHarCreateRules'),
+    );
+    expect(harButton).toContain('@click="handleImportHar"');
+  });
+
+  it('中英两侧的专属标签都不与「导入配置 / Import」同字', () => {
+    const zhLabels = JSON.parse(fs.readFileSync('locales/zh_CN/options.json', 'utf8'));
+    const enLabels = JSON.parse(fs.readFileSync('locales/en/options.json', 'utf8'));
+    expect(zhLabels.importHarCreateRules).not.toBe(zhLabels.importButton);
+    expect(enLabels.importHarCreateRules).not.toBe(enLabels.importButton);
+    expect(zhLabels.importHarCreateRules).toContain('HAR');
+    expect(enLabels.importHarCreateRules).toContain('HAR');
+  });
+});

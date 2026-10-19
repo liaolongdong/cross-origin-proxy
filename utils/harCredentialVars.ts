@@ -62,9 +62,9 @@ export interface RelocatedHar {
   rules: ProxyRule[];
   /** 需要合并进变量表的那部分（不含既有变量） */
   variables: VariableStore;
-  /** 改成引用的头的数量 */
+  /** 改成引用的**头**的数量（同值复用同一变量时不新建，所以它可以大于本次真正新增的变量条数） */
   relocated: number;
-  /** 因为装不下、名字不合用、或本就是引用而保留原值的数量 */
+  /** 因为装不下、名字不合用、或值超过单条长度上限而保留原值的头的数量（「本来就是引用」不计——它没被改动） */
   keptRaw: number;
 }
 

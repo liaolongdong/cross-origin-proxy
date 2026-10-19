@@ -218,7 +218,7 @@
           style="margin-top: 12px"
           @click="handleImportHar"
         >
-          {{ t('importButton') }}
+          {{ t('importHarCreateRules') }}
         </el-button>
       </div>
     </div>
