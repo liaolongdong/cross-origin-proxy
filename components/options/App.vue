@@ -845,16 +845,24 @@ async function handleImported(stats: ImportResultStats) {
   showImportExport.value = false;
 }
 
-async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[], targetOrigin: string) {
+async function handleImportHarRules(
+  harRules: import('@/utils/types').ProxyRule[],
+  targetOrigin: string,
+  relocated: number,
+  keptRaw: number,
+) {
   try {
     // 批量一次写入，避免逐条 sendMessage 触发 N 次 DNR 重建
     await batchAddRules(harRules);
-    // 换了环境就说清「指到哪去了」：只报条数会让用户以为这批规则跟自己刚才填的那个地址无关
-    ElMessage.success(
-      targetOrigin
-        ? t('importHarSuccessWithTarget', [harRules.length, targetOrigin])
-        : t('importHarSuccess', [harRules.length]),
-    );
+    // 换了环境就说清「指到哪去了」、搬了凭据就点名搬了几个、装不下而保留原值的也要点名：
+    // 三者都是用户刚做的显式选择或它的代价，只报条数等于让人事后自己猜这句话包含了什么
+    const base = targetOrigin
+      ? t('importHarSuccessWithTarget', [harRules.length, targetOrigin])
+      : t('importHarSuccess', [harRules.length]);
+    const suffix =
+      (relocated > 0 ? t('importHarSuccessRelocated', [relocated]) : '') +
+      (keptRaw > 0 ? t('importHarSuccessKeptRaw', [keptRaw]) : '');
+    ElMessage.success(base + suffix);
     showImportExport.value = false;
   } catch (error) {
     // 失败时不关窗：达上限时用户删几条即可重试，不必重新选文件

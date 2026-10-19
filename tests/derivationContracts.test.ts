@@ -132,6 +132,39 @@ describe('HAR 目标环境 — 非必填，且复选框不出现时不参与启�
 });
 
 /**
+ * 批次三：HAR 凭据搬进变量表（默认不勾）
+ *
+ * 这一格钉的全是「静默就会有害」的形状：默认值从 false 翻成 true 是改变既有导入结果；
+ * 严格判据松成 truthy 判断会让一个混进消息体的字符串偷偷改变产出；写失败被吞掉则界面
+ * 说「导入成功」而规则里留下一批引用不存在的变量。判据本身在 `tests/harCredentialVars.test.ts`。
+ */
+describe('HAR 凭据搬家 — 默认不勾、严格判、失败不吞', () => {
+  const router = fs.readFileSync('entrypoints/background/messageRouter.ts', 'utf8');
+
+  it('界面那格的默认值是「不勾」，且勾上才多说一句为什么', () => {
+    expect(importExport).toContain('const harRelocateCredentials = ref(false)');
+    expect(importExport).toContain('v-model="harRelocateCredentials"');
+    expect(importExport).toContain('v-if="harRelocateCredentials"');
+  });
+
+  it('后台只认严格 true，不勾时的分支一个字都不多写', () => {
+    expect(flat(router)).toContain('if (message.data.relocateCredentials !== true) {');
+    expect(flat(router)).toContain('relocateHarCredentialHeaders(rules, existing)');
+  });
+
+  it('写变量表失败既不能静默、也不能把规则交回界面', () => {
+    expect(router).toContain("if (dropped > 0) throw new Error('VARIABLES_DROPPED')");
+    // 合并写：整表覆盖的入口是 `saveVariables`，直接交新值就是抹掉用户已有凭据
+    expect(flat(router)).toContain('await saveVariables({ ...existing, ...moved.variables })');
+  });
+
+  it('两个计数都进成功提示（搬了几个、装不下留了几个）', () => {
+    expect(flat(optionsApp)).toContain("t('importHarSuccessRelocated', [relocated])");
+    expect(flat(optionsApp)).toContain("t('importHarSuccessKeptRaw', [keptRaw])");
+  });
+});
+
+/**
  * 批次二：日志转 Mock 的接线
  *
  * 这里只钉三件「看不见」的事：判据只有一个出口、五种拒绝的文案都是字面量 key、草稿走表单

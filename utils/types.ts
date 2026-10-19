@@ -512,10 +512,24 @@ export interface ExportHarMessage {
  * `targetOrigin` / `enableOnImport` 是「把这一批抓包直接指到另一个环境」的那一步：它们随消息
  * 进后台，由 SW 自己按 `apiOriginOf` 重判（载荷属不可信输入，绕过界面不代表后台该照单全收），
  * 判据与其余 HAR 闸门同处。两者都不传时后台产出与本功能存在之前逐字节相同。
+ *
+ * `relocateCredentials` 把抓到的 `Authorization` / `Cookie` / `x-api-key` 原值搬进凭据变量表、
+ * 规则里只留 `{{名称}}` 引用（口径见 `utils/harCredentialVars.ts`）。同样只认严格 `true`。
  */
 export interface ImportHarMessage {
   type: MessageType.IMPORT_HAR;
-  data: HarImportPayload & { targetOrigin?: string; enableOnImport?: boolean };
+  data: HarImportPayload & { targetOrigin?: string; enableOnImport?: boolean; relocateCredentials?: boolean };
+}
+
+/** `IMPORT_HAR` 的回包：规则交回界面写入，`relocated` / `keptRaw` 是给成功提示用的计数 */
+export interface ImportHarResult {
+  success: boolean;
+  error?: string;
+  rules?: ProxyRule[];
+  /** 改成 `{{名称}}` 引用的凭据头数量 */
+  relocated?: number;
+  /** 因变量表装不下而保留原值的数量（界面必须把这一档说出来） */
+  keptRaw?: number;
 }
 
 /** 获取环境配置列表 */

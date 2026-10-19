@@ -38,6 +38,7 @@ import {
   getRecentTargets,
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
+import { relocateHarCredentialHeaders } from '@/utils/harCredentialVars';
 import { apiOriginOf } from '@/utils/pageApiOrigins';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
@@ -590,8 +591,34 @@ export function setupMessageRouter(): void {
           return false;
         }
         const rules = harEntriesToRules(entries, harTargetFromMessage(message));
-        sendResponse({ success: true, rules });
-        return false;
+        // 凭据搬家是**用户勾了才做**的一步：默认形状与这个选项存在之前逐字节相同。
+        // 只认严格 true（与 `sendCredentials` 同一档写法），且变量写失败就整笔失败——
+        // 静默回退成原值等于把用户明确要的那一步偷偷取消掉。
+        if (message.data.relocateCredentials !== true) {
+          sendResponse({ success: true, rules });
+          return false;
+        }
+        return respondAsync(
+          sendResponse,
+          (async () => {
+            const existing = await getVariables();
+            const moved = relocateHarCredentialHeaders(rules, existing);
+            const created = Object.keys(moved.variables);
+            if (created.length > 0) {
+              // 收口函数自己那条上限在这里是第二道：真丢了条目，规则会引用一条不存在的变量、
+              // 运行时原样发出 `{{HAR_x}}` 并被上游 401——那就不是「省一步手工粘贴」而是埋一条坏配置，
+              // 所以宁可让这次导入整体失败（回包的 error 只进日志，界面说的是 `importHarFailed`）。
+              const { dropped } = await saveVariables({ ...existing, ...moved.variables });
+              if (dropped > 0) throw new Error('VARIABLES_DROPPED');
+            }
+            return {
+              success: true,
+              rules: moved.rules,
+              relocated: moved.relocated,
+              keptRaw: moved.keptRaw,
+            };
+          })(),
+        );
       }
 
       case MessageType.GET_PROFILES:

@@ -197,6 +197,20 @@
         >
           {{ t('importHarEnableOnImport') }}
         </el-checkbox>
+        <!-- 默认不勾：勾上才会把抓到的凭据头搬进变量表、规则里只留 `{{名称}}` 引用。
+             不勾时的产出与这个选项存在之前逐字节相同（原值进 `headerOverrides`）。 -->
+        <el-checkbox
+          v-model="harRelocateCredentials"
+          class="har-relocate"
+        >
+          {{ t('importHarRelocateCredentials') }}
+        </el-checkbox>
+        <p
+          v-if="harRelocateCredentials"
+          class="section-desc har-target-desc"
+        >
+          {{ t('importHarRelocateCredentialsDesc') }}
+        </p>
         <el-button
           v-if="harFileContent"
           type="success"
@@ -216,7 +230,14 @@ import { ref, computed, watch } from 'vue';
 import { Download, Upload } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadFile } from 'element-plus';
-import type { HarImportPayload, ImportMode, ImportPlan, ImportResultStats, ProxyRule } from '@/utils/types';
+import type {
+  HarImportPayload,
+  ImportHarResult,
+  ImportMode,
+  ImportPlan,
+  ImportResultStats,
+  ProxyRule,
+} from '@/utils/types';
 import { MessageType } from '@/utils/types';
 import { MAX_IMPORT_FILE_SIZE, MAX_RULES } from '@/utils/constants';
 import { harEntriesOverLimit } from '@/utils/har';
@@ -249,7 +270,7 @@ const emit = defineEmits<{
    * `targetOrigin` 是这一批被指过去的那个环境，空串表示没填——父组件据此选一句成功提示，
    * 免得「创建了 N 条规则」这句话在用户刚刚换了环境时听起来像什么都没发生。
    */
-  importHarRules: [rules: ProxyRule[], targetOrigin: string];
+  importHarRules: [rules: ProxyRule[], targetOrigin: string, relocated: number, keptRaw: number];
   importCurl: [data: ParsedCurl];
 }>();
 
@@ -271,6 +292,8 @@ const harFileContent = ref<string | null>(null);
 const harTargetOrigin = ref('');
 /** 复选框只在读得出目标时出现，所以它「没出现」时一律按未勾参与（见 `harEnableOnImportFlag`） */
 const harEnableOnImport = ref(true);
+/** 抓包里的凭据头是否搬进变量表；默认关，关着时后台产出的形状与本选项存在之前逐字节相同 */
+const harRelocateCredentials = ref(false);
 
 /** 输入里读得出的 origin；空串表示没填或读不出（粘整条 URL 也接受，只取协议+域名+端口） */
 const harTargetParsed = computed(() => apiOriginOf(harTargetOrigin.value.trim()));
@@ -524,6 +547,7 @@ function resetHarPick(): void {
   harFileContent.value = null;
   harTargetOrigin.value = '';
   harEnableOnImport.value = true;
+  harRelocateCredentials.value = false;
   harUploadRef.value?.clearFiles();
 }
 
@@ -549,15 +573,16 @@ async function handleImportHar() {
         ...harData,
         targetOrigin: harTargetParsed.value || undefined,
         enableOnImport: harEnableOnImportFlag.value,
+        relocateCredentials: harRelocateCredentials.value,
       },
-    })) as { success?: boolean; rules?: ProxyRule[]; error?: string } | undefined;
+    })) as ImportHarResult | undefined;
     // `?.` 是必需的：SW 刚被回收时 `sendMessage` 会 resolve `undefined`（与 `importConfig`
     // 同一件事）。少了它，这一行抛的 TypeError 会被下面的 catch 收成「文件不合法」——
     // 用户的 HAR 明明没问题，却被指着格式说事，重试多少次都是同一句话。
     if (result?.success && result.rules) {
       // 只负责把规则交给父组件写入：emit 是同步的，此处弹「成功」会在达上限时
       // 与父组件的失败提示同时出现，输入也会被提前清掉、无法重试
-      emit('importHarRules', result.rules, harTargetParsed.value);
+      emit('importHarRules', result.rules, harTargetParsed.value, result.relocated ?? 0, result.keptRaw ?? 0);
     } else {
       ElMessage.error(t('importHarFailed'));
     }
@@ -607,7 +632,8 @@ async function handleImportHar() {
   color: var(--el-color-danger);
 }
 
-.har-enable-on-import {
+.har-enable-on-import,
+.har-relocate {
   margin-top: 2px;
 }
 
