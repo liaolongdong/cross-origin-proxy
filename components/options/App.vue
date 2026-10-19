@@ -72,6 +72,8 @@
       v-model:visible="showRuleDialog"
       :rule="editingRule"
       :initial-data="templateInitialData"
+      :derived-draft="derivedDraft"
+      :target-suggestions="targetSuggestions"
       @save="handleSaveRule"
     />
     <ImportExportDialog
@@ -132,7 +134,9 @@
 import { ref, computed, watch, onMounted, onUnmounted, h, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { ImportResultStats, ProxyRule } from '@/utils/types';
-import { MAX_RULES, DELETE_UNDO_WINDOW_MS } from '@/utils/constants';
+import { MessageType } from '@/utils/types';
+import { MAX_RULES, MAX_RECENT_TARGETS, DELETE_UNDO_WINDOW_MS } from '@/utils/constants';
+import { distinctTargetOrigins, sanitizeRecentTargets } from '@/utils/recentTargets';
 import { useRuleManagement } from '@/composables/useRuleManagement';
 import { useDeleteUndo } from '@/composables/useDeleteUndo';
 import { useDnrSupport, useDnrSkipText } from '@/composables/useDnrSupport';
@@ -273,6 +277,38 @@ const editingRule = ref<ProxyRule | null>(null);
  */
 const savingRule = ref(false);
 const templateInitialData = ref<Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> | null>(null);
+/**
+ * 这一次打开表单，是不是从「一条真实地址」派生出来的（cURL / 日志 / 本页接口）
+ *
+ * 同源提示只在这种草稿上出现：模板卡里有「注入认证头」那种**故意**自映射的形状，
+ * 给它也永久挂一句警告，教会用户的是忽略这句话，而不是换环境。
+ */
+const derivedDraft = ref(false);
+/** 最近用过的目标环境（存储层在规则落盘后记的，见 `utils/recentTargets.ts`） */
+const recentTargets = ref<string[]>([]);
+/**
+ * `目标URL` 那一格的下拉候选：最近用过的 ∪ 现有规则里换过环境的
+ *
+ * 两份都出自同一份判据（`distinctTargetOrigins`），所以不会出现「保存时记了、下拉里没有」。
+ * 读不到候选就是「没有候选」——它是便利列表，坏了不该在配置页冒出错误。
+ */
+const targetSuggestions = computed(() => {
+  const merged: string[] = [];
+  for (const origin of [...recentTargets.value, ...distinctTargetOrigins(rules.value)]) {
+    if (!merged.includes(origin)) merged.push(origin);
+  }
+  return merged.slice(0, MAX_RECENT_TARGETS);
+});
+
+/** 打开配置页时读一次候选；失败只记日志，界面上什么都不说 */
+async function loadRecentTargets(): Promise<void> {
+  try {
+    const result = (await chrome.runtime.sendMessage({ type: MessageType.GET_RECENT_TARGETS })) as unknown;
+    recentTargets.value = sanitizeRecentTargets(result);
+  } catch (error) {
+    logger.debug('Recent targets unavailable:', error);
+  }
+}
 const highlightRuleId = ref<string | null>(null);
 
 // 搜索与筛选（状态在容器层，SearchFilterBar 为受控组件）
@@ -373,6 +409,7 @@ onMounted(async () => {
 
   void fetchDnrStats();
   void fetchSwStats();
+  void loadRecentTargets();
 
   // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出，
   // #profiles 打开环境配置，#url-test 打开 URL 匹配预演，
@@ -486,19 +523,26 @@ async function handleToggleProxy(val: boolean) {
 function handleAddRule() {
   editingRule.value = null;
   templateInitialData.value = null;
+  derivedDraft.value = false;
   showRuleDialog.value = true;
 }
 
-/** 使用模板：预填充表单数据并以新增模式打开弹窗 */
-function handleUseTemplate(data: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
+/**
+ * 使用模板：预填充表单数据并以新增模式打开弹窗
+ * @param from `'derived'` 表示这份草稿是从一条真实地址派生出来的（cURL / 日志 / 本页接口），
+ *   表单上那句「还不改写」的提示只在这种草稿上出现；七张模板卡都不带这个标记。
+ */
+function handleUseTemplate(data: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>, from?: 'derived') {
   editingRule.value = null;
   templateInitialData.value = data;
+  derivedDraft.value = from === 'derived';
   showRuleDialog.value = true;
 }
 
 function handleEditRule(rule: ProxyRule) {
   editingRule.value = { ...rule };
   templateInitialData.value = null;
+  derivedDraft.value = false;
   showRuleDialog.value = true;
 }
 
@@ -800,11 +844,16 @@ async function handleImported(stats: ImportResultStats) {
   showImportExport.value = false;
 }
 
-async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[]) {
+async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[], targetOrigin: string) {
   try {
     // 批量一次写入，避免逐条 sendMessage 触发 N 次 DNR 重建
     await batchAddRules(harRules);
-    ElMessage.success(t('importHarSuccess', [harRules.length]));
+    // 换了环境就说清「指到哪去了」：只报条数会让用户以为这批规则跟自己刚才填的那个地址无关
+    ElMessage.success(
+      targetOrigin
+        ? t('importHarSuccessWithTarget', [harRules.length, targetOrigin])
+        : t('importHarSuccess', [harRules.length]),
+    );
     showImportExport.value = false;
   } catch (error) {
     // 失败时不关窗：达上限时用户删几条即可重试，不必重新选文件
@@ -832,7 +881,7 @@ function handleImportCurl(parsed: import('@/utils/curlParser').ParsedCurl) {
   if (parsed.body !== undefined) {
     prefill.requestBodyOverride = parsed.body;
   }
-  handleUseTemplate(prefill);
+  handleUseTemplate(prefill, 'derived');
 }
 
 /** 环境配置加载成功后：后台已整体替换规则集，刷新本地列表保持一致 */
@@ -876,7 +925,7 @@ function handleCreateRuleFromUrl(rawUrl: string): boolean {
     ElMessage.error(t('createRuleFromLogFailed'));
     return false;
   }
-  handleUseTemplate(buildOriginWildcardDraft(url, `${t('createRuleFromLogPrefix')} ${url.hostname}`));
+  handleUseTemplate(buildOriginWildcardDraft(url, `${t('createRuleFromLogPrefix')} ${url.hostname}`), 'derived');
   return true;
 }
 

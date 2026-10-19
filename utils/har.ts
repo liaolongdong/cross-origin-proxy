@@ -1,6 +1,7 @@
 import type { RequestLogEntry, HarEntry, ProxyRule } from '@/utils/types';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { isProxyableProtocol } from '@/utils/ruleValidation';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import { generateId } from '@/utils/generateId';
 import { MAX_HAR_IMPORT_ENTRIES } from '@/utils/constants';
 
@@ -87,11 +88,23 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
  * - 协议：只收本扩展能代理的协议（{@link isProxyableProtocol}，口径与 `utils/curlParser.ts` 同源）。
  * - 条目形状：`headers` 不是数组、头项缺 `name`/`value` 都只跳过那一条头，不让它连带作废整条规则。
  * 去重登记因此必须挨着 `rules.push`——早一步登记就会让一条坏条目吃掉同 origin 后面那条好规则。
+ *
+ * @param entries HAR 条目（不可信输入）
+ * @param opts `targetOrigin` 把这一批 origin 规则**一并指过去**（抓包→可用配置的那一步）；
+ *   它为空或解析不出 http(s) origin 时当作没填，产出与本函数历史形状逐字节相同（`enabled: false`、
+ *   目标等于源站）。`enabled` 绑在合法目标之后，没有换环境就不凭空打开这批规则。
  */
-export function harEntriesToRules(entries: HarEntry[]): ProxyRule[] {
+export function harEntriesToRules(
+  entries: HarEntry[],
+  opts?: { targetOrigin?: string; enabled?: boolean },
+): ProxyRule[] {
   const now = Date.now();
   const seenOrigins = new Set<string>();
   const rules: ProxyRule[] = [];
+  // 目标环境只在**自己解析得出 http(s) origin** 时生效：空串或非法串一律当「没填」，
+  // 于是下面的产出与不传 opts 时逐字节相同。启用开关绑在它之后——没换环境就默认启用是凭空打开规则。
+  const targetOrigin = opts?.targetOrigin ? apiOriginOf(opts.targetOrigin) : '';
+  const enabled = !!targetOrigin && opts?.enabled === true;
 
   for (const entry of entries) {
     try {
@@ -123,9 +136,9 @@ export function harEntriesToRules(entries: HarEntry[]): ProxyRule[] {
       const rule: ProxyRule = {
         id: generateId(),
         name: `Imported: ${url.hostname}`,
-        enabled: false,
+        enabled,
         matchPattern: `${origin}/*`,
-        targetUrl: origin,
+        targetUrl: targetOrigin || origin,
         matchType: 'wildcard',
         priority: 100,
         createdAt: now,

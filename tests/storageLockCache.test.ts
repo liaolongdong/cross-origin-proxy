@@ -30,7 +30,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProxyConfig, ProxyRule, RequestLogEntry } from '@/utils/types';
-import { DEFAULT_PROXY_CONFIG, MAX_RULES, STORAGE_KEYS } from '@/utils/constants';
+import { DEFAULT_PROXY_CONFIG, MAX_RECENT_TARGETS, MAX_RULES, STORAGE_KEYS } from '@/utils/constants';
 
 /** 真实 `chrome.storage` 的 onChanged 回调签名，这里只用到 `storage.ts` 会读的那两个字段 */
 type ChangeListener = (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, areaName: string) => void;
@@ -47,6 +47,16 @@ const changeListeners: ChangeListener[] = [];
 let opLog: string[];
 /** 置为字符串时，下一次 `set` 抛该文案（配额/异常的替身） */
 let failNextSet: string | false = false;
+/**
+ * 置为 N 时，本用例内第 N 次 `set` 抛错一次
+ *
+ * 存在的理由是要单独让**后一笔**失败：`failNextSet` 只能打中第一笔（主写入），而
+ * 「候选写失败绝不能翻成保存失败」这一格需要的是主写入成功、紧随其后的那一笔被配额拒。
+ * 不用 `mockImplementation` 覆盖整只 spy 是因为那份桩会漏给后面的用例（本文件的
+ * `beforeEach` 只清计数与 store，不还原实现）。
+ */
+let failNthSet: number | null = null;
+let setCalls = 0;
 
 const getSpy = vi.fn(async (keys?: string | string[] | null): Promise<Record<string, unknown>> => {
   const names = keys === undefined || keys === null ? Object.keys(store) : typeof keys === 'string' ? [keys] : keys;
@@ -59,10 +69,15 @@ const getSpy = vi.fn(async (keys?: string | string[] | null): Promise<Record<str
 });
 
 const setSpy = vi.fn(async (items: Record<string, unknown>): Promise<void> => {
+  setCalls += 1;
   if (failNextSet !== false) {
     const message = failNextSet;
     failNextSet = false;
     throw new Error(message);
+  }
+  if (failNthSet === setCalls) {
+    failNthSet = null;
+    throw new Error('QuotaBytes exceeded');
   }
   for (const [key, value] of Object.entries(items)) {
     store[key] = clone(value);
@@ -82,6 +97,7 @@ const {
   addRequestLog,
   addRule,
   batchAddRules,
+  batchUpdateTargets,
   clearRequestLogs,
   configRules,
   deleteRule,
@@ -89,6 +105,7 @@ const {
   getProfiles,
   getProxyConfig,
   getRequestLogs,
+  getRecentTargets,
   getVariables,
   invalidateConfigCache,
   invalidateLogsCache,
@@ -142,6 +159,8 @@ beforeEach(() => {
   store = {};
   opLog = [];
   failNextSet = false;
+  failNthSet = null;
+  setCalls = 0;
   getSpy.mockClear();
   setSpy.mockClear();
   invalidateConfigCache();
@@ -211,7 +230,8 @@ describe('互斥锁：并发读改写不丢更新', () => {
     await Promise.all([added, replaced]);
 
     // 串行 = 新增先读完并落盘，替换随后整份覆盖；不加锁时中间那次 set 会跑到 get 与 set 之间
-    expect(opLog).toEqual([
+    // 只看配置键：`addRule` 成功后还会为候选多走一笔（见文件末尾那一组），那一笔的去处不是这里要问的
+    expect(opLog.filter(entry => entry.includes(STORAGE_KEYS.PROXY_CONFIG))).toEqual([
       `get:${STORAGE_KEYS.PROXY_CONFIG}`,
       `set:${STORAGE_KEYS.PROXY_CONFIG}`,
       `set:${STORAGE_KEYS.PROXY_CONFIG}`,
@@ -592,5 +612,105 @@ describe('日志表缓存：只挡不是自己写的那一笔', () => {
     await addRequestLog(log('c'));
     await flushLogs();
     expect((await getRequestLogs()).map(l => l.id)).toEqual(['c']);
+  });
+});
+
+/**
+ * `recent_targets`：规则落盘**之后**才记的那份便利候选
+ *
+ * 三个承重点，都按「外部可观察面」断言，不看实现细节：
+ * 1. **顺序**——这一笔必须排在主写入之后（拿 1M 字符那笔恢复点换来的同一条纪律）：它自己去抢
+ *    主写入要的配额，就是「安全网自己落盘成功、把用户要的那次挤失败」。
+ * 2. **失败不外泄**——候选自己写失败（配额）时，`addRule` 照样成功、规则照样在盘上；
+ *    反过来主写入失败时候选**一个字都不写**（否则盘上没有的规则在候选里活着）。
+ * 3. **只记真正换过环境的那些**——自映射（合法的纯头注入）、空目标（Mock）、含 `{{变量}}` 而
+ *    读不出 origin 的，都不该出现。少了这一格，候选会被用户最常写的「同源注头」规则淹没。
+ */
+describe('recent_targets：候选记在主写入之后，且只记换过环境的', () => {
+  /** 只看「有没有为候选动过写盘」，不锁死读的次数——读侧收口是实现细节，写盘才是外部可观察面 */
+  const touchedTargets = () => opLog.some(op => op === `set:${STORAGE_KEYS.RECENT_TARGETS}`);
+
+  it('addRule 把换过去的目标记下来', async () => {
+    await addRule(makeRule('a'));
+    expect(await getRecentTargets()).toEqual(['https://target.example.com']);
+  });
+
+  it('这一笔排在主写入之后', async () => {
+    await addRule(makeRule('a'));
+    const main = opLog.lastIndexOf(`set:${STORAGE_KEYS.PROXY_CONFIG}`);
+    const targets = opLog.findIndex(op => op === `set:${STORAGE_KEYS.RECENT_TARGETS}`);
+    expect(main).toBeGreaterThanOrEqual(0);
+    expect(targets, '候选写在主写入之前 = 拿它去抢主写入要的配额').toBeGreaterThan(main);
+  });
+
+  it.each([
+    ['自映射（合法的纯头注入）', { targetUrl: 'https://api.example.com' }],
+    ['空目标（Mock 规则）', { targetUrl: '' }],
+    ['目标里是变量引用', { targetUrl: '{{GATEWAY}}' }],
+    ['目标读不出 URL', { targetUrl: 'not a url' }],
+  ])('%s：一个字都不记', async (_label, overrides) => {
+    await addRule(makeRule('a', overrides));
+    expect(await getRecentTargets()).toEqual([]);
+    expect(touchedTargets(), '没有值得记的目标就不该多一次写盘').toBe(false);
+  });
+
+  it('候选那一笔被配额拒时，保存照样成功、规则照样在盘上', async () => {
+    failNthSet = 2; // 第一笔是主写入，第二笔才是候选
+    await expect(addRule(makeRule('a'))).resolves.toBeUndefined();
+    expect(storedRules()).toEqual(['a']);
+    expect(await getRecentTargets()).toEqual([]);
+    expect(setCalls, '主写入与候选各一笔；只测其中一笔等于没测这条顺序').toBe(2);
+  });
+
+  it('主写入失败时候选一个字都不写', async () => {
+    failNextSet = 'QuotaBytes exceeded';
+    await expect(addRule(makeRule('a'))).rejects.toThrow();
+    expect(touchedTargets()).toBe(false);
+    expect(store[STORAGE_KEYS.RECENT_TARGETS]).toBeUndefined();
+  });
+
+  it('updateRule 记的是合并之后那一份，并插在旧候选前面', async () => {
+    putConfig({ enabled: false, rules: [makeRule('a', { targetUrl: 'https://old.example.com' })] });
+    store[STORAGE_KEYS.RECENT_TARGETS] = ['https://earlier.test'];
+    await updateRule('a', makeRuleBody({ targetUrl: 'https://new.example.com' }));
+    expect(await getRecentTargets()).toEqual(['https://new.example.com', 'https://earlier.test']);
+  });
+
+  it('batchAddRules 一次写入只补一笔候选，上限按批次顺序收口', async () => {
+    store[STORAGE_KEYS.RECENT_TARGETS] = ['https://earlier.test'];
+    const rules = Array.from({ length: MAX_RECENT_TARGETS + 4 }, (_unused, index) =>
+      makeRule(`r${index}`, { targetUrl: `https://e${index}.test` }),
+    );
+    await batchAddRules(rules);
+    const targets = await getRecentTargets();
+    // 同一批里不存在「谁更新」——它们同时落盘，所以按批次顺序排，旧的候选整体被挤到上限之外
+    expect(targets).toEqual(rules.slice(0, MAX_RECENT_TARGETS).map(rule => rule.targetUrl));
+    expect(targets).not.toContain('https://earlier.test');
+  });
+
+  it('迁移弹窗换过去的目标同样算一次（它就是那个动作）', async () => {
+    putConfig({ enabled: false, rules: [makeRule('a', { targetUrl: 'https://old.example.com' })] });
+    store[STORAGE_KEYS.RECENT_TARGETS] = ['https://earlier.test'];
+    await batchUpdateTargets([{ id: 'a', targetUrl: 'https://migrated.example.com' }]);
+    expect(await getRecentTargets()).toEqual(['https://migrated.example.com', 'https://earlier.test']);
+  });
+
+  it('同一批里目标彼此相同的规则只占一格，迁移与保存共用一份判据', async () => {
+    putConfig({
+      enabled: false,
+      rules: [makeRule('a', { targetUrl: 'https://x.test' }), makeRule('b', { targetUrl: 'https://x.test' })],
+    });
+    await batchUpdateTargets([
+      { id: 'a', targetUrl: 'https://shared.example.com' },
+      { id: 'b', targetUrl: 'https://shared.example.com' },
+    ]);
+    expect(await getRecentTargets()).toEqual(['https://shared.example.com']);
+  });
+
+  it('存储里那个键被手改坏时回落空候选，而不是报错', async () => {
+    store[STORAGE_KEYS.RECENT_TARGETS] = { not: 'an array' };
+    expect(await getRecentTargets()).toEqual([]);
+    store[STORAGE_KEYS.RECENT_TARGETS] = ['https://ok.test', 7, '', null, 'https://ok.test'];
+    expect(await getRecentTargets()).toEqual(['https://ok.test']);
   });
 });

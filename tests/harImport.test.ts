@@ -253,3 +253,74 @@ describe('harEntriesOverLimit — 多少条算超', () => {
     }
   });
 });
+
+/**
+ * 目标环境那一步（`opts`）：把「导入抓包 → 一堆自映射规则、还得逐条手改」折成一次输入就可用。
+ *
+ * 承重的是**它的缺席**：不传 `opts`（或传了个读不出 origin 的值）时，产出必须与本功能存在之前
+ * 逐字节相同——默认停用那句承诺在中英七处文档里写着，而「填了目标才启用」是唯一新增的启用路径。
+ * 少一条这条方向的断言，将来有人把 `enabled` 写成无条件 `true` 就只会由文档那一侧发现，而文档不会红。
+ */
+describe('harEntriesToRules — 目标环境（opts.targetOrigin / opts.enabled）', () => {
+  /** 去掉每次运行都不同的三个字段，好让「逐字节相同」这件事可比 */
+  function comparable(rules: ReturnType<typeof harEntriesToRules>) {
+    return rules.map(({ id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest }) => rest);
+  }
+
+  it('不传 opts：产出就是历史形状（自映射 + 停用 + 优先级 100）', () => {
+    expect(comparable(harEntriesToRules([entry('https://fat.example.com/api/x')]))).toEqual([
+      {
+        name: 'Imported: fat.example.com',
+        enabled: false,
+        matchPattern: 'https://fat.example.com/*',
+        targetUrl: 'https://fat.example.com',
+        matchType: 'wildcard',
+        priority: 100,
+      },
+    ]);
+  });
+
+  it('合法目标 + enabled：目标换过去、这一批默认启用', () => {
+    const [rule] = harEntriesToRules([entry('https://fat.example.com/api/x')], {
+      targetOrigin: 'https://uat.example.com',
+      enabled: true,
+    });
+    expect(rule.targetUrl).toBe('https://uat.example.com');
+    expect(rule.enabled).toBe(true);
+    // 匹配侧一个字都不动：改的只是「指到哪」
+    expect(rule.matchPattern).toBe('https://fat.example.com/*');
+  });
+
+  it('目标粘成整条 URL 也只取 origin（协议+域名+端口）', () => {
+    const [rule] = harEntriesToRules([entry('https://fat.example.com/api/x')], {
+      targetOrigin: 'https://uat.example.com/some/path?token=abc',
+      enabled: true,
+    });
+    expect(rule.targetUrl).toBe('https://uat.example.com');
+  });
+
+  it.each([
+    ['空串', ''],
+    ['读不出 URL 的串', 'not a url'],
+    ['非 http(s) 协议', 'file:///tmp/uat'],
+    ['不透明 origin', 'null'],
+  ])('目标为%s时一律当没填：回落历史形状，哪怕 enabled 传了 true', (_label, raw) => {
+    expect(
+      comparable(harEntriesToRules([entry('https://fat.example.com/api/x')], { targetOrigin: raw, enabled: true })),
+    ).toEqual(comparable(harEntriesToRules([entry('https://fat.example.com/api/x')])));
+  });
+
+  it('没换环境就不凭空启用：targetOrigin 缺省时 enabled 一律为 false', () => {
+    const [withFlag] = harEntriesToRules([entry('https://fat.example.com')], { enabled: true });
+    expect(withFlag.enabled).toBe(false);
+  });
+
+  it('多个源 origin 折叠后各自指向同一个目标', () => {
+    const rules = harEntriesToRules(
+      [entry('https://a.example.com/x'), entry('https://a.example.com/y'), entry('https://b.example.com/z')],
+      { targetOrigin: 'https://uat.example.com', enabled: true },
+    );
+    expect(rules.map(r => r.matchPattern)).toEqual(['https://a.example.com/*', 'https://b.example.com/*']);
+    expect(rules.every(r => r.targetUrl === 'https://uat.example.com' && r.enabled)).toBe(true);
+  });
+});

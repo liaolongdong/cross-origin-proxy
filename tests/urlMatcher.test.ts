@@ -9,6 +9,7 @@ import {
   isRegexSafe,
   isPatternUsable,
   isUrlTooLongForScan,
+  sameOriginNoRewrite,
   MAX_MATCH_URL_LENGTH,
 } from '@/utils/urlMatcher';
 import type { ProxyRule } from '@/utils/types';
@@ -281,5 +282,70 @@ describe('超限 URL 不进 wildcard/regex 扫描', () => {
     const noTarget = makeRule({ matchPattern: 'https://a.com/*' });
     expect(rewriteUrl(over, noTarget)).toBe(over);
     expect(rewriteUrl('https://a.com/x', noTarget)).toBe('https://a.com/x');
+  });
+});
+
+/**
+ * `sameOriginNoRewrite` —— 「这一条根本不改写地址」那句界面提示的唯一判据
+ *
+ * 它只服务提示与候选收集，不参与生效判定，所以这里的断言全部围绕**它不许说谎**：
+ * 判不出来（regex、无协议的模式、变量引用）一律 false，绝不能把「不知道」画成「这条没配好」；
+ * 端口参与 origin 比较，`8443` 与默认端口是两个环境，说成同源就是把可用配置说成空转。
+ */
+describe('sameOriginNoRewrite — 目标与匹配来源是否同一个 origin', () => {
+  it.each([
+    [
+      'wildcard 自映射（派生草稿的形状）',
+      { matchType: 'wildcard' as const, matchPattern: 'https://a.com/*', targetUrl: 'https://a.com' },
+      true,
+    ],
+    [
+      '目标多写了尾斜杠',
+      { matchType: 'wildcard' as const, matchPattern: 'https://a.com/*', targetUrl: 'https://a.com/' },
+      true,
+    ],
+    [
+      'prefix 同源',
+      { matchType: 'prefix' as const, matchPattern: 'https://a.com/api', targetUrl: 'https://a.com' },
+      true,
+    ],
+    [
+      '换到另一个域名',
+      { matchType: 'wildcard' as const, matchPattern: 'https://a.com/*', targetUrl: 'https://b.com' },
+      false,
+    ],
+    [
+      '换端口就是换环境',
+      { matchType: 'wildcard' as const, matchPattern: 'https://a.com:8443/*', targetUrl: 'https://a.com' },
+      false,
+    ],
+    [
+      '空目标（只注入不改写）',
+      { matchType: 'wildcard' as const, matchPattern: 'https://a.com/*', targetUrl: '' },
+      false,
+    ],
+    [
+      '目标是变量引用，读不出 origin',
+      { matchType: 'wildcard' as const, matchPattern: 'https://a.com/*', targetUrl: '{{GATEWAY}}' },
+      false,
+    ],
+    [
+      '模式本身不是绝对地址',
+      { matchType: 'wildcard' as const, matchPattern: 'a.com/*', targetUrl: 'https://a.com' },
+      false,
+    ],
+    [
+      'regex 判不出来，一律 false',
+      { matchType: 'regex' as const, matchPattern: '^https://a\\.com/(.*)', targetUrl: 'https://a.com' },
+      false,
+    ],
+  ])('%s → %s', (_label, rule, expected) => {
+    expect(sameOriginNoRewrite(makeRule(rule))).toBe(expected);
+  });
+
+  it('交出的是判据而不是副作用：同一份规则连问两次答案不变', () => {
+    const rule = makeRule({ matchPattern: 'https://a.com/*', targetUrl: 'https://a.com' });
+    expect(sameOriginNoRewrite(rule)).toBe(true);
+    expect(sameOriginNoRewrite(rule)).toBe(true);
   });
 });

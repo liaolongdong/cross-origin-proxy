@@ -64,10 +64,17 @@ const MUTATING_TYPES: MessageType[] = [
  * 而这两条桥接层从不转发。少了这道 gate，任意页面一次 sendMessage 就能读走
  * 用户所有环境的密钥（或历次成套替换前的真实请求头），「真值只在 SW 展开」的整套设计当场作废。
  *
- * 判据是「页面从不读取 + 回的是凭据类数据」，两者缺一都不该加进来：给内容脚本要用的消息
+ * 判据是「页面从不读取 + 回的是凭据或本地数据」，两者缺一都不该加进来：给内容脚本要用的消息
  * 加 gate 等于当场废掉代理。
+ *
+ * `GET_RECENT_TARGETS` 的理由不是「它属于读取」：那份候选是用户配过的**目标环境 origin 清单**，
+ * 对内网拓扑的说明力比界面看上去需要的多，而它的读者只有配置页。
  */
-const CREDENTIAL_READING_TYPES: MessageType[] = [MessageType.GET_VARIABLES, MessageType.GET_CONFIG_HISTORY];
+const CREDENTIAL_READING_TYPES: MessageType[] = [
+  MessageType.GET_VARIABLES,
+  MessageType.GET_CONFIG_HISTORY,
+  MessageType.GET_RECENT_TARGETS,
+];
 
 /** 刻意不经 gate 的消息：内容脚本要靠它们拉配置与代理，被 gate 住代理当场失效 */
 const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
@@ -964,5 +971,89 @@ describe('GET_PROXY_CONFIG — 拉取即视为已同步，只清自己那个标�
     await flush();
 
     expect(sync.isConfigUnsynced(26)).toBe(true);
+  });
+});
+
+/**
+ * `IMPORT_HAR` 的目标环境：载荷里那两个字段属不可信输入，后台必须自己重判一遍。
+ *
+ * 界面上确实也判过一次（`ImportExportDialog` 的输入框），但那一次只是省流量：绕过界面不代表
+ * 后台该照单全收——这与既有的「条数闸门界面与后台各跑一次、共用 `harEntriesOverLimit`」同一条理由。
+ * 判不出 origin 就当没填，此时回包必须与**不带这两个字段**时逐字节相同（默认停用那条承诺不能被动过）。
+ */
+describe('IMPORT_HAR 的目标环境与 GET_RECENT_TARGETS', () => {
+  const harPayload = (extra: Record<string, unknown> = {}) => ({
+    log: {
+      entries: [{ request: { method: 'GET', url: 'https://fat.example.com/api/x' }, response: { status: 200 } }],
+    },
+    ...extra,
+  });
+  /** 回包里的规则只留承重字段，`id` 与两个时间戳每次运行都不同 */
+  const shapeOf = (sendResponse: ReturnType<typeof vi.fn>) => {
+    const rules = (lastResponse(sendResponse) as { rules?: Record<string, unknown>[] }).rules;
+    return rules?.map(({ id: _id, createdAt: _c, updatedAt: _u, ...rest }) => rest);
+  };
+
+  it('合法目标 + 严格 true 的启用开关：目标换过去、这一批启用', async () => {
+    const { sendResponse } = dispatch(
+      MessageType.IMPORT_HAR,
+      TRUSTED_PAGE_URL,
+      harPayload({ targetOrigin: 'https://uat.example.com', enableOnImport: true }),
+    );
+    await flush();
+    expect(shapeOf(sendResponse)).toEqual([
+      {
+        name: 'Imported: fat.example.com',
+        enabled: true,
+        matchPattern: 'https://fat.example.com/*',
+        targetUrl: 'https://uat.example.com',
+        matchType: 'wildcard',
+        priority: 100,
+      },
+    ]);
+  });
+
+  it.each([
+    ['空串', ''],
+    ['读不出 URL 的串', 'javascript:alert(1)'],
+    ['非 http(s) 协议', 'file:///tmp/uat'],
+    ['不是字符串', { nested: true }],
+  ])('目标是%s时后台当没填：与不带这两个字段的回包逐字节相同', (_label, raw) => {
+    const plain = dispatch(MessageType.IMPORT_HAR, TRUSTED_PAGE_URL, harPayload());
+    const spoofed = dispatch(
+      MessageType.IMPORT_HAR,
+      TRUSTED_PAGE_URL,
+      harPayload({ targetOrigin: raw, enableOnImport: true }),
+    );
+    expect(shapeOf(spoofed.sendResponse)).toEqual(shapeOf(plain.sendResponse));
+    expect(shapeOf(spoofed.sendResponse)?.[0]).toMatchObject({ enabled: false, targetUrl: 'https://fat.example.com' });
+  });
+
+  it('启用开关只认严格 true：truthy 的字符串与数字都不打开这批规则', () => {
+    for (const raw of ['true', 1, {}]) {
+      const { sendResponse } = dispatch(
+        MessageType.IMPORT_HAR,
+        TRUSTED_PAGE_URL,
+        harPayload({ targetOrigin: 'https://uat.example.com', enableOnImport: raw }),
+      );
+      expect(shapeOf(sendResponse)?.[0], `enableOnImport=${JSON.stringify(raw)} 不该被当成 true`).toMatchObject({
+        enabled: false,
+        targetUrl: 'https://uat.example.com',
+      });
+    }
+  });
+
+  it('GET_RECENT_TARGETS 由可信 sender 读出收口后的数组', async () => {
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.GET_RECENT_TARGETS, TRUSTED_PAGE_URL, undefined);
+    expect(keepChannelOpen).toBe(true);
+    await flush();
+    expect(sendResponse).toHaveBeenCalledWith([]);
+  });
+
+  it('存储里那个键被改坏时回空数组，而不是回一个非数组或报错', async () => {
+    store[STORAGE_KEYS.RECENT_TARGETS] = 'https://uat.example.com';
+    const { sendResponse } = dispatch(MessageType.GET_RECENT_TARGETS, TRUSTED_PAGE_URL, undefined);
+    await flush();
+    expect(sendResponse).toHaveBeenCalledWith([]);
   });
 });

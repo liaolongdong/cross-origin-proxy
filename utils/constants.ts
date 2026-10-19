@@ -11,6 +11,7 @@ export const STORAGE_KEYS = {
   AUTO_OFF_MINUTES: 'auto_off_minutes', // 代理自动关闭时长（分钟），0 表示不自动关闭
   VARIABLES: 'variables', // 凭据变量表（规则里以 {{名称}} 引用，真值只存这一处）
   CONFIG_HISTORY: 'config_history', // 配置恢复点（成套替换所换掉的那份整包配置，见 utils/storage.ts）
+  RECENT_TARGETS: 'recent_targets', // 最近用过的目标环境 origin（便利候选，不参与判定、不进任何导出）
 } as const;
 
 // Theme modes
@@ -241,6 +242,13 @@ export const CONFIG_SYNC_TAB_CACHE_SIZE = 200;
  * 每次代理请求整表读进内存，且它和配置一样不申请 `unlimitedStorage`。
  */
 export const MAX_VARIABLES = 50;
+/**
+ * 最近目标环境候选的上限
+ *
+ * 收这么紧是因为它只是便利：一个人同时在几个环境之间切换，两位数足够；而这份列表读回来
+ * 会直接渲染成下拉选项，无界列表在配置页首屏上是看得见的成本。
+ */
+export const MAX_RECENT_TARGETS = 8;
 /** 变量名长度上限，与 `VARIABLE_NAME_RE` 的 1+63 对齐 */
 export const MAX_VARIABLE_NAME_LENGTH = 64;
 /**

@@ -187,6 +187,14 @@ export enum MessageType {
   // 凭据变量（仅扩展页面可用：GET 回的是真值表，内容脚本一旦能读就等于把密钥交给站点）
   GET_VARIABLES = 'GET_VARIABLES',
   SET_VARIABLES = 'SET_VARIABLES',
+
+  /**
+   * Options → SW：读最近用过的目标环境候选
+   *
+   * 与上面两条同档过 `isTrustedSender`：判据不是「它属于读取」，而是「页面永远不会问它，
+   * 而回包是用户配过的内网域名清单」（见 messageRouter 的 `CREDENTIAL_READING_TYPES`）。
+   */
+  GET_RECENT_TARGETS = 'GET_RECENT_TARGETS',
 }
 
 /**
@@ -498,10 +506,16 @@ export interface ExportHarMessage {
   data?: { sanitize?: boolean };
 }
 
-/** 导入 HAR */
+/**
+ * 导入 HAR
+ *
+ * `targetOrigin` / `enableOnImport` 是「把这一批抓包直接指到另一个环境」的那一步：它们随消息
+ * 进后台，由 SW 自己按 `apiOriginOf` 重判（载荷属不可信输入，绕过界面不代表后台该照单全收），
+ * 判据与其余 HAR 闸门同处。两者都不传时后台产出与本功能存在之前逐字节相同。
+ */
 export interface ImportHarMessage {
   type: MessageType.IMPORT_HAR;
-  data: HarImportPayload;
+  data: HarImportPayload & { targetOrigin?: string; enableOnImport?: boolean };
 }
 
 /** 获取环境配置列表 */
@@ -541,6 +555,11 @@ export interface GetVariablesMessage {
 export interface SetVariablesMessage {
   type: MessageType.SET_VARIABLES;
   data: { variables: VariableStore };
+}
+
+/** 读取最近用过的目标环境候选（无载荷） */
+export interface GetRecentTargetsMessage {
+  type: MessageType.GET_RECENT_TARGETS;
 }
 
 /** HAR 导入载荷 */
@@ -603,7 +622,8 @@ export type RuntimeMessage =
   | LoadProfileMessage
   | DeleteProfileMessage
   | GetVariablesMessage
-  | SetVariablesMessage;
+  | SetVariablesMessage
+  | GetRecentTargetsMessage;
 
 /**
  * 请求日志条目

@@ -35,8 +35,10 @@ import {
   saveVariables,
   getConfigHistory,
   restoreConfigHistory,
+  getRecentTargets,
 } from '@/utils/storage';
 import { logsToHar, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
@@ -248,9 +250,16 @@ const STATE_MUTATING_TYPES = new Set([
  * `GET_CONFIG_HISTORY` 同档：恢复点是那次成套替换所换掉的整包配置，里面的 `headerOverrides` 是
  * **原样落盘的真实请求头**（凭据变量库之前录入的规则尤其如此），一份历史等于把配好几种环境的会话全交出去。
  *
- * 新增读取类消息时不要照这里加：判据是「页面从不读取 + 回的是凭据类数据」，两者缺一就别加。
+ * `GET_RECENT_TARGETS` 同档，但理由不是「它回凭据」：那份候选是用户配过的**目标环境 origin 清单**，
+ * 对内网拓扑的说明力比界面看上去需要的多，而页面永远不会问它（配置页是唯一读者）。
+ *
+ * 新增读取类消息时不要照这里加：判据是「页面从不读取 + 回的是凭据或本地数据」，两者缺一就别加。
  */
-const CREDENTIAL_READING_TYPES = new Set([MessageType.GET_VARIABLES, MessageType.GET_CONFIG_HISTORY]);
+const CREDENTIAL_READING_TYPES = new Set([
+  MessageType.GET_VARIABLES,
+  MessageType.GET_CONFIG_HISTORY,
+  MessageType.GET_RECENT_TARGETS,
+]);
 
 /**
  * 统一处理异步消息响应：resolve 时回传结果，reject 时回传 { success: false, error }
@@ -263,6 +272,21 @@ function respondAsync(sendResponse: (response?: unknown) => void, promise: Promi
       sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
     );
   return true;
+}
+
+/**
+ * 从 HAR 导入消息里收口出「目标环境」那一步
+ *
+ * 载荷属不可信输入，所以不采信界面已经判过的那一遍：`apiOriginOf` 认不出（空串、非 http(s)、
+ * 解析不了）就当没填，此时后台的产出与本功能存在之前逐字节相同。启用开关绑在合法目标之后，
+ * 且只认严格 `true`——没有换环境就默认启用这批规则，等于凭空打开一整套转发。
+ */
+function harTargetFromMessage(message: RuntimeMessage): { targetOrigin: string; enabled: boolean } | undefined {
+  if (message.type !== MessageType.IMPORT_HAR) return undefined;
+  const raw = message.data.targetOrigin;
+  const targetOrigin = typeof raw === 'string' ? apiOriginOf(raw) : '';
+  if (!targetOrigin) return undefined;
+  return { targetOrigin, enabled: message.data.enableOnImport === true };
 }
 
 /**
@@ -565,7 +589,7 @@ export function setupMessageRouter(): void {
           sendResponse({ success: false, error: 'HAR_TOO_MANY_ENTRIES' });
           return false;
         }
-        const rules = harEntriesToRules(entries);
+        const rules = harEntriesToRules(entries, harTargetFromMessage(message));
         sendResponse({ success: true, rules });
         return false;
       }
@@ -608,6 +632,11 @@ export function setupMessageRouter(): void {
       case MessageType.GET_VARIABLES:
         // 走到这里说明已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是真值表
         return respondAsync(sendResponse, getVariables());
+
+      case MessageType.GET_RECENT_TARGETS:
+        // 同上那道校验：回的是用户配过的目标环境清单。读侧自己把异常收成空数组，
+        // 所以这里不需要接手人——候选坏了的正确表现就是「没有候选」。
+        return respondAsync(sendResponse, getRecentTargets());
 
       case MessageType.SET_VARIABLES:
         // 整表写入（与 UPDATE_PROXY_CONFIG 同形态）：非键值对象在 `saveVariables` 里抛错，

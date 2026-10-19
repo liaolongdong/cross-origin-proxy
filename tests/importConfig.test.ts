@@ -414,11 +414,11 @@ describe('[P2-6] 导入失败保留输入（弹窗与父组件的契约）', () 
       appSrc.indexOf('async function handleImportHarRules'),
       appSrc.indexOf('\n}\n', appSrc.indexOf('async function handleImportHarRules')),
     );
-    expect(harHandler).toContain("ElMessage.success(t('importHarSuccess'");
+    expect(harHandler).toContain("t('importHarSuccess'");
+    // 填了目标环境就说清「指到哪去了」：只报条数会让用户以为这批规则与他刚填的地址无关
+    expect(harHandler).toContain("t('importHarSuccessWithTarget'");
     // 顺序要求：提示在写入之后；关窗只在 try 内（位于 catch 之前），失败时弹窗保持打开
-    expect(harHandler.indexOf('await batchAddRules')).toBeLessThan(
-      harHandler.indexOf("ElMessage.success(t('importHarSuccess'"),
-    );
+    expect(harHandler.indexOf('await batchAddRules')).toBeLessThan(harHandler.indexOf('ElMessage.success('));
     expect(harHandler.indexOf('showImportExport.value = false')).toBeLessThan(harHandler.indexOf('catch'));
     expect(harHandler).toContain('showAddFailedMessage');
   });

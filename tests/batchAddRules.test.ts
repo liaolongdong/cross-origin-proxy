@@ -43,11 +43,15 @@ describe('batchAddRules — 批量新增（HAR 导入性能优化）', () => {
     invalidateConfigCache();
   });
 
-  it('一次写入多条规则（仅一次 storage.set）', async () => {
+  it('一次写入多条规则（配置只落一次盘）', async () => {
     const rules = [makeRule('a'), makeRule('b'), makeRule('c')];
     await batchAddRules(rules);
 
-    expect(setSpy).toHaveBeenCalledTimes(1);
+    // 这一格钉的是「不为 N 条规则做 N 次写」。配置键之外还会有一笔 `recent_targets`
+    // （2026-10-19 起，规则落盘之后记一次目标环境候选），它同样是**整批一笔**，
+    // 所以按配置键数次数才是要害；把它算进来会变成「加一个便利列表就弄红性能契约」。
+    const configWrites = setSpy.mock.calls.filter(([items]) => STORAGE_KEYS.PROXY_CONFIG in (items as object));
+    expect(configWrites).toHaveLength(1);
     const config = await getProxyConfig();
     expect(config.rules.map(r => r.id)).toEqual(['a', 'b', 'c']);
   });

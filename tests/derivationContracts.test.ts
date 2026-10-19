@@ -1,0 +1,132 @@
+/**
+ * 「派生出可用规则」这一批的源码契约（2026-10-19）
+ *
+ * 为什么这一批只有源码契约：本环境测不到 Vue 的渲染与交互（node 无 DOM，`jsdom` / `@vue/test-utils`
+ * 未装），而这几格坏掉的表现全是**看不见**的——变量芯片把值画出来是凭据泄漏，同源提示挂到所有规则上
+ * 是「警告多到没人看」，候选判据分家就是「保存时记了、下拉里没有」。所以按外部可观察面能钉的都在
+ * `tests/recentTargets.test.ts`、`tests/urlMatcher.test.ts`、`tests/harImport.test.ts`、
+ * `tests/storageLockCache.test.ts` 与 `tests/messageRouter.test.ts` 里，这里只钉那些只能读源码的接线。
+ *
+ * 每条断言都写成「改动会红」的形状：被钉的表达式若在某文件里有多个调用点，一律**数次数**，
+ * 不然 `toContain` 只看得到第一处。
+ */
+import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+
+/**
+ * 接线契约按「空白归一化后的源码」断言
+ *
+ * prettier 会把超长的表达式折行，而这里钉的是**接线**（谁调用谁、值从哪来），不是排版。
+ * 用 `toContain` 卡原始文本会红在一次无关的换行上——那种红没有牙，只会教人跳过这条用例。
+ */
+const flat = (source: string) => source.replace(/\s+/g, ' ');
+
+const ruleForm = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf8');
+const importExport = fs.readFileSync('components/options/ImportExportDialog.vue', 'utf8');
+const optionsApp = fs.readFileSync('components/options/App.vue', 'utf8');
+const recentTargets = fs.readFileSync('utils/recentTargets.ts', 'utf8');
+const storage = fs.readFileSync('utils/storage.ts', 'utf8');
+
+describe('凭据变量芯片 — 只出现名字，值从不进模板', () => {
+  it('芯片的数据源是 `Object.keys(variables.value)`，全文件仅此一处', () => {
+    expect(ruleForm.match(/Object\.keys\(variables\.value\)/g)).toHaveLength(1);
+  });
+
+  it('模板里不存在任何把变量值插出来的写法', () => {
+    // 三种真会画出值的形式：按下标取值、整体 JSON 输出、把 entries 铺开
+    expect(ruleForm).not.toMatch(/variables\.value\[[^\]]+\]/);
+    expect(ruleForm).not.toContain('v-for="([name, value]) in');
+    expect(ruleForm).not.toMatch(/<template[^>]*>\s*\{\{\s*value\s*\}\}/);
+  });
+
+  it('芯片渲染的是名字本身', () => {
+    expect(ruleForm).toContain('v-for="name in variableNames"');
+    expect(ruleForm).toMatch(/class="variable-chip"[\s\S]{0,160}\{\{ name \}\}/);
+  });
+
+  it('长连接规则的查询参数那一侧不提供芯片（那种组合保存时必被拒）', () => {
+    expect(ruleForm).toContain('v-if="variableNames.length && !isWsRule"');
+    expect(ruleForm).toContain('v-if="variableNames.length"');
+  });
+});
+
+describe('同源提示 — 只挂在派生草稿上，且不作为保存闸门', () => {
+  it('判据被 `derivedDraft` 与 `targetTouched` 双重限定，且只出现一处', () => {
+    expect(ruleForm.match(/sameOriginNoRewrite\(/g)).toHaveLength(1);
+    const guard = ruleForm.slice(ruleForm.indexOf('const showSameOriginHint'), ruleForm.indexOf('const suggestions'));
+    expect(guard).toContain('props.derivedDraft === true');
+    expect(guard).toContain('!targetTouched.value');
+  });
+
+  it('提示是文案，不进校验规则、不拦保存', () => {
+    expect(ruleForm).toContain("{{ t('derivedSameTargetHint') }}");
+    // targetUrl 的 rules 里只有格式校验（type: 'url'），没有为这句新增的 validator
+    const targetRules = ruleForm.slice(
+      ruleForm.indexOf('targetUrl: ['),
+      ruleForm.indexOf(']', ruleForm.indexOf('targetUrl: [')),
+    );
+    expect(targetRules).not.toContain('derivedSameTargetHint');
+    expect(targetRules).toContain("type: 'url'");
+  });
+
+  it('`targetTouched` 不由 watch 置真（预填自己就会写那个字段）', () => {
+    expect(ruleForm).toContain('@input="targetTouched = true"');
+    expect(ruleForm).not.toMatch(/watch\(\s*\(\)\s*=>\s*form\.targetUrl/);
+  });
+});
+
+describe('目标环境候选 — 「保存侧记什么」与「界面列什么」同一份判据', () => {
+  it('存储层与容器层都经 `distinctTargetOrigins` 取数', () => {
+    expect(recentTargets).toContain('export function distinctTargetOrigins');
+    expect(recentTargets.match(/distinctTargetOrigins\(/g) ?? []).toHaveLength(2);
+    expect(flat(storage)).toContain('distinctTargetOrigins(saved)');
+    expect(flat(optionsApp)).toContain('distinctTargetOrigins(rules.value)');
+  });
+
+  it('容器层的候选按同一个上限收口', () => {
+    expect(flat(optionsApp)).toContain('.slice(0, MAX_RECENT_TARGETS)');
+  });
+
+  it('候选读失败只记日志——便利列表坏了不该在配置页冒错', () => {
+    const loader = optionsApp.slice(
+      optionsApp.indexOf('async function loadRecentTargets'),
+      optionsApp.indexOf('\n}', optionsApp.indexOf('async function loadRecentTargets')),
+    );
+    expect(loader).toContain('logger.debug');
+    expect(loader).not.toContain('ElMessage');
+  });
+});
+
+describe('HAR 目标环境 — 非必填，且复选框不出现时不参与启用', () => {
+  it('目标输入框存在，非法只标红这一格', () => {
+    expect(importExport).toContain('v-model="harTargetOrigin"');
+    expect(importExport).toContain(':error="harTargetInvalid"');
+  });
+
+  it('导入按钮的可用条件里没有目标环境——留空照样能按老方式导入', () => {
+    const button = importExport.slice(importExport.indexOf('<el-button\n          v-if="harFileContent"'));
+    expect(button.slice(0, 260)).not.toContain('disabled');
+  });
+
+  it('复选框只在读得出目标时出现，交给后台的意图由那个「在场」旗标兜住', () => {
+    expect(flat(importExport)).toContain('v-if="harTargetValid" v-model="harEnableOnImport"');
+    // 复选框不在场时恒为 false——「没出现」绝不能读成「用户没勾，但照样启用」
+    expect(importExport).toMatch(
+      /const harEnableOnImportFlag = computed\(\s*\(\)\s*=>\s*harTargetValid\.value && harEnableOnImport\.value/,
+    );
+    expect(flat(importExport)).toContain('enableOnImport: harEnableOnImportFlag.value');
+  });
+
+  it('目标随消息进后台，界面那份判据不是唯一一道', () => {
+    expect(flat(importExport)).toContain('targetOrigin: harTargetParsed.value || undefined');
+    expect(storage).not.toContain('targetOrigin');
+  });
+
+  it('三条派生出口都带 derived 标记（cURL 与「日志/本页」共用那两个入口），模板卡那条不带', () => {
+    // 按字面量数调用点：被钉的表达式在文件里有两处，用 toContain 只看得到第一处
+    expect(optionsApp.match(/, 'derived'\);/g)).toHaveLength(2);
+    expect(optionsApp).toContain("derivedDraft.value = from === 'derived'");
+    // 手动新增与编辑既有规则都不许带上这个标记（否则模板卡的合法自映射也吃警告）
+    expect(optionsApp.match(/derivedDraft\.value = false;/g)).toHaveLength(2);
+  });
+});

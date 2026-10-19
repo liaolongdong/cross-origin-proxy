@@ -170,6 +170,33 @@
             <div class="el-upload__tip">.har / .json</div>
           </template>
         </el-upload>
+        <el-input
+          v-model="harTargetOrigin"
+          class="har-target-input"
+          :placeholder="t('importHarTargetPlaceholder')"
+          :error="harTargetInvalid"
+          clearable
+          autocomplete="off"
+          spellcheck="false"
+          @change="normalizeHarTarget"
+        >
+          <template #prepend>{{ t('importHarTargetLabel') }}</template>
+        </el-input>
+        <p class="section-desc har-target-desc">{{ t('importHarTargetDesc') }}</p>
+        <p
+          v-if="harTargetInvalid"
+          class="har-target-error"
+        >
+          {{ t('importHarTargetInvalid') }}
+        </p>
+        <!-- 只在读得出目标时出现：没换环境就默认启用这批规则，等于凭空把整站的流量指走 -->
+        <el-checkbox
+          v-if="harTargetValid"
+          v-model="harEnableOnImport"
+          class="har-enable-on-import"
+        >
+          {{ t('importHarEnableOnImport') }}
+        </el-checkbox>
         <el-button
           v-if="harFileContent"
           type="success"
@@ -193,6 +220,7 @@ import type { HarImportPayload, ImportMode, ImportPlan, ImportResultStats, Proxy
 import { MessageType } from '@/utils/types';
 import { MAX_IMPORT_FILE_SIZE, MAX_RULES } from '@/utils/constants';
 import { harEntriesOverLimit } from '@/utils/har';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import { parseCurlCommand } from '@/utils/curlParser';
 import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
@@ -215,7 +243,13 @@ const emit = defineEmits<{
   imported: [stats: ImportResultStats];
   /** 请求导出：`sanitize` 为弹窗里的「分享模式」勾选值，由父组件执行下载与提示 */
   export: [sanitize: boolean];
-  importHarRules: [rules: ProxyRule[]];
+  /**
+   * HAR 导入产出的规则交给父组件写入（emit 是同步的，成功提示由父组件在它落盘后才发）
+   *
+   * `targetOrigin` 是这一批被指过去的那个环境，空串表示没填——父组件据此选一句成功提示，
+   * 免得「创建了 N 条规则」这句话在用户刚刚换了环境时听起来像什么都没发生。
+   */
+  importHarRules: [rules: ProxyRule[], targetOrigin: string];
   importCurl: [data: ParsedCurl];
 }>();
 
@@ -233,6 +267,23 @@ const fileContent = ref<string | null>(null);
 const harExporting = ref(false);
 const harImporting = ref(false);
 const harFileContent = ref<string | null>(null);
+/** HAR 导入的目标环境：留空 = 与本功能存在之前一样，产出自映射、默认停用的规则 */
+const harTargetOrigin = ref('');
+/** 复选框只在读得出目标时出现，所以它「没出现」时一律按未勾参与（见 `harEnableOnImportFlag`） */
+const harEnableOnImport = ref(true);
+
+/** 输入里读得出的 origin；空串表示没填或读不出（粘整条 URL 也接受，只取协议+域名+端口） */
+const harTargetParsed = computed(() => apiOriginOf(harTargetOrigin.value.trim()));
+const harTargetValid = computed(() => !!harTargetParsed.value);
+/** 填了但读不出：只标红这一格，**不禁用导入按钮**——按老方式导入同样是合法意图 */
+const harTargetInvalid = computed(() => !!harTargetOrigin.value.trim() && !harTargetValid.value);
+/** 交给后台的启用意图：复选框不在场时恒为 false */
+const harEnableOnImportFlag = computed(() => harTargetValid.value && harEnableOnImport.value);
+
+/** 失焦时把输入收成 origin 本身，省掉「用户粘了整条带路径的 URL、界面上却一直显示那一长串」 */
+function normalizeHarTarget(): void {
+  if (harTargetValid.value) harTargetOrigin.value = harTargetParsed.value;
+}
 const importMode = ref<ImportMode>('replace');
 /** 分享模式：默认开启——导出的 JSON 常被直接贴进群里，凭据一旦外泄收不回，本机备份少勾一下即可 */
 const sanitizeExport = ref(true);
@@ -471,6 +522,8 @@ function handleHarFileRemove() {
  */
 function resetHarPick(): void {
   harFileContent.value = null;
+  harTargetOrigin.value = '';
+  harEnableOnImport.value = true;
   harUploadRef.value?.clearFiles();
 }
 
@@ -491,7 +544,12 @@ async function handleImportHar() {
     }
     const result = (await chrome.runtime.sendMessage({
       type: MessageType.IMPORT_HAR,
-      data: harData,
+      // 目标环境随消息进后台，由后台按同一份 origin 判据再核一遍（载荷属不可信输入）
+      data: {
+        ...harData,
+        targetOrigin: harTargetParsed.value || undefined,
+        enableOnImport: harEnableOnImportFlag.value,
+      },
     })) as { success?: boolean; rules?: ProxyRule[]; error?: string } | undefined;
     // `?.` 是必需的：SW 刚被回收时 `sendMessage` 会 resolve `undefined`（与 `importConfig`
     // 同一件事）。少了它，这一行抛的 TypeError 会被下面的 catch 收成「文件不合法」——
@@ -499,7 +557,7 @@ async function handleImportHar() {
     if (result?.success && result.rules) {
       // 只负责把规则交给父组件写入：emit 是同步的，此处弹「成功」会在达上限时
       // 与父组件的失败提示同时出现，输入也会被提前清掉、无法重试
-      emit('importHarRules', result.rules);
+      emit('importHarRules', result.rules, harTargetParsed.value);
     } else {
       ElMessage.error(t('importHarFailed'));
     }
@@ -532,6 +590,25 @@ async function handleImportHar() {
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--cop-text-color-secondary);
+}
+
+/* HAR 的目标环境那一格：输入框、说明、报错行与「立即启用」复选框各占一段 */
+.har-target-input {
+  margin-bottom: 6px;
+}
+
+.har-target-desc {
+  margin: 0 0 8px;
+}
+
+.har-target-error {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: var(--el-color-danger);
+}
+
+.har-enable-on-import {
+  margin-top: 2px;
 }
 
 .export-sanitize-tip {
