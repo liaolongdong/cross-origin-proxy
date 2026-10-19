@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   VARIABLES: 'variables', // 凭据变量表（规则里以 {{名称}} 引用，真值只存这一处）
   CONFIG_HISTORY: 'config_history', // 配置恢复点（成套替换所换掉的那份整包配置，见 utils/storage.ts）
   RECENT_TARGETS: 'recent_targets', // 最近用过的目标环境 origin（便利候选，不参与判定、不进任何导出）
+  SITE_STATE: 'site_proxy_state', // 站点维度的生效范围（见 utils/siteScope.ts）；不进任何导出
 } as const;
 
 // Theme modes
@@ -259,6 +260,17 @@ export const MAX_VARIABLES = 50;
  * 会直接渲染成下拉选项，无界列表在配置页首屏上是看得见的成本。
  */
 export const MAX_RECENT_TARGETS = 8;
+
+// 站点维度生效范围
+/**
+ * 「停用/仅此站点」名单里最多记多少台主机
+ *
+ * 判据按**主机**记（不是 origin）——网络层那条通道的 initiator 条件只认域名、不认端口与协议，
+ * 两边用不同的键就会分叉（同一台站点上 `:3000` 关掉了、`:4000` 还开着，是本仓最贵的那类不一致）。
+ * 上限取 50：这是「我手头的环境」这种量级的清单，不是收藏夹；越界的新条目被丢弃并由写入方点名，
+ * 静默截断等于让界面说不清自己记了哪些。
+ */
+export const MAX_SITE_STATE_HOSTS = 50;
 /** 变量名长度上限，与 `VARIABLE_NAME_RE` 的 1+63 对齐 */
 export const MAX_VARIABLE_NAME_LENGTH = 64;
 /**

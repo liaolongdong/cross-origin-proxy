@@ -127,7 +127,7 @@
   "matchTypeRegex": "正则",
   "batchEnable": "批量启用",
   "batchDisable": "批量禁用",
-  "noMatch": "没有匹配的规则",
+  "noMatch": "规则不匹配此 URL",
   "readFailed": "暂时读不到已保存的规则，可能是后台正在重启。稍等会自动恢复，也可以手动刷新。",
   "rulesCountInfo": "共 $1 条规则，已启用 $2 条",
   "statsTotal": "总计",
@@ -162,7 +162,6 @@
   "testRule": "测试规则",
   "testUrlPlaceholder": "输入要测试的 URL",
   "matchResult": "匹配结果",
-  "noMatch": "规则不匹配此 URL",
   "rewrittenUrl": "重写后的 URL",
   "matched": "匹配成功",
   "patternTest": "模式匹配测试",
@@ -465,5 +464,13 @@
   "removeMockQueryParamA11y": "删除条件响应里的第 $1 个查询参数",
   "removeVariableA11y": "删除变量「$1」",
   "closeTestPanelA11y": "关闭匹配测试面板",
-  "closeLogDetailA11y": "关闭请求详情"
+  "closeLogDetailA11y": "关闭请求详情",
+  "siteScopeManageTitle": "站点生效范围",
+  "siteScopeModeLabel": "生效方式",
+  "siteScopeModeAll": "全部站点（默认）",
+  "siteScopeModeOff": "停用列出的站点",
+  "siteScopeModeOnly": "仅列出的站点",
+  "siteScopeListHint": "名单按主机匹配，含其子域名；端口与协议不分家。",
+  "siteScopeEmpty": "还没有单独设置过的站点。",
+  "siteScopeRemoveA11y": "从站点名单里移除 $1"
 }

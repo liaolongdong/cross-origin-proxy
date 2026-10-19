@@ -55,6 +55,7 @@ const MUTATING_TYPES: MessageType[] = [
   MessageType.LOAD_PROFILE,
   MessageType.DELETE_PROFILE,
   MessageType.SET_VARIABLES,
+  MessageType.SET_SITE_STATE,
 ];
 
 /**
@@ -74,6 +75,7 @@ const CREDENTIAL_READING_TYPES: MessageType[] = [
   MessageType.GET_VARIABLES,
   MessageType.GET_CONFIG_HISTORY,
   MessageType.GET_RECENT_TARGETS,
+  MessageType.GET_SITE_STATE,
 ];
 
 /** 刻意不经 gate 的消息：内容脚本要靠它们拉配置与代理，被 gate 住代理当场失效 */

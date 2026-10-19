@@ -112,6 +112,21 @@ export type VariableStore = Record<string, string>;
 /**
  * 全局代理配置
  */
+/**
+ * 站点维度的生效范围（总开关之外的那一档，判据唯一出口是 `utils/siteScope.ts`）
+ *
+ * `hosts` 记的是**主机名**而不是 origin：网络层（DNR）的 initiator 条件只认域名、不认端口与协议，
+ * 两侧用不同的键就会出现「同一台站点上 :3000 关了、:4000 还在改写」这种通道分叉。
+ */
+export type SiteScopeMode = 'all' | 'site-off' | 'site-only';
+
+export interface SiteState {
+  /** `all` = 这一层不参与；`site-off` = 名单内不代理；`site-only` = 只代理名单内 */
+  mode: SiteScopeMode;
+  /** 规范化后的小写主机名，判定按网络层口径连子域一起算 */
+  hosts: string[];
+}
+
 export interface ProxyConfig {
   enabled: boolean; // 总开关
   rules: ProxyRule[]; // 规则列表
@@ -195,6 +210,15 @@ export enum MessageType {
    * 而回包是用户配过的内网域名清单」（见 messageRouter 的 `CREDENTIAL_READING_TYPES`）。
    */
   GET_RECENT_TARGETS = 'GET_RECENT_TARGETS',
+
+  /**
+   * 读/写「站点维度的生效范围」（总开关之外的那一档，见 `utils/siteScope.ts`）
+   *
+   * 读侧与 `GET_RECENT_TARGETS` 同档过 `isTrustedSender`——判据同样是「页面永远不会问它，而回包是
+   * 用户在哪几台站点上关掉过代理」，那份清单本身就是内网拓扑。写侧是状态修改类。
+   */
+  GET_SITE_STATE = 'GET_SITE_STATE',
+  SET_SITE_STATE = 'SET_SITE_STATE',
 }
 
 /**
@@ -576,6 +600,22 @@ export interface GetRecentTargetsMessage {
   type: MessageType.GET_RECENT_TARGETS;
 }
 
+/** 读取站点生效范围（无载荷） */
+export interface GetSiteStateMessage {
+  type: MessageType.GET_SITE_STATE;
+}
+
+/**
+ * 整体写入站点生效范围
+ *
+ * 用「整包写」而不是「增删一条」：名单只有十几条、界面又是单选切换，增删两条消息只会多两处
+ * 可以各写一半判据的地方（与凭据变量表同一口径）。载荷属不可信输入，SW 侧一律过 `sanitizeSiteState`。
+ */
+export interface SetSiteStateMessage {
+  type: MessageType.SET_SITE_STATE;
+  data: { mode: SiteScopeMode; hosts: string[] };
+}
+
 /** HAR 导入载荷 */
 export interface HarImportPayload {
   log: {
@@ -637,7 +677,9 @@ export type RuntimeMessage =
   | DeleteProfileMessage
   | GetVariablesMessage
   | SetVariablesMessage
-  | GetRecentTargetsMessage;
+  | GetRecentTargetsMessage
+  | GetSiteStateMessage
+  | SetSiteStateMessage;
 
 /**
  * 请求日志条目

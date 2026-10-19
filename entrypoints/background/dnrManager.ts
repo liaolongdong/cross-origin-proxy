@@ -1,10 +1,11 @@
-import { getProxyConfig } from '@/utils/storage';
+import { getProxyConfig, getSiteState } from '@/utils/storage';
 import { buildDnrRules } from '@/utils/dnrRules';
 import { checkDnrRule, usesDnrChannel } from '@/utils/dnrSupport';
 import { logger } from '@/utils/logger';
 import { MessageType } from '@/utils/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 import { invalidateMatcherCache, isSimpleRule } from '@/utils/urlMatcher';
+import { hostnameOf, rulesForSite } from '@/utils/siteScope';
 import type { ProxyRule, ProxyConfig } from '@/utils/types';
 import { setDnrRuleIdMap } from './dnrStats';
 import { invalidateDnrSample } from './dnrSampler';
@@ -91,7 +92,10 @@ async function doSyncDnrRules(config: ProxyConfig): Promise<void> {
     const removeRuleIds = existingRules.map(r => r.id);
 
     const supported = await filterDnrApplicableRules(Array.isArray(config.rules) ? config.rules : []);
-    const { rules: newRules, idMap } = buildDnrRules(supported, config.enabled);
+    // 站点范围读不到时回落「不排除任何站点」，与存储层同一口径：这一层是总开关之下的一档，
+    // 它读失败不该把已经在生效的重定向整个撤掉（那才是用户最没预料到的后果）
+    const siteState = await getSiteState();
+    const { rules: newRules, idMap } = buildDnrRules(supported, config.enabled, siteState);
 
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds,
@@ -142,17 +146,21 @@ export async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> 
   try {
     if (!Array.isArray(config.rules)) return;
     const tabs = await chrome.tabs.query({});
-    const interceptorConfig: ProxyConfig = {
-      enabled: config.enabled,
-      rules: config.rules.filter(rule => !isSimpleRule(rule)),
-    };
+    const complexRules = config.rules.filter(rule => !isSimpleRule(rule));
+    const siteState = await getSiteState();
     const targets = tabs.filter(tab => tab.id !== undefined && isBroadcastTarget(tab));
     await Promise.allSettled(
       targets.map(async tab => {
         try {
+          // 每台站点收到的是「它自己那一份」：不在范围内就是空规则集，页面侧拦截器压根不问后台，
+          // fetch 与 XHR 都自然走原生——比「代发了再失败」干净，也不会把 XHR 打成 status 0
+          const scoped: ProxyConfig = {
+            enabled: config.enabled,
+            rules: rulesForSite(complexRules, siteState, hostnameOf(tab.url)),
+          };
           await chrome.tabs.sendMessage(tab.id!, {
             type: MessageType.UPDATE_PROXY_CONFIG,
-            data: interceptorConfig,
+            data: scoped,
           });
           clearConfigUnsynced(tab.id!);
         } catch {
@@ -177,7 +185,16 @@ export async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> 
  */
 export function initDnrManager(): void {
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && STORAGE_KEYS.PROXY_CONFIG in changes) {
+    if (areaName !== 'local') return;
+    // 站点范围变了：规则一条没动，生效范围却整个换了——重建 DNR（initiator 条件在每条规则上）
+    // 并把现有配置重广播一次（页面侧那份是按发起页收窄的）。刻意不判新旧是否相同：
+    // 这一层的写入本来就少，比「省一次重建」更贵的是漏掉这一次。
+    if (STORAGE_KEYS.SITE_STATE in changes) {
+      // 挪成命名函数而不是就地 async IIFE：`initDnrManager` 的函数体要保持在「同步阶段只注册监听」
+      // 这个形状里（那条契约就钉在它 body 里没有存储读取），重同步的异步部分属于另一个函数
+      void resyncForSiteScopeChange();
+    }
+    if (STORAGE_KEYS.PROXY_CONFIG in changes) {
       const newConfig = changes[STORAGE_KEYS.PROXY_CONFIG].newValue as ProxyConfig | undefined;
       if (newConfig && Array.isArray(newConfig.rules)) {
         invalidateMatcherCache();
@@ -188,6 +205,22 @@ export function initDnrManager(): void {
   });
 
   void initialSync();
+}
+
+/**
+ * 站点范围变了：重建 DNR（initiator 条件写在每一条规则上）并把现有配置按新范围重广播一次
+ *
+ * 规则一条没动，生效范围却整个换了，所以两份都得重来；刻意不判新旧是否相同——这一层的写入
+ * 本来就少，比「省一次重建」贵得多的是漏掉这一次（用户关了开关，页面却还在被改写）。
+ */
+async function resyncForSiteScopeChange(): Promise<void> {
+  try {
+    const config = await getProxyConfig();
+    await syncDnrRules(config);
+    await broadcastConfigToTabs(config);
+  } catch (error) {
+    logger.error('Re-sync after site-state change failed:', error);
+  }
 }
 
 /** 启动时按存储里的配置全量重建一次 DNR 规则 */

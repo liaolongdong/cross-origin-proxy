@@ -1,10 +1,18 @@
 import { findMatchingRule, matchRule, rewriteUrl, applyQueryOverrides, isRegexSafe } from '@/utils/urlMatcher';
 import { filterIncomingHeaders, isValidHeaderEntry, validateRuleHeaders } from '@/utils/headerValidation';
-import { configRules, getProxyConfig, addRequestLog, getRequestLogs, getVariables } from '@/utils/storage';
+import {
+  configRules,
+  getProxyConfig,
+  getSiteState,
+  addRequestLog,
+  getRequestLogs,
+  getVariables,
+} from '@/utils/storage';
 import { collectRuleVariableRefs, resolveVariableMap } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
 import { normalizeRuleTimings } from '@/utils/ruleValidation';
+import { hostnameOf, siteAllows } from '@/utils/siteScope';
 import { logger } from '@/utils/logger';
 import type {
   ProxyStatus,
@@ -411,13 +419,14 @@ export async function handleProxyRequest(
   data: ProxyRequestPayload,
   requestKey?: string,
   onProxied?: () => void,
+  senderHost = '',
 ): Promise<ProxyResponsePayload> {
-  if (!requestKey) return runProxyRequest(data, undefined, onProxied);
+  if (!requestKey) return runProxyRequest(data, undefined, onProxied, senderHost);
 
   const controller = new AbortController();
   inFlightRequests.set(requestKey, controller);
   try {
-    return await runProxyRequest(data, controller.signal, onProxied);
+    return await runProxyRequest(data, controller.signal, onProxied, senderHost);
   } finally {
     inFlightRequests.delete(requestKey);
   }
@@ -427,9 +436,23 @@ async function runProxyRequest(
   data: ProxyRequestPayload,
   signal?: AbortSignal,
   onProxied?: () => void,
+  senderHost = '',
 ): Promise<ProxyResponsePayload> {
   const startTime = Date.now();
   const config = await getProxyConfig();
+
+  // 站点范围在这里再判一次，与 `effectiveRulesForSender` 同一份答案：桥接层拿到的那份配置本应
+  // 已经把这台站点摘掉，走到这一步说明要么是伪造的请求、要么两边判据已经分叉。两种都不该代发。
+  if (siteAllows(await getSiteState(), senderHost) === false) {
+    return {
+      requestId: data.requestId,
+      status: 0,
+      statusText: 'Proxy Bypass',
+      headers: {},
+      body: 'Site excluded',
+      isBase64: false,
+    };
+  }
 
   if (!config.enabled) {
     return {
@@ -852,6 +875,23 @@ async function runProxyRequest(
     body: lastError ?? 'Unknown error',
     isBase64: false,
   };
+}
+
+/**
+ * 发起页这一台站点上「现在到底能看到哪些规则」——SW 侧唯一的两份用途共用的判读
+ *
+ * `handleProxyRequest` 拿它做代发前的闸门，`messageRouter` 的 `GET_PROXY_CONFIG` 拿它回页面拉的那一份。
+ * 收成一处是因为这两处必须给出同一个答案：一处把规则摘掉了、另一处还在代发，页面就会看到一个
+ * 「规则列表里没有、却仍在改写请求」的幽灵；反之则是「列表里有、这一页却什么都不走」。
+ *
+ * 读不到站点范围时按「不排除任何站点」处理（与存储层同一口径）：这一层是总开关之下的一档，
+ * 它读失败不该把已经在生效的重定向整个撤掉。
+ */
+export async function effectiveRulesForSender(sender: chrome.runtime.MessageSender): Promise<ProxyRule[]> {
+  const config = await getProxyConfig();
+  const rules = configRules(config);
+  const siteState = await getSiteState();
+  return siteAllows(siteState, hostnameOf(sender.tab?.url ?? sender.url)) ? rules : [];
 }
 
 // ─── 代理状态 ─────────────────────────────────────────────────────────────────

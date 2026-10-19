@@ -36,7 +36,10 @@ import {
   getConfigHistory,
   restoreConfigHistory,
   getRecentTargets,
+  getSiteState,
+  saveSiteState,
 } from '@/utils/storage';
+import { hostnameOf, siteAllows } from '@/utils/siteScope';
 import { logsToHar, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
 import { relocateHarCredentialHeaders } from '@/utils/harCredentialVars';
 import { apiOriginOf } from '@/utils/pageApiOrigins';
@@ -233,6 +236,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.CLEAR_REQUEST_LOG,
   MessageType.IMPORT_CONFIG,
   MessageType.IMPORT_HAR,
+  MessageType.SET_SITE_STATE,
   MessageType.RESTORE_CONFIG_HISTORY,
   MessageType.SAVE_PROFILE,
   MessageType.LOAD_PROFILE,
@@ -260,6 +264,10 @@ const CREDENTIAL_READING_TYPES = new Set([
   MessageType.GET_VARIABLES,
   MessageType.GET_CONFIG_HISTORY,
   MessageType.GET_RECENT_TARGETS,
+  // 「在哪几台站点上关掉过代理」这份清单，对内网拓扑的说明力不比「配过哪些目标环境」小
+  // （`fat-api.corp.example.com` 这种主机名就是答案），而页面永远不会问它：桥接层通往 SW 的
+  // 四个出口里没有这一条，配置页是唯一读者。判据仍是那两条，缺一就别加。
+  MessageType.GET_SITE_STATE,
 ]);
 
 /**
@@ -332,8 +340,12 @@ export function setupMessageRouter(): void {
         // 而它至少被压到「每伪造一次要付一次规则匹配」，不再是无成本地空转。
         return respondAsync(
           sendResponse,
-          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId), () =>
-            countProxyRequestForTab(sender.tab?.id, sender.frameId),
+          handleProxyRequest(
+            message.data,
+            proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId),
+            () => countProxyRequestForTab(sender.tab?.id, sender.frameId),
+            // 发起页主机由 Chrome 写的 sender 取（页面伪造不了），代发的站点闸门与下发配置用的是同一份答案
+            hostnameOf(sender.tab?.url ?? sender.url),
           ),
         );
       }
@@ -359,7 +371,16 @@ export function setupMessageRouter(): void {
         // （见 `configSyncState` 与 `broadcastConfigToTabs` 的时序说明）。
         const requesterTabId = sender.tab?.id;
         if (typeof requesterTabId === 'number') clearConfigUnsynced(requesterTabId);
-        return respondAsync(sendResponse, getProxyConfig());
+        // 回的是「这一台站点上现在到底有哪些规则」：与 `broadcastConfigToTabs` 逐 tab 收窄那一份
+        // 同一个判据，两处不一致就会出现「拉到的配置与推来的配置行为不同」。
+        return respondAsync(
+          sendResponse,
+          (async () => {
+            const config = await getProxyConfig();
+            const siteState = await getSiteState();
+            return siteAllows(siteState, hostnameOf(sender.tab?.url ?? sender.url)) ? config : { ...config, rules: [] };
+          })(),
+        );
       }
 
       case MessageType.UPDATE_PROXY_CONFIG:
@@ -565,6 +586,29 @@ export function setupMessageRouter(): void {
           return false;
         }
         return respondAsync(sendResponse, restoreConfigHistory(message.data.id));
+
+      case MessageType.GET_SITE_STATE:
+        // 已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是「用户在哪几台站点上停用/独占了代理」
+        return respondAsync(sendResponse, getSiteState());
+
+      case MessageType.SET_SITE_STATE: {
+        // 载荷属不可信输入：模式只认三个字面量，名单必须是字符串数组，其余一律当默认值处理
+        const mode = message.data?.mode;
+        const hosts = message.data?.hosts;
+        if (mode !== 'all' && mode !== 'site-off' && mode !== 'site-only') {
+          sendResponse({ success: false, error: 'Invalid site mode' });
+          return false;
+        }
+        if (hosts !== undefined && !Array.isArray(hosts)) {
+          sendResponse({ success: false, error: 'Invalid site hosts' });
+          return false;
+        }
+        // 回包里带回收口的状态：界面按「storage 里现在是什么」画，而不是按「我刚提交了什么」画
+        return respondAsync(
+          sendResponse,
+          saveSiteState({ mode, hosts: Array.isArray(hosts) ? hosts : [] }).then(() => ({ success: true })),
+        );
+      }
 
       case MessageType.EXPORT_HAR: {
         // 「分享模式」同样管住 HAR：日志里的 Cookie / Authorization 是用户当时那个会话的凭据，

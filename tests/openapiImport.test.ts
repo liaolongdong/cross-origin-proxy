@@ -159,9 +159,14 @@ describe('openApiSpecToRules — 产出的规则形状', () => {
     expect(rules[0].name).toContain('fat.example.com/v3');
   });
 
-  it('空 targetOrigin 等于没填（产出与不传 opts 逐字节相同）', () => {
-    expect(openApiSpecToRules(spec, { targetOrigin: '', enabled: true })).toEqual(openApiSpecToRules(spec));
-    expect(openApiSpecToRules(spec, { enabled: true })).toEqual(openApiSpecToRules(spec));
+  it('空 targetOrigin 等于没填（除时间戳与 id 外，产出与不传 opts 完全相同）', () => {
+    // 「逐字节相同」在这里只能比到稳定字段：id 与两个时间戳本来就带 Date.now()，
+    // 两次调用跨一毫秒就会不同——那不是形状变了，把它写成全等断言就是一条会自己闪的测试
+    const strip = (rules: ReturnType<typeof openApiSpecToRules>) =>
+      rules.map(({ id: _id, createdAt: _c, updatedAt: _u, ...rest }) => rest);
+    const baseline = strip(openApiSpecToRules(spec));
+    expect(strip(openApiSpecToRules(spec, { targetOrigin: '', enabled: true }))).toEqual(baseline);
+    expect(strip(openApiSpecToRules(spec, { enabled: true }))).toEqual(baseline);
   });
 
   it('填了目标：每条都指过去，并把各自的 basePath 带上', () => {

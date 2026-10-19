@@ -1,5 +1,6 @@
 import type {
   ProxyConfig,
+  SiteState,
   ProxyRule,
   RequestLogEntry,
   EnvironmentProfile,
@@ -26,6 +27,7 @@ import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
 import { distinctTargetOrigins, mergeRecentTargets, sanitizeRecentTargets } from '@/utils/recentTargets';
+import { DEFAULT_SITE_STATE, sanitizeSiteState } from '@/utils/siteScope';
 import { inspectProfileRules, isStoredProfileEntry } from '@/utils/profileValidation';
 import { sanitizeVariables } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
@@ -198,6 +200,38 @@ export async function rememberTargetOf(saved: ProxyRule[]): Promise<void> {
   } catch (error) {
     logger.warn('Remember target failed:', error);
   }
+}
+
+/**
+ * 读出站点生效范围（`utils/siteScope.ts` 的判据，存储层只管取与收口）
+ *
+ * 读不出就回落默认值（`mode: 'all'`，等于这一层不参与），与 `configRules()` / `getRecentTargets()`
+ * 同一族口径：坏数据不许把代理整个弄坏。但这条回落方向要说清——它是「不排除任何站点」，
+ * 不是「一切停用」；界面那侧要区分「读到的是 all」与「没读到」，不能把没读到画成「全部站点都生效」
+ * 的确认语气（见 popup 的读失败处理）。
+ */
+export async function getSiteState(): Promise<SiteState> {
+  try {
+    const data = await chrome.storage.local.get(STORAGE_KEYS.SITE_STATE);
+    return sanitizeSiteState(data[STORAGE_KEYS.SITE_STATE]);
+  } catch (error) {
+    logger.warn('Site state read failed:', error);
+    return { ...DEFAULT_SITE_STATE };
+  }
+}
+
+/**
+ * 整体写入站点生效范围（先收口再落盘）
+ *
+ * 与「最近目标」那一条刻意相反：这一条**要**把失败交给调用方——它是用户点下去的那次状态变更，
+ * 悄悄吞掉就等于界面说「已停用这台站点」而 storage 里根本没记。收口在写之前做，
+ * 因此落盘的永远是要么默认值、要么合法状态，读侧的 sanitize 只是兜住手改 storage 的那一路。
+ */
+export async function saveSiteState(state: SiteState): Promise<void> {
+  const next = sanitizeSiteState(state);
+  await withStorageLock(async () => {
+    await chrome.storage.local.set({ [STORAGE_KEYS.SITE_STATE]: next });
+  });
 }
 
 /**

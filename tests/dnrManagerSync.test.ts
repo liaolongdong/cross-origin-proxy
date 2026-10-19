@@ -38,7 +38,11 @@ type StorageListener = Parameters<typeof chrome.storage.onChanged.addListener>[0
 const getProxyConfig = vi.fn();
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
-vi.mock('@/utils/storage', () => ({ getProxyConfig: (args: unknown) => getProxyConfig(args) }));
+vi.mock('@/utils/storage', () => ({
+  getProxyConfig: (args: unknown) => getProxyConfig(args),
+  // 同步路径现在会读一次站点范围（条件要写进每条规则），这份 mock 就得给它一个读数
+  getSiteState: () => Promise.resolve({ mode: 'all', hosts: [] as string[] }),
+}));
 vi.mock('@/utils/logger', () => ({ logger }));
 
 let getDynamicRules: ReturnType<typeof vi.fn>;

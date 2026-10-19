@@ -206,6 +206,42 @@
       </p>
     </div>
 
+    <!-- 这一台站点的生效范围：判据在 utils/siteScope.ts，这里只说结果 -->
+    <div
+      v-if="pageHost"
+      class="site-scope-card"
+    >
+      <div class="site-scope-row">
+        <div class="site-scope-text">
+          <span class="site-scope-label">{{ t('siteScopeTitle') }}</span>
+          <code
+            class="site-scope-host"
+            :title="pageHost"
+            >{{ pageHost }}</code
+          >
+        </div>
+        <el-switch
+          size="small"
+          :model-value="hostProxied === true"
+          :aria-label="t('siteScopeTitle')"
+          :disabled="hostProxied === null || siteScopeBusy"
+          @update:model-value="applyHostProxied($event as boolean)"
+        />
+      </div>
+      <p
+        v-if="hostProxied === null"
+        class="site-scope-note"
+      >
+        {{ t('siteScopeUnreadable') }}
+      </p>
+      <p
+        v-else
+        class="site-scope-note"
+      >
+        {{ t('siteScopeBoundary') }}
+      </p>
+    </div>
+
     <!-- 本页地址命中预览（只回答页面地址本身，边界写在卡内） -->
     <div
       v-if="pageUrl"
@@ -610,6 +646,8 @@ import { probeCorsSuspects, probePageApiOrigins } from '@/utils/pageApiProbe';
 import { buildPickerRows, type ApiPickerRow, type CorsSuspect } from '@/utils/corsSuspects';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import { diagnoseRequest, type Diagnosis, type DiagnosisCode } from '@/utils/diagnosis';
+import { DEFAULT_SITE_STATE, sanitizeSiteState, siteAllows, withHostActive, hostnameOf } from '@/utils/siteScope';
+import type { SiteState } from '@/utils/types';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
 import { describeInterceptorStats, isInterceptorStatsEntry } from '@/utils/interceptorStats';
@@ -770,6 +808,7 @@ async function computePageHit() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? '';
     pageUrl.value = url;
+    pageHost.value = hostnameOf(url);
     const proxiable = /^https?:/i.test(url);
     pageHitProxiable.value = proxiable;
 
@@ -779,6 +818,7 @@ async function computePageHit() {
       void fetchTabDnrStats(tab?.id);
       void fetchTabInterceptorStats(tab?.id);
       void fetchTabConfigSync(tab?.id);
+      void fetchSiteState();
       void fetchCorsSuspects(tab?.id);
     }
 
@@ -885,6 +925,61 @@ async function fetchTabInterceptorStats(tabId: number | undefined) {
     if (isInterceptorStatsEntry(entry)) interceptorRaw.value = entry;
   } catch (error) {
     logger.debug('Fetch tab interceptor stats failed:', error);
+  }
+}
+
+// ─── 站点维度的生效范围（这一台站点要不要走代理） ─────────────────────────────
+/**
+ * 判据不在这一侧：`utils/siteScope.ts` 的 `withHostActive` 才决定「打开开关」在两种模式下
+ * 各写成什么状态。界面只说结果——「这一台站点走不走代理」——因为名单在 `site-off` 与
+ * `site-only` 里含义相反，把「往名单里加一台」直接画成开关就会在换档时说反话。
+ *
+ * `siteState` 为 null 表示「这次没读到」。那一档不许画成「全部站点都在生效」的确认语气，
+ * 也不许把开关当成「已关闭」——开关读不到就是读不到（与 `statusEverRead` 同一族规矩）。
+ */
+const siteState = ref<SiteState | null>(null);
+const siteScopeBusy = ref(false);
+const pageHost = ref('');
+
+/** 这台主机当前是否走代理（读不到状态时为 null，界面据此禁用开关） */
+const hostProxied = computed<boolean | null>(() =>
+  siteState.value === null ? null : siteAllows(siteState.value, pageHost.value),
+);
+
+async function fetchSiteState() {
+  try {
+    const state: unknown = await chrome.runtime.sendMessage({ type: MessageType.GET_SITE_STATE });
+    siteState.value = sanitizeSiteState(state);
+  } catch (error) {
+    logger.debug('Fetch site state failed:', error);
+    siteState.value = null;
+  }
+}
+
+async function applyHostProxied(value: boolean) {
+  if (!pageHost.value || siteScopeBusy.value) return;
+  siteScopeBusy.value = true;
+  const previous = siteState.value;
+  try {
+    const next = withHostActive(previous ?? DEFAULT_SITE_STATE, pageHost.value, value);
+    const response = (await chrome.runtime.sendMessage({
+      type: MessageType.SET_SITE_STATE,
+      data: { mode: next.mode, hosts: next.hosts },
+    })) as { success?: boolean } | undefined;
+    if (response?.success) {
+      siteState.value = next;
+      ElMessage.success(value ? t('siteScopeEnabledHere') : t('siteScopeDisabledHere'));
+      // 名单变了 → DNR 与这一页的配置都要重来一次，读数不能停在按旧范围算出来的那份
+      void computePageHit();
+    } else {
+      ElMessage.error(t('siteScopeSaveFailed'));
+    }
+  } catch (error) {
+    logger.debug('Set site state failed:', error);
+    ElMessage.error(t('siteScopeSaveFailed'));
+  } finally {
+    siteScopeBusy.value = false;
+    void previous;
   }
 }
 
@@ -1596,6 +1691,48 @@ async function openOptionsPage(hash = '') {
 
   /* 与拦截器那一行同一种进场：两条提示都会在读数到位后突然出现，抖动的方式得一致 */
   animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
+}
+
+/* 站点生效范围那一格：与本页命中卡同一套底色，靠边说明「按主机判定」 */
+.site-scope-card {
+  padding: 8px 10px;
+  margin-top: 10px;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 8px;
+}
+
+.site-scope-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-scope-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.site-scope-label {
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+}
+
+.site-scope-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--cop-text-color-primary);
+  white-space: nowrap;
+}
+
+.site-scope-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cop-text-color-secondary);
 }
 
 /* 当前页命中预览 */

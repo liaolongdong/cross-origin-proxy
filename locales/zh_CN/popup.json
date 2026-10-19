@@ -70,5 +70,11 @@
   "interceptorDetail": "自报于 $1：拦到 $2 · 交给后台 $3 · 回退原生 $4 · 代发超时 $5（同一请求可同时计入多项，不能相加）",
   "configNotSynced": "此页尚未收到最新配置，刷新这一页通常可恢复",
   "configNotSyncedHint": "配置是在这个页面打开之后改的，而那次推送没有送达：页面可能在扩展安装、更新或重载之前就已经打开，也可能是该站点禁用了扩展。刷新页面通常即可恢复；若站点被禁用，需要在 Chrome 的扩展菜单里为该站点重新开启。",
-  "requestFailed": "失败"
+  "requestFailed": "失败",
+  "siteScopeTitle": "这台站点的代理",
+  "siteScopeBoundary": "按主机判定：含它的子域名；协议与端口不算两台站点。",
+  "siteScopeUnreadable": "这次没读到站点的开关状态，先不动它。",
+  "siteScopeEnabledHere": "这台站点已恢复走代理",
+  "siteScopeDisabledHere": "这台站点已停用代理（含子域名）",
+  "siteScopeSaveFailed": "站点设置保存失败，请重试"
 }

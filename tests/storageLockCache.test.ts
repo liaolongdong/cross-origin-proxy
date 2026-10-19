@@ -117,6 +117,8 @@ const {
   toggleProxy,
   toggleRule,
   updateRule,
+  getSiteState,
+  saveSiteState,
 } = await import('@/utils/storage');
 
 function makeRule(id: string, overrides: Partial<ProxyRule> = {}): ProxyRule {
@@ -712,5 +714,36 @@ describe('recent_targets：候选记在主写入之后，且只记换过环境�
     expect(await getRecentTargets()).toEqual([]);
     store[STORAGE_KEYS.RECENT_TARGETS] = ['https://ok.test', 7, '', null, 'https://ok.test'];
     expect(await getRecentTargets()).toEqual(['https://ok.test']);
+  });
+});
+
+describe('站点生效范围读写（`getSiteState` / `saveSiteState`）', () => {
+  it('键不存在时给默认值，而不是 undefined 传下去', async () => {
+    expect(await getSiteState()).toEqual({ mode: 'all', hosts: [] });
+  });
+
+  it('storage 原文被手改坏时一律回落默认值，不抛', async () => {
+    for (const junk of ['x', 42, null, ['a.test'], { mode: 'weird', hosts: 'nope' }]) {
+      store[STORAGE_KEYS.SITE_STATE] = junk;
+      expect(await getSiteState()).toEqual({ mode: 'all', hosts: [] });
+    }
+  });
+
+  it('写入前先收口：落盘的是合法状态，非法条目与越界的名单不会进 storage', async () => {
+    await saveSiteState({ mode: 'site-off', hosts: ['A.T Estr', 'fat.example.com', 'fat.example.com'] });
+    expect(store[STORAGE_KEYS.SITE_STATE]).toEqual({ mode: 'site-off', hosts: ['fat.example.com'] });
+  });
+
+  it('写失败会把异常交给调用方（这一条与「最近目标」刻意相反：那是便利列表，这是用户点下的状态变更）', async () => {
+    failNextSet = 'Quota exceeded';
+    await expect(saveSiteState({ mode: 'site-only', hosts: ['a.test'] })).rejects.toThrow(/Quota/);
+  });
+
+  it('读写都只碰 SITE_STATE 那个键，不顺手写配置', async () => {
+    await saveSiteState({ mode: 'site-off', hosts: ['a.test'] });
+    expect(await getSiteState()).toEqual({ mode: 'site-off', hosts: ['a.test'] });
+    const writes = Object.keys(store);
+    expect(writes).toContain(STORAGE_KEYS.SITE_STATE);
+    expect(writes).not.toContain(STORAGE_KEYS.PROXY_CONFIG);
   });
 });

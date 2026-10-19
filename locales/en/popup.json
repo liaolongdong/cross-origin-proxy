@@ -70,5 +70,11 @@
   "interceptorDetail": "Reported at $1: intercepted $2 · handed over $3 · fell back $4 · timed out $5 (one request can count in more than one — don't add them up)",
   "configNotSynced": "This page has not received the latest rules — reloading it usually fixes it",
   "configNotSyncedHint": "The rules changed after this page loaded, and that push never arrived: the page may predate an install, update or reload of the extension, or the extension is disabled for this site. Reloading the page usually fixes it; if the site is blocked, re-enable the extension for it from Chrome's extension menu.",
-  "requestFailed": "Failed"
+  "requestFailed": "Failed",
+  "siteScopeTitle": "Proxy on this site",
+  "siteScopeBoundary": "Matched by host: subdomains are included, and scheme or port does not make a second site.",
+  "siteScopeUnreadable": "Couldn't read the site switch this time — leaving it as is.",
+  "siteScopeEnabledHere": "This site is proxied again",
+  "siteScopeDisabledHere": "Proxy disabled for this site (subdomains included)",
+  "siteScopeSaveFailed": "Could not save the site setting — try again"
 }
