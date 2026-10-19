@@ -472,5 +472,7 @@
   "siteScopeModeOnly": "Only listed sites",
   "siteScopeListHint": "Entries match by host including subdomains; scheme and port do not separate sites.",
   "siteScopeEmpty": "No sites configured yet.",
-  "siteScopeRemoveA11y": "Remove $1 from the site list"
+  "siteScopeRemoveA11y": "Remove $1 from the site list",
+  "rulesSkeletonA11y": "Loading your saved rules",
+  "logsSkeletonA11y": "Loading request logs"
 }

@@ -317,3 +317,24 @@ export const SCHEMA_VERSION = 2;
  * `tests/deleteUndo.test.ts` 按这个前提钉住两处用的是同一个常量。
  */
 export const DELETE_UNDO_WINDOW_MS = 5000;
+
+// ─── 行级过渡预算（components/options/RuleTable） ──────────────────────────────
+/**
+ * 「可见行集合变了」这一次重排，最多给多少行做行级过渡（FLIP 归位 + 新行错峰落位）
+ *
+ * 这不是审美阈值而是性能阈值：2026-09-25 满负载实测里，日志抽屉 500 行的「点击 → 首行出现」
+ * 要 3.7–4.9s（归因是组件实例数，不是过渡代码），同一份夹具 50 行只要 392ms。
+ * FLIP 那一遍是每行一次 `getBoundingClientRect()`（同步布局）加一次 `animate()`，
+ * 行数一上去就把「重排本来的一次代价」换成「几百次」，而筛选是用户一边打字一边触发的。
+ * 越过这条线就直接重排：内容照样立刻换对，只是不动。
+ */
+export const MAX_ANIMATED_ROWS = 60;
+/**
+ * 新行错峰落位的最大延迟（毫秒）
+ *
+ * 阶梯本身写在 `RuleTable.vue` 的 `:nth-child(n + k)` 里（60 / 120 / 180ms 三档），
+ * 这里只留「最高那一档」给 JS 侧算「类名什么时候摘掉」。两处必须是同一个数：
+ * 提前摘就是在动画中途把行抽回静止态，滞后摘则让下一次筛选复用上一批的类名。
+ * 由 `tests/rowMotion.test.ts` 按 CSS 里实际出现过的最大 `animation-delay` 对账。
+ */
+export const ROW_STAGGER_MAX_DELAY_MS = 180;

@@ -169,9 +169,13 @@ describe('读取失败面板排在空态引导之前（源码契约）', () => {
 
   it('失败面板的判据是「列表为空且读取失败」，刷新按钮接回 fetchConfig', () => {
     const head = table.slice(0, table.indexOf('key="read-failed"'));
-    const guard = head.match(/v-if="([^"]+)"/);
+    // 2026-10-19 起这一串多了一格：`key="read-failed"` 之前是「首屏还没读到过」的骨架，
+    // 所以挂在失败面板上的那条不再是串里的第一个条件。取**离那个 key 最近**的一条——
+    // 判据本身一个字没改，改的是它前面多出来的那一格。
+    const guards = [...head.matchAll(/v-(?:else-)?if="([^"]+)"/g)];
+    expect(guards.length, '找不到挂在 read-failed 那一格上的条件（那一格被写死了？）').toBeGreaterThanOrEqual(1);
 
-    expect(guard?.[1].replace(/\s+/g, ' ')).toBe('rules.length === 0 && readFailed');
+    expect(guards[guards.length - 1][1].replace(/\s+/g, ' ')).toBe('rules.length === 0 && readFailed');
     expect(table).toMatch(/@click="\$emit\('refresh'\)"/);
     expect(app).toMatch(/@refresh="fetchConfig"/);
   });

@@ -139,6 +139,16 @@ export function withViewTransition(update: () => void | Promise<void>): void {
   });
 }
 
+/**
+ * FLIP 的 First 那一份位置
+ *
+ * 刻意收成 `left` / `top` 两个数而不是整个 `DOMRect`（`readRects` 交出来的 `DOMRect` 天然满足它）：
+ * 调用方手里那份「变更前」的矩形往往是上一次布局时量的，两次量之间页面可能滚了不止一格
+ * （筛选把 200 行收成 3 行时浏览器还会自己把滚动位置夹回去），带滚动漂移校正的调用方交出来的
+ * 就是这两个数——这里要看的本来也只有这两个数。
+ */
+export type FlipRect = Pick<DOMRect, 'left' | 'top'>;
+
 /** 快照一批元素的当前位置，配合 {@link applyFlip} 在 DOM 变更后使用 */
 export function readRects(elements: Iterable<HTMLElement>): Map<HTMLElement, DOMRect> {
   const rects = new Map<HTMLElement, DOMRect>();
@@ -154,12 +164,12 @@ export function readRects(elements: Iterable<HTMLElement>): Map<HTMLElement, DOM
  * 后者要求元素把 transform 交给动画，而列表元素自己往往也有 transform（悬浮上浮、拖拽抬起），
  * 收尾时一并撤掉就会顺带改坏人家的样式。keyframe 动画跑完即散场，不留任何样式。
  *
- * @param rects 变更前用 `readRects` 拿到的同一批元素的位置
+ * @param rects 变更前用 `readRects`（或已按滚动漂移校正过的 {@link FlipRect}）拿到的同一批元素的位置
  * @param durationMs 归位时长；不传则读 `--cop-duration-base`（对动画来说「时长缺失」比
  *   「差一档」严重得多，所以留字面量兜底，和 CSS 里 `var(--x, 220ms)` 同一层含义）
  * @param easing 缓动；不传则读 `--cop-ease-spring`（物体自己落位的那一档手感）
  */
-export function applyFlip(rects: Map<HTMLElement, DOMRect>, durationMs?: number, easing?: string): void {
+export function applyFlip(rects: Map<HTMLElement, FlipRect>, durationMs?: number, easing?: string): void {
   if (prefersReducedMotion() || !rects.size) return;
   const ms = durationMs ?? motionTokenToMs('--cop-duration-base', 220);
   const curve = easing ?? readMotionToken('--cop-ease-spring', 'cubic-bezier(0.34, 1.4, 0.64, 1)');

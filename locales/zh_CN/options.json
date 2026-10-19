@@ -472,5 +472,7 @@
   "siteScopeModeOnly": "仅列出的站点",
   "siteScopeListHint": "名单按主机匹配，含其子域名；端口与协议不分家。",
   "siteScopeEmpty": "还没有单独设置过的站点。",
-  "siteScopeRemoveA11y": "从站点名单里移除 $1"
+  "siteScopeRemoveA11y": "从站点名单里移除 $1",
+  "rulesSkeletonA11y": "正在读取已保存的规则",
+  "logsSkeletonA11y": "正在读取请求记录"
 }

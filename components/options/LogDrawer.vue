@@ -225,9 +225,11 @@
            翻不开它。这里把表格自身变成一个焦点位：上下方向键移动高亮行、回车或空格展开——
            与点击共用同一个 `toggleLogDetail`，两条路看到的是同一件事，不存在「键盘版是另一套逻辑」。
            这些属性透传到 `.el-table` 根 div（EP 没有设 `inheritAttrs: false`），而裸 `<div>` 上的
-           `aria-label` 不会被念出来，所以同时给 `role="group"`。 -->
+           `aria-label` 不会被念出来，所以同时给 `role="group"`。
+           `v-loading` 只在**已经读到过一次**之后再盖：首屏那一次由空位上的骨架回答（见下面的 `#empty`），
+           两张叠在一起就是把「还没读到」画成「蒙了一层布的空白」。 -->
       <el-table
-        v-loading="loading"
+        v-loading="loading && logsEverRead"
         :data="windowedLogs"
         :row-class-name="rowClassName"
         row-key="id"
@@ -357,9 +359,19 @@
           </template>
         </el-table-column>
 
-        <!-- 空状态 -->
+        <!-- 空状态：首屏那一次往返还在路上时先画骨架，读完仍为空才说那三句话
+             （`logsEmptyText`，其中「从来没有读到过」那一档从此只在「还没读到就结束」时出现） -->
         <template #empty>
-          <div class="empty-state">
+          <TableSkeleton
+            v-if="firstReadPending"
+            :label="t('logsSkeletonA11y')"
+            :columns="SKELETON_COLUMNS"
+            :rows="SKELETON_ROW_COUNT"
+          />
+          <div
+            v-else
+            class="empty-state"
+          >
             <el-icon
               :size="48"
               :color="'var(--cop-text-color-placeholder)'"
@@ -596,6 +608,7 @@ import { useRenderWindow } from '@/composables/useRenderWindow';
 import { resolveLogRowKey } from '@/utils/logRowNavigation';
 import { buildMockDraftFromLog } from '@/utils/mockFromLog';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
+import TableSkeleton from './TableSkeleton.vue';
 
 /**
  * 请求日志抽屉（由原 RequestLogPanel 标签页改造）
@@ -699,6 +712,30 @@ const logsEmptyText = computed(() => {
   if (!props.logsEverRead) return t('statusUnknown');
   return t('noLogs');
 });
+
+/**
+ * 首屏那一次往返还在路上：空位上画骨架，不画那三句话
+ *
+ * 与 `RuleTable` 同一个判据（`loading && !everRead`）。这里换掉的是「未知」那一档——
+ * 它本来就在说「还没读到」，只是没有形状；骨架把同一句话说得不用猜。
+ * 读失败时 `loading` 落回 false，那一格立刻交还给 `logsReadFailed` 那句话，
+ * 所以「读不到」不会被画成「还在加载」。
+ */
+const firstReadPending = computed(() => props.loading && !props.logsEverRead);
+
+/** 骨架的七格，按这张表的列轮廓：时间 / 规则 / 方法 / 原 URL / 改写 URL / 状态 / 耗时 */
+const SKELETON_COLUMNS = [
+  { width: '96px' },
+  { width: '16%' },
+  { width: '52px' },
+  { flex: 1 },
+  { flex: 1 },
+  { width: '56px' },
+  { width: '44px' },
+];
+
+/** 骨架画几行：抽屉比规则表窄、又比它矮（上面还压着两格统计），六行够把「这是一张表」说清 */
+const SKELETON_ROW_COUNT = 6;
 
 /**
  * 「这一轮日志没读到、手里这几行是旧账」那一句

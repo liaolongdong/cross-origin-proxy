@@ -48,6 +48,7 @@
       :rules="filteredRules"
       :loading="ruleLoading"
       :has-any-rules="rules.length > 0"
+      :ever-read="configEverRead"
       :read-failed="configReadFailed"
       :highlight-rule-id="highlightRuleId"
       :search-text="searchText"
