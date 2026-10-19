@@ -49,14 +49,14 @@
 
 <table>
   <tr>
-    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="规则编辑弹窗：正则匹配模式、重写目标、HTTP 方法、查询参数与请求头覆盖" width="100%" /></a><br /><b>规则编辑器</b>——匹配 / 重写 / 请求头与响应覆盖 / 条件化 Mock / 延迟 / 阻断 / 重试，一个表单配齐，带实时冲突提示</td>
+    <td width="50%" align="center"><a href="./docs/assets/img/rule-editor.jpg"><img src="./docs/assets/img/rule-editor.jpg" alt="规则编辑弹窗：通配符匹配模式、重写目标、HTTP 方法、查询参数与请求头覆盖" width="100%" /></a><br /><b>规则编辑器</b>——匹配 / 重写 / 请求头与响应覆盖 / 条件化 Mock / 延迟 / 阻断 / 重试，一个表单配齐，带实时冲突提示</td>
     <td width="50%" align="center"><a href="./docs/assets/img/url-tester.jpg"><img src="./docs/assets/img/url-tester.jpg" alt="URL 匹配预演：命中规则、重写后地址与转发通道" width="100%" /></a><br /><b>URL 匹配预演</b>——粘贴任意地址，实时查看命中规则、重写结果、转发通道与被遮蔽规则</td>
   </tr>
   <tr>
     <td align="center"><a href="./docs/assets/img/request-log.jpg"><img src="./docs/assets/img/request-log.jpg" alt="请求日志抽屉：总计与成功失败、两条通道各自的命中统计、原始与代理地址并排" width="100%" /></a><br /><b>请求日志</b>——最近 500 条，可筛选、复制为 cURL、导出 HAR，含两条通道各自的命中统计</td>
-    <td align="center"><a href="./docs/assets/img/popup.jpg"><img src="./docs/assets/img/popup.jpg" alt="扩展弹窗：总开关、今日请求与快捷入口" width="100%" /></a><br /><b>弹窗</b>——总开关、今日请求、自动关闭倒计时、当前页命中预演与「为本页创建规则」</td>
+    <td align="center"><a href="./docs/assets/img/popup.jpg"><img src="./docs/assets/img/popup.jpg" alt="扩展弹窗：总开关、活跃规则与今日请求、按主机生效的站点开关与本页命中预览" width="100%" /></a><br /><b>弹窗</b>——总开关、活跃规则与今日请求、按主机生效的站点开关、当前页命中规则与改写结果、自动关闭档位</td>
   <tr>
-    <td align="center"><a href="./docs/assets/img/config-import.jpg"><img src="./docs/assets/img/config-import.jpg" alt="导入前预览：预计写入 2 条规则、2 条同键规则将被跳过，并点名不会生效的目标地址" width="100%" /></a><br /><b>导入与导出</b>——粘贴或选择 JSON 后先「预览变更」：写入几条、哪几条因同名同匹配模式被跳过、哪个目标地址不会生效，导入前就说清楚；同一弹窗还负责导出（分享模式剔除凭据）、cURL / HAR / OpenAPI 导入与整套替换前的恢复点</td>
+    <td align="center"><a href="./docs/assets/img/config-import.jpg"><img src="./docs/assets/img/config-import.jpg" alt="导入前预览：预计写入 1 条规则、2 条同键规则将被跳过，并点名不会生效的目标地址" width="100%" /></a><br /><b>导入与导出</b>——粘贴或选择 JSON 后先「预览变更」：写入几条、哪几条因同名同匹配模式被跳过、哪个目标地址不会生效，导入前就说清楚；同一弹窗还负责导出（分享模式剔除凭据）、cURL / HAR / OpenAPI 导入与整套替换前的恢复点</td>
     <td align="center"><a href="./docs/assets/img/credential-variables.jpg"><img src="./docs/assets/img/credential-variables.jpg" alt="偏好设置弹窗：主题颜色、界面语言、自动关闭代理与凭据变量表，变量真值以圆点遮蔽" width="100%" /></a><br /><b>凭据变量</b>——token 只在本机存一份，规则里写 <code>{{名称}}</code> 引用，代发那一刻才展开；导出、日志与页面侧脚本都拿不到真值</td>
   </tr>
 </table>

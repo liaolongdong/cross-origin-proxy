@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-19"
+            "dateModified": "2026-10-20"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-19",
+            "dateModified": "2026-10-20",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -1381,7 +1381,7 @@
                 <figure>
                   <img
                     src="assets/img/rule-editor.jpg"
-                    alt="Rule editor dialog: regex match pattern, rewrite target, HTTP methods, query and header overrides"
+                    alt="Rule editor dialog: wildcard match pattern, rewrite target, HTTP methods, query and header overrides"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1443,7 +1443,7 @@
                 <figure>
                   <img
                     src="assets/img/popup.jpg"
-                    alt="Extension popup with global switch, active rule count and quick links"
+                    alt="Extension popup with master switch and auto-off, active rules and requests today, a per-host site switch, and this page's matched rule and rewrite"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1452,9 +1452,10 @@
                   <figcaption>
                     <b>Popup</b
                     ><span
-                      >Global switch, active rules, requests via the extension (background channel only), this tab's
-                      network-layer hits (5 min), recent calls, quick rule toggles, auto-off countdown, this page's
-                      address match preview and “create rule for this page”.</span
+                      >Master switch and auto-off presets, active rules and today's extension-proxied requests; the
+                      per-site switch scopes the proxy by host (subdomains included, scheme and port make no
+                      difference); the page card gives the matched rule, forwarding channel and rewritten URL right
+                      away.</span
                     >
                   </figcaption>
                 </figure>
@@ -1463,7 +1464,7 @@
                 <figure>
                   <img
                     src="assets/img/config-import.jpg"
-                    alt="Import preview: two rules will be written, two same-key rules will be skipped, and the target URL that would take no effect is named"
+                    alt="Import preview: one rule will be written, two same-key rules will be skipped, and the target URL that would take no effect is named"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -3066,7 +3067,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.5.1</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-10-19</span>
+            <span>Last updated 2026-10-20</span>
             <span
               ><a
                 href="./"

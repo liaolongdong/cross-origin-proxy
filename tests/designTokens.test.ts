@@ -463,6 +463,35 @@ describe('EP 节奏覆盖必须靠特异度赢，而不是靠加载顺序', () =
 });
 
 /**
+ * 顶栏那颗反色主按钮（「添加规则」）在暗色模式下的可见性，同样只由特异度决定。
+ *
+ * `styles.css` 的 `:root[data-mode='dark'] .el-button--primary` 把字色换成 on-primary
+ * 深墨（让暗色主色实底上的文字看得清），而顶栏那颗按钮是反过来的：深色底 + 主色字。
+ * 两支选择器在本源里都是 3 个类级权重，可 `:deep()` 编译后 Vue 还会给 `.header-actions`
+ * 加一个 scoped 属性（+1 类级）；真正让顶栏赢的必须是选择器里多带的 `.el-button`
+ * （共 4 个类级），而不是谁的 `<link>` 排在后面。2026-10-20 在真 Chrome 里量到过
+ * 失效态：字色 `rgb(16, 21, 31)` 压在 `rgb(26, 26, 46)` 底上（约 1.07:1），按钮文字等于消失。
+ */
+describe('顶栏反色主按钮的权重必须高于暗色主按钮', () => {
+  const HEADER = 'components/options/HeaderBar.vue';
+  const GLOBAL_CSS = 'entrypoints/options/styles.css';
+
+  /** 源选择器里的类级权重（类 / 属性 / 伪类各记 1；`:deep()` 只取括号里的内容） */
+  const classWeight = (selector: string) => (selector.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length;
+
+  it('HeaderBar 的 `.el-button--primary` 规则带 `.el-button`，且暗色覆盖仍在', () => {
+    const header = readFileSync(HEADER, 'utf-8');
+    const match = header.match(/:deep\((\.header-actions[^{]*\.el-button--primary[^{]*)\)/);
+    expect(match, '找不到 HeaderBar 的主按钮选择器').not.toBeNull();
+    const headerWeight = classWeight(match![1]) + 1; // scoped 属性选择器在编译期加到 `.header-actions`
+    const styles = readFileSync(GLOBAL_CSS, 'utf-8');
+    const darkRule = ":root[data-mode='dark'] .el-button--primary";
+    expect(styles).toContain(darkRule);
+    expect(headerWeight).toBeGreaterThan(classWeight(darkRule));
+  });
+});
+
+/**
  * 换肤那一次整页淡入由四个快照层一起完成，四层都得挂在同一档上。
  *
  * 这条是 2026-09-26 真机量出来的：`::view-transition-group(root)` 当时没人写，于是它保持 UA 的

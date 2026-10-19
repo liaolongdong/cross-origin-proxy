@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — 跨域代理助手 / Cross-Origin Proxy
 
-> Last Updated: 2026-09-22
+> Last Updated: 2026-10-20
 > 本文件是商店上架的唯一素材源：把这里的内容逐项复制进 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)。
 > 商店表单（名称/描述/截图/权限理由/数据披露）无法由 API 代写，只能手动粘；**包上传与提审已经自动化**，见第 11 节。
 > 本文件位于 `.github/docs/`——仓库侧的运维文档，和它所描述的自动化放在同一棵子树里。它不在 `.output/chrome-mv3` 内，因此不会被打进上传包。
@@ -400,7 +400,7 @@ Redirects a page's API requests to another backend environment and lets develope
 
 ## 2. Graphics & Assets
 
-运行 `pnpm assets`（中文版）与 `pnpm assets:en`（英文版）生成，产物在 `store-assets/`（已 gitignore，可再生）。原图按语言分两套：`screenshots/*.png` 是中文界面（落地页与 README 用），`screenshots/en/*.png` 是英文界面——`--en` 生成商店图时优先取后者，**英文列表因此配的是英文截图**。截图于 2026-09-22 用 1.1.0 构建实拍重拍（演示数据，7 条规则）。
+运行 `pnpm assets`（中文版）与 `pnpm assets:en`（英文版）生成，产物在 `store-assets/`（已 gitignore，可再生）。原图按语言分两套：`screenshots/*.png` 是中文界面（落地页与 README 用），`screenshots/en/*.png` 是英文界面——`--en` 生成商店图时优先取后者，**英文列表因此配的是英文截图**。截图于 2026-10-20 用 1.5.1 构建实拍重拍（演示数据，7 条规则）。`05-popup` 只截弹窗首屏那一屏（总开关与自动关闭、三个计数、站点开关、本页命中），快捷入口在更下方，没有进这张图。
 
 | Asset                  | Dimensions  | Status   | Filename                                                                              |
 | ---------------------- | ----------- | -------- | ------------------------------------------------------------------------------------- |

@@ -85,8 +85,8 @@ const SHOTS = [
     slug: '02-rule-editor',
     store: true,
     alt: {
-      zh: '规则编辑弹窗：正则匹配、重写目标、方法限定、查询参数与请求头覆盖',
-      en: 'Rule editor: regex match, rewrite target, method filter, query and header overrides',
+      zh: '规则编辑弹窗：通配符匹配、重写目标、方法限定、查询参数与请求头覆盖，头值里引用凭据变量',
+      en: 'Rule editor: wildcard match, rewrite target, method filter, query and header overrides with credential variables',
     },
     caption: {
       zh: {
@@ -139,17 +139,17 @@ const SHOTS = [
     slug: '05-popup',
     store: true,
     alt: {
-      zh: '弹窗：总开关、活跃规则数、今日请求数与五个快捷入口',
-      en: 'Popup: master switch, active rules, requests today and five shortcuts',
+      zh: '弹窗：总开关与自动关闭、活跃规则数、当日经扩展请求数、按主机生效的站点开关，以及当前页地址的命中规则与改写结果',
+      en: 'Popup: master switch and auto-off, active rules, requests today, a per-host site switch, and this page’s matched rule and rewrite',
     },
     caption: {
       zh: {
-        title: '总开关一按即生效，规则与请求数就在旁边',
-        sub: '活跃规则数、今日经扩展请求数、规则列表、为当前页创建规则、请求日志与导入导出入口',
+        title: '总开关、站点开关与本页命中',
+        sub: '活跃规则与当日代发数、按主机生效的站点开关、当前页命中规则与通道',
       },
       en: {
-        title: 'One switch, with the counts right beside it',
-        sub: 'Active rules, requests today, rule list, create-rule-for-this-page, log and export',
+        title: 'Switch, per-site scope and what this page hits',
+        sub: 'Active rules and requests today, a per-host switch, and the rule this page hits',
       },
     },
   },

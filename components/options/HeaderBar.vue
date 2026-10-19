@@ -242,7 +242,12 @@ const { t } = useI18n();
   transform: translateY(-1px);
 }
 
-:deep(.header-actions .el-button--primary) {
+/* 多带一个 `.el-button` 是承重的：`entrypoints/options/styles.css` 里暗色模式那条
+   `:root[data-mode='dark'] .el-button--primary` 与本选择器同为 3 个类级权重，而它排在
+   组件样式之后，于是暗色的 on-primary 深墨字色会盖掉这里反色按钮的 `--cop-primary`——
+   深墨字压在深色底上，按钮文字等于消失。加上 `.el-button` 抬到 4 个类级，
+   胜负不再由样式表顺序决定。 */
+:deep(.header-actions .el-button.el-button--primary) {
   font-weight: 500;
   color: var(--cop-primary);
   background: var(--cop-bg-color);
