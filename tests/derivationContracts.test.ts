@@ -237,3 +237,69 @@ describe('HAR 面板的确认按钮 — 不得复用「导入配置」那枚标�
     expect(enLabels.importHarCreateRules).toContain('HAR');
   });
 });
+
+describe('Mock 五档拒绝 — 判据、界面文案与说明文档只许有一份答案（2026-10-19 文档漂移实测）', () => {
+  // 这一支是本轮补的：`utils/mockFromLog.ts` 后来加了第五档 `badUrl`，代码与界面都跟着改了，
+  // 而 CHANGELOG 与两份 README 还写着「四种情况」——文档比判据少一档，用户按文档去找那句话就找不到。
+  // 数字这种写法最容易漂，所以这里从**类型定义**取档数，再去对文档里的那个数词。
+  const mockSource = fs.readFileSync('utils/mockFromLog.ts', 'utf8');
+  const logDrawerSource = fs.readFileSync('components/options/LogDrawer.vue', 'utf8');
+  const readmeZh = fs.readFileSync('README.md', 'utf8');
+  const readmeEn = fs.readFileSync('README.en.md', 'utf8');
+  const changelogDraft = fs.readFileSync('CHANGELOG.md', 'utf8').split('\n## [')[0];
+
+  const union = mockSource.match(/export type MockDraftRefusal =([^;]+);/);
+  const reasons = union ? (union[1].match(/'([^']+)'/g) || []).map(s => s.slice(1, -1)) : [];
+
+  const CN_DIGIT: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+  const EN_DIGIT: Record<string, number> = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+  };
+
+  it('判据自己先要读得出来（解析失败时不许空对空全绿）', () => {
+    expect(reasons.length).toBeGreaterThanOrEqual(4);
+    expect(reasons).toContain('badUrl');
+  });
+
+  it('每一档都在抽屉的 switch 里有自己的 case 与 key', () => {
+    for (const reason of reasons) {
+      expect(logDrawerSource).toContain(`case '${reason}':`);
+      const pascal = reason.charAt(0).toUpperCase() + reason.slice(1);
+      expect(logDrawerSource).toContain(`t('mockFromLog${pascal}')`);
+    }
+  });
+
+  it('每一档的中英文案都存在（缺一句就会画出空字符串那句拒绝）', () => {
+    for (const reason of reasons) {
+      const pascal = reason.charAt(0).toUpperCase() + reason.slice(1);
+      for (const locale of ['zh_CN', 'en']) {
+        const labels = JSON.parse(fs.readFileSync(`locales/${locale}/options.json`, 'utf8')) as Record<string, string>;
+        expect(labels[`mockFromLog${pascal}`], `${locale} / mockFromLog${pascal}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('文档里写的那个「几档」必须等于类型定义里的档数', () => {
+    const zhCount = (text: string): number | null => {
+      const m = text.match(/([一二三四五六七八九十])种情况不提供/);
+      return m ? (CN_DIGIT[m[1]] ?? null) : null;
+    };
+    const enCount = (text: string): number | null => {
+      const m = text.match(/([A-Za-z]+) cases are refused/);
+      return m ? (EN_DIGIT[m[1].toLowerCase()] ?? null) : null;
+    };
+    expect(zhCount(readmeZh)).toBe(reasons.length);
+    expect(enCount(readmeEn)).toBe(reasons.length);
+    expect(zhCount(changelogDraft)).toBe(reasons.length);
+    expect(enCount(changelogDraft)).toBe(reasons.length);
+  });
+});
