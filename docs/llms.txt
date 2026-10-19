@@ -70,4 +70,4 @@
 - Chrome 应用商店已上架：https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg
 - 或从源码构建：Node.js 20+ 与 pnpm 10，执行 `pnpm install && pnpm build`，然后以「加载已解压的扩展程序」方式加载 `.output/chrome-mv3`。tag 版本由 GitHub Actions 自动发布，并在配置商店凭据后提交到商店。
 
-Last updated / 最后更新: 2026-10-02 (store build v1.3.0)
+Last updated / 最后更新: 2026-10-19 (store build v1.5.1)
