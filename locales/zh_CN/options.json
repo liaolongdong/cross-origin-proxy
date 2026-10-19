@@ -474,5 +474,8 @@
   "siteScopeEmpty": "还没有单独设置过的站点。",
   "siteScopeRemoveA11y": "从站点名单里移除 $1",
   "rulesSkeletonA11y": "正在读取已保存的规则",
-  "logsSkeletonA11y": "正在读取请求记录"
+  "logsSkeletonA11y": "正在读取请求记录",
+  "ratingTitle": "如果觉得好用",
+  "ratingDesc": "评分页在 Chrome 应用商店里，点一下就过去。它不会自己弹出来、不拦任何操作、也没有奖励可以换——这个扩展不收集使用数据，所以也不知道你有没有点过。",
+  "ratingAction": "打开商店评分页"
 }

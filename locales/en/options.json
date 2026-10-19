@@ -474,5 +474,8 @@
   "siteScopeEmpty": "No sites configured yet.",
   "siteScopeRemoveA11y": "Remove $1 from the site list",
   "rulesSkeletonA11y": "Loading your saved rules",
-  "logsSkeletonA11y": "Loading request logs"
+  "logsSkeletonA11y": "Loading request logs",
+  "ratingTitle": "If it has been useful",
+  "ratingDesc": "The review page lives in the Chrome Web Store; clicking just takes you there. Nothing pops up on its own, nothing is blocked while you decide, and there is no reward to earn — this extension collects no usage data, so it never learns whether you clicked.",
+  "ratingAction": "Open the store review page"
 }

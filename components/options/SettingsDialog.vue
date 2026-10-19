@@ -266,6 +266,26 @@
           <p class="site-scope-hint">{{ t('siteScopeListHint') }}</p>
         </template>
       </div>
+
+      <!-- 评分入口：一格常驻的设置项，只在从 Chrome 商店装的构建上出现（解包加载、Edge 那一族
+           的 `update_url` 都不算，那条链接在它们身上必然 404；判据见 utils/storePage.ts）。
+           形态是这里唯一承重的选择：Chrome Web Store 的政策禁的是
+           操纵评价（激励换评、刷量、自评），并不禁止征求评价，而 Google 自己的文档就写着
+           「条目 URL 末尾加 /reviews」；会撞线的是弹窗拦截、伪装成浏览器警告、反复骚扰那三类。
+           所以这一格不自动出现、不拦任何操作、不给奖励、不读数——点一下只是开一个标签页。 -->
+      <div
+        v-if="reviewUrl"
+        class="setting-section"
+      >
+        <div class="setting-label">{{ t('ratingTitle') }}</div>
+        <p class="rating-desc">{{ t('ratingDesc') }}</p>
+        <el-button
+          size="small"
+          @click="openReviewPage"
+        >
+          {{ t('ratingAction') }}
+        </el-button>
+      </div>
     </div>
   </el-dialog>
 </template>
@@ -286,6 +306,7 @@ import {
 import { AUTO_OFF_PRESETS, readAutoOffMinutes, writeAutoOffMinutes } from '@/utils/autoOff';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
 import { DEFAULT_SITE_STATE, sanitizeSiteState, withoutHost } from '@/utils/siteScope';
+import { isStoreInstalled, storeReviewUrl } from '@/utils/storePage';
 import type {
   ConfigHistoryEntry,
   ConfigHistoryReason,
@@ -652,6 +673,21 @@ function removeSiteHost(host: string) {
   void writeSiteScope(withoutHost(siteState.value, host));
 }
 
+/**
+ * 商店评分页地址；不是从 Chrome 商店装的构建就是空串，那一格整个不出现
+ *
+ * 解包加载（开发者模式、把 zip 拖进扩展页）没有 `update_url`；Edge 加载项、自建 XML、企业策略
+ * 那种虽然也有，但 ID 属于别的商店。两种情况下那条链接都是 404——与其画一个点开了错误页的按钮，
+ * 不如什么都不画。判据与 URL 形状都在 `utils/storePage.ts`。
+ */
+const reviewUrl = isStoreInstalled(chrome.runtime.getManifest().update_url) ? storeReviewUrl(chrome.runtime.id) : '';
+
+/** 只开一个标签页：不写 storage、不发任何消息、也不知道用户点没点（本扩展没有任何遥测） */
+function openReviewPage() {
+  if (!reviewUrl) return;
+  void chrome.tabs.create({ url: reviewUrl });
+}
+
 function addVariable() {
   variableRows.value.push({ uid: ++rowUidSeed, name: '', value: '' });
 }
@@ -738,11 +774,16 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
 
 .site-scope-empty,
 .site-scope-hint,
-.site-scope-warning {
+.site-scope-warning,
+.rating-desc {
   margin: 6px 0 0;
   font-size: 12px;
   line-height: 1.5;
   color: var(--cop-text-color-secondary);
+}
+
+.rating-desc {
+  margin-bottom: 10px;
 }
 
 .site-scope-warning {
