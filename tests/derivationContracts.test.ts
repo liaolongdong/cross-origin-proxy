@@ -130,3 +130,50 @@ describe('HAR 目标环境 — 非必填，且复选框不出现时不参与启�
     expect(optionsApp.match(/derivedDraft\.value = false;/g)).toHaveLength(2);
   });
 });
+
+/**
+ * 批次二：日志转 Mock 的接线
+ *
+ * 这里只钉三件「看不见」的事：判据只有一个出口、五种拒绝的文案都是字面量 key、草稿走表单
+ * 而不是自己写存储。判据本身（哪五档、形状长什么样）由 `tests/mockFromLog.test.ts` 按运行时测。
+ */
+describe('日志转 Mock — 判据唯一出口与文案分档', () => {
+  const logDrawer = fs.readFileSync('components/options/LogDrawer.vue', 'utf8');
+
+  it('组件只调一次判据，自己不造第二份理由', () => {
+    expect(flat(logDrawer).match(/buildMockDraftFromLog\(/g)).toHaveLength(1);
+    // 采纳的那一句必须是「整份交给判据」，不能在界面侧再补一个三元
+    expect(flat(logDrawer)).toContain(
+      'const mockDraft = computed(() => (selectedLog.value ? buildMockDraftFromLog(selectedLog.value) : null))',
+    );
+    // 界面不许自己拼拒绝理由（那等于在判据之外长出第二种「为什么不能」）
+    expect(logDrawer).not.toMatch(/reason:\s*'/);
+    expect(logDrawer).not.toMatch(/\{\s*ok:\s*false/);
+  });
+
+  it('五档拒绝各是一个字面量 key（动态拼 key 会躲过 i18n 那条存在性守卫）', () => {
+    for (const key of ['NoBody', 'NoStatus', 'Base64', 'Truncated', 'BadUrl']) {
+      expect(logDrawer).toContain(`t('mockFromLog${key}')`);
+    }
+    // 注意这里扫的是「拼出来的那种写法」，被测文件里的注释已改成不含该形状的说法
+    expect(logDrawer).not.toMatch(/t\(\s*`/);
+  });
+
+  it('三条边界句只在按钮出现的那一支里', () => {
+    const notes = logDrawer.slice(
+      logDrawer.indexOf('v-if="mockDraft?.ok"'),
+      logDrawer.indexOf('log-detail-mock-refuse'),
+    );
+    for (const key of ['mockFromLogQueryNote', 'mockFromLogScopeNote', 'mockFromLogBodyNote']) {
+      expect(notes).toContain(`t('${key}')`);
+    }
+    expect(notes).not.toContain('mockFromLogNoBody');
+  });
+
+  it('草稿交规则表单确认，组件自己一个字节都不写存储', () => {
+    expect(flat(optionsApp)).toContain('handleUseTemplate(draft)');
+    expect(logDrawer).not.toContain('BATCH_ADD_RULES');
+    expect(logDrawer).not.toContain('ADD_RULE');
+    expect(logDrawer).not.toContain('saveProxyConfig');
+  });
+});

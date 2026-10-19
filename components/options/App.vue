@@ -126,6 +126,7 @@
       @update:refresh-interval="setRefreshInterval"
       @refresh-dnr-stats="fetchDnrStats"
       @create-rule-from-log="handleCreateRuleFromLog"
+      @create-mock-from-log="handleCreateMockFromLog"
     />
   </div>
 </template>
@@ -934,6 +935,18 @@ function handleCreateRuleFromLog(log: import('@/utils/types').RequestLogEntry) {
   if (handleCreateRuleFromUrl(log.originalUrl)) {
     showLogs.value = false;
   }
+}
+
+/**
+ * 日志详情里「存为 Mock」的落点：交规则表单确认，与 cURL / 日志转规则同一条派生路径
+ *
+ * 刻意不带 `'derived'` 标记——Mock 草稿的目标是空的（它交付响应，不换后端），那句
+ * 「还不改写」对它既不是现状也不是待办。抽屉这里已经在按钮上判过一次可成性，
+ * 能点就说明判据放行，所以直接收起抽屉。
+ */
+function handleCreateMockFromLog(draft: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
+  handleUseTemplate(draft);
+  showLogs.value = false;
 }
 
 async function handleReorder(fromId: string, toId: string) {

@@ -7,11 +7,13 @@
  * 用户看到的只是数字变了，没有任何一处会报错——这正是需要运行时用例的那类「静默失效」面。
  *
  * 断言都按「这一格改了以后谁会受害」来选：
- * - 默认停用：「新规则默认停用、确认后自行启用」这句（英文 "those rules arrive disabled until you
- *   enable them"）在中英两侧各写着四处 —— `README` 两份、站点根落地页（`index.html` / `en.html`）、
- *   `docs/llms.txt`、`CHROMEWEBSTORE.md`，另外 `docs/llms-full.txt` 那一行里中英各还有一份；
- *   `docs/alternatives.html` 两份倒是都没提，别照着它以为这句只有一处。
- *   翻成 `true` 等于让一份在别的机器上抓的包当场接管这个 origin 的流量。
+ * - 默认停用：2026-10-19 之前这句在中英两侧各写着四处（`README` 两份、站点根落地页
+ *   `index.html` / `en.html` 各两处、`docs/llms.txt`、`docs/llms-full.txt`、`.github/docs/CHROMEWEBSTORE.md`），
+ *   写的是「新规则默认停用、确认后自行启用」，而 `docs/alternatives.html` 两份都没提——别照着它以为只有一处。
+ *   现在它成了**条件句**：填了合法的目标环境，这批规则默认启用（界面上那个复选框可取消）；
+ *   留空才照旧停用。所以这六处都改成了「不设目标环境就默认停用」这一类说法，翻成无条件
+ *   `enabled: true` 或反过来把条件句改回无条件，都等于让文档与实现对不上——而
+ *   「一份在别的机器上抓的包当场接管这个 origin 的流量」这条代价仍然成立。
  * - 按 origin 去重、先到先得：Chrome DevTools 导出的 HAR 里同一个后端通常有几十条请求，
  *   不去重就是几十条同键规则（合并键取 `name` + `matchType` + `matchPattern`，见
  *   `utils/ruleConflicts.ts` 的 `ruleMergeKey`，而这里生成的名字与模式都由 origin 决定），

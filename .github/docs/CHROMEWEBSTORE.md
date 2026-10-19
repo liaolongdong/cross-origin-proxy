@@ -11,11 +11,11 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 优化重心因此放在后两个字段：
 
-| 字段     | 预算       | 当前投入               | 说明                                                                                                                                                                                                                                                                                                                       |
-| -------- | ---------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 名称     | 75 码点    | 36 / 52                | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                                                                                                                                                                                                                                |
-| 摘要     | 132 码点   | 100 / 127              | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                                                                                                                                                                                                                           |
-| 详细描述 | 16000 码点 | 中约 5.8K / 英约 16.0K | 中文侧余量充足，**英文侧只剩 29 码点**：中英按「行数 / 条目数 / 段落数」逐行对等同步（`tests/docs-consistency.test.ts` 守卫），所以**扩写瓶颈在英文，不在中文**。往下加新段落的唯一前提是先在英文侧腾出等量空间，见 §0.1；加字只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
+| 字段     | 预算       | 当前投入                                                 | 说明                                                                                                                                                                                                                                                                                                                       |
+| -------- | ---------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 名称     | 75 码点    | 36 / 52                                                  | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                                                                                                                                                                                                                                |
+| 摘要     | 132 码点   | 100 / 127                                                | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                                                                                                                                                                                                                           |
+| 详细描述 | 16000 码点 | 中约 5.8K / 英约 16.0K（2026-10-19 现量 5,831 / 15,966） | 中文侧余量充足，**英文侧只剩 34 码点**：中英按「行数 / 条目数 / 段落数」逐行对等同步（`tests/docs-consistency.test.ts` 守卫），所以**扩写瓶颈在英文，不在中文**。往下加新段落的唯一前提是先在英文侧腾出等量空间，见 §0.1；加字只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
 | 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
 | ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 **这个差不是「中文写得少」**。两份详细描述逐行对等：28 个段落、64 个 `- ` 条目、134 行，一条不多一条不少（`tests/docs-consistency.test.ts` 的「中英详细描述结构对等」按 `{lines, bullets, paragraphs}` 全等断言）。差的只有语言密度——2026-09-22 这一轮新增的五处内容块，中文侧 +852 码点，英文镜像 +2,781 码点，**约 3.3 倍**。所以「把中文字数追到和英文一样」只能靠给中文单独加行，而那当场就会让对等守卫变红；**不要把码点不等当缺陷去"修"**，它和「英文列表以 FAT/UAT 开头」是同一类事实：语言特性，不是覆盖差。
 
-真正的约束因此落在英文那一份上。商店按语言各填一份详细描述、各自吃 16000 上限，中文列表还剩约 10.2K，英文只剩 **29 码点**；但因为结构必须对等，**英文一满，中文同时封顶**。
+真正的约束因此落在英文那一份上。商店按语言各填一份详细描述、各自吃 16000 上限，中文列表还剩约 10.2K，英文只剩 **34 码点**（2026-10-19 按上面那条命令现量：中 5,831 / 英 15,966）；但因为结构必须对等，**英文一满，中文同时封顶**。
 
 要再扩中文，按这个顺序腾空间：
 
@@ -149,7 +149,7 @@ PY
 调试与协作：
 - 请求日志记录方法、状态、耗时与命中的规则，点开可看请求与响应的头与文本 body（二进制响应体不落盘），JSON 自动格式化
 - 顶部「URL 匹配测试」输入任意地址（可带方法），实时显示命中的规则、重写后的地址、走哪条通道，以及还有哪些规则同样命中、但被它遮蔽
-- 把任意一条日志复制为 cURL（按原始请求地址）；支持 HAR 1.2 导出、HAR 导入（由录制流量生成规则，新规则默认停用，确认后自行启用）、cURL 粘贴导入
+- 把任意一条日志复制为 cURL（按原始请求地址）；支持 HAR 1.2 导出、HAR 导入（由录制流量生成规则，可填目标环境一次指过去并默认启用；不填则停用等你确认）、cURL 粘贴导入
 - 规则可拖拽排序、单条与批量启停/删除，按名称、匹配模式或目标地址搜索，并按状态与匹配类型筛选
 - 环境轮换时批量迁移目标域名，并给出逐条变更预览
 - 规则列表为空时可直接点快速模板（通配符代理、前缀匹配、鉴权头、改请求头等）起步；删除一条规则后能立即撤销，误删不用重填
@@ -302,7 +302,7 @@ Who reaches for it:
 Debugging and teamwork:
 - A request log with method, status, duration and the rule that matched; open any entry for request and response headers and text bodies (a binary response body is not stored), JSON auto-formatted
 - A URL match tester in the header bar: type any URL (optionally with a method) to see in real time which rule matches, what the rewritten URL is, which channel it takes, and which other rules match the same URL but lose to it
-- Copy any logged request as cURL, using its original URL; HAR 1.2 export, HAR import that generates rules from recorded traffic (those rules arrive disabled until you enable them), and cURL paste import
+- Copy any logged request as cURL, using its original URL; HAR 1.2 export, HAR import that generates rules from recorded traffic (disabled unless you set a target environment), and cURL paste import
 - Drag to reorder rule priority, enable/disable/delete one at a time or in batch, search by name, pattern or target, and filter by status and match type
 - Batch-migrate target domains across rules with a per-rule change preview
 - Start from a quick template while the list is still empty (wildcard proxy, prefix match, auth header, header override, and more), and undo a delete immediately — a mistaken removal does not mean retyping the rule
