@@ -99,8 +99,8 @@ describe('目标环境候选 — 「保存侧记什么」与「界面列什么�
 
 describe('HAR 目标环境 — 非必填，且复选框不出现时不参与启用', () => {
   it('目标输入框存在，非法只标红这一格', () => {
-    expect(importExport).toContain('v-model="harTargetOrigin"');
-    expect(importExport).toContain(':error="harTargetInvalid"');
+    expect(importExport).toContain('v-model="harTarget.raw"');
+    expect(importExport).toContain(':error="harTarget.invalid"');
   });
 
   it('导入按钮的可用条件里没有目标环境——留空照样能按老方式导入', () => {
@@ -109,16 +109,16 @@ describe('HAR 目标环境 — 非必填，且复选框不出现时不参与启�
   });
 
   it('复选框只在读得出目标时出现，交给后台的意图由那个「在场」旗标兜住', () => {
-    expect(flat(importExport)).toContain('v-if="harTargetValid" v-model="harEnableOnImport"');
-    // 复选框不在场时恒为 false——「没出现」绝不能读成「用户没勾，但照样启用」
-    expect(importExport).toMatch(
-      /const harEnableOnImportFlag = computed\(\s*\(\)\s*=>\s*harTargetValid\.value && harEnableOnImport\.value/,
-    );
-    expect(flat(importExport)).toContain('enableOnImport: harEnableOnImportFlag.value');
+    expect(flat(importExport)).toContain('v-if="harTarget.valid" v-model="harTarget.enableOnImport"');
+    // 复选框不在场时恒为 false——「没出现」绝不能读成「用户没勾，但照样启用」。
+    // 这条不变量现在只有一份，住在 `useTargetEnv` 里（第二条进口不该再实现一遍）
+    const targetEnvSource = fs.readFileSync('composables/useTargetEnv.ts', 'utf8');
+    expect(targetEnvSource).toMatch(/enableOnImportFlag: computed\(\(\) => valid\.value && enableOnImport\.value\)/);
+    expect(flat(importExport)).toContain('enableOnImport: harTarget.enableOnImportFlag');
   });
 
   it('目标随消息进后台，界面那份判据不是唯一一道', () => {
-    expect(flat(importExport)).toContain('targetOrigin: harTargetParsed.value || undefined');
+    expect(flat(importExport)).toContain('targetOrigin: harTarget.parsed || undefined');
     expect(storage).not.toContain('targetOrigin');
   });
 
@@ -301,5 +301,48 @@ describe('Mock 五档拒绝 — 判据、界面文案与说明文档只许有一
     expect(enCount(readmeEn)).toBe(reasons.length);
     expect(zhCount(changelogDraft)).toBe(reasons.length);
     expect(enCount(changelogDraft)).toBe(reasons.length);
+  });
+});
+
+describe('OpenAPI / Swagger 进口 — 判据只有一份、失败原因一个都不能漏（批次四）', () => {
+  const openApiSource = fs.readFileSync('utils/openapi.ts', 'utf8');
+  const dialog = fs.readFileSync('components/options/ImportExportDialog.vue', 'utf8');
+  const targetEnv = fs.readFileSync('composables/useTargetEnv.ts', 'utf8');
+
+  const union = openApiSource.match(/export type OpenApiFailure =([^;]+);/);
+  const reasons = union ? (union[1].match(/'([^']+)'/g) || []).map(s => s.slice(1, -1)) : [];
+
+  it('失败原因解析得出（否则下面三条会空对空地全绿）', () => {
+    expect(reasons.length).toBeGreaterThanOrEqual(4);
+    expect(reasons).toContain('notJson');
+    expect(reasons).toContain('noServers');
+  });
+
+  it('每一档都有对应文案，且界面上留了兜底那一支', () => {
+    for (const key of ['importOpenApiNotJson', 'importOpenApiNoServers', 'importOpenApiUnsupported']) {
+      expect(dialog).toContain(`t('${key}')`);
+    }
+    // 漏了兜底时，新增一档会弹出一句 `undefined`
+    expect(dialog).toContain(": t('importOpenApiUnsupported'),");
+  });
+
+  it('「目标环境」的判据只有 `useTargetEnv` 一份：弹窗自己不再解析 origin', () => {
+    expect(targetEnv).toContain('apiOriginOf');
+    expect(dialog).not.toContain('apiOriginOf');
+    expect(dialog.match(/useTargetEnv\(\)/g)).toHaveLength(2);
+  });
+
+  it('两条派生进口的写入都走同一个 `addGeneratedRules`（新进口不能自己忘掉的失败路径）', () => {
+    const optionsApp = fs.readFileSync('components/options/App.vue', 'utf8');
+    expect(optionsApp.match(/await batchAddRules\(/g)).toHaveLength(1);
+    expect(optionsApp.match(/await addGeneratedRules\(/g)).toHaveLength(2);
+  });
+
+  it('生成规则时 enabled 只能随目标 origin 走', () => {
+    const body = openApiSource.slice(
+      openApiSource.indexOf('export function openApiSpecToRules'),
+      openApiSource.indexOf('const now = Date.now()'),
+    );
+    expect(body).toContain('const enabled = targetOrigin ? opts?.enabled === true : false;');
   });
 });

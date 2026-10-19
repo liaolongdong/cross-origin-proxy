@@ -92,6 +92,16 @@ export const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024;
  */
 export const MAX_HAR_IMPORT_ENTRIES = 5000;
 
+/**
+ * 单份 OpenAPI / Swagger 文档允许导出的**接口来源**条数上限
+ *
+ * 与 {@link MAX_HAR_IMPORT_ENTRIES} 同一族但量级小得多：HAR 数的是请求条目（一份抓包可以几千条），
+ * 这里数的是文档里折叠出来的 `servers` 来源——正常文档 1–5 条，几十条已经是异常文件。
+ * 取 50：既拦住「把不该是 servers 的东西当成 servers 读」，又远不到 `MAX_RULES=200` 的写入天花板，
+ * 所以越界只可能来自坏文件而不是用户真有几百个环境。超出部分**计数并跳过**，界面要把跳过几句说清。
+ */
+export const MAX_OPENAPI_ORIGINS = 50;
+
 // 规则默认值
 /**
  * 规则优先级默认值（数值越小越先匹配）。

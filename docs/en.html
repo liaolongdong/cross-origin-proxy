@@ -640,7 +640,7 @@
               <span>No telemetry</span>
               <span>No backend change</span>
               <span>Network-layer fast path</span>
-              <span>HAR · cURL · JSON</span>
+              <span>HAR · OpenAPI · cURL · JSON</span>
               <span>EN / 中文 UI</span>
               <span>6 themes</span>
             </div>
@@ -798,7 +798,9 @@
                 </tr>
                 <tr>
                   <td>Record traffic in a capture tool, then rebuild the request by hand to reproduce a failure.</td>
-                  <td>Import the HAR file or paste the cURL command and the rule is prefilled.</td>
+                  <td>
+                    Import a HAR file or an OpenAPI document, or paste the cURL command, and the rule is prefilled.
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1200,19 +1202,20 @@
                 plus token-like query parameters — with replace or merge modes on import, and a preview before anything
                 is written that says how many rules the file adds and which same-name, same-pattern rules stay; HAR 1.2
                 export of captured traffic and HAR import that turns recorded requests into rules (they arrive disabled
-                unless you set a target environment, which also enables them); cURL paste that prefills the form;
-                copy-as-cURL on every log entry, using its original URL. Named profiles snapshot the whole rule set, and
-                switching between FAT, UAT and PROD does not need the options page: the popup lists what you have saved,
-                and one tap on a row plus a confirmation replaces everything with that set (your current config is kept
-                first as a restore point, and the global switch turns on). Batch migration rewrites target domains
-                across selected rules with a change preview. A replace-import, a profile load or a batch delete that
-                actually removed something keeps the rule set it replaces as a restore point under Settings → Config
-                restore points (the last 5), ready to roll back. Header and query-parameter values can also be written
-                as a reference such as
-                <code>{{UAT_TOKEN}}</code>, with the real value kept in the credential variable table under Settings →
-                Credential Variables — the rule itself, the exported config, the profiles and the configuration sent
-                down to the page all carry nothing but that reference, and the substitution happens at the last moment
-                inside the extension-proxied request.
+                unless you set a target environment, which also enables them); an OpenAPI / Swagger document import that
+                creates one rule per declared <code>servers</code> origin (sources with no readable http(s) address are
+                skipped and named); cURL paste that prefills the form; copy-as-cURL on every log entry, using its
+                original URL. Named profiles snapshot the whole rule set, and switching between FAT, UAT and PROD does
+                not need the options page: the popup lists what you have saved, and one tap on a row plus a confirmation
+                replaces everything with that set (your current config is kept first as a restore point, and the global
+                switch turns on). Batch migration rewrites target domains across selected rules with a change preview. A
+                replace-import, a profile load or a batch delete that actually removed something keeps the rule set it
+                replaces as a restore point under Settings → Config restore points (the last 5), ready to roll back.
+                Header and query-parameter values can also be written as a reference such as <code>{{UAT_TOKEN}}</code>,
+                with the real value kept in the credential variable table under Settings → Credential Variables — the
+                rule itself, the exported config, the profiles and the configuration sent down to the page all carry
+                nothing but that reference, and the substitution happens at the last moment inside the extension-proxied
+                request.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -2292,7 +2295,7 @@ pnpm build</code></pre>
                 </tr>
                 <tr class="reveal">
                   <th scope="row">Rules shareable as a plain local file</th>
-                  <td class="col-us"><span class="mark-yes">Yes — JSON / HAR / cURL</span></td>
+                  <td class="col-us"><span class="mark-yes">Yes — JSON / HAR / OpenAPI / cURL</span></td>
                   <td><span class="mark-yes">Yes — in the repo</span></td>
                   <td><span class="mark-part">Session files</span></td>
                   <td><span class="mark-part">Often cloud-synced</span></td>

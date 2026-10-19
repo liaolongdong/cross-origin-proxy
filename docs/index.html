@@ -639,7 +639,7 @@
               <span>无埋点无遥测</span>
               <span>不需要后端改动</span>
               <span>网络层零 JS 快通道</span>
-              <span>HAR · cURL · JSON</span>
+              <span>HAR · OpenAPI · cURL · JSON</span>
               <span>中英双语界面</span>
               <span>6 套主题</span>
             </div>
@@ -789,7 +789,7 @@
                 </tr>
                 <tr>
                   <td>抓包工具里录下流量，再手工复现一次请求去验证异常分支。</td>
-                  <td>导入 HAR 或粘贴 cURL 命令，规则自动预填。</td>
+                  <td>导入 HAR / OpenAPI 文档，或粘贴 cURL 命令，规则自动预填。</td>
                 </tr>
               </tbody>
             </table>
@@ -1174,7 +1174,8 @@
                 JSON 配置导出，默认开启分享模式，自动剔除 Authorization、Cookie 等请求头/响应头与 token
                 类查询参数，取消勾选即原样备份；导入时可选择覆盖或与现有规则合并，写入前还能先预览这个文件会新增几条、
                 哪些同名同模式的旧规则被保留（预览与写入同一份判据）；HAR 1.2 导出捕获到的流量，导入 HAR
-                则把录制到的请求自动变成规则（填了目标环境才默认启用，否则停用等你确认）；粘贴 cURL
+                则把录制到的请求自动变成规则（填了目标环境才默认启用，否则停用等你确认）；导入 OpenAPI / Swagger
+                文档会按它声明的 `servers` 逐条建规则（读不出的来源跳过并点名）；粘贴 cURL
                 预填表单；每条日志都能按原始请求地址复制为 cURL。环境快照保存整套规则的命名副本，FAT / UAT / PROD
                 不用先开配置页——弹窗里点「环境配置」就列出已存的快照，点一下那一行、再确认一次就整套换过去（换之前先把当前配置记成一份恢复点，也会把总开关打开）；环境换域名时，批量迁移会先给出变更预览；覆盖导入、加载快照、真正删掉了东西的批量删除这三类整套替换，会把自己换掉的那份规则集留在「设置
                 → 配置恢复点」里（最近 5 份），随时一键回退。请求头与查询参数的值还能写成
@@ -2199,7 +2200,7 @@ pnpm build</code></pre>
                 </tr>
                 <tr class="reveal">
                   <th scope="row">规则可用普通本地文件分享</th>
-                  <td class="col-us"><span class="mark-yes">JSON / HAR / cURL</span></td>
+                  <td class="col-us"><span class="mark-yes">JSON / HAR / OpenAPI / cURL</span></td>
                   <td><span class="mark-yes">随仓库代码共享</span></td>
                   <td><span class="mark-part">会话文件</span></td>
                   <td><span class="mark-part">常需云端同步</span></td>

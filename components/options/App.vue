@@ -81,6 +81,7 @@
       @export="handleExport"
       @imported="handleImported"
       @import-har-rules="handleImportHarRules"
+      @import-open-api-rules="handleImportOpenApiRules"
       @import-curl="handleImportCurl"
     />
     <ProfilesDialog
@@ -845,29 +846,44 @@ async function handleImported(stats: ImportResultStats) {
   showImportExport.value = false;
 }
 
-async function handleImportHarRules(
-  harRules: import('@/utils/types').ProxyRule[],
-  targetOrigin: string,
-  relocated: number,
-  keptRaw: number,
-) {
+/**
+ * 「一键生成规则」那几条进口（HAR / OpenAPI）共用的落地路径
+ *
+ * 收成一处不是为了少几行，而是这三件事必须**一起成立**：批量一次写入（逐条发消息会触发 N 次
+ * DNR 重建）、成功后才关窗、失败时保留输入并可重试。第二条进口出现时最容易犯的坏事是
+ * 「新那条忘了 catch，失败也把窗关了」——用户看到弹窗消失，既不知道导了几条，也得重新选一遍文件。
+ *
+ * @param message 由调用方拼好的成功文案（`t()` 的字面量 key 留在调用点，动态 key 会躲过 i18n 那条存在性守卫）
+ */
+async function addGeneratedRules(rules: ProxyRule[], message: string) {
   try {
-    // 批量一次写入，避免逐条 sendMessage 触发 N 次 DNR 重建
-    await batchAddRules(harRules);
-    // 换了环境就说清「指到哪去了」、搬了凭据就点名搬了几个、装不下而保留原值的也要点名：
-    // 三者都是用户刚做的显式选择或它的代价，只报条数等于让人事后自己猜这句话包含了什么
-    const base = targetOrigin
-      ? t('importHarSuccessWithTarget', [harRules.length, targetOrigin])
-      : t('importHarSuccess', [harRules.length]);
-    const suffix =
-      (relocated > 0 ? t('importHarSuccessRelocated', [relocated]) : '') +
-      (keptRaw > 0 ? t('importHarSuccessKeptRaw', [keptRaw]) : '');
-    ElMessage.success(base + suffix);
+    await batchAddRules(rules);
+    ElMessage.success(message);
     showImportExport.value = false;
   } catch (error) {
-    // 失败时不关窗：达上限时用户删几条即可重试，不必重新选文件
     showAddFailedMessage(error);
   }
+}
+
+async function handleImportHarRules(harRules: ProxyRule[], targetOrigin: string, relocated: number, keptRaw: number) {
+  // 换了环境就说清「指到哪去了」、搬了凭据就点名搬了几个、装不下而保留原值的也要点名：
+  // 三者都是用户刚做的显式选择或它的代价，只报条数等于让人事后自己猜这句话包含了什么
+  const base = targetOrigin
+    ? t('importHarSuccessWithTarget', [harRules.length, targetOrigin])
+    : t('importHarSuccess', [harRules.length]);
+  const suffix =
+    (relocated > 0 ? t('importHarSuccessRelocated', [relocated]) : '') +
+    (keptRaw > 0 ? t('importHarSuccessKeptRaw', [keptRaw]) : '');
+  await addGeneratedRules(harRules, base + suffix);
+}
+
+/** OpenAPI / Swagger 导入：按文档声明的接口来源批量落规则，跳过的来源要点名 */
+async function handleImportOpenApiRules(openApiRules: ProxyRule[], targetOrigin: string, skipped: number) {
+  const base = targetOrigin
+    ? t('importOpenApiSuccessWithTarget', [openApiRules.length, targetOrigin])
+    : t('importOpenApiSuccess', [openApiRules.length]);
+  // 跳过的条数不能不说：文档写了 5 个 server、界面却只出 3 条，用户会以为工具漏了
+  await addGeneratedRules(openApiRules, base + (skipped > 0 ? t('importOpenApiSkipped', [skipped]) : ''));
 }
 
 /** cURL 导入：按请求 origin 预填通配符规则，头/体进入对应覆盖项，交由表单确认保存 */
