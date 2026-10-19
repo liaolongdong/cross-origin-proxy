@@ -1814,6 +1814,9 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-primary-border);
   border-radius: 10px;
+
+  /* 面板是 `v-if`，只在出现那一刻挂上；不写 fill，避免把 `transform` 冻在末帧吃掉行内的悬浮抬升 */
+  animation: cop-rise-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
 .api-picker-title {
@@ -1924,6 +1927,9 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-primary-bg);
   border: 1px solid var(--cop-primary-border);
   border-radius: 6px;
+
+  /* 这一格是按下某一行之后才出现的后果说明：离用户的手最近，所以走 `fast` 而不是面板的 `slow` */
+  animation: cop-rise-in var(--cop-duration-fast) var(--cop-ease-enter);
 }
 
 .profile-confirm-text {

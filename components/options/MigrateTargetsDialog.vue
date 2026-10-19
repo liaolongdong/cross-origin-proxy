@@ -177,6 +177,7 @@ function handleClose() {
   gap: 8px;
   max-height: 320px;
   overflow-y: auto;
+  animation: cop-rise-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
 .migrate-preview-title {
