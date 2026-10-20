@@ -704,6 +704,15 @@ describe('落地页重写预演引擎', () => {
       expect(isSimpleRule(wsConfig!.config.rules[0]), 'WebSocket 永远不走网络层').toBe(false);
     });
 
+    it('导出目标地址会剥掉 userinfo、query 与 hash，不把粘贴进来的凭据带走', () => {
+      const config = engine.buildConfig(
+        { ...passing, target: 'https://user:pass@uat.example.com/api?token=abc#frag' },
+        { now: NOW },
+      );
+      expect(config).not.toBeNull();
+      expect(config!.config.rules[0].targetUrl).toBe('https://uat.example.com/api');
+    });
+
     it('预演没通过就导不出任何东西', () => {
       const cases: Array<[string, Record<string, string>]> = [
         ['测试地址没有命中', { ...passing, url: 'https://other.example.com/api' }],

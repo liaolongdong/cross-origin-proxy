@@ -300,6 +300,22 @@
     }
   };
 
+  /** 导出只保留可代理的地址本身；userinfo、query、hash 都可能是凭据，不该被「带走」 */
+  const sanitizeExportTarget = value => {
+    const trimmed = (value || '').trim();
+    try {
+      const parsed = new URL(trimmed);
+      if (!/^(https?|wss?):$/.test(parsed.protocol)) return trimmed;
+      parsed.username = '';
+      parsed.password = '';
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.pathname === '/' ? parsed.origin : parsed.href;
+    } catch {
+      return trimmed;
+    }
+  };
+
   /**
    * 把预演通过的这一笔折成可导入的配置
    *
@@ -328,7 +344,7 @@
     if (!result.usable || !result.matched) return null;
     if (result.channel === 'net' && result.netSkip) return null;
 
-    const target = (input.target || '').trim();
+    const target = sanitizeExportTarget(input.target);
     const source = hostOfPattern(pattern) || hostOfUrl((input.url || '').trim()) || pattern;
     const targetHost = hostOfUrl(target);
     const stamp = typeof options?.now === 'number' && Number.isFinite(options.now) ? options.now : Date.now();
