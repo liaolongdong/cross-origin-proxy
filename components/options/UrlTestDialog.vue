@@ -225,6 +225,8 @@ const props = defineProps<{
   rules: ProxyRule[];
   /** 走 DNR 通道但不会被浏览器应用的规则（ruleId → 原因） */
   dnrSkippedRules: Map<string, DnrSkipReason>;
+  /** 那份「会不会被应用」的判定有没有落到过一次：空 Map 也可能是「还没判完」 */
+  dnrSupportRead: boolean;
   /** 代理总开关状态：关闭时规则不会实际生效，需提醒 */
   proxyEnabled: boolean;
 }>();
@@ -285,12 +287,14 @@ const matchedDnrSkipReason = computed<DnrSkipReason | undefined>(() =>
  * 上面那一行「重写后地址」算的是后台通道的结果；一条覆盖不全的正则交给网络层时，
  * 浏览器实际得到的是另一个地址。不说这一句，这一屏就会拿着一个不会发生的地址当结论。
  * 浏览器根本不会应用这条规则时**不说话**——那时网络层没有「另一个地址」这回事，
- * 说「两边不同」本身就是假的。
+ * 说「两边不同」本身就是假的。判定还没落到过一次时同样不说话：空 Map 既可能是
+ * 「都会被应用」，也可能是「这一次还没判完 / 判的过程抛了」，而这一格的断言
+ * （「网络层实际拿到 X」）只在第一种情况下成立。
  */
 const divergence = computed(() => {
   const rule = matchedRule.value;
   const url = testUrl.value.trim();
-  if (!rule || !url || matchedDnrSkipReason.value) return null;
+  if (!rule || !url || !props.dnrSupportRead || matchedDnrSkipReason.value) return null;
   return findRegexRewriteDivergence(url, rule);
 });
 

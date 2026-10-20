@@ -94,6 +94,7 @@
       v-model:visible="showUrlTest"
       :rules="rules"
       :dnr-skipped-rules="dnrSkippedRules"
+      :dnr-support-read="dnrSupportRead"
       :proxy-enabled="proxyEnabled"
     />
     <MigrateTargetsDialog
@@ -244,7 +245,8 @@ const {
 const { exportConfig } = useImportExport();
 
 // 「DNR 不会应用」的规则（RE2 不兼容 / 捕获引用越界）：这类规则界面显示已启用，实际零作用
-const { dnrSkippedRules } = useDnrSupport(rules);
+// dnrSupportRead 是这份判定「落到过一次」的旗标——空 Map 不等于「都会应用」，见 composables
+const { dnrSkippedRules, dnrSupportRead } = useDnrSupport(rules);
 const { skipReasonText } = useDnrSkipText();
 
 // UI 状态
@@ -506,7 +508,7 @@ function handleHashNavigation() {
   } else if (hash === '#url-test') {
     showUrlTest.value = true;
   } else if (hash === '#settings') {
-    // popup 次级动作行的出口：语言、主题、自动关闭时长、站点名单、凭据变量此前在弹窗里到不了
+    // popup 次级动作行的出口：整页设置（语言、主题、整张站点名单、凭据变量）此前在弹窗里没有通往的路
     showSettings.value = true;
   } else if (hash.startsWith('#add-rule-from-tab=')) {
     // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）

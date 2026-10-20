@@ -75,7 +75,8 @@ describe('档位：type 只表达层级，不表达动作类别', () => {
     const drawer = readFileSync('components/options/LogDrawer.vue', 'utf8');
     const block = templateOf(drawer, '<div class="log-detail-actions"', '</div>');
     const tags = buttonTags(block);
-    expect(tags.length, '创建规则 / 存为 Mock / 复制为 cURL / 关闭').toBeGreaterThanOrEqual(3);
+    // 数的是「四颗平行动作」这一件事本身，所以钉死到 4：写 >=3 时摘掉关闭那颗照样绿
+    expect(tags.length, '创建规则 / 存为 Mock / 复制为 cURL / 关闭').toBe(4);
     expect(
       tags.every(t => /:icon="/.test(t)),
       '这一格的图标要么全带要么全不带',
@@ -112,10 +113,14 @@ describe('popup → options 的出口', () => {
   })();
 
   it('弹窗里用到的每一个 hash，options 的分派必须有对应分支（否则点了没反应、且无声）', () => {
-    const hashes = [...popup.matchAll(/openOptionsPage\('#([a-z-]+)[=']?/g)].map(m => m[1]);
+    // 实参既可能是普通字符串 '#logs'，也可能是模板串 `#add-rule-from-tab=${…}`：
+    // 只认引号那一种，模板串那条出口就整个从这条守卫眼前溜走（本轮实测漏过一次）
+    const hashes = [...popup.matchAll(/openOptionsPage\(\s*['`]#([a-z-]+)/g)].map(m => m[1]);
     expect(hashes.length, '一个 hash 都没抓到＝正则或写法变了，本用例失去意义').toBeGreaterThan(0);
+    // 按「引号 + #hash」这个前缀对账，不带收尾引号：分派里 `startsWith('#add-rule-from-tab=')`
+    // 那种分支也要算对上
     for (const hash of new Set(hashes)) {
-      expect(router.includes(`'#${hash}'`), `options 不认 #${hash}`).toBe(true);
+      expect(router.includes(`'#${hash}`), `options 不认 #${hash}`).toBe(true);
     }
   });
 

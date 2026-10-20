@@ -123,29 +123,59 @@ export function countCaptureGroups(regexFilter: string): number {
   return captureGroupOffsets(regexFilter).length;
 }
 
+/** 替换模板扫出来的一段：字面量文本，或一个捕获组引用 */
+export type SubstitutionSegment = { kind: 'literal'; text: string } | { kind: 'ref'; index: number };
+
 /**
- * 列出 regexSubstitution 里出现的每一个捕获组引用（按出现顺序，重复保留）
+ * 逐段扫描 regexSubstitution：什么算字面量、什么算引用，全仓只有这一处定义
  *
- * 与 `maxSubstitutionRef` 同一份扫描：界面上的「捕获组 ↔ 引用」对照条要把每个引用逐个说一遍，
- * 而「什么算一个引用」（`\\` 是字面量反斜杠、数字整段读取）只能有一处定义——两处各抄一遍时，
- * 先错的是那份没人测的。
+ * `\\` 是字面量反斜杠、其后数字不构成引用；引用编号**贪婪读取**（按单位读取时 `\12` 会被
+ * 看成 `\1`）；结尾孤立的反斜杠丢弃。消费方有两类：`substitutionRefs`（界面上的
+ * 「捕获组 ↔ 引用」对照条与越界守卫）与 `renderRegexSubstitution`（把模板渲染成真实地址）。
+ * 后者曾经自带一份扫描规则——两处各抄一遍时，先错的是那份没人测的，而这里错的代价是
+ * 预演报出一个与浏览器不同的地址。
  */
-export function substitutionRefs(substitution: string): number[] {
-  const refs: number[] = [];
+export function substitutionSegments(substitution: string): SubstitutionSegment[] {
+  const segments: SubstitutionSegment[] = [];
+  let literal = '';
+  const flush = () => {
+    if (literal) {
+      segments.push({ kind: 'literal', text: literal });
+      literal = '';
+    }
+  };
   for (let i = 0; i < substitution.length; i++) {
-    if (substitution[i] !== '\\') continue;
+    if (substitution[i] !== '\\') {
+      literal += substitution[i];
+      continue;
+    }
     const next = substitution[i + 1];
     if (next === undefined) break;
     if (next < '0' || next > '9') {
-      i++; // `\\`：转义的字面量反斜杠，连同其后一字符一起跳过
+      literal += next;
+      i++;
       continue;
     }
     let j = i + 1;
     while (j < substitution.length && substitution[j] >= '0' && substitution[j] <= '9') j++;
-    refs.push(Number(substitution.slice(i + 1, j)));
+    flush();
+    segments.push({ kind: 'ref', index: Number(substitution.slice(i + 1, j)) });
     i = j - 1;
   }
-  return refs;
+  flush();
+  return segments;
+}
+
+/**
+ * 列出 regexSubstitution 里出现的每一个捕获组引用（按出现顺序，重复保留）
+ *
+ * 与 `maxSubstitutionRef` 同一份扫描：界面上的「捕获组 ↔ 引用」对照条要把每个引用逐个说一遍，
+ * 而「什么算一个引用」只能有一处定义——见 `substitutionSegments`。
+ */
+export function substitutionRefs(substitution: string): number[] {
+  return substitutionSegments(substitution)
+    .filter((segment): segment is { kind: 'ref'; index: number } => segment.kind === 'ref')
+    .map(segment => segment.index);
 }
 
 /**

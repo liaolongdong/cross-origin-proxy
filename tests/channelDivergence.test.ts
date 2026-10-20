@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { ProxyRule } from '@/utils/types';
 import { rewriteUrl } from '@/utils/urlMatcher';
+import { substitutionRefs } from '@/utils/dnrRules';
 import { findRegexRewriteDivergence, renderRegexSubstitution } from '@/utils/channelDivergence';
 
 function makeRule(overrides: Partial<ProxyRule>): ProxyRule {
@@ -106,9 +107,38 @@ describe('判据只有一个出口 — 界面不许自己再算一遍', () => {
     expect(src).toContain("import { findRegexRewriteDivergence } from '@/utils/channelDivergence'");
     const block = src.slice(src.indexOf('const divergence = computed('));
     expect(block.slice(0, 600)).toContain('matchedDnrSkipReason.value');
+    // 判定还没落到过一次同样不说话：那时「不会被应用」与「还不知道」在 Map 里长成同一个空集
+    expect(block.slice(0, 600)).toContain('dnrSupportRead');
     // 第二份实现就长这样：界面里直接对规则跑 replace / 自己拼替换模板
     expect(src).not.toContain('.replace(new RegExp(');
     expect(src).not.toContain('buildRegexSubstitution');
+  });
+});
+
+/**
+ * 引用扫描全仓只有一把尺（`dnrRules.ts` 的 `substitutionSegments`）。
+ * 这里按「同一个模板 → 守卫看到的引用」与「同一个模板 → 渲染出的地址」成对钉：
+ * 两处一旦分家，预演就报出一个与浏览器不同的地址，而这件事没有任何界面症状。
+ */
+describe('渲染与越界守卫读同一批引用', () => {
+  it('channelDivergence 自己不数反斜杠了', () => {
+    const src = readFileSync('utils/channelDivergence.ts', 'utf8');
+    expect(src).toContain('substitutionSegments');
+    // 第二把尺长这样：自己往后扫数字
+    expect(src).not.toMatch(/while\s*\([^)]*template\[j\]\s*>=/);
+    expect(src).not.toMatch(/while\s*\([^)]*digits \+=/);
+  });
+
+  it.each([
+    ['https://b.com/\\1', [1], 'https://b.com/A'],
+    ['\\2-x/\\1', [2, 1], 'B-x/A'],
+    ['a\\\\12', [], 'a\\12'],
+    ['p\\12q', [12], 'pq'],
+    ['tail\\', [], 'tail'],
+  ])('%s：守卫的引用清单与渲染的取值出自同一批', (template, refs, rendered) => {
+    const groups = ['', 'A', 'B', 'C'];
+    expect(substitutionRefs(template)).toEqual(refs);
+    expect(renderRegexSubstitution(template, groups)).toBe(rendered);
   });
 });
 
