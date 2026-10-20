@@ -132,7 +132,8 @@ onUnmounted(() => {
 <style scoped>
 .search-filter-bar {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   align-items: center;
   padding: 16px 20px;
   margin: 0 32px 16px;
@@ -141,8 +142,13 @@ onUnmounted(() => {
   box-shadow: var(--cop-shadow-md);
 }
 
+.search-filter-bar :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 .search-input {
-  flex: 1;
+  flex: 1 1 260px;
+  min-width: 220px;
 }
 
 .status-select {

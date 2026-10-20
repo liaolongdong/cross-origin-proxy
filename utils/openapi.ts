@@ -224,15 +224,18 @@ export function openApiSpecToRules(
   // 不在这里掐上限：静默丢掉一部分来源，等于替用户说「这份文档就这些接口」，
   // 而真正该说的是「超出 200 条了，删几条再导入」——那件事由批量写入那侧拒绝、界面点名。
   return spec.origins.map((item, index) => {
-    // 前缀里带 basePath 时，目标也要带上同一段：文档说这套 API 挂在 `/v3`，换环境后不该落到根上
+    // 前缀里带 basePath 时，目标也要带上同一段：文档说这套 API 挂在 `/v3`，换环境后不该落到根上。
+    // 模式用 `origin/basePath/*` 而不是裸 prefix：`startsWith('https://a.com')` 会连
+    // `https://a.com.evil.com` 与 `/apix` 一起吞掉，这不是「这一套 API」的边界。
+    const matchPattern = `${item.prefix}/*`;
     const target = targetOrigin ? `${targetOrigin}${item.basePath}` : item.prefix;
     return {
       id: `openapi_${now.toString(36)}_${index.toString(36)}`,
       name: `${label} · ${item.prefix.replace(/^https?:\/\//, '')}`,
       enabled,
-      matchPattern: item.prefix,
+      matchPattern,
       targetUrl: target,
-      matchType: 'prefix',
+      matchType: 'wildcard',
       priority: 100,
       createdAt: now,
       updatedAt: now,

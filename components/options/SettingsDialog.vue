@@ -228,6 +228,7 @@
           <div class="site-scope-modes">
             <el-radio-group
               :model-value="siteState.mode"
+              :disabled="siteScopeBusy"
               size="small"
               @change="changeSiteMode($event as SiteScopeMode)"
             >
@@ -250,6 +251,7 @@
                 type="danger"
                 link
                 size="small"
+                :disabled="siteScopeBusy"
                 :aria-label="t('siteScopeRemoveA11y', host)"
                 @click="removeSiteHost(host)"
               >
@@ -315,6 +317,7 @@ import type {
   SiteState,
   VariableStore,
 } from '@/utils/types';
+import { MessageType } from '@/utils/types';
 import { collectRuleVariableRefs, findUndefinedVariableRefs, isVariableName } from '@/utils/variables';
 import { formatLocaleDateTime } from '@/utils/formatters';
 import { useVariables } from '@/composables/useVariables';
@@ -630,11 +633,20 @@ async function commitVariables(): Promise<boolean> {
  */
 const siteState = ref<SiteState>({ ...DEFAULT_SITE_STATE });
 const siteScopeUnreadable = ref(true);
+const siteScopeBusy = ref(false);
+
+function isSiteStateResponse(value: unknown): value is SiteState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const state = value as Partial<SiteState>;
+  return (
+    (state.mode === 'all' || state.mode === 'site-off' || state.mode === 'site-only') && Array.isArray(state.hosts)
+  );
+}
 
 async function loadSiteScope() {
   try {
-    const state: unknown = await chrome.runtime.sendMessage({ type: 'GET_SITE_STATE' });
-    if (!state || typeof state !== 'object') {
+    const state: unknown = await chrome.runtime.sendMessage({ type: MessageType.GET_SITE_STATE });
+    if (!isSiteStateResponse(state)) {
       siteScopeUnreadable.value = true;
       return;
     }
@@ -647,15 +659,18 @@ async function loadSiteScope() {
 
 /** 写完一律回读：storage 里现在是什么，界面就画什么，不拿「我刚提交的那份」当真值 */
 async function writeSiteScope(next: SiteState) {
-  if (siteScopeUnreadable.value) return;
+  if (siteScopeUnreadable.value || siteScopeBusy.value) return;
+  siteScopeBusy.value = true;
   try {
     const response = (await chrome.runtime.sendMessage({
-      type: 'SET_SITE_STATE',
+      type: MessageType.SET_SITE_STATE,
       data: { mode: next.mode, hosts: next.hosts },
     })) as { success?: boolean } | undefined;
     if (!response?.success) ElMessage.error(t('siteScopeSaveFailed'));
   } catch {
     ElMessage.error(t('siteScopeSaveFailed'));
+  } finally {
+    siteScopeBusy.value = false;
   }
   await loadSiteScope();
 }
@@ -669,8 +684,20 @@ function changeSiteMode(mode: SiteScopeMode) {
   void writeSiteScope({ mode, hosts: siteState.value.hosts });
 }
 
-function removeSiteHost(host: string) {
-  void writeSiteScope(withoutHost(siteState.value, host));
+async function removeSiteHost(host: string) {
+  const next = withoutHost(siteState.value, host);
+  if (siteState.value.mode === 'site-only' && next.mode === 'all') {
+    try {
+      await ElMessageBox.confirm(t('siteScopeLastWhitelistConfirm'), t('siteScopeLastWhitelistTitle'), {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning',
+      });
+    } catch {
+      return;
+    }
+  }
+  void writeSiteScope(next);
 }
 
 /**
@@ -766,6 +793,8 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
 }
 
 .site-scope-item code {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--cop-text-color-primary);

@@ -274,10 +274,16 @@ export interface GetProxyConfigMessage {
   type: MessageType.GET_PROXY_CONFIG;
 }
 
-/** 更新代理配置 */
+/**
+ * 更新代理配置
+ *
+ * 后台向内容脚本广播时额外带一份 `siteState`，让 ISOLATED bridge 能按**自己这个 frame** 的 hostname
+ * 收窄；这份名单不会经 `toInterceptorConfig` 进入 MAIN world。Options 发给 SW 的写入载荷仍只是
+ * `ProxyConfig`，因此该字段刻意可选，不要求调用方伪造站点范围。
+ */
 export interface UpdateProxyConfigMessage {
   type: MessageType.UPDATE_PROXY_CONFIG;
-  data: ProxyConfig;
+  data: ProxyConfig & { siteState?: SiteState };
 }
 
 /** 切换总开关 */

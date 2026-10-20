@@ -217,6 +217,10 @@ const { t } = useI18n();
   gap: 12px;
 }
 
+.header-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 /* 毛玻璃半透明按钮（「新增规则」那颗反色主按钮除外，它另走一张卡片底）
    颜色与投影走 90ms、上浮走同样的时长：悬停反馈要「立刻跟上指针」，
    200ms 以上就会觉得按钮比手慢。显式列属性而不是 `all`——`all` 会把

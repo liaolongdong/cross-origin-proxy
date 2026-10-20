@@ -129,29 +129,35 @@ export function rulesForSite<T>(rules: T[], state: SiteState, hostname: string):
  * 「白名单」）。界面说的是结果——「这一台站点走不走代理」——所以翻译必须由判据这一侧做，
  * 否则同一句「打开开关」在两种模式下会给出相反的结果，而界面只画了一个开关。
  *
+ * 父域条目会覆盖整棵子域树，而这份模型没有「例外子域」表达能力。调用方必须比较新旧
+ * `siteAllows()` 的结果：返回值不变意味着这次意图无法被如实翻译，界面不能替用户按下一次假开关。
+ *
  * 不改入参；`mode` 在用户没有明确换档意图时保持不变，包括从 `all` 变出去的那一步。
  */
 export function withHostActive(state: SiteState, host: unknown, active: boolean): SiteState {
   const normalized = normalizeHost(host);
   if (!normalized) return sanitizeSiteState(state);
   const current = sanitizeSiteState(state);
-  const without = current.hosts.filter(entry => entry !== normalized);
   if (current.mode === 'all') {
-    // 这一层本来不参与：要让它不生效，只能把这台站点放进排除名单
     return active ? current : { mode: 'site-off', hosts: [normalized] };
   }
+  if (siteAllows(current, normalized) === active) return current;
+
+  const covering = current.hosts.filter(entry => hostMatches(entry, normalized));
+  const canExpressByExactEdit = covering.length === 0 || (covering.length === 1 && covering[0] === normalized);
+  if (!canExpressByExactEdit) return current;
+
   if (current.mode === 'site-off') {
-    const hosts = active ? without : [...without, normalized].sort();
+    const hosts = active ? current.hosts.filter(entry => entry !== normalized) : [...current.hosts, normalized].sort();
     return hosts.length === 0
       ? { mode: 'all', hosts: [] }
       : { mode: 'site-off', hosts: hosts.slice(0, MAX_SITE_STATE_HOSTS) };
   }
-  const hosts = active ? [...without, normalized].sort() : without;
-  if (hosts.length === 0) {
-    // 白名单被清空 = 一台都不代理，那不是用户点这一下的意思：交回「全部站点」这一档更安全
-    return { mode: 'all', hosts: [] };
-  }
-  return { mode: 'site-only', hosts: hosts.slice(0, MAX_SITE_STATE_HOSTS) };
+
+  const hosts = active ? [...current.hosts, normalized].sort() : current.hosts.filter(entry => entry !== normalized);
+  return hosts.length === 0
+    ? { mode: 'all', hosts: [] }
+    : { mode: 'site-only', hosts: hosts.slice(0, MAX_SITE_STATE_HOSTS) };
 }
 
 /** 从名单里删掉一台（设置页那颗删除）。删空时回到 `all`——留一个空的白名单不是任何人的意图 */

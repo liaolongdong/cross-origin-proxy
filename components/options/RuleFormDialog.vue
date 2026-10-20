@@ -201,6 +201,7 @@
                 v-model="query.value"
                 :placeholder="t('queryValuePlaceholder')"
                 style="width: 40%"
+                @focus="lastFocusedQueryUid = query.uid"
               />
               <el-button
                 type="danger"
@@ -230,7 +231,7 @@
                 :key="name"
                 type="button"
                 class="variable-chip"
-                @click="insertVariableRef(queryList, addQuery, name)"
+                @click="insertVariableRef(queryList, addQuery, name, lastFocusedQueryUid)"
               >
                 {{ name }}
               </button>
@@ -255,6 +256,7 @@
                 v-model="header.value"
                 :placeholder="t('headerValuePlaceholder')"
                 style="width: 40%"
+                @focus="lastFocusedHeaderUid = header.uid"
               />
               <el-button
                 type="danger"
@@ -284,10 +286,22 @@
                 :key="name"
                 type="button"
                 class="variable-chip"
-                @click="insertVariableRef(headerList, addHeader, name)"
+                @click="insertVariableRef(headerList, addHeader, name, lastFocusedHeaderUid)"
               >
                 {{ name }}
               </button>
+            </div>
+            <div
+              v-else-if="!variableNamesLoaded && !variableNamesFailed"
+              class="field-hint"
+            >
+              {{ t('variableLoadingHint') }}
+            </div>
+            <div
+              v-else-if="variableNamesFailed"
+              class="field-hint"
+            >
+              {{ t('variableLoadFailedHint') }}
             </div>
             <div
               v-else
@@ -833,6 +847,7 @@ import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { findInvalidHeaderNames } from '@/utils/headerValidation';
 import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule, sameOriginNoRewrite } from '@/utils/urlMatcher';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import {
   captureGroupOffsets,
   substitutionRefs,
@@ -873,6 +888,8 @@ const { t } = useI18n();
 const { variables, loadVariables } = useVariables();
 /** 变量表是否读到过：没读到就别拿它去否决用户的保存 */
 const variableNamesLoaded = ref(false);
+/** 这一趟读取是否已经失败：「还在路上」与「读不到」在界面上必须说两句不同的话 */
+const variableNamesFailed = ref(false);
 /**
  * 变量表这一趟读取的 promise（打开弹窗时挂上）
  *
@@ -949,8 +966,11 @@ const showSameOriginHint = computed(
     sameOriginNoRewrite({ matchType: form.matchType, matchPattern: form.matchPattern, targetUrl: form.targetUrl }),
 );
 
-/** 候选里剔掉与当前目标相同的那些——选了它什么都不改变，留着只是噪声 */
-const suggestions = computed(() => (props.targetSuggestions ?? []).filter(item => item !== form.targetUrl));
+/** 候选里剔掉「选了等于没选」的两类：本条规则的来源，以及当前已经填着的目标 */
+const suggestions = computed(() => {
+  const source = apiOriginOf(form.matchPattern.replace(/\*+$/, ''));
+  return (props.targetSuggestions ?? []).filter(item => item !== source && item !== form.targetUrl);
+});
 
 /** 从候选里挑一项当作这条规则的目标环境（下拉本身不持有值，它是一次动作） */
 function applyTargetCandidate(value: string): void {
@@ -975,15 +995,23 @@ const isWsRule = computed(() => isWebSocketRule({ matchPattern: form.matchPatter
  */
 const variableNames = computed(() => Object.keys(variables.value));
 
+const lastFocusedHeaderUid = ref<number | null>(null);
+const lastFocusedQueryUid = ref<number | null>(null);
+
 /**
- * 把 `{{名称}}` 接进这一段最后一行的值里；一行都没有时先补一行
+ * 把 `{{名称}}` 接进这一段最后聚焦过的行；一行都没有时先补一行
  *
  * 只填值、不猜头名：同一个凭据在不同站点上头名不一样（Authorization / x-api-key / api-key），
  * 替用户造一行「名字已经填好」的覆盖，比让用户自己点一行更容易留下无效配置。
  */
-function insertVariableRef(list: { uid: number; value: string }[], addRow: () => void, name: string): void {
+function insertVariableRef(
+  list: { uid: number; value: string }[],
+  addRow: () => void,
+  name: string,
+  lastFocusedUid: number | null,
+): void {
   if (list.length === 0) addRow();
-  const row = list[list.length - 1];
+  const row = list.find(item => item.uid === lastFocusedUid) ?? list[list.length - 1];
   if (row) row.value = `${row.value}{{${name}}}`;
 }
 
@@ -1253,11 +1281,13 @@ watch(
     if (val) {
       // 每次打开重新拉一遍引用名：设置页可能刚改过表，拿旧表校验会误报「未定义」
       variableNamesLoaded.value = false;
+      variableNamesFailed.value = false;
       saving.value = false;
       // 每一次打开重新判断「要不要提那句同源」：上一次编辑留下的痕迹不该替这一次作决定
       targetTouched.value = false;
       variablesLoad = loadVariables().then(ok => {
         variableNamesLoaded.value = ok;
+        variableNamesFailed.value = !ok;
         return ok;
       });
       if (props.rule) {
@@ -1527,6 +1557,7 @@ async function submitRule() {
   if (!variableNamesLoaded.value) {
     await (variablesLoad ??= loadVariables().then(ok => {
       variableNamesLoaded.value = ok;
+      variableNamesFailed.value = !ok;
       return ok;
     }));
   }

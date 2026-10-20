@@ -489,7 +489,7 @@ done
 - **Visibility**: Public
 - **Regions**: All regions
 - **Pricing**: Free
-- **Package**: `pnpm build:zip` → `.output/cross-origin-proxy-<version>-chrome.zip`（即 `<package-name>-<version>-<browser>.zip`；`manifest.json` 位于 zip 根目录，包内不含源码、测试与本文档）。版本号只在 `package.json` 维护，发版链路见 [RELEASING.md](./RELEASING.md)。
+- **Package**: `pnpm build` → `.output/cross-origin-proxy-<version>-chrome.zip`（`pnpm build:zip` 是它的别名）（即 `<package-name>-<version>-<browser>.zip`；`manifest.json` 位于 zip 根目录，包内不含源码、测试与本文档）。版本号只在 `package.json` 维护，发版链路见 [RELEASING.md](./RELEASING.md)。
 
 ## 7. Developer Info
 
@@ -594,7 +594,7 @@ PY
 
 包与清单：
 
-- [ ] `pnpm build:zip` 通过，zip 根目录就是 `manifest.json`
+- [ ] `pnpm build` 通过，zip 根目录就是 `manifest.json`
 - [ ] `manifest.json` 的 `name` / `description` 与本文档第 1 节完全一致（Chrome 硬校验 ≤75 / ≤132，`pnpm test` 已守卫）
 - [ ] 版本号 > 商店已发布版本（首次忽略）
 - [ ] 包内无 `.git`、`node_modules`、源码 map、测试、`README.md`、本文件

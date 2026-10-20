@@ -37,6 +37,7 @@ import {
   restoreConfigHistory,
   getRecentTargets,
   getSiteState,
+  readSiteState,
   saveSiteState,
 } from '@/utils/storage';
 import { hostnameOf, siteAllows } from '@/utils/siteScope';
@@ -344,8 +345,9 @@ export function setupMessageRouter(): void {
             message.data,
             proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId),
             () => countProxyRequestForTab(sender.tab?.id, sender.frameId),
-            // 发起页主机由 Chrome 写的 sender 取（页面伪造不了），代发的站点闸门与下发配置用的是同一份答案
-            hostnameOf(sender.tab?.url ?? sender.url),
+            // 发起 frame 的主机由 Chrome 写的 `sender.url` 给出。顶层 `tab.url` 不能替 iframe 回答
+            // 站点范围问题，否则 DNR 按 frame 排除、SW 却按顶层放行，复杂规则仍会带着凭据代发。
+            hostnameOf(sender.url),
           ),
         );
       }
@@ -371,14 +373,16 @@ export function setupMessageRouter(): void {
         // （见 `configSyncState` 与 `broadcastConfigToTabs` 的时序说明）。
         const requesterTabId = sender.tab?.id;
         if (typeof requesterTabId === 'number') clearConfigUnsynced(requesterTabId);
-        // 回的是「这一台站点上现在到底有哪些规则」：与 `broadcastConfigToTabs` 逐 tab 收窄那一份
-        // 同一个判据，两处不一致就会出现「拉到的配置与推来的配置行为不同」。
+        // 内容脚本按**自己 frame** 的 host 收窄；扩展页虽然也可能带 `sender.tab`，但它的 `sender.url`
+        // 不是 http(s) 网页，不隶属于「某一台站点」，必须始终拿到完整配置。
         return respondAsync(
           sendResponse,
           (async () => {
             const config = await getProxyConfig();
+            const requesterHost = hostnameOf(sender.url);
+            if (!requesterHost) return config;
             const siteState = await getSiteState();
-            return siteAllows(siteState, hostnameOf(sender.tab?.url ?? sender.url)) ? config : { ...config, rules: [] };
+            return siteAllows(siteState, requesterHost) ? config : { ...config, rules: [] };
           })(),
         );
       }
@@ -588,8 +592,9 @@ export function setupMessageRouter(): void {
         return respondAsync(sendResponse, restoreConfigHistory(message.data.id));
 
       case MessageType.GET_SITE_STATE:
-        // 已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是「用户在哪几台站点上停用/独占了代理」
-        return respondAsync(sendResponse, getSiteState());
+        // 已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是「用户在哪几台站点上停用/独占了代理」。
+        // 这里用 `readSiteState()` 而不是执行侧的 fail-open 默认值：界面必须分得清「读到 all」和「没读到」。
+        return respondAsync(sendResponse, readSiteState());
 
       case MessageType.SET_SITE_STATE: {
         // 载荷属不可信输入：模式只认三个字面量，名单必须是字符串数组，其余一律当默认值处理

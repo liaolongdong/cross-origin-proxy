@@ -1392,7 +1392,13 @@ function copyAsCurl() {
 
 .log-detail-actions {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.log-detail-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .log-detail-mock-notes,

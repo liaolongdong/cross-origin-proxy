@@ -207,7 +207,8 @@ describe('harEntriesToRules — HAR 条目转代理规则', () => {
    */
   it('HAR 抄进规则的头名，全部落在分享模式的敏感表里', () => {
     const src = readFileSync('utils/har.ts', 'utf-8');
-    const whitelisted = [...src.matchAll(/name === '([^']+)'/g)].map(m => m[1]);
+    const setLiteral = src.match(/HAR_CREDENTIAL_HEADER_NAMES\s*=\s*new Set\(\[([^\]]+)\]\)/)?.[1] ?? '';
+    const whitelisted = [...setLiteral.matchAll(/'([^']+)'/g)].map(m => m[1]);
 
     // 抓不到东西就是这条契约失效（而不是通过）：白名单被换成了 grep 认不出的写法
     expect(whitelisted.length).toBeGreaterThanOrEqual(3);

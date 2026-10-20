@@ -45,6 +45,9 @@
   /** 镜像 `MAX_DNR_SUBSTITUTION_REF`：DNR 的 `\n` 替换语法只能引用到第 9 组 */
   const MAX_DNR_SUBSTITUTION_REF = 9;
 
+  /** 镜像 `MAX_MATCH_URL_LENGTH`：超长主题不进 wildcard / regex 的线性扫描，prefix 仍按字符串比较 */
+  const MAX_MATCH_URL_LENGTH = 8192;
+
   /** 与 `isRegexSafe` 同一份嵌套量词清单——ReDoS 的判据不能有两份 */
   const UNSAFE_REGEX = [
     /\([^)]*[+*][^)]*\)[+*]/,
@@ -225,8 +228,10 @@
     // 测试地址留空时不谈命中：空模式配空地址在真实现里算「匹配」，而这里是一格还没填完的输入框。
     if (!url) return base;
 
+    const tooLongForScan = url.length > MAX_MATCH_URL_LENGTH && matchType !== 'prefix';
     let matched;
-    if (matchType === 'wildcard') matched = wildcardRegex(pattern).test(url);
+    if (tooLongForScan) matched = false;
+    else if (matchType === 'wildcard') matched = wildcardRegex(pattern).test(url);
     else if (matchType === 'prefix') matched = url.startsWith(pattern);
     else matched = compile(pattern).test(url);
     if (!matched) return base;

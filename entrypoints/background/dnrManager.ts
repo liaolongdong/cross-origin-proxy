@@ -5,7 +5,6 @@ import { logger } from '@/utils/logger';
 import { MessageType } from '@/utils/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 import { invalidateMatcherCache, isSimpleRule } from '@/utils/urlMatcher';
-import { hostnameOf, rulesForSite } from '@/utils/siteScope';
 import type { ProxyRule, ProxyConfig } from '@/utils/types';
 import { setDnrRuleIdMap } from './dnrStats';
 import { invalidateDnrSample } from './dnrSampler';
@@ -152,15 +151,12 @@ export async function broadcastConfigToTabs(config: ProxyConfig): Promise<void> 
     await Promise.allSettled(
       targets.map(async tab => {
         try {
-          // 每台站点收到的是「它自己那一份」：不在范围内就是空规则集，页面侧拦截器压根不问后台，
-          // fetch 与 XHR 都自然走原生——比「代发了再失败」干净，也不会把 XHR 打成 status 0
-          const scoped: ProxyConfig = {
-            enabled: config.enabled,
-            rules: rulesForSite(complexRules, siteState, hostnameOf(tab.url)),
-          };
+          // 广播按标签页发送，而 `tabs.sendMessage` 会抵达它的每个 frame。顶层 URL 不能替 iframe
+          // 回答「这台发起页是否生效」，所以这里把完整复杂规则与站点范围一起交给 ISOLATED bridge，
+          // 由每个 frame 按自己的 hostname 收窄；bridge 转发给 MAIN world 前会剥掉 siteState。
           await chrome.tabs.sendMessage(tab.id!, {
             type: MessageType.UPDATE_PROXY_CONFIG,
-            data: scoped,
+            data: { enabled: config.enabled, rules: complexRules, siteState },
           });
           clearConfigUnsynced(tab.id!);
         } catch {

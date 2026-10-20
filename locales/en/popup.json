@@ -76,5 +76,6 @@
   "siteScopeUnreadable": "Couldn't read the site switch this time — leaving it as is.",
   "siteScopeEnabledHere": "This site is proxied again",
   "siteScopeDisabledHere": "Proxy disabled for this site (subdomains included)",
+  "siteScopeParentCovered": "A parent domain in the list also covers this host, so it cannot be switched separately. Adjust the parent domain in Settings.",
   "siteScopeSaveFailed": "Could not save the site setting — try again"
 }

@@ -76,5 +76,6 @@
   "siteScopeUnreadable": "这次没读到站点的开关状态，先不动它。",
   "siteScopeEnabledHere": "这台站点已恢复走代理",
   "siteScopeDisabledHere": "这台站点已停用代理（含子域名）",
+  "siteScopeParentCovered": "这台站点由名单里的父域名覆盖，无法单独切换。请到设置页调整父域名。",
   "siteScopeSaveFailed": "站点设置保存失败，请重试"
 }

@@ -646,7 +646,7 @@ import { probeCorsSuspects, probePageApiOrigins } from '@/utils/pageApiProbe';
 import { buildPickerRows, type ApiPickerRow, type CorsSuspect } from '@/utils/corsSuspects';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import { diagnoseRequest, type Diagnosis, type DiagnosisCode } from '@/utils/diagnosis';
-import { DEFAULT_SITE_STATE, sanitizeSiteState, siteAllows, withHostActive, hostnameOf } from '@/utils/siteScope';
+import { sanitizeSiteState, siteAllows, withHostActive, hostnameOf } from '@/utils/siteScope';
 import type { SiteState } from '@/utils/types';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
@@ -804,6 +804,11 @@ const pageHitCauseText = computed(() => (pageHitCause.value ? diagnosisText(page
  * 而是给下面那张「为本页创建规则」卡片提供一句话与面板里的标记，所以问不到只是少一句卖点。
  */
 async function computePageHit() {
+  pageHitRuleId.value = '';
+  pageHitRuleName.value = '';
+  pageHitRewritten.value = '';
+  pageHitChannelDnr.value = false;
+  pageHitCause.value = null;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? '';
@@ -946,10 +951,18 @@ const hostProxied = computed<boolean | null>(() =>
   siteState.value === null ? null : siteAllows(siteState.value, pageHost.value),
 );
 
+function isSiteStateResponse(value: unknown): value is SiteState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const state = value as Partial<SiteState>;
+  return (
+    (state.mode === 'all' || state.mode === 'site-off' || state.mode === 'site-only') && Array.isArray(state.hosts)
+  );
+}
+
 async function fetchSiteState() {
   try {
     const state: unknown = await chrome.runtime.sendMessage({ type: MessageType.GET_SITE_STATE });
-    siteState.value = sanitizeSiteState(state);
+    siteState.value = isSiteStateResponse(state) ? sanitizeSiteState(state) : null;
   } catch (error) {
     logger.debug('Fetch site state failed:', error);
     siteState.value = null;
@@ -957,11 +970,23 @@ async function fetchSiteState() {
 }
 
 async function applyHostProxied(value: boolean) {
-  if (!pageHost.value || siteScopeBusy.value) return;
+  if (!pageHost.value || !siteState.value || siteScopeBusy.value) return;
+  const current = siteState.value;
+  const next = withHostActive(current, pageHost.value, value);
+  if (siteAllows(next, pageHost.value) !== value) {
+    ElMessage.warning(t('siteScopeParentCovered'));
+    return;
+  }
+  if (
+    next.mode === current.mode &&
+    next.hosts.length === current.hosts.length &&
+    next.hosts.every((host, index) => host === current.hosts[index])
+  ) {
+    siteState.value = next;
+    return;
+  }
   siteScopeBusy.value = true;
-  const previous = siteState.value;
   try {
-    const next = withHostActive(previous ?? DEFAULT_SITE_STATE, pageHost.value, value);
     const response = (await chrome.runtime.sendMessage({
       type: MessageType.SET_SITE_STATE,
       data: { mode: next.mode, hosts: next.hosts },
@@ -979,7 +1004,6 @@ async function applyHostProxied(value: boolean) {
     ElMessage.error(t('siteScopeSaveFailed'));
   } finally {
     siteScopeBusy.value = false;
-    void previous;
   }
 }
 

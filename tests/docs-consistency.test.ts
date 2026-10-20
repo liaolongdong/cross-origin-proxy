@@ -1367,6 +1367,17 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(read(STORE_DOC)).toContain(`${pkg.name}-<version>-chrome.zip`);
     });
 
+    it('pnpm build 单次构建同时产出解压目录与商店 zip，图标与 prepare 自动跟进', () => {
+      // 与 account-password-helper 的命令面保持一致：`pnpm build` 一次产出两者，
+      // `build:zip` 只是既有发布脚本仍在用的别名；图标与 WXT 类型都在构建/安装时自动生成。
+      expect(pkg.scripts.build).toBe('wxt zip');
+      expect(pkg.scripts['build:zip']).toBe('pnpm run build');
+      expect(pkg.scripts.prebuild).toBe('pnpm run icons:build');
+      expect(pkg.scripts['icons:build']).toBe('node scripts/generate-icons.mjs');
+      expect(pkg.scripts.postinstall).toBe('wxt prepare');
+      expect(pkg.scripts.analyze).toContain('--analyze');
+    });
+
     it('版本号只在 package.json，wxt.config.ts 不得重新声明 manifest.version', () => {
       expect(read('wxt.config.ts')).not.toMatch(/^\s*version:\s*['"]/m);
     });

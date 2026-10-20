@@ -14,6 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { openApiSpecToRules, parseOpenApiSpec, type OpenApiSpec } from '@/utils/openapi';
+import { matchRule } from '@/utils/urlMatcher';
 import { MAX_OPENAPI_ORIGINS } from '@/utils/constants';
 
 /** 一份最小可用的 OpenAPI 3 文档 */
@@ -147,11 +148,11 @@ describe('parseOpenApiSpec — 文档读数与拒绝原因', () => {
 describe('openApiSpecToRules — 产出的规则形状', () => {
   const spec = okSpec(spec3([{ url: 'https://fat.example.com/v3' }, { url: 'https://other.example.com' }]));
 
-  it('不传 opts 时是自映射、默认停用、固定优先级 100、prefix 匹配', () => {
+  it('不传 opts 时是自映射、默认停用、固定优先级 100、wildcard 匹配', () => {
     const rules = openApiSpecToRules(spec);
     expect(rules).toHaveLength(2);
-    expect(rules[0].matchType).toBe('prefix');
-    expect(rules[0].matchPattern).toBe('https://fat.example.com/v3');
+    expect(rules[0].matchType).toBe('wildcard');
+    expect(rules[0].matchPattern).toBe('https://fat.example.com/v3/*');
     expect(rules[0].targetUrl).toBe('https://fat.example.com/v3');
     expect(rules[0].enabled).toBe(false);
     expect(rules[0].priority).toBe(100);
@@ -173,8 +174,19 @@ describe('openApiSpecToRules — 产出的规则形状', () => {
     const rules = openApiSpecToRules(spec, { targetOrigin: 'https://uat.example.com', enabled: true });
     expect(rules.map(r => r.targetUrl)).toEqual(['https://uat.example.com/v3', 'https://uat.example.com']);
     // 匹配侧仍然按文档声明的来源：换的是目标，不是「这一条管哪些请求」
-    expect(rules.map(r => r.matchPattern)).toEqual(['https://fat.example.com/v3', 'https://other.example.com']);
+    expect(rules.map(r => r.matchPattern)).toEqual(['https://fat.example.com/v3/*', 'https://other.example.com/*']);
     expect(rules.every(r => r.enabled)).toBe(true);
+  });
+
+  it('wildcard 边界不会把相邻主机或相邻路径一起吞掉', () => {
+    const [rootRule, basePathRule] = openApiSpecToRules(
+      okSpec(spec3([{ url: 'https://a.com' }, { url: 'https://b.com/api' }])),
+      { targetOrigin: 'https://target.example.com', enabled: true },
+    );
+    expect(matchRule('https://a.com/users', rootRule)).toBe(true);
+    expect(matchRule('https://a.com.evil.com/users', rootRule)).toBe(false);
+    expect(matchRule('https://b.com/api/users', basePathRule)).toBe(true);
+    expect(matchRule('https://b.com/apix', basePathRule)).toBe(false);
   });
 
   it('没填目标时 enabled 传什么都不算（界面上那个复选框此时不存在）', () => {

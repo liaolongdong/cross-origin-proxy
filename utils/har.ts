@@ -23,6 +23,9 @@ export function harEntriesOverLimit(entries: readonly unknown[]): { actual: numb
   return entries.length > MAX_HAR_IMPORT_ENTRIES ? { actual: entries.length, limit: MAX_HAR_IMPORT_ENTRIES } : null;
 }
 
+/** HAR 里会被当成凭据带上目标环境的三枚头名；搬家侧与生成侧必须共用这一份清单 */
+export const HAR_CREDENTIAL_HEADER_NAMES = new Set(['authorization', 'cookie', 'x-api-key']);
+
 /**
  * 将请求日志转换为 HAR 格式（HTTP Archive）
  *
@@ -79,6 +82,17 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
   };
 }
 
+/** 从 HAR 条目里收集去重后的 http(s) 来源，供导入前的多来源确认使用 */
+export function distinctHarOrigins(entries: readonly HarEntry[]): string[] {
+  const origins = new Set<string>();
+  for (const entry of entries) {
+    const url = entry?.request?.url;
+    const origin = typeof url === 'string' ? apiOriginOf(url) : '';
+    if (origin) origins.add(origin);
+  }
+  return [...origins];
+}
+
 /**
  * 从 HAR 条目生成代理规则
  *
@@ -127,7 +141,7 @@ export function harEntriesToRules(
         for (const h of entry.request.headers) {
           if (!h || typeof h.name !== 'string' || typeof h.value !== 'string') continue;
           const name = h.name.toLowerCase();
-          if (name === 'authorization' || name === 'x-api-key' || name === 'cookie') {
+          if (HAR_CREDENTIAL_HEADER_NAMES.has(name)) {
             headerOverrides[h.name] = h.value;
           }
         }

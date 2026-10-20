@@ -60,10 +60,8 @@
           />
         </div>
 
-        <div style="margin-top: 12px">
-          <label style="margin-right: 12px; font-size: 13px; color: var(--el-text-color-regular)">{{
-            t('importMode')
-          }}</label>
+        <div class="import-mode-row">
+          <label class="import-mode-label">{{ t('importMode') }}</label>
           <el-radio-group v-model="importMode">
             <el-radio value="replace">{{ t('importModeReplace') }}</el-radio>
             <el-radio value="merge">{{ t('importModeMerge') }}</el-radio>
@@ -121,8 +119,8 @@
         />
         <el-button
           type="success"
-          :disabled="!curlInput.trim()"
-          style="margin-top: 12px"
+          :disabled="!curlInput.trim() || busy"
+          class="section-action"
           @click="handleImportCurl"
         >
           {{ t('importCurlButton') }}
@@ -172,9 +170,10 @@
         </el-upload>
         <el-input
           v-model="harTarget.raw"
-          class="target-env-input"
+          :class="['target-env-input', { 'target-env-input--invalid': harTarget.invalid }]"
           :placeholder="t('importHarTargetPlaceholder')"
-          :error="harTarget.invalid"
+          :aria-invalid="harTarget.invalid ? 'true' : undefined"
+          :aria-describedby="harTarget.invalid ? 'har-target-error' : undefined"
           clearable
           autocomplete="off"
           spellcheck="false"
@@ -185,6 +184,7 @@
         <p class="section-desc target-env-desc">{{ t('importHarTargetDesc') }}</p>
         <p
           v-if="harTarget.invalid"
+          id="har-target-error"
           class="target-env-error"
         >
           {{ t('importHarTargetInvalid') }}
@@ -214,8 +214,9 @@
         <el-button
           v-if="harFileContent"
           type="success"
-          :loading="harImporting"
-          style="margin-top: 12px"
+          :loading="harImporting || busy"
+          :disabled="busy"
+          class="section-action"
           @click="handleImportHar"
         >
           {{ t('importHarCreateRules') }}
@@ -246,9 +247,10 @@
         </el-upload>
         <el-input
           v-model="openApiTarget.raw"
-          class="target-env-input"
+          :class="['target-env-input', { 'target-env-input--invalid': openApiTarget.invalid }]"
           :placeholder="t('importOpenApiTargetPlaceholder')"
-          :error="openApiTarget.invalid"
+          :aria-invalid="openApiTarget.invalid ? 'true' : undefined"
+          :aria-describedby="openApiTarget.invalid ? 'openapi-target-error' : undefined"
           clearable
           autocomplete="off"
           spellcheck="false"
@@ -259,6 +261,7 @@
         <p class="section-desc target-env-desc">{{ t('importHarTargetDesc') }}</p>
         <p
           v-if="openApiTarget.invalid"
+          id="openapi-target-error"
           class="target-env-error"
         >
           {{ t('importHarTargetInvalid') }}
@@ -274,8 +277,9 @@
         <el-button
           v-if="openApiFileContent"
           type="success"
-          :loading="openApiImporting"
-          style="margin-top: 12px"
+          :loading="openApiImporting || busy"
+          :disabled="busy"
+          class="section-action"
           @click="handleImportOpenApi"
         >
           {{ t('importOpenApiCreateRules') }}
@@ -300,7 +304,7 @@ import type {
 } from '@/utils/types';
 import { MessageType } from '@/utils/types';
 import { MAX_IMPORT_FILE_SIZE, MAX_RULES } from '@/utils/constants';
-import { harEntriesOverLimit } from '@/utils/har';
+import { distinctHarOrigins, harEntriesOverLimit } from '@/utils/har';
 import { useTargetEnv } from '@/composables/useTargetEnv';
 import { openApiSpecToRules, parseOpenApiSpec } from '@/utils/openapi';
 import { parseCurlCommand } from '@/utils/curlParser';
@@ -312,6 +316,8 @@ import { useImportExport } from '@/composables/useImportExport';
 
 defineProps<{
   visible: boolean;
+  /** 父组件正在把派生规则批量写入存储：期间锁住所有「一键生成规则」出口，避免连点写两份 */
+  busy?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -669,6 +675,19 @@ async function handleImportHar() {
       ElMessage.error(t('importHarTooManyEntries', [String(overflow.actual), String(overflow.limit)]));
       return;
     }
+    const origins = distinctHarOrigins(harData.log.entries);
+    if (harTarget.parsed && origins.length > 1) {
+      const preview = origins.slice(0, 5).join('\n');
+      try {
+        await ElMessageBox.confirm(
+          t('importHarMultiOriginConfirm', [String(origins.length), preview]),
+          t('importHarMultiOriginTitle'),
+          { confirmButtonText: t('confirm'), cancelButtonText: t('cancel'), type: 'warning' },
+        );
+      } catch {
+        return;
+      }
+    }
     const result = (await chrome.runtime.sendMessage({
       type: MessageType.IMPORT_HAR,
       // 目标环境随消息进后台，由后台按同一份 origin 判据再核一遍（载荷属不可信输入）
@@ -714,15 +733,36 @@ async function handleImportHar() {
   color: var(--cop-text-color-primary);
 }
 
+.section-action {
+  margin-top: 12px;
+}
+
 .section-desc {
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--cop-text-color-secondary);
 }
 
+.import-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.import-mode-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
 /* HAR 的目标环境那一格：输入框、说明、报错行与「立即启用」复选框各占一段 */
 .target-env-input {
   margin-bottom: 6px;
+}
+
+.target-env-input--invalid :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
 }
 
 .target-env-desc {
@@ -796,9 +836,14 @@ async function handleImportHar() {
 
 .preview-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-top: 12px;
+}
+
+.preview-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .curl-input :deep(textarea) {

@@ -79,6 +79,7 @@
     />
     <ImportExportDialog
       v-model:visible="showImportExport"
+      :busy="generatingRules"
       @export="handleExport"
       @imported="handleImported"
       @import-har-rules="handleImportHarRules"
@@ -249,6 +250,8 @@ const { skipReasonText } = useDnrSkipText();
 // UI 状态
 const showRuleDialog = ref(false);
 const showImportExport = ref(false);
+/** 派生进口正在批量写规则：弹窗用它锁住所有生成按钮，避免连点把同一批写两遍 */
+const generatingRules = ref(false);
 const showProfiles = ref(false);
 const showSettings = ref(false);
 const showUrlTest = ref(false);
@@ -857,12 +860,15 @@ async function handleImported(stats: ImportResultStats) {
  * @param message 由调用方拼好的成功文案（`t()` 的字面量 key 留在调用点，动态 key 会躲过 i18n 那条存在性守卫）
  */
 async function addGeneratedRules(rules: ProxyRule[], message: string) {
+  generatingRules.value = true;
   try {
     await batchAddRules(rules);
     ElMessage.success(message);
     showImportExport.value = false;
   } catch (error) {
     showAddFailedMessage(error);
+  } finally {
+    generatingRules.value = false;
   }
 }
 

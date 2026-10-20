@@ -7,7 +7,7 @@ description: 安装依赖并跑完仓库全套校验（ESLint / Stylelint / Pret
 
 inputs:
   build-mode:
-    description: 'build = 只产出 .output/chrome-mv3；zip = 同时产出可上传商店的 .output/*-chrome.zip'
+    description: '兼容输入：build 与 zip 现在等价——pnpm build 单次构建同时产出 .output/chrome-mv3 与 .output/*-chrome.zip'
     required: false
     default: build
   node-version:
@@ -68,8 +68,8 @@ runs:
       shell: bash
 
     # build-verification.test.ts 断言的是真实构建产物，所以 build 必须在 test 之前。
-    # zip 分支：`wxt zip` 内部会先 build，`.output/chrome-mv3` 与 zip 同时就位，
-    # 测试照旧可跑，发布任务因此不需要再构建一次。
+    # `pnpm build` 本身就是 `wxt zip`：单次构建同时产出 `.output/chrome-mv3` 与 zip，
+    # 两个分支因此等价；保留 `build-mode` 只为不打断既有调用方（release / store-publish 仍传 zip）。
     - name: Build
       if: ${{ inputs.build-mode != 'zip' }}
       run: pnpm build

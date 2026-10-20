@@ -1,4 +1,5 @@
 import { MAX_VARIABLES, MAX_VARIABLE_VALUE_LENGTH } from '@/utils/constants';
+import { HAR_CREDENTIAL_HEADER_NAMES } from '@/utils/har';
 import { isVariableName } from '@/utils/variables';
 import type { ProxyRule, VariableStore } from '@/utils/types';
 
@@ -21,8 +22,8 @@ import type { ProxyRule, VariableStore } from '@/utils/types';
  * 纯函数：不碰 `chrome`、不改入参、同名同值的既有变量**复用而不新增**。
  */
 
-/** HAR 侧会带凭据的三枚头名（与 `utils/har.ts` 的白名单同一份含义，判读处在那一侧） */
-const CREDENTIAL_HEADER_NAMES = new Set(['authorization', 'cookie', 'x-api-key']);
+/** HAR 侧会带凭据的三枚头名：判据与生成侧共用 `utils/har.ts` 的同一份清单 */
+const CREDENTIAL_HEADER_NAMES = HAR_CREDENTIAL_HEADER_NAMES;
 
 /** 引用前缀与最长名字（`VARIABLE_NAME_RE` 上限 64） */
 const NAME_PREFIX = 'HAR_';

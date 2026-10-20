@@ -136,6 +136,13 @@ describe('withHostActive — 界面那句「这台站点走不走代理」到名
     expect(withHostActive(only, 'fat.example.com', false)).toEqual({ mode: 'all', hosts: [] });
   });
 
+  it('父域覆盖子域时不伪造一次成功：开关意图无法由精确条目表达，原状态交回', () => {
+    const off: SiteState = { mode: 'site-off', hosts: ['example.com'] };
+    expect(withHostActive(off, 'app.example.com', true)).toEqual(off);
+    const only: SiteState = { mode: 'site-only', hosts: ['example.com'] };
+    expect(withHostActive(only, 'app.example.com', false)).toEqual(only);
+  });
+
   it('换档意图不丢名单：site-off 与 site-only 之间由 mode 表达，withHostActive 不改 mode', () => {
     const off: SiteState = { mode: 'site-off', hosts: ['a.test', 'b.test'] };
     expect(withHostActive(off, 'c.test', false).mode).toBe('site-off');
@@ -227,13 +234,18 @@ describe('接线 — 两条通道、导出隔离与「谁都不许自己判」',
   const exportSanitize = read('utils/exportSanitize.ts');
   const importExport = read('composables/useImportExport.ts');
 
-  it('页面拉到的配置与逐 tab 推送的配置用同一份判据（两处不一致就是「拉到的与推来的行为不同」）', () => {
-    expect(router).toContain('siteAllows(siteState, hostnameOf(sender.tab?.url ?? sender.url))');
-    expect(manager).toContain('rulesForSite(complexRules, siteState, hostnameOf(tab.url))');
+  it('内容脚本按 frame 收窄，扩展页始终拿完整配置', () => {
+    expect(router).toContain('const requesterHost = hostnameOf(sender.url);');
+    expect(router).toContain('if (!requesterHost) return config;');
+    expect(router).toContain('siteAllows(siteState, requesterHost)');
+    expect(manager).toContain('data: { enabled: config.enabled, rules: complexRules, siteState }');
+    expect(bridge).toContain(
+      'rulesForSite(Array.isArray(config.rules) ? config.rules : [], config.siteState, window.location.hostname)',
+    );
   });
 
-  it('代发前再判一次，且带的是 Chrome 写的 sender 主机名', () => {
-    expect(router).toContain('hostnameOf(sender.tab?.url ?? sender.url),');
+  it('代发前再判一次，且带的是 Chrome 写的 frame sender 主机名', () => {
+    expect(router).toContain('hostnameOf(sender.url),');
     expect(handler).toContain('siteAllows(await getSiteState(), senderHost) === false');
   });
 
@@ -258,7 +270,9 @@ describe('接线 — 两条通道、导出隔离与「谁都不许自己判」',
     expect(importExport).not.toContain('SITE_STATE');
   });
 
-  it('收窄发生在下发之前，所以页面侧两个 world 都不需要（也不该有）第二份判据', () => {
+  it('ISOLATED bridge 按 frame 收窄，MAIN world 仍不持有第二份站点判据', () => {
+    expect(bridge).toContain('rulesForSite');
+    expect(bridge).toContain('window.location.hostname');
     expect(bridge).not.toContain('SITE_STATE');
     expect(mainInterceptor).not.toContain('siteScope');
     expect(mainInterceptor).not.toContain('site_proxy_state');
@@ -269,6 +283,21 @@ describe('接线 — 两条通道、导出隔离与「谁都不许自己判」',
     expect(popup).not.toContain('hosts: [');
     expect(settings.match(/withoutHost\(/g)).toHaveLength(1);
     expect(settings).not.toMatch(/hosts:\s*siteState\.value\.hosts\.(push|splice)/);
+  });
+
+  it('每次重算命中预览都先归零，不让上一条规则冒充这一页的新答案', () => {
+    const body = popup.slice(popup.indexOf('async function computePageHit'), popup.indexOf('// ─── 拦截器自报活动'));
+    expect(body).toContain("pageHitRuleId.value = '';");
+    expect(body).toContain("pageHitRuleName.value = '';");
+    expect(body).toContain("pageHitRewritten.value = '';");
+    expect(body).toContain('pageHitCause.value = null;');
+  });
+
+  it('设置页用消息枚举、读写有闸门，且最后一台白名单移除前确认', () => {
+    expect(settings).toContain('type: MessageType.GET_SITE_STATE');
+    expect(settings).toContain('type: MessageType.SET_SITE_STATE');
+    expect(settings).toContain('if (siteScopeUnreadable.value || siteScopeBusy.value) return;');
+    expect(settings).toContain('siteScopeLastWhitelistConfirm');
   });
 
   it('读不到时开关与那一格都说话，而不是画成「全部站点都生效」的确认语气', () => {

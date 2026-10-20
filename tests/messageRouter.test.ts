@@ -974,6 +974,50 @@ describe('GET_PROXY_CONFIG — 拉取即视为已同步，只清自己那个标�
 
     expect(sync.isConfigUnsynced(26)).toBe(true);
   });
+
+  it('site-only 只收窄内容脚本，扩展页始终拿到完整配置', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = { enabled: true, rules: [importableRule('site')] };
+    store[STORAGE_KEYS.SITE_STATE] = { mode: 'site-only', hosts: ['fat.example.com'] };
+
+    const optionsResponse = vi.fn();
+    listener!({ type: MessageType.GET_PROXY_CONFIG }, { url: TRUSTED_PAGE_URL }, optionsResponse);
+    await flush();
+    expect((optionsResponse.mock.calls.at(-1)?.[0] as { rules: unknown[] }).rules).toHaveLength(1);
+
+    const allowedResponse = vi.fn();
+    listener!(
+      { type: MessageType.GET_PROXY_CONFIG },
+      { url: 'https://fat.example.com/app', tab: { id: 31 } },
+      allowedResponse,
+    );
+    await flush();
+    expect((allowedResponse.mock.calls.at(-1)?.[0] as { rules: unknown[] }).rules).toHaveLength(1);
+
+    const excludedResponse = vi.fn();
+    listener!(
+      { type: MessageType.GET_PROXY_CONFIG },
+      { url: 'https://other.example.com/app', tab: { id: 32 } },
+      excludedResponse,
+    );
+    await flush();
+    expect((excludedResponse.mock.calls.at(-1)?.[0] as { rules: unknown[] }).rules).toEqual([]);
+  });
+});
+
+describe('GET_SITE_STATE — 读取失败不能伪装成默认值', () => {
+  it('存储读取抛错时回 null，让界面落进「没读到」那一档', async () => {
+    const original = chrome.storage.local.get;
+    chrome.storage.local.get = vi.fn(async () => {
+      throw new Error('storage unavailable');
+    });
+    try {
+      const { sendResponse } = dispatch(MessageType.GET_SITE_STATE, TRUSTED_PAGE_URL);
+      await flush();
+      expect(sendResponse).toHaveBeenCalledWith(null);
+    } finally {
+      chrome.storage.local.get = original;
+    }
+  });
 });
 
 /**

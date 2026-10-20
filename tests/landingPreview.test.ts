@@ -80,6 +80,13 @@ interface Case {
 
 const CASES: Case[] = [
   {
+    name: '超长 wildcard URL：真实现与预演都拒绝扫描',
+    matchType: 'wildcard',
+    pattern: 'https://fat.example.com/*',
+    target: 'https://uat.example.com',
+    url: `https://fat.example.com/${'a'.repeat(9000)}`,
+  },
+  {
     name: '通配符末尾 *，带非空尾部',
     matchType: 'wildcard',
     pattern: 'https://fat-api.example.com/*',

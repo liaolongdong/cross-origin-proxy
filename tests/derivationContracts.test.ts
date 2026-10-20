@@ -100,12 +100,15 @@ describe('目标环境候选 — 「保存侧记什么」与「界面列什么�
 describe('HAR 目标环境 — 非必填，且复选框不出现时不参与启用', () => {
   it('目标输入框存在，非法只标红这一格', () => {
     expect(importExport).toContain('v-model="harTarget.raw"');
-    expect(importExport).toContain(':error="harTarget.invalid"');
+    expect(importExport).toContain("'target-env-input--invalid': harTarget.invalid");
+    expect(importExport).toContain(':aria-invalid="harTarget.invalid ? \'true\' : undefined"');
   });
 
   it('导入按钮的可用条件里没有目标环境——留空照样能按老方式导入', () => {
     const button = importExport.slice(importExport.indexOf('<el-button\n          v-if="harFileContent"'));
-    expect(button.slice(0, 260)).not.toContain('disabled');
+    const buttonAttrs = button.slice(0, 260);
+    expect(buttonAttrs).not.toContain('harTarget');
+    expect(buttonAttrs).toContain(':disabled="busy"');
   });
 
   it('复选框只在读得出目标时出现，交给后台的意图由那个「在场」旗标兜住', () => {

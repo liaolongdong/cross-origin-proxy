@@ -9,6 +9,7 @@ pnpm-debug.log*
 .output/
 dist/
 build/
+stats.html
 
 # WXT cache and temporary files
 .wxt/

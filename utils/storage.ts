@@ -207,16 +207,25 @@ export async function rememberTargetOf(saved: ProxyRule[]): Promise<void> {
  *
  * 读不出就回落默认值（`mode: 'all'`，等于这一层不参与），与 `configRules()` / `getRecentTargets()`
  * 同一族口径：坏数据不许把代理整个弄坏。但这条回落方向要说清——它是「不排除任何站点」，
- * 不是「一切停用」；界面那侧要区分「读到的是 all」与「没读到」，不能把没读到画成「全部站点都生效」
- * 的确认语气（见 popup 的读失败处理）。
+ * 不是「一切停用」；界面要区分「读到的是 all」与「没读到」，因此只读这一份，读取侧走 `readSiteState()`。
  */
 export async function getSiteState(): Promise<SiteState> {
+  return (await readSiteState()) ?? { ...DEFAULT_SITE_STATE };
+}
+
+/**
+ * 读出站点生效范围，并把「存储读取失败」如实交回 `null`
+ *
+ * 执行侧仍按 fail-open 处理（见 `getSiteState()`），但界面不能拿默认值冒充一次成功读取：
+ * 「没读到」既不该画成「全部站点都在生效」，也不该允许用户在此基础上整表覆盖。
+ */
+export async function readSiteState(): Promise<SiteState | null> {
   try {
     const data = await chrome.storage.local.get(STORAGE_KEYS.SITE_STATE);
     return sanitizeSiteState(data[STORAGE_KEYS.SITE_STATE]);
   } catch (error) {
     logger.warn('Site state read failed:', error);
-    return { ...DEFAULT_SITE_STATE };
+    return null;
   }
 }
 

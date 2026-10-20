@@ -654,9 +654,7 @@ function onTableDrop(e: DragEvent) {
 
 /** 同一批行换了顺序＝刚才那次拖拽落位；行数或行集变了就作废那份位置 */
 function isPureReorder(nextIds: string[]): boolean {
-  if (!pendingFlipIds.length || nextIds.length !== pendingFlipIds.length) return false;
-  const sorted = [...nextIds].sort().join('\u0000');
-  return sorted === [...pendingFlipIds].sort().join('\u0000');
+  return isSameRowSet(pendingFlipIds, nextIds);
 }
 
 watch(
