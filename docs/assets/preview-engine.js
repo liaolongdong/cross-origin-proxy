@@ -17,6 +17,12 @@
  * 那是扩展进程里的异步 API，网页无从调用，所以正则模式的「浏览器会不会应用」在这里不表态，
  * 由界面文案把这句话交代给扩展内的「未生效」标记。
  *
+ * 除了 `preview`，这里还出两件「带走一条规则」用的东西（同一份判据，不另写一套）：
+ * `patternFromUrl` 把读者粘进来的测试地址折成 `来源/*`，`buildConfig` 把预演通过的这一笔
+ * 折成导入格式。**导出的前提是预演真的说出一条能用的规则**——没命中、模式被拒、
+ * 网络层那一格算不出可跳转地址，一律返回 `null`，界面据此不出现「带走」按钮；
+ * 页面绝不能生成一条用户没验证过的配置。
+ *
  * 零依赖、零外链；只挂一个 `window.copRewritePreview`，不参与页面渲染。
  */
 
@@ -249,5 +255,100 @@
     };
   };
 
-  window.copRewritePreview = { preview };
+  /**
+   * 把一条测试地址折成「来源/*」的匹配模式
+   *
+   * 只认本扩展能代理的四种协议（与 `isProxyableProtocol` 同一份白名单）。`URL#origin`
+   * 顺带剥掉路径、查询、hash 与 userinfo——凭据不该跟着模式走，而「同一来源的全部接口」
+   * 正是读者在这里想要的粒度；非默认端口保留，端口不同就是不同来源。
+   *
+   * @param {string} input 读者粘进来的地址
+   * @returns {string|null} `origin + '/*'`；解析不出或协议不支持时 `null`
+   */
+  const patternFromUrl = input => {
+    const raw = (input || '').trim();
+    if (!raw) return null;
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      return null;
+    }
+    if (!/^(https?|wss?):$/.test(parsed.protocol)) return null;
+    return `${parsed.origin}/*`;
+  };
+
+  /** 从模式或目标里取主机（`*` 不属于 origin；正则取不出来） */
+  const hostOfPattern = value => {
+    try {
+      return new URL(value.replace(/\*/g, '')).host;
+    } catch {
+      return '';
+    }
+  };
+
+  const hostOfUrl = value => {
+    try {
+      return new URL(value).host;
+    } catch {
+      return '';
+    }
+  };
+
+  /**
+   * 把预演通过的这一笔折成可导入的配置
+   *
+   * 判据全部复用 `preview`，不另算一套：
+   * - 模式为空、正则被拒（`usable === false`）、测试地址没命中（`matched === false`）→ `null`；
+   * - 走网络层却算出「不会被应用」的结果（`substitutionInvalid` / `notUrl`）→ `null`，
+   *   那种规则装不进 DNR 或换出来的不是地址，交到用户手里只会坏；
+   * - 后台通道那三种（空目标、WebSocket、通配符末尾非 `*`）本身是合法规则，照常导出。
+   *
+   * 导出形态与真实导出文件同构（`schemaVersion` + `config`），导入侧会重新生成 id、
+   * 收口优先级，所以这里的占位 id 不会与现网冲突。`config.enabled` 刻意写 `false`：
+   * 合并导入时缺省沿用当前总开关，读者不会因为导入一条规则而被动开启代理。
+   * 规则本身 `enabled: true`——刚在预演里看到它生效，导入后不该是一条停用的规则。
+   *
+   * @param {{matchType: string, pattern: string, target: string, url: string}} input 界面四项输入
+   * @param {{now?: number}} [options] 时间戳注入口（测试用；缺省取当前时刻）
+   * @returns {object|null} 导入格式的配置对象；不满足导出前提时 `null`
+   */
+  const buildConfig = (input, options) => {
+    const matchType = input.matchType;
+    if (matchType !== 'wildcard' && matchType !== 'prefix' && matchType !== 'regex') return null;
+    const pattern = (input.pattern || '').trim();
+    if (!pattern) return null;
+
+    const result = preview({ ...input, pattern });
+    if (!result.usable || !result.matched) return null;
+    if (result.channel === 'net' && result.netSkip) return null;
+
+    const target = (input.target || '').trim();
+    const source = hostOfPattern(pattern) || hostOfUrl((input.url || '').trim()) || pattern;
+    const targetHost = hostOfUrl(target);
+    const stamp = typeof options?.now === 'number' && Number.isFinite(options.now) ? options.now : Date.now();
+
+    return {
+      schemaVersion: 2,
+      exportTime: stamp,
+      config: {
+        enabled: false,
+        rules: [
+          {
+            id: 'landing-preview-rule',
+            name: targetHost ? `${source} → ${targetHost}` : source,
+            enabled: true,
+            matchType,
+            matchPattern: pattern,
+            targetUrl: target,
+            priority: 100,
+            createdAt: stamp,
+            updatedAt: stamp,
+          },
+        ],
+      },
+    };
+  };
+
+  window.copRewritePreview = { preview, buildConfig, patternFromUrl };
 })();

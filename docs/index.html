@@ -464,6 +464,22 @@
           },
           {
             "@type": "Question",
+            "name": "落地页上试出来的规则，怎么装进扩展？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "在「试一条规则」面板里点「复制配置 JSON」或「下载 .json」，再打开扩展设置页的「导入/导出配置」，选中这个文件；导入模式选「合并（保留现有，追加新规则）」后确认。合并不会动你现有的规则，也不会替你打开总开关，所以导入后代理还关着的话，去弹窗里打开即可。这份配置里只有一条规则，带匹配类型、匹配模式与目标地址，不含请求头、查询参数或任何凭据。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "能把 Vite / webpack 的 devServer proxy 配置直接导进来吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "不能。devServer 的代理按站点内的相对路径（例如 /api）转发，浏览器看到的请求仍然是同源的；要去的后端环境写在 devServer 配置里，从不出现在浏览器实际请求的 URL 上，而扩展的规则按请求 URL 匹配——这份配置里没有一条能对上真实地址，它的字段结构也不是扩展的导入格式。正确做法是按真实 API 来源建一条通配符规则：把 https://fat-api.example.com/* 指向 https://uat-api.example.com，面板里的「用测试地址填匹配模式」可以直接生成这个模式。"
+            }
+          },
+          {
+            "@type": "Question",
             "name": "我的数据会被上传到服务器吗？",
             "acceptedAnswer": {
               "@type": "Answer",
@@ -1906,6 +1922,22 @@ pnpm build</code></pre>
                 />
               </label>
             </div>
+            <div class="try-tools">
+              <button
+                type="button"
+                class="try-fill"
+                data-try-fill
+                data-filled="已按测试地址填好匹配模式"
+                data-fill-failed="先在「测试地址」里填一个 http(s) 或 ws(s) 地址"
+              >
+                用测试地址填匹配模式
+              </button>
+              <span
+                class="try-fill-status"
+                role="status"
+                data-try-fill-status
+              ></span>
+            </div>
             <p
               class="try-verdict"
               role="status"
@@ -1948,6 +1980,52 @@ pnpm build</code></pre>
             >
               两行不一样不是坏在谁身上：后台通道只把匹配到的那段字符换掉，网络层则是整个地址被替换成替换串。走哪一行，看上面点名的那条通道。
             </p>
+            <div
+              class="try-take"
+              data-try-take
+              hidden
+            >
+              <p class="try-take-lede">这一笔已经通过预演，可以连同模式和目标一起带走：</p>
+              <div class="try-actions">
+                <button
+                  type="button"
+                  class="try-action try-action-primary"
+                  data-try-copy
+                  data-copied="配置 JSON 已复制"
+                  data-copy-failed="复制失败，请改用「下载 .json」"
+                >
+                  复制配置 JSON
+                </button>
+                <button
+                  type="button"
+                  class="try-action"
+                  data-try-download
+                  data-downloaded="已开始下载"
+                  data-filename="cross-origin-proxy-rule.json"
+                >
+                  下载 .json
+                </button>
+                <span
+                  class="try-status"
+                  role="status"
+                  data-try-status
+                ></span>
+              </div>
+              <details class="try-guide">
+                <summary>怎么把这条规则装进扩展（3 步）</summary>
+                <ol>
+                  <li>点「下载 .json」，或复制 JSON 自己存成 <code>.json</code> 文件。</li>
+                  <li>在扩展的设置页打开「导入/导出配置」，选中这个文件。</li>
+                  <li>
+                    <strong>导入模式选「合并（保留现有，追加新规则）」</strong
+                    >，再确认导入。选「替换」会整包覆盖你现有的规则，并把总开关关掉。
+                  </li>
+                </ol>
+                <p>
+                  这条规则本身是启用的，但文件不会替你打开总开关：如果代理还关着，在弹窗里打开即可。配置里只有匹配类型、匹配模式与目标地址，没有任何请求头或凭据。
+                </p>
+              </details>
+            </div>
             <ul
               class="try-why"
               data-try-codes
@@ -2709,6 +2787,24 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                 返回时结果已就绪」这个契约，异步化只会让页面读到一个空响应。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。
               </p>
             </details>
+            <details>
+              <summary>落地页上试出来的规则，怎么装进扩展？</summary>
+              <p>
+                在「试一条规则」面板里点「复制配置 JSON」或「下载
+                .json」，再打开扩展设置页的「导入/导出配置」，选中这个文件；导入模式选「合并（保留现有，追加新规则）」后确认。合并不会动你现有的规则，也不会替你打开总开关，所以导入后代理还关着的话，去弹窗里打开即可。这份配置里只有一条规则，带匹配类型、匹配模式与目标地址，不含请求头、查询参数或任何凭据。
+              </p>
+            </details>
+            <details>
+              <summary>能把 Vite / webpack 的 devServer proxy 配置直接导进来吗？</summary>
+              <p>
+                不能。devServer 的代理按站点内的相对路径（例如
+                <code>/api</code>）转发，浏览器看到的请求仍然是同源的；要去的后端环境写在 devServer
+                配置里，从不出现在浏览器实际请求的 URL 上，而扩展的规则按请求 URL
+                匹配——这份配置里没有一条能对上真实地址，它的字段结构也不是扩展的导入格式。正确做法是按真实 API
+                来源建一条通配符规则：把 <code>https://fat-api.example.com/*</code> 指向
+                <code>https://uat-api.example.com</code>，面板里的「用测试地址填匹配模式」可以直接生成这个模式。
+              </p>
+            </details>
 
             <h3
               class="faq-category"
@@ -2768,7 +2864,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                   <a href="#faq-mock">Mock 与故障注入<span class="faq-toc-n">3</span></a>
                 </li>
                 <li>
-                  <a href="#faq-sharing">分享、限制与安全兜底<span class="faq-toc-n">3</span></a>
+                  <a href="#faq-sharing">分享、限制与安全兜底<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
                   <a href="#faq-privacy">隐私与兼容性<span class="faq-toc-n">2</span></a>

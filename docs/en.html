@@ -464,6 +464,22 @@
           },
           {
             "@type": "Question",
+            "name": "How do I install a rule I tried on this page?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Click “Copy rule JSON” or “Download .json” in the preview panel, then open “Import / Export” in the extension's settings page and pick that file. Choose “Merge (keep existing, add new rules)” as the import mode, then confirm. Merge leaves your current rules alone and does not turn the master switch on for you, so if proxying is still off, switch it on from the popup. The file holds one rule — match type, match pattern and target URL — with no headers, query parameters or credentials."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I import a Vite or webpack devServer proxy config?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. A devServer proxy forwards site-relative paths such as /api, and the browser's request stays same-origin; the backend environment it points at lives in the devServer config and never appears in the URL the browser actually requests. Extension rules match on that request URL, so none of those entries would ever match a real address, and the file's shape is not the extension's import format either. Create a wildcard rule from the real API origin instead — for example https://fat-api.example.com/* to https://uat-api.example.com; the panel's “Fill the pattern from this URL” generates exactly that pattern."
+            }
+          },
+          {
+            "@type": "Question",
             "name": "Is my data sent to a server?",
             "acceptedAnswer": {
               "@type": "Answer",
@@ -1989,6 +2005,22 @@ pnpm build</code></pre>
                 />
               </label>
             </div>
+            <div class="try-tools">
+              <button
+                type="button"
+                class="try-fill"
+                data-try-fill
+                data-filled="Pattern filled from the request URL"
+                data-fill-failed="Enter an http(s) or ws(s) URL in Request URL first"
+              >
+                Fill the pattern from this URL
+              </button>
+              <span
+                class="try-fill-status"
+                role="status"
+                data-try-fill-status
+              ></span>
+            </div>
             <p
               class="try-verdict"
               role="status"
@@ -2033,6 +2065,54 @@ pnpm build</code></pre>
               the URL the regex matched, while the network layer replaces the whole URL with the substitution. Whichever
               channel the sentence above names is the one that runs.
             </p>
+            <div
+              class="try-take"
+              data-try-take
+              hidden
+            >
+              <p class="try-take-lede">This one already passed the preview — take the pattern and target with you:</p>
+              <div class="try-actions">
+                <button
+                  type="button"
+                  class="try-action try-action-primary"
+                  data-try-copy
+                  data-copied="Rule JSON copied"
+                  data-copy-failed="Copy failed — use “Download .json” instead"
+                >
+                  Copy rule JSON
+                </button>
+                <button
+                  type="button"
+                  class="try-action"
+                  data-try-download
+                  data-downloaded="Download started"
+                  data-filename="cross-origin-proxy-rule.json"
+                >
+                  Download .json
+                </button>
+                <span
+                  class="try-status"
+                  role="status"
+                  data-try-status
+                ></span>
+              </div>
+              <details class="try-guide">
+                <summary>How to import this rule (3 steps)</summary>
+                <ol>
+                  <li>Click “Download .json”, or copy the JSON and save it as a <code>.json</code> file.</li>
+                  <li>Open “Import / Export” in the extension's options page and select that file.</li>
+                  <li>
+                    <strong>Choose “Merge (keep existing, add new rules)”</strong> as the import mode, then confirm.
+                    “Replace” would overwrite all your existing rules and switch the proxy off.
+                  </li>
+                </ol>
+                <p>
+                  The rule itself is enabled, but the file will not turn the master switch on for you: if the proxy is
+                  off, enable it from the popup. The file contains only the match type, pattern and target — no headers
+                  and no credentials.
+                </p>
+              </details>
+            </div>
             <ul
               class="try-why"
               data-try-codes
@@ -2854,6 +2934,28 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 rule: a blocked request is never replayed natively.
               </p>
             </details>
+            <details>
+              <summary>How do I install a rule I tried on this page?</summary>
+              <p>
+                Click “Copy rule JSON” or “Download .json” in the preview panel, then open “Import / Export” in the
+                extension's settings page and pick that file. Choose “Merge (keep existing, add new rules)” as the
+                import mode, then confirm. Merge leaves your current rules alone and does not turn the master switch on
+                for you, so if proxying is still off, switch it on from the popup. The file holds one rule — match type,
+                match pattern and target URL — with no headers, query parameters or credentials.
+              </p>
+            </details>
+            <details>
+              <summary>Can I import a Vite or webpack devServer proxy config?</summary>
+              <p>
+                No. A devServer proxy forwards site-relative paths such as <code>/api</code>, and the browser's request
+                stays same-origin; the backend environment it points at lives in the devServer config and never appears
+                in the URL the browser actually requests. Extension rules match on that request URL, so none of those
+                entries would ever match a real address, and the file's shape is not the extension's import format
+                either. Create a wildcard rule from the real API origin instead — for example
+                <code>https://fat-api.example.com/*</code> to <code>https://uat-api.example.com</code>; the panel's
+                “Fill the pattern from this URL” generates exactly that pattern.
+              </p>
+            </details>
 
             <h3
               class="faq-category"
@@ -2914,7 +3016,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
                   <a href="#faq-mock">Mock and failure injection<span class="faq-toc-n">3</span></a>
                 </li>
                 <li>
-                  <a href="#faq-sharing">Sharing, limits and safety<span class="faq-toc-n">3</span></a>
+                  <a href="#faq-sharing">Sharing, limits and safety<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
                   <a href="#faq-privacy">Privacy and compatibility<span class="faq-toc-n">2</span></a>
