@@ -111,6 +111,34 @@
               {{ channelIsDnr ? t('urlTestChannelDnr') : t('urlTestChannelSw') }}
             </el-tag>
           </div>
+          <!--
+            同一笔请求、两条通道、两个地址：上面那行「重写后地址」是后台通道给的结果，
+            而这一条走网络层，浏览器实际拿到的是另一个地址。措辞必须把「哪个会真的发生」说清，
+            否则这一屏等于拿着一个不会发生的地址当结论。
+          -->
+          <div
+            v-if="divergence"
+            class="channel-divergence"
+          >
+            <p class="channel-divergence-title">{{ t('urlTestDivergenceTitle') }}</p>
+            <div class="result-row">
+              <span class="result-label">{{ t('urlTestDivergenceNet') }}</span>
+              <code
+                class="result-url"
+                :title="divergence.networkUrl"
+                >{{ divergence.networkUrl }}</code
+              >
+            </div>
+            <div class="result-row">
+              <span class="result-label">{{ t('urlTestDivergenceExt') }}</span>
+              <code
+                class="result-url"
+                :title="divergence.extensionUrl"
+                >{{ divergence.extensionUrl }}</code
+              >
+            </div>
+            <p class="channel-divergence-hint">{{ t('urlTestDivergenceHint') }}</p>
+          </div>
           <div
             v-if="matchedDnrSkipReason"
             class="dnr-skip-alert"
@@ -184,6 +212,7 @@ import {
   rewriteUrl,
 } from '@/utils/urlMatcher';
 import { diffRewrite } from '@/utils/rewriteDiff';
+import { findRegexRewriteDivergence } from '@/utils/channelDivergence';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
 import { useDiagnosisText } from '@/composables/useDiagnosis';
@@ -249,6 +278,21 @@ const channelIsDnr = computed(() => (matchedRule.value ? isSimpleRule(matchedRul
 const matchedDnrSkipReason = computed<DnrSkipReason | undefined>(() =>
   matchedRule.value ? props.dnrSkippedRules.get(matchedRule.value.id) : undefined,
 );
+
+/**
+ * 正则规则的两通道重写差异（判据唯一出口 `utils/channelDivergence.ts`）
+ *
+ * 上面那一行「重写后地址」算的是后台通道的结果；一条覆盖不全的正则交给网络层时，
+ * 浏览器实际得到的是另一个地址。不说这一句，这一屏就会拿着一个不会发生的地址当结论。
+ * 浏览器根本不会应用这条规则时**不说话**——那时网络层没有「另一个地址」这回事，
+ * 说「两边不同」本身就是假的。
+ */
+const divergence = computed(() => {
+  const rule = matchedRule.value;
+  const url = testUrl.value.trim();
+  if (!rule || !url || matchedDnrSkipReason.value) return null;
+  return findRegexRewriteDivergence(url, rule);
+});
 
 /**
  * 未命中时的归因结论，`null` = 这一句没有可补充的信息
@@ -401,6 +445,27 @@ const extraActions = computed(() => {
 
 .dnr-skip-alert p {
   margin: 0;
+}
+
+/* 两通道给出两个地址：这是一条要改规则的提示，不是错误，所以走 warning 那档色带 */
+.channel-divergence {
+  padding: 8px 10px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-color-warning, #e6a23c);
+  background: var(--el-color-warning-light-9, #fdf6ec);
+  border-left: 3px solid var(--el-color-warning, #e6a23c);
+  border-radius: 0 6px 6px 0;
+}
+
+.channel-divergence-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.channel-divergence-hint {
+  margin: 4px 0 0;
 }
 
 .cors-note {
