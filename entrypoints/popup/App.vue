@@ -196,14 +196,28 @@
         <span class="interceptor-text">{{ interceptorText }}</span>
       </div>
 
-      <!-- 配置广播没送达：这一页还在拿旧规则干活，是唯一一条「现在就刷新」能解决的话 -->
-      <p
+      <!-- 配置广播没送达：这一页还在拿旧规则干活，是唯一一条「现在就刷新」能解决的话——
+           所以这句话旁边就得有一个能按的按钮，而不是让用户关掉弹窗自己去摸地址栏的刷新键 -->
+      <div
         v-if="configSyncVisible"
-        class="config-sync-warning"
-        :title="t('configNotSyncedHint')"
+        class="config-sync-row"
       >
-        {{ t('configNotSynced') }}
-      </p>
+        <p
+          class="config-sync-warning"
+          :title="t('configNotSyncedHint')"
+        >
+          {{ t('configNotSynced') }}
+        </p>
+        <button
+          v-if="activeTabId !== null"
+          type="button"
+          class="config-sync-reload"
+          @click="reloadCurrentTab"
+        >
+          <el-icon><Refresh /></el-icon>
+          <span>{{ t('configNotSyncedReload') }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- 这一台站点的生效范围：判据在 utils/siteScope.ts，这里只说结果 -->
@@ -647,6 +661,7 @@ import {
   Timer,
   Plus,
   Operation,
+  Refresh,
   Link,
 } from '@element-plus/icons-vue';
 import type { TagProps } from 'element-plus';
@@ -778,6 +793,11 @@ async function fetchTabDnrStats(tabId: number | undefined) {
 // ─── 当前页命中预览 ────────────────────────────────────────────────────
 
 const pageUrl = ref('');
+/**
+ * 活动标签页的 id：只有「配置没送达」那一行会用它去重载这一页。
+ * `null` = 这一次没问到（查询失败、或问到的那一条没有 id），此时重载按钮不许出现。
+ */
+const activeTabId = ref<number | null>(null);
 const pageHitProxiable = ref(false);
 const pageHitRuleName = ref('');
 /** 命中规则的 id：只用于查 `dnrSkippedRuleIds`，不参与渲染 */
@@ -829,6 +849,7 @@ async function computePageHit() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? '';
+    activeTabId.value = typeof tab?.id === 'number' ? tab.id : null;
     pageUrl.value = url;
     pageHost.value = hostnameOf(url);
     const proxiable = /^https?:/i.test(url);
@@ -1383,6 +1404,27 @@ async function applyProfile(profile: { id: string; name: string }) {
 }
 
 /**
+ * 重载这一页——弹窗里那句「刷新这一页通常可恢复」唯一能把话兑现的入口。
+ *
+ * `chrome.tabs.reload` 不需要额外权限（本扩展已有 `<all_urls>`），也不写任何状态。
+ * 点了之后标签页导航、弹窗随之关闭，所以刻意不给成功提示：那是一句没人会看到的话。
+ * 失败要说话——这一行既然出现了，用户已经知道这一页在拿旧规则干活，静默失败等于什么都没做。
+ */
+async function reloadCurrentTab() {
+  const tabId = activeTabId.value;
+  if (typeof tabId !== 'number') {
+    ElMessage.error(t('configNotSyncedReloadFailed'));
+    return;
+  }
+  try {
+    await chrome.tabs.reload(tabId);
+  } catch (error) {
+    logger.warn('重载当前标签页失败:', error);
+    ElMessage.error(t('configNotSyncedReloadFailed'));
+  }
+}
+
+/**
  * 打开 Options 页；带 hash 时直达对应弹窗/抽屉
  * （#add-rule / #logs / #import-export / #add-rule-from-tab=<encoded url>）。
  * 优先复用已打开的 Options 标签页（通过 runtime.getContexts 查找，无需 tabs 权限），
@@ -1753,16 +1795,74 @@ async function openOptionsPage(hash = '') {
   color: var(--el-color-success, #67c23a);
 }
 
-/* 配置没送达：这一页仍在用旧规则干活，用户当下唯一能做的动作就是刷新，所以给告警色而非次要色 */
+/* 配置没送达这一行：文字 + 那句唯一 remedy 的按钮，窄屏放不下就折行、不挤压文字 */
+.config-sync-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+
+  /* 与拦截器那一行同一种进场：两条提示都会在读数到位后突然出现，抖动的方式得一致 */
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
+}
+
+/* 这一页仍在用旧规则干活，用户当下唯一能做的动作就是刷新，所以用告警色而非次要色 */
 .config-sync-warning {
-  margin: 10px 0 0;
+  flex: 1 1 180px;
+  min-width: 0;
   font-size: 11px;
   line-height: 1.4;
   color: var(--el-color-warning, #e6a23c);
   cursor: default;
+}
 
-  /* 与拦截器那一行同一种进场：两条提示都会在读数到位后突然出现，抖动的方式得一致 */
-  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
+/*
+  「刷新这一页」：档位与次级动作行那三颗同为 text（无边框、次要字色），只有尺寸收小一档，
+  因为这一格挤在警告句的右边。刻意**不**用 `--el-color-warning-light-N` 上底色——
+  那几个浅档在暗色两条路径没有值，写上去就是靠回退色蒙过 `tests/designTokens.test.ts`，
+  而那句话的颜色由 `.config-sync-warning` 自己承担就够了。
+  热区下限 24px 由 padding 凑够（11 × 1.4 + 4 × 2 + 1 × 2 ≈ 25.4），刻意**不**用
+  `min-height` 配一条改口径的声明去凑：这个文件里那条声明一次都没出现过，那正是
+  「内容宽 320 / 渲染宽 352 / 视口 368」这笔算式的前提，由 `tests/docs-consistency.test.ts`
+  逐文件守着——写进去的那一刻，文档里那三个数就不再彼此推得出来。
+*/
+.config-sync-reload {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cop-text-color-regular);
+  cursor: pointer;
+  background: var(--cop-bg-color);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 6px;
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    background-color var(--cop-duration-instant) var(--cop-ease-standard),
+    border-color var(--cop-duration-instant) var(--cop-ease-standard);
+}
+
+.config-sync-reload :deep(.el-icon) {
+  font-size: 12px;
+}
+
+.config-sync-reload:hover {
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg);
+  border-color: var(--cop-primary-border);
+}
+
+.config-sync-reload:focus-visible {
+  color: var(--cop-primary);
+  outline: none;
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 25%);
 }
 
 /* 站点生效范围那一格：与本页命中卡同一套底色，靠边说明「按主机判定」 */
