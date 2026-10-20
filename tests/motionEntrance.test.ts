@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 const popup = readFileSync('entrypoints/popup/App.vue', 'utf8');
 const urlTest = readFileSync('components/options/UrlTestDialog.vue', 'utf8');
 const migrate = readFileSync('components/options/MigrateTargetsDialog.vue', 'utf8');
+const filterBar = readFileSync('components/options/SearchFilterBar.vue', 'utf8');
 const tokens = readFileSync('assets/theme/tokens.css', 'utf8');
 
 /** 取某个类选择器的规则体（只取第一个匹配，这几处都是单类名块） */
@@ -39,12 +40,15 @@ describe('入场动效 — 形状约束', () => {
     ['popup 的确认格', () => ruleOf(popup, '.profile-confirm')],
     ['URL 预演的结论块', () => ruleOf(urlTest, '.result-block')],
     ['批量迁移的预览列表', () => ruleOf(migrate, '.migrate-preview')],
+    ['筛选栏的批量按钮组', () => ruleOf(filterBar, '.batch-action')],
   ])('%s 用令牌阶梯、且不写 fill', (_label, read) => {
     const rule = read();
     const animation = rule.match(/animation:\s*([^;]+);/);
     expect(animation, '这一处没有入场动效了').toBeTruthy();
     expect(animation![1]).toContain('cop-rise-in');
-    expect(animation![1]).toMatch(/var\(--cop-duration-(fast|slow)\)/);
+    // 阶梯三档都算合法（`base` 给「被用户自己的动作叫出来、但不属于按下就跟手」那格），
+    // 真正承重的是下面那条：不许落字面量时长
+    expect(animation![1]).toMatch(/var\(--cop-duration-(base|fast|slow)\)/);
     expect(animation![1]).toContain('var(--cop-ease-enter)');
     expect(animation![1]).not.toMatch(/\d+m?s/);
     expect(animation![1]).not.toMatch(/\b(both|forwards)\b/);
@@ -56,7 +60,7 @@ describe('入场动效 — 形状约束', () => {
   });
 
   it('新增的每一条都不在任何 :hover / :active 规则里（悬浮抬升被动画抢掉是无声失效）', () => {
-    for (const source of [popup, urlTest, migrate]) {
+    for (const source of [popup, urlTest, migrate, filterBar]) {
       const hoverRules = source.match(/:hover\s*\{[^}]*\}/g) ?? [];
       for (const rule of hoverRules) expect(rule).not.toContain('animation:');
     }

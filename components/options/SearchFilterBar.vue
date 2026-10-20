@@ -54,10 +54,26 @@
 
     <!-- 有勾选时出现的批量操作 -->
     <template v-if="selectedCount > 0">
-      <el-button @click="$emit('batchToggle', true)"> {{ t('batchEnable') }} ({{ selectedCount }}) </el-button>
-      <el-button @click="$emit('batchToggle', false)"> {{ t('batchDisable') }} ({{ selectedCount }}) </el-button>
-      <el-button @click="$emit('batchMigrate')"> {{ t('batchMigrate') }} </el-button>
       <el-button
+        class="batch-action"
+        @click="$emit('batchToggle', true)"
+      >
+        {{ t('batchEnable') }} ({{ selectedCount }})
+      </el-button>
+      <el-button
+        class="batch-action"
+        @click="$emit('batchToggle', false)"
+      >
+        {{ t('batchDisable') }} ({{ selectedCount }})
+      </el-button>
+      <el-button
+        class="batch-action"
+        @click="$emit('batchMigrate')"
+      >
+        {{ t('batchMigrate') }}
+      </el-button>
+      <el-button
+        class="batch-action"
         type="danger"
         plain
         @click="$emit('batchDelete')"
@@ -144,6 +160,18 @@ onUnmounted(() => {
 
 .search-filter-bar :deep(.el-button + .el-button) {
   margin-left: 0;
+}
+
+/*
+  勾选一下才出现的四颗批量按钮：此前它们是凭空长出来的（第一次勾一行，整组直接跳出来），
+  而「取消勾选」那一组同时消失——同一件事的两个方向都只有一半交代。
+  复用 `tokens.css` 的 `cop-rise-in`（不新建关键帧、不写第二份时长表），
+  时长走 `base`：这一格是被用户自己的勾选叫出来的，不是按下的跟手反馈。
+  不写 fill——`both` / `forwards` 会把 `transform` 冻在末帧，而动画在级联里排在 `:hover` 之前，
+  悬浮抬升会当场失效且没有任何报错。reduce 那一档由 `tokens.css` 的全局 `*` 段接住。
+*/
+.batch-action {
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
 .search-input {
