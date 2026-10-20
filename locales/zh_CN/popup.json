@@ -53,6 +53,7 @@
   "pageHitChannelSw": "SW",
   "pageHitRewritten": "改写为",
   "pageHitProxyOff": "代理未开启，规则未生效",
+  "pageHitSiteBlocked": "这台站点的代理已停用，所以下面这条改写不会发生",
   "pageHitNoMatch": "本页地址未被代理（代理通常作用于接口地址，非页面地址）",
   "pageHitOpenUrlTest": "用 URL 匹配测试核对",
   "metricDnrTab": "本页 · 近 5 分钟",
@@ -73,9 +74,11 @@
   "requestFailed": "失败",
   "siteScopeTitle": "这台站点的代理",
   "siteScopeBoundary": "按主机判定：含它的子域名；协议与端口不算两台站点。",
+  "siteScopeReading": "正在读取站点名单…",
   "siteScopeUnreadable": "这次没读到站点的开关状态，先不动它。",
   "siteScopeEnabledHere": "这台站点已恢复走代理",
   "siteScopeDisabledHere": "这台站点已停用代理（含子域名）",
   "siteScopeParentCovered": "这台站点由名单里的父域名覆盖，无法单独切换。请到设置页调整父域名。",
+  "siteScopeCapReached": "站点名单已到 $1 条上限，这台加不进去。请到设置页删掉一条再试。",
   "siteScopeSaveFailed": "站点设置保存失败，请重试"
 }

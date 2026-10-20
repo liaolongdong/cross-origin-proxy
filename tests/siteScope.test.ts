@@ -18,6 +18,7 @@ import {
   hostnameOf,
   sanitizeSiteState,
   siteAllows,
+  siteScopeToggle,
   withHostActive,
   withoutHost,
   dnrInitiatorCondition,
@@ -141,6 +142,34 @@ describe('withHostActive — 界面那句「这台站点走不走代理」到名
     expect(withHostActive(off, 'app.example.com', true)).toEqual(off);
     const only: SiteState = { mode: 'site-only', hosts: ['example.com'] };
     expect(withHostActive(only, 'app.example.com', false)).toEqual(only);
+  });
+
+  it('名单已满时拒绝而不是挤掉别人：被 slice 掉的永远是字母序最后那台，与用户点的这台无关', () => {
+    const hosts = Array.from({ length: MAX_SITE_STATE_HOSTS }, (_, i) => `h${String(i).padStart(2, '0')}.test`);
+    const off: SiteState = { mode: 'site-off', hosts };
+    // 这台按字典序排在最后 —— 旧写法 `[...hosts, host].sort().slice(0, 50)` 丢掉的是它，不是这一台
+    const result = siteScopeToggle(off, 'zz.test', false);
+    expect(result.blocked).toBe('capReached');
+    expect(result.state).toEqual(off);
+    expect(siteAllows(result.state, 'zz.test'), '拒绝必须真的拒绝：那台仍在生效').toBe(true);
+    expect(siteAllows(result.state, 'h49.test'), '别人的条目不许被顺手抹掉').toBe(false);
+    // 移出同样满员，但它不越界，照常允许
+    expect(siteScopeToggle(off, hosts[0], true)).toEqual({
+      state: { mode: 'site-off', hosts: hosts.slice(1) },
+      blocked: null,
+    });
+  });
+
+  it('两种「翻译不出来」各给一个原因，界面才说得出是哪一个', () => {
+    const off: SiteState = { mode: 'site-off', hosts: ['example.com'] };
+    expect(siteScopeToggle(off, 'app.example.com', true).blocked).toBe('parentCovered');
+    const full: SiteState = {
+      mode: 'site-only',
+      hosts: Array.from({ length: MAX_SITE_STATE_HOSTS }, (_, i) => `h${String(i).padStart(2, '0')}.test`),
+    };
+    expect(siteScopeToggle(full, 'zz.test', true).blocked).toBe('capReached');
+    expect(siteScopeToggle(DEFAULT_SITE_STATE, 'fat.test', true).blocked).toBeNull();
+    expect(siteScopeToggle(DEFAULT_SITE_STATE, 'fat.test', false).blocked).toBeNull();
   });
 
   it('换档意图不丢名单：site-off 与 site-only 之间由 mode 表达，withHostActive 不改 mode', () => {
@@ -278,11 +307,20 @@ describe('接线 — 两条通道、导出隔离与「谁都不许自己判」',
     expect(mainInterceptor).not.toContain('site_proxy_state');
   });
 
-  it('两处界面都只经 `withHostActive` / `withoutHost` 改名单，不直接摆数组', () => {
-    expect(popup.match(/withHostActive\(/g)).toHaveLength(1);
+  it('两处界面都只经 `siteScopeToggle` / `withoutHost` 改名单，不直接摆数组', () => {
+    expect(popup.match(/siteScopeToggle\(/g)).toHaveLength(1);
+    expect(popup).not.toContain('withHostActive(');
     expect(popup).not.toContain('hosts: [');
     expect(settings.match(/withoutHost\(/g)).toHaveLength(1);
     expect(settings).not.toMatch(/hosts:\s*siteState\.value\.hosts\.(push|splice)/);
+  });
+
+  it('两种拒绝各说一句，且界面自己不再判「为什么没改成」', () => {
+    expect(popup).toContain("blocked === 'capReached'");
+    expect(popup).toContain("t('siteScopeCapReached'");
+    expect(popup).toContain("t('siteScopeParentCovered')");
+    // 上限这个数只在判据那一侧存在过：界面读的是常量，不是文案里的字面量
+    expect(popup).toContain('String(MAX_SITE_STATE_HOSTS)');
   });
 
   it('每次重算命中预览都先归零，不让上一条规则冒充这一页的新答案', () => {
@@ -304,5 +342,33 @@ describe('接线 — 两条通道、导出隔离与「谁都不许自己判」',
     expect(popup).toContain(':disabled="hostProxied === null || siteScopeBusy"');
     expect(popup).toContain("t('siteScopeUnreadable')");
     expect(settings).toContain("t('siteScopeUnreadable')");
+  });
+
+  it('「还在路上」是第三档，排在「读不到」之前，两侧各一份', () => {
+    // 次序承重：只写 hostProxied === null 的话，首帧那一次往返会被说成「读不到」
+    const popupNotes = popup.slice(popup.indexOf('v-if="siteScopeReading"'), popup.indexOf("t('siteScopeBoundary')"));
+    expect(popupNotes).toContain("t('siteScopeReading')");
+    expect(popupNotes).toContain('v-else-if="hostProxied === null"');
+    expect(popup).toContain('const siteScopeFirstReadSettled = ref(false);');
+    // 落定标志必须排在 finally：只写在成功分支的话，第一次就失败的那一局会永远挂着「正在读取」
+    const fetch = popup.slice(
+      popup.indexOf('async function fetchSiteState'),
+      popup.indexOf('async function applyHostProxied'),
+    );
+    expect(fetch).toContain('finally {');
+    expect(fetch.indexOf('siteScopeFirstReadSettled.value = true;')).toBeGreaterThan(fetch.indexOf('catch (error)'));
+    // 设置页同理：初值必须是「在读」，否则那一节打开就说「没读到」
+    expect(settings).toContain('const siteScopeReading = ref(true);');
+    expect(settings.match(/siteScopeReading\.value = false/g)).toHaveLength(2);
+    expect(settings).toContain('v-else-if="siteScopeUnreadable"');
+  });
+
+  it('命中预览不许对着一台已停用的站点承诺改写', () => {
+    expect(popup).toContain('const pageHitSiteBlocked = computed(');
+    expect(popup).toContain('!siteAllows(siteState.value, pageHost.value)');
+    expect(popup).toContain('pageHitRewritten !== pageUrl && !pageHitSiteBlocked');
+    expect(popup).toContain("t('pageHitSiteBlocked')");
+    // 读不到名单时不判（null 不是「已停用」），那一格自会说「没读到」
+    expect(popup).toContain('siteState.value !== null && !siteAllows');
   });
 });

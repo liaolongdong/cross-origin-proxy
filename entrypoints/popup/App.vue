@@ -229,7 +229,13 @@
         />
       </div>
       <p
-        v-if="hostProxied === null"
+        v-if="siteScopeReading"
+        class="site-scope-note"
+      >
+        {{ t('siteScopeReading') }}
+      </p>
+      <p
+        v-else-if="hostProxied === null"
         class="site-scope-note"
       >
         {{ t('siteScopeUnreadable') }}
@@ -286,11 +292,17 @@
           >
         </div>
         <div
-          v-if="pageHitRewritten && pageHitRewritten !== pageUrl"
+          v-if="pageHitRewritten && pageHitRewritten !== pageUrl && !pageHitSiteBlocked"
           class="page-hit-row"
         >
           <span class="page-hit-label">{{ t('pageHitRewritten') }}</span>
           <code class="page-hit-rewritten">{{ truncateUrl(pageHitRewritten, 44) }}</code>
+        </div>
+        <div
+          v-if="pageHitSiteBlocked"
+          class="page-hit-off"
+        >
+          {{ t('pageHitSiteBlocked') }}
         </div>
         <div
           v-if="!enabled && statusEverRead"
@@ -646,7 +658,8 @@ import { probeCorsSuspects, probePageApiOrigins } from '@/utils/pageApiProbe';
 import { buildPickerRows, type ApiPickerRow, type CorsSuspect } from '@/utils/corsSuspects';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import { diagnoseRequest, type Diagnosis, type DiagnosisCode } from '@/utils/diagnosis';
-import { sanitizeSiteState, siteAllows, withHostActive, hostnameOf } from '@/utils/siteScope';
+import { sanitizeSiteState, siteAllows, siteScopeToggle, hostnameOf } from '@/utils/siteScope';
+import { MAX_SITE_STATE_HOSTS } from '@/utils/constants';
 import type { SiteState } from '@/utils/types';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
@@ -935,20 +948,43 @@ async function fetchTabInterceptorStats(tabId: number | undefined) {
 
 // ─── 站点维度的生效范围（这一台站点要不要走代理） ─────────────────────────────
 /**
- * 判据不在这一侧：`utils/siteScope.ts` 的 `withHostActive` 才决定「打开开关」在两种模式下
+ * 判据不在这一侧：`utils/siteScope.ts` 的 `siteScopeToggle` 才决定「打开开关」在两种模式下
  * 各写成什么状态。界面只说结果——「这一台站点走不走代理」——因为名单在 `site-off` 与
  * `site-only` 里含义相反，把「往名单里加一台」直接画成开关就会在换档时说反话。
  *
  * `siteState` 为 null 表示「这次没读到」。那一档不许画成「全部站点都在生效」的确认语气，
  * 也不许把开关当成「已关闭」——开关读不到就是读不到（与 `statusEverRead` 同一族规矩）。
+ * 而「这一次还在路上」是第三档，与「读不到」也与「没有」都不同：首帧就交出一句「没读到」
+ * 等于在往返完成之前先下结论（与规则表骨架同一件事）。
  */
 const siteState = ref<SiteState | null>(null);
+/** 第一次往返有没有落定（成功或失败都算）：它只回答「那一格还没问过」，不参与其余判定 */
+const siteScopeFirstReadSettled = ref(false);
 const siteScopeBusy = ref(false);
 const pageHost = ref('');
 
 /** 这台主机当前是否走代理（读不到状态时为 null，界面据此禁用开关） */
 const hostProxied = computed<boolean | null>(() =>
   siteState.value === null ? null : siteAllows(siteState.value, pageHost.value),
+);
+
+/**
+ * 「这一次还在路上」——只在第一次落定之前出现。
+ * 判据必须是「落定过没有」而不是「读到过没有」：只写后者的话，第一次就失败的那一局会永远挂着
+ * 「正在读取」把失败吞掉（与规则表骨架排在读失败之后是同一个错）。
+ */
+const siteScopeReading = computed(() => !siteScopeFirstReadSettled.value);
+
+/**
+ * 这一台站点被名单排除在外 → 命中预览不许承诺改写
+ *
+ * 弹窗是扩展页，拿到的刻意是**完整**配置（收窄只发生在下发给内容脚本之前），所以这里按
+ * `siteAllows` 自己判一次：不加这一格，卡片会指着一条规则说「命中 · 网络层 · 改写为 X」，
+ * 而两条通道在这一台站点上都不动它——那是本仓最不该出现的那类假承诺。
+ * 读不到名单时保持原样（`null` 不是「已停用」），上面那一格自会说「没读到」。
+ */
+const pageHitSiteBlocked = computed(
+  () => !!pageHost.value && siteState.value !== null && !siteAllows(siteState.value, pageHost.value),
 );
 
 function isSiteStateResponse(value: unknown): value is SiteState {
@@ -966,15 +1002,19 @@ async function fetchSiteState() {
   } catch (error) {
     logger.debug('Fetch site state failed:', error);
     siteState.value = null;
+  } finally {
+    siteScopeFirstReadSettled.value = true;
   }
 }
 
 async function applyHostProxied(value: boolean) {
   if (!pageHost.value || !siteState.value || siteScopeBusy.value) return;
   const current = siteState.value;
-  const next = withHostActive(current, pageHost.value, value);
-  if (siteAllows(next, pageHost.value) !== value) {
-    ElMessage.warning(t('siteScopeParentCovered'));
+  const { state: next, blocked } = siteScopeToggle(current, pageHost.value, value);
+  if (blocked) {
+    ElMessage.warning(
+      blocked === 'capReached' ? t('siteScopeCapReached', String(MAX_SITE_STATE_HOSTS)) : t('siteScopeParentCovered'),
+    );
     return;
   }
   if (

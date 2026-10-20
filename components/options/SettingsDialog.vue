@@ -219,7 +219,13 @@
       <div class="setting-section">
         <div class="setting-label">{{ t('siteScopeManageTitle') }}</div>
         <p
-          v-if="siteScopeUnreadable"
+          v-if="siteScopeReading"
+          class="site-scope-empty"
+        >
+          {{ t('siteScopeReading') }}
+        </p>
+        <p
+          v-else-if="siteScopeUnreadable"
           class="site-scope-warning"
         >
           {{ t('siteScopeUnreadable') }}
@@ -633,6 +639,8 @@ async function commitVariables(): Promise<boolean> {
  */
 const siteState = ref<SiteState>({ ...DEFAULT_SITE_STATE });
 const siteScopeUnreadable = ref(true);
+/** 第一次读取还在路上：那一档既不是「读不到」也不是「没有站点」，界面不许先交结论 */
+const siteScopeReading = ref(true);
 const siteScopeBusy = ref(false);
 
 function isSiteStateResponse(value: unknown): value is SiteState {
@@ -646,6 +654,7 @@ function isSiteStateResponse(value: unknown): value is SiteState {
 async function loadSiteScope() {
   try {
     const state: unknown = await chrome.runtime.sendMessage({ type: MessageType.GET_SITE_STATE });
+    siteScopeReading.value = false;
     if (!isSiteStateResponse(state)) {
       siteScopeUnreadable.value = true;
       return;
@@ -653,6 +662,7 @@ async function loadSiteScope() {
     siteState.value = sanitizeSiteState(state);
     siteScopeUnreadable.value = false;
   } catch {
+    siteScopeReading.value = false;
     siteScopeUnreadable.value = true;
   }
 }

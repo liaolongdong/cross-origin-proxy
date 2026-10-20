@@ -122,6 +122,15 @@ export function rulesForSite<T>(rules: T[], state: SiteState, hostname: string):
   return [];
 }
 
+/** 这次意图翻译不成新状态时的那一句原因 */
+export type SiteScopeBlock = 'parentCovered' | 'capReached';
+
+export interface SiteScopeToggle {
+  state: SiteState;
+  /** `null` = 这次意图被如实翻译了（或本来就已满足）；非空 = 返回值不变，界面不许按下假开关 */
+  blocked: SiteScopeBlock | null;
+}
+
 /**
  * 把「这台主机要不要走代理」这一句意图翻译成新的状态（弹窗那颗开关的唯一写法）
  *
@@ -129,35 +138,48 @@ export function rulesForSite<T>(rules: T[], state: SiteState, hostname: string):
  * 「白名单」）。界面说的是结果——「这一台站点走不走代理」——所以翻译必须由判据这一侧做，
  * 否则同一句「打开开关」在两种模式下会给出相反的结果，而界面只画了一个开关。
  *
- * 父域条目会覆盖整棵子域树，而这份模型没有「例外子域」表达能力。调用方必须比较新旧
- * `siteAllows()` 的结果：返回值不变意味着这次意图无法被如实翻译，界面不能替用户按下一次假开关。
+ * 两种「翻译不出来」各自点名（调用方按原因说不同的话）：
+ * - `parentCovered`：父域条目覆盖整棵子域树，而这份模型没有「例外子域」的表达能力；
+ * - `capReached`：名单已到 `MAX_SITE_STATE_HOSTS`。这里必须是**拒绝**而不是截断——
+ *   排序后 `slice` 掉的是字母序最后那一台，等于用户关掉 A 站点，却把毫不相干的 B 站点
+ *   从名单里挤出去，另一台站点的代理当场分叉且无人知情。
  *
  * 不改入参；`mode` 在用户没有明确换档意图时保持不变，包括从 `all` 变出去的那一步。
  */
-export function withHostActive(state: SiteState, host: unknown, active: boolean): SiteState {
+export function siteScopeToggle(state: SiteState, host: unknown, active: boolean): SiteScopeToggle {
   const normalized = normalizeHost(host);
-  if (!normalized) return sanitizeSiteState(state);
+  if (!normalized) return { state: sanitizeSiteState(state), blocked: null };
   const current = sanitizeSiteState(state);
   if (current.mode === 'all') {
-    return active ? current : { mode: 'site-off', hosts: [normalized] };
+    return active
+      ? { state: current, blocked: null }
+      : { state: { mode: 'site-off', hosts: [normalized] }, blocked: null };
   }
-  if (siteAllows(current, normalized) === active) return current;
+  if (siteAllows(current, normalized) === active) return { state: current, blocked: null };
 
   const covering = current.hosts.filter(entry => hostMatches(entry, normalized));
-  const canExpressByExactEdit = covering.length === 0 || (covering.length === 1 && covering[0] === normalized);
-  if (!canExpressByExactEdit) return current;
+  if (!(covering.length === 0 || (covering.length === 1 && covering[0] === normalized))) {
+    return { state: current, blocked: 'parentCovered' };
+  }
+  const adding = !current.hosts.includes(normalized);
+  if (adding && current.hosts.length >= MAX_SITE_STATE_HOSTS) {
+    return { state: current, blocked: 'capReached' };
+  }
 
   if (current.mode === 'site-off') {
     const hosts = active ? current.hosts.filter(entry => entry !== normalized) : [...current.hosts, normalized].sort();
-    return hosts.length === 0
-      ? { mode: 'all', hosts: [] }
-      : { mode: 'site-off', hosts: hosts.slice(0, MAX_SITE_STATE_HOSTS) };
+    return {
+      state: hosts.length === 0 ? { mode: 'all', hosts: [] } : { mode: 'site-off', hosts },
+      blocked: null,
+    };
   }
 
   const hosts = active ? [...current.hosts, normalized].sort() : current.hosts.filter(entry => entry !== normalized);
-  return hosts.length === 0
-    ? { mode: 'all', hosts: [] }
-    : { mode: 'site-only', hosts: hosts.slice(0, MAX_SITE_STATE_HOSTS) };
+  return { state: hosts.length === 0 ? { mode: 'all', hosts: [] } : { mode: 'site-only', hosts }, blocked: null };
+}
+
+export function withHostActive(state: SiteState, host: unknown, active: boolean): SiteState {
+  return siteScopeToggle(state, host, active).state;
 }
 
 /** 从名单里删掉一台（设置页那颗删除）。删空时回到 `all`——留一个空的白名单不是任何人的意图 */

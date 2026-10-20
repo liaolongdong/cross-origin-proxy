@@ -82,7 +82,13 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
   };
 }
 
-/** 从 HAR 条目里收集去重后的 http(s) 来源，供导入前的多来源确认使用 */
+/**
+ * 从 HAR 条目里收集去重后的 http(s) 来源，供导入前的多来源确认使用
+ *
+ * 只数 http(s)：`apiOriginOf` 就是「什么算一个环境」的那份判据，而目标环境按它定义——
+ * 长连接条目压根不会被它搬走（见 `harEntriesToRules` 里 `isWebSocket` 那一支），
+ * 把它算进确认文案等于问了一件不发生的事。
+ */
 export function distinctHarOrigins(entries: readonly HarEntry[]): string[] {
   const origins = new Set<string>();
   for (const entry of entries) {
@@ -132,6 +138,12 @@ export function harEntriesToRules(
       const origin = url.origin;
       if (!origin || origin === 'null') continue;
 
+      // 「目标环境」这一格按 `apiOriginOf` 定义，只能是 http(s) 的源；把 wss 握手改写到
+      // `https://…` 上不是换环境，是把这条规则变成永远连不上（`new WebSocket('https://…')`
+      // 当场被判成非法地址）。所以长连接条目一律留在自己的 origin 上，要跨 ws 环境去表单里改。
+      const isWebSocket = url.protocol === 'ws:' || url.protocol === 'wss:';
+      const target = isWebSocket ? origin : targetOrigin || origin;
+
       // 去重登记必须挨着 `rules.push`：此前它排在头清洗之前，一条头形状坏掉的条目
       // 自己没成为规则，却已经把这个 origin 占住，同 origin 后面那条完好的跟着一起丢。
       if (seenOrigins.has(origin)) continue;
@@ -150,9 +162,10 @@ export function harEntriesToRules(
       const rule: ProxyRule = {
         id: generateId(),
         name: `Imported: ${url.hostname}`,
-        enabled,
+        // 换环境没换到它的那条（长连接）不跟着启用：一条自映射的活动规则不是任何人的意图
+        enabled: isWebSocket ? false : enabled,
         matchPattern: `${origin}/*`,
-        targetUrl: targetOrigin || origin,
+        targetUrl: target,
         matchType: 'wildcard',
         priority: 100,
         createdAt: now,

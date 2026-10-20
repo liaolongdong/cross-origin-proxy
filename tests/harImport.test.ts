@@ -33,7 +33,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
+import { distinctHarOrigins, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
 import { MAX_HAR_IMPORT_ENTRIES } from '@/utils/constants';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import type { HarEntry } from '@/utils/types';
@@ -192,6 +192,31 @@ describe('harEntriesToRules — HAR 条目转代理规则', () => {
 
     const [ws] = harEntriesToRules([entry('wss://a.com/socket')] as HarEntry[]);
     expect(ws.matchPattern).toBe('wss://a.com/*');
+  });
+
+  /**
+   * 「目标环境」按 `apiOriginOf` 定义，只能是 http(s) 的源，所以它换不动长连接那一档。
+   * 把 `wss://a.com/*` 指向 `https://uat…` 不是跨环境，是把这条规则变成连不上：
+   * `new WebSocket('https://…')` 在页面侧当场被判非法地址，用户看到的症状是「装了扩展之后
+   * 这个页面 WebSocket 全坏」，而日志里一句代理记录都不会有（长连接不走 SW 代发）。
+   */
+  it('目标环境不改写也不启用长连接条目：wss → https 是一条连不上的规则', () => {
+    const rules = harEntriesToRules([entry('wss://socket.a.com/live'), entry('https://api.a.com/x')] as HarEntry[], {
+      targetOrigin: 'https://uat.example.com',
+      enabled: true,
+    });
+    const ws = rules.find(r => r.matchPattern.startsWith('wss://'))!;
+    const http = rules.find(r => r.matchPattern.startsWith('https://api.a.com'))!;
+
+    expect(ws.targetUrl, '长连接留在自己的 origin 上').toBe('wss://socket.a.com');
+    expect(ws.enabled, '换环境没换到它，就不该跟着被启用成一条自映射的活动规则').toBe(false);
+    expect(http.targetUrl).toBe('https://uat.example.com');
+    expect(http.enabled).toBe(true);
+
+    // 确认文案问的就是「会被搬走的那些来源」，所以它必须与这里的选址同一份口径
+    expect(distinctHarOrigins([entry('wss://socket.a.com/live'), entry('https://api.a.com/x')] as HarEntry[])).toEqual([
+      'https://api.a.com',
+    ]);
   });
 
   /**

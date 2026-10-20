@@ -53,6 +53,7 @@
   "pageHitChannelSw": "SW",
   "pageHitRewritten": "Rewrites to",
   "pageHitProxyOff": "Proxy is off, rule not active",
+  "pageHitSiteBlocked": "Proxying is disabled for this site, so this rewrite won't happen",
   "pageHitNoMatch": "This page's address isn't proxied (rules usually match API hosts, not the page URL)",
   "pageHitOpenUrlTest": "Check with the URL match tester",
   "metricDnrTab": "This tab · 5 min",
@@ -73,9 +74,11 @@
   "requestFailed": "Failed",
   "siteScopeTitle": "Proxy on this site",
   "siteScopeBoundary": "Matched by host: subdomains are included, and scheme or port does not make a second site.",
+  "siteScopeReading": "Reading the site list…",
   "siteScopeUnreadable": "Couldn't read the site switch this time — leaving it as is.",
   "siteScopeEnabledHere": "This site is proxied again",
   "siteScopeDisabledHere": "Proxy disabled for this site (subdomains included)",
   "siteScopeParentCovered": "A parent domain in the list also covers this host, so it cannot be switched separately. Adjust the parent domain in Settings.",
+  "siteScopeCapReached": "The site list is full at $1 entries, so this host can't be added. Remove one in Settings and try again.",
   "siteScopeSaveFailed": "Could not save the site setting — try again"
 }
