@@ -40,7 +40,7 @@
           :on-remove="handleFileRemove"
           style="margin-bottom: 16px"
         >
-          <el-button type="primary">
+          <el-button>
             <el-icon><Upload /></el-icon>
             {{ t('selectFile') }}
           </el-button>
@@ -93,7 +93,7 @@
             {{ t('importPreviewButton') }}
           </el-button>
           <el-button
-            type="success"
+            type="primary"
             :loading="importing"
             :disabled="!canImport"
             @click="handleImport"
@@ -118,7 +118,7 @@
           :placeholder="t('importCurlPlaceholder')"
         />
         <el-button
-          type="success"
+          type="primary"
           :disabled="!curlInput.trim() || busy"
           class="section-action"
           @click="handleImportCurl"
@@ -137,7 +137,7 @@
           {{ sanitizeExport ? t('exportHarRedacted') : t('exportHarFull') }}
         </p>
         <el-button
-          type="warning"
+          type="primary"
           :loading="harExporting"
           @click="handleExportHar"
         >
@@ -160,7 +160,7 @@
           :on-change="handleHarFileChange"
           :on-remove="handleHarFileRemove"
         >
-          <el-button type="warning">
+          <el-button>
             <el-icon><Upload /></el-icon>
             {{ t('importHar') }}
           </el-button>
@@ -213,7 +213,7 @@
         </p>
         <el-button
           v-if="harFileContent"
-          type="success"
+          type="primary"
           :loading="harImporting || busy"
           :disabled="busy"
           class="section-action"
@@ -237,7 +237,7 @@
           :on-change="handleOpenApiFileChange"
           :on-remove="handleOpenApiFileRemove"
         >
-          <el-button type="warning">
+          <el-button>
             <el-icon><Upload /></el-icon>
             {{ t('importOpenApiPick') }}
           </el-button>
@@ -276,7 +276,7 @@
         </el-checkbox>
         <el-button
           v-if="openApiFileContent"
-          type="success"
+          type="primary"
           :loading="openApiImporting || busy"
           :disabled="busy"
           class="section-action"

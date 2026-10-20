@@ -362,8 +362,10 @@ describe('[popup] 只在说得出这件事时说话', () => {
    */
   const popupFlat = popupSrc.replace(/\s+/g, ' ');
 
-  function sliceFlat(anchor: string, closer: string): string {
-    const start = popupFlat.indexOf(anchor);
+  function sliceFlat(anchor: string, closer: string, after = ''): string {
+    const base = after ? popupFlat.indexOf(after) : 0;
+    expect(base, `popup 模板里找不到起点锚：${after}`).toBeGreaterThanOrEqual(0);
+    const start = popupFlat.indexOf(anchor, base);
     expect(start, `popup 模板里找不到锚点：${anchor}`).toBeGreaterThan(-1);
     const end = popupFlat.indexOf(closer, start);
     expect(end).toBeGreaterThan(start);
@@ -395,10 +397,12 @@ describe('[popup] 只在说得出这件事时说话', () => {
     expect(cell).toContain('api-picker-count--suspect');
     expect(cell).toContain("t('apiPickerSuspect', String(row.suspect))");
     expect(cell).toContain("t('apiPickerSuspectHint', String(row.suspect))");
-    // 没标记的那一格必须还是原来那句「N 次」：这一格讲什么只由有没有标记决定
-    expect(sliceFlat('<span v-else class="api-picker-count"', '</span>')).toContain(
-      "t('apiPickerCount', String(row.count))",
-    );
+    // 没标记的那一格必须还是原来那句「N 次」：这一格讲什么只由有没有标记决定。
+    // 起点锚指到候选面板 itself——快照面板用的是同一个 `api-picker-count` 类名与同一条 `v-else`，
+    // 而两块面板的先后次序属界面布局、不由这条判据承重（弹窗动作区重排那天就是它先红的）。
+    expect(
+      sliceFlat('<span v-else class="api-picker-count"', '</span>', '<div v-if="apiPicker" class="api-picker"'),
+    ).toContain("t('apiPickerCount', String(row.count))");
     // 整行的可点语义没被顺手改掉：点的仍是这一行的来源
     expect(popupFlat).toContain(`:class="{ 'api-picker-row--suspect': row.suspect > 0 }"`);
     expect(popupFlat).toContain('@click="chooseApiDraft(row.origin)"');

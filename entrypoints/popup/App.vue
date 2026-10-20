@@ -338,18 +338,98 @@
         class="action-card"
         role="button"
         tabindex="0"
-        @click="openOptionsPage('#add-rule')"
-        @keydown.enter.space.prevent="openOptionsPage('#add-rule')"
+        :aria-expanded="profilePicker ? 'true' : 'false'"
+        @click="handleProfilesCard"
+        @keydown.enter.space.prevent="handleProfilesCard"
       >
         <div class="action-card__icon action-card__icon--primary">
-          <el-icon><Setting /></el-icon>
+          <el-icon><Collection /></el-icon>
         </div>
         <div class="action-card__content">
-          <div class="action-card__title">{{ t('actionOpenConfig') }}</div>
-          <div class="action-card__desc">{{ t('actionOpenConfigDesc') }}</div>
+          <div class="action-card__title">{{ t('actionProfiles') }}</div>
+          <div class="action-card__desc">{{ t('actionProfilesDesc') }}</div>
         </div>
       </div>
 
+      <!--
+        环境快照面板：切环境是这个扩展最勤的动作，不值得为它开一次标签页。
+        复用「这一页在调谁」那套面板样式与真按钮行——同一层交互不该有两种键盘路径。
+        确认这一步做在面板里而不是 `ElMessageBox`：弹窗模块一旦进 popup 首屏就是白涨的体积，
+        而这里要的只是「把后果说清楚 + 再点一下」。措辞必须点名两件副作用（整套替换、总开关被打开），
+        这是 `utils/storage.ts` 的 `loadProfile` 既有语义，本轮刻意不改。
+      -->
+      <div
+        v-if="profilePicker"
+        class="api-picker"
+        role="group"
+        :aria-label="t('profilePickerTitle')"
+      >
+        <p class="api-picker-title">{{ t('profilePickerTitle') }}</p>
+        <template
+          v-for="profile in profiles"
+          :key="profile.id"
+        >
+          <button
+            type="button"
+            class="api-picker-row"
+            :class="{ 'is-pending': pendingProfileId === profile.id }"
+            :aria-expanded="pendingProfileId === profile.id ? 'true' : 'false'"
+            :disabled="switchingProfile || profile.damaged"
+            :title="profile.damaged ? t('profilePickerDamaged') : undefined"
+            @click="chooseProfile(profile.id)"
+          >
+            <span
+              class="api-picker-origin"
+              :title="profile.name"
+              >{{ profile.name }}</span
+            >
+            <span
+              v-if="profile.damaged"
+              class="api-picker-count api-picker-count--damaged"
+              >{{ t('profilePickerDamaged') }}</span
+            >
+            <span
+              v-else
+              class="api-picker-count"
+              >{{ t('profilePickerRuleCount', String(profile.ruleCount ?? 0)) }}</span
+            >
+          </button>
+          <div
+            v-if="pendingProfileId === profile.id"
+            class="profile-confirm"
+          >
+            <p class="profile-confirm-text">
+              {{ t('profilePickerConfirm', [profile.name, profile.ruleCount ?? 0]) }}
+            </p>
+            <!-- 次序与 options 的弹窗 footer 同一条：取消在左、主行动在最右 -->
+            <div class="profile-confirm-actions">
+              <button
+                type="button"
+                class="profile-confirm-btn"
+                :disabled="switchingProfile"
+                @click="pendingProfileId = ''"
+              >
+                {{ t('cancel') }}
+              </button>
+              <button
+                type="button"
+                class="profile-confirm-btn profile-confirm-btn--apply"
+                :disabled="switchingProfile"
+                @click="applyProfile(profile)"
+              >
+                {{ switchingProfile ? t('profilePickerApplying') : t('profilePickerApply') }}
+              </button>
+            </div>
+          </div>
+        </template>
+        <button
+          type="button"
+          class="api-picker-row api-picker-row--muted"
+          @click="openOptionsPage('#profiles')"
+        >
+          <span class="api-picker-origin">{{ t('profilePickerManage') }}</span>
+        </button>
+      </div>
       <div
         class="action-card"
         role="button"
@@ -358,7 +438,7 @@
         @click="handleCreateRuleFromTab"
         @keydown.enter.space.prevent="handleCreateRuleFromTab"
       >
-        <div class="action-card__icon action-card__icon--tint">
+        <div class="action-card__icon action-card__icon--accent">
           <el-icon><Plus /></el-icon>
         </div>
         <div class="action-card__content">
@@ -434,129 +514,49 @@
         class="action-card"
         role="button"
         tabindex="0"
+        @click="openOptionsPage()"
+        @keydown.enter.space.prevent="openOptionsPage()"
+      >
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><Operation /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionOpenConfig') }}</div>
+          <div class="action-card__desc">{{ t('actionOpenConfigDesc') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!--
+      次级动作行：日志、导入导出、设置都不该占一张满宽卡片的垂直空间，
+      而设置此前在弹窗里根本没有入口（语言、主题、自动关闭时长、站点名单、凭据变量都到不了）。
+      三颗一律 text 档、一律带图标、同一容器同一档位——与 options 顶栏的图标语义对齐。
+    -->
+    <div class="action-bar">
+      <button
+        type="button"
+        class="action-bar__btn"
         @click="openOptionsPage('#logs')"
-        @keydown.enter.space.prevent="openOptionsPage('#logs')"
       >
-        <div class="action-card__icon action-card__icon--accent">
-          <el-icon><Document /></el-icon>
-        </div>
-        <div class="action-card__content">
-          <div class="action-card__title">{{ t('actionViewLogs') }}</div>
-          <div class="action-card__desc">{{ t('actionViewLogsDesc') }}</div>
-        </div>
-      </div>
-
-      <div
-        class="action-card"
-        role="button"
-        tabindex="0"
+        <el-icon><Document /></el-icon>
+        <span>{{ t('actionViewLogs') }}</span>
+      </button>
+      <button
+        type="button"
+        class="action-bar__btn"
         @click="openOptionsPage('#import-export')"
-        @keydown.enter.space.prevent="openOptionsPage('#import-export')"
       >
-        <div class="action-card__icon action-card__icon--tint">
-          <el-icon><FolderOpened /></el-icon>
-        </div>
-        <div class="action-card__content">
-          <div class="action-card__title">{{ t('actionImportExport') }}</div>
-          <div class="action-card__desc">{{ t('actionImportExportDesc') }}</div>
-        </div>
-      </div>
-
-      <div
-        class="action-card"
-        role="button"
-        tabindex="0"
-        :aria-expanded="profilePicker ? 'true' : 'false'"
-        @click="handleProfilesCard"
-        @keydown.enter.space.prevent="handleProfilesCard"
+        <el-icon><FolderOpened /></el-icon>
+        <span>{{ t('actionImportExport') }}</span>
+      </button>
+      <button
+        type="button"
+        class="action-bar__btn"
+        @click="openOptionsPage('#settings')"
       >
-        <div class="action-card__icon action-card__icon--tint">
-          <el-icon><Collection /></el-icon>
-        </div>
-        <div class="action-card__content">
-          <div class="action-card__title">{{ t('actionProfiles') }}</div>
-          <div class="action-card__desc">{{ t('actionProfilesDesc') }}</div>
-        </div>
-      </div>
-
-      <!--
-        环境快照面板：切环境是这个扩展最勤的动作，不值得为它开一次标签页。
-        复用「这一页在调谁」那套面板样式与真按钮行——同一层交互不该有两种键盘路径。
-        确认这一步做在面板里而不是 `ElMessageBox`：弹窗模块一旦进 popup 首屏就是白涨的体积，
-        而这里要的只是「把后果说清楚 + 再点一下」。措辞必须点名两件副作用（整套替换、总开关被打开），
-        这是 `utils/storage.ts` 的 `loadProfile` 既有语义，本轮刻意不改。
-      -->
-      <div
-        v-if="profilePicker"
-        class="api-picker"
-        role="group"
-        :aria-label="t('profilePickerTitle')"
-      >
-        <p class="api-picker-title">{{ t('profilePickerTitle') }}</p>
-        <template
-          v-for="profile in profiles"
-          :key="profile.id"
-        >
-          <button
-            type="button"
-            class="api-picker-row"
-            :class="{ 'is-pending': pendingProfileId === profile.id }"
-            :aria-expanded="pendingProfileId === profile.id ? 'true' : 'false'"
-            :disabled="switchingProfile || profile.damaged"
-            :title="profile.damaged ? t('profilePickerDamaged') : undefined"
-            @click="chooseProfile(profile.id)"
-          >
-            <span
-              class="api-picker-origin"
-              :title="profile.name"
-              >{{ profile.name }}</span
-            >
-            <span
-              v-if="profile.damaged"
-              class="api-picker-count api-picker-count--damaged"
-              >{{ t('profilePickerDamaged') }}</span
-            >
-            <span
-              v-else
-              class="api-picker-count"
-              >{{ t('profilePickerRuleCount', String(profile.ruleCount ?? 0)) }}</span
-            >
-          </button>
-          <div
-            v-if="pendingProfileId === profile.id"
-            class="profile-confirm"
-          >
-            <p class="profile-confirm-text">
-              {{ t('profilePickerConfirm', [profile.name, profile.ruleCount ?? 0]) }}
-            </p>
-            <div class="profile-confirm-actions">
-              <button
-                type="button"
-                class="profile-confirm-btn profile-confirm-btn--apply"
-                :disabled="switchingProfile"
-                @click="applyProfile(profile)"
-              >
-                {{ switchingProfile ? t('profilePickerApplying') : t('profilePickerApply') }}
-              </button>
-              <button
-                type="button"
-                class="profile-confirm-btn"
-                :disabled="switchingProfile"
-                @click="pendingProfileId = ''"
-              >
-                {{ t('cancel') }}
-              </button>
-            </div>
-          </div>
-        </template>
-        <button
-          type="button"
-          class="api-picker-row api-picker-row--muted"
-          @click="openOptionsPage('#profiles')"
-        >
-          <span class="api-picker-origin">{{ t('profilePickerManage') }}</span>
-        </button>
-      </div>
+        <el-icon><Setting /></el-icon>
+        <span>{{ t('actionSettings') }}</span>
+      </button>
     </div>
 
     <!-- 最近请求 -->
@@ -646,6 +646,7 @@ import {
   ArrowDown,
   Timer,
   Plus,
+  Operation,
   Link,
 } from '@element-plus/icons-vue';
 import type { TagProps } from 'element-plus';
@@ -680,8 +681,11 @@ import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@
 /**
  * Popup 弹窗（动作卡片风格，参照 account-password-helper）
  *
- * 结构：头部 → 开关状态行 → 数据点 → 动作卡片（直达不同目标）→ 最近请求列表。
- * 动作卡片通过 URL hash 直达 Options 的对应弹窗/抽屉，并支持按当前标签页地址预填新规则。
+ * 结构：头部 → 开关状态行 → 数据点 → 三张主卡（按使用频率排）→ 次级动作一行 → 最近请求列表。
+ * 主卡要么就地展开面板（环境配置、为当前页创建规则），要么直达 Options 的规则列表；
+ * 次级那一行（请求日志 / 导入导出 / 设置）经 URL hash 直达 Options 的对应弹窗或抽屉。
+ * 卡片与次级行都排在诊断三块（数据点 / 站点范围 / 本页命中）之后——「这一页有没有生效」
+ * 是这个弹窗的存在理由，不为按钮上移而挪它。
  */
 const { t } = useI18n();
 const { diagnosisText } = useDiagnosisText();
@@ -1501,6 +1505,7 @@ async function openOptionsPage(hash = '') {
 
 .auto-off-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1508,9 +1513,12 @@ async function openOptionsPage(hash = '') {
   五格等宽：内容宽 320px 减去这一行左右的 14px 内边距与四段 6px 间隙，
   中英文最长的「4小时 / 4h」都放得下（2026-09-30 用一次性探针在 320px 下逐个量过，见交付说明）。
   选中态不只靠颜色：字重与边框同时变，`aria-pressed` 再说给读屏。
+  `min-width` + `flex-wrap` 是兜底：文案本身不可收缩，将来任一语种出现更长的档位词，
+  这一格要么折行、要么把相邻那格挤到读不清——没有第三种。
 */
 .auto-off-chip {
-  flex: 1;
+  flex: 1 0 auto;
+  min-width: 52px;
   padding: 4px 0;
   font-family: inherit;
   font-size: 11px;
@@ -1923,7 +1931,7 @@ async function openOptionsPage(hash = '') {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .action-card {
@@ -2006,6 +2014,59 @@ async function openOptionsPage(hash = '') {
   font-size: 12px;
   line-height: 1.3;
   color: var(--cop-text-color-secondary);
+}
+
+/*
+  次级动作行：三件事都不该占一张满宽卡片的高度，但必须一眼数得出、点得到。
+  三格按内容分配剩余宽度并可折行（英文「Import / Export」比中文长 5 个字母），
+  图标按容器走——这一行三颗全带，与 options 顶栏那一组同一口径。
+  档位是 text（无边框、次要字色），悬浮与聚焦才长出底色与描边：
+  它们的视觉权重必须低于上面那三张卡，否则「哪个是主行动」又变成一次猜测。
+*/
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: stretch;
+  margin: 0 0 12px;
+}
+
+.action-bar__btn {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--cop-text-color-regular);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    background-color var(--cop-duration-instant) var(--cop-ease-standard),
+    border-color var(--cop-duration-instant) var(--cop-ease-standard);
+}
+
+.action-bar__btn :deep(.el-icon) {
+  font-size: 14px;
+}
+
+.action-bar__btn:hover {
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg);
+  border-color: var(--cop-primary-border);
+}
+
+.action-bar__btn:focus-visible {
+  color: var(--cop-primary);
+  outline: none;
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 25%);
 }
 
 /* 候选面板（「为当前页创建规则」点开后）：与动作卡同一套圆角与底色，
@@ -2143,6 +2204,7 @@ async function openOptionsPage(hash = '') {
 .profile-confirm-actions {
   display: flex;
   gap: 6px;
+  justify-content: flex-end;
   margin-top: 8px;
 }
 

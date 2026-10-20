@@ -399,41 +399,45 @@
                 :active-text="t('revealSensitive')"
                 :aria-label="t('revealSensitive')"
               />
+              <!--
+                这四颗是对同一笔日志的四个平行动作，没有主次之分：同容器同档位（`plain` + `small`、
+                一律带图标、一律不带 `type`）。此前它们是 success / warning / primary / 无型四种，
+                于是「哪个更危险」被读成「哪个是主行动」，而这里压根没有主行动。
+                图标走 `:icon` prop，不再用内联 `style="margin-right"` 手摆间距。
+              -->
               <el-button
                 size="small"
-                type="success"
                 plain
+                :icon="Plus"
                 @click="handleCreateRuleFromLog"
               >
-                <el-icon style="margin-right: 4px"><Plus /></el-icon>
                 {{ t('createRuleFromLog') }}
               </el-button>
               <!-- 只在判据说这一笔能变成 Mock 时出现；不能的那些在面板下面说清是哪一档 -->
               <el-button
                 v-if="mockDraft?.ok"
                 size="small"
-                type="warning"
                 plain
+                :icon="Document"
                 @click="handleCreateMockFromLog"
               >
-                <el-icon style="margin-right: 4px"><Document /></el-icon>
                 {{ t('mockFromLogButton') }}
               </el-button>
               <el-button
                 size="small"
-                type="primary"
                 plain
+                :icon="CopyDocument"
                 @click="copyAsCurl"
               >
                 {{ t('copyAsCurl') }}
               </el-button>
               <el-button
                 size="small"
+                plain
+                :icon="Close"
                 :aria-label="t('closeLogDetailA11y')"
                 @click="selectedLog = null"
-              >
-                <el-icon><Close /></el-icon>
-              </el-button>
+              />
             </div>
           </div>
 

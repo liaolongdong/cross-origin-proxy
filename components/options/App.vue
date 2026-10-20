@@ -505,6 +505,9 @@ function handleHashNavigation() {
     showProfiles.value = true;
   } else if (hash === '#url-test') {
     showUrlTest.value = true;
+  } else if (hash === '#settings') {
+    // popup 次级动作行的出口：语言、主题、自动关闭时长、站点名单、凭据变量此前在弹窗里到不了
+    showSettings.value = true;
   } else if (hash.startsWith('#add-rule-from-tab=')) {
     // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）
     handleCreateRuleFromUrl(decodeURIComponent(hash.slice('#add-rule-from-tab='.length)));
