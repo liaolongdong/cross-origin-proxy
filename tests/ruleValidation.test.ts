@@ -367,3 +367,31 @@ describe('同步契约 — 判据只有一份，取值集那几份并列清单�
     }
   });
 });
+
+/**
+ * `tags` 的类型闸门（值域归 `utils/ruleTags.ts`，见 tests/ruleTags.test.ts）
+ *
+ * 与 `methods` 同一条理由：表格那一列与筛选下拉直接对 `tags` 调 `.some()` / `.slice()`，
+ * 一条 `tags: "uat"` 的导入数据会让整张规则表在渲染时抛 TypeError——不是这一条失效，是整页白掉。
+ * 越界的**值**（超长、条数、非字符串项）不连坐整条规则：标签只是分类名，为它丢一条好规则是本末倒置。
+ */
+describe('tags 形状 — 类型闸门在结构判据，值域在导入清洗', () => {
+  it('「不是数组」才拒整条规则；数组里的非字符串项交给清洗（不连坐）', () => {
+    expect(isValidRuleShape(shape())).toBe(true);
+    expect(isValidRuleShape(shape({ tags: [] }))).toBe(true);
+    expect(isValidRuleShape(shape({ tags: ['uat', '结算'] }))).toBe(true);
+    expect(isValidRuleShape(shape({ tags: ['uat', 7] }))).toBe(true);
+    expect(isValidRuleShape(shape({ tags: 'uat' }))).toBe(false);
+    expect(isValidRuleShape(shape({ tags: null }))).toBe(false);
+    expect(isValidRuleShape(shape({ tags: { 0: 'uat' } }))).toBe(false);
+  });
+
+  it('导入侧把越界的值钳掉而不是丢整条规则，并把空数组收口成「没有这个字段」', () => {
+    const [clamped] = normalizeImportedRules([shape({ tags: ['a'.repeat(60), 7, '', 'uat', 'UAT'] })]);
+    expect(clamped.tags).toEqual(['a'.repeat(24), 'uat']);
+    const [noTags] = normalizeImportedRules([shape({ tags: [] })]);
+    expect('tags' in noTags).toBe(false);
+    const [untouched] = normalizeImportedRules([shape()]);
+    expect('tags' in untouched).toBe(false);
+  });
+});

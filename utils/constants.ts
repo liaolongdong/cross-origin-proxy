@@ -36,6 +36,15 @@ export const DEFAULT_PROXY_CONFIG: ProxyConfig = {
 export const MAX_LOG_ENTRIES = 500;
 export const MAX_RULES = 200;
 /**
+ * 规则标签的两道上限（标签是用户自己起的分类名，只服务筛选，不参与匹配与任何判定）。
+ *
+ * 取 10 / 24 的理由不是「省字节」：一屏筛选下拉里能一眼读完的标签就那么多，
+ * 再多的标签会让人开始数标签而不是看规则。清洗与钳制的判据只住在 `utils/ruleTags.ts` 一处。
+ */
+export const MAX_RULE_TAGS = 10;
+/** 单个标签的码点上限：按码点量而非 `.length`，否则一个 emoji（代理对）会被算成两个字符、截半时留下孤立代理位 */
+export const MAX_RULE_TAG_LENGTH = 24;
+/**
  * 单条日志正文（请求体/响应体）的字符上限，超出部分在写入前截断并留痕。
  *
  * 未设上限时，一条超大 JSON 响应（代理请求体上限本就是 10MB）就能把 `storage.local`

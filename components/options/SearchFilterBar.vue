@@ -52,6 +52,30 @@
       />
     </el-select>
 
+    <!-- 标签筛选：一条规则都没打过标签时整格不出现（空下拉只会让人觉得界面坏了） -->
+    <el-select
+      v-if="availableTags.length > 0"
+      :model-value="tagsFilter"
+      multiple
+      collapse-tags
+      collapse-tags-tooltip
+      clearable
+      class="tag-select"
+      :placeholder="t('filterTags')"
+      @update:model-value="$emit('update:tagsFilter', $event ?? [])"
+    >
+      <el-option
+        :label="t('filterTagsUntagged')"
+        :value="UNTAGGED"
+      />
+      <el-option
+        v-for="option in availableTags"
+        :key="option.tag"
+        :label="`${option.tag} (${option.count})`"
+        :value="option.tag"
+      />
+    </el-select>
+
     <!-- 有勾选时出现的批量操作 -->
     <template v-if="selectedCount > 0">
       <el-button
@@ -94,6 +118,7 @@
 import { ref, watch, onUnmounted } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
+import { UNTAGGED } from '@/utils/ruleTags';
 
 /**
  * 规则搜索筛选栏（白色圆角卡片）
@@ -107,6 +132,10 @@ const props = defineProps<{
   statusFilter: string;
   /** 匹配类型筛选：'' | 'wildcard' | 'prefix' | 'regex' */
   matchTypeFilter: string;
+  /** 标签筛选（多选，任一命中；含 UNTAGGED 哨兵表示「没打标签的」）。判据在 `utils/ruleTags.ts` */
+  tagsFilter: string[];
+  /** 现有规则用到的标签与各自条数，按用量降序（`collectRuleTags` 的产物） */
+  availableTags: { tag: string; count: number }[];
   /** 表格勾选数量（>0 时显示批量按钮） */
   selectedCount: number;
   /** 规则总数（>0 时显示全部启用/停用按钮） */
@@ -117,6 +146,7 @@ const emit = defineEmits<{
   'update:searchText': [value: string];
   'update:statusFilter': [value: string];
   'update:matchTypeFilter': [value: string];
+  'update:tagsFilter': [value: string[]];
   /** 批量启用/停用勾选规则 */
   batchToggle: [enabled: boolean];
   /** 批量删除勾选规则 */
@@ -187,6 +217,12 @@ onUnmounted(() => {
 .match-type-select {
   flex-shrink: 0;
   width: 130px;
+}
+
+/* 标签是多选、会挤成两枚 chip + 「+N」，比那两枚单选宽一点才不用悬停才知道筛了什么 */
+.tag-select {
+  flex-shrink: 0;
+  width: 176px;
 }
 
 @media (width <= 768px) {

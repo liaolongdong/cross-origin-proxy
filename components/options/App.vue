@@ -19,6 +19,8 @@
       v-model:search-text="searchText"
       v-model:status-filter="statusFilter"
       v-model:match-type-filter="matchTypeFilter"
+      v-model:tags-filter="tagsFilter"
+      :available-tags="availableTags"
       :selected-count="selectedRules.length"
       :total-rules="rules.length"
       @batch-toggle="handleBatchToggle"
@@ -75,6 +77,7 @@
       :initial-data="templateInitialData"
       :derived-draft="derivedDraft"
       :target-suggestions="targetSuggestions"
+      :tag-suggestions="tagNames"
       @save="handleSaveRule"
     />
     <ImportExportDialog
@@ -161,6 +164,7 @@ import {
 import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import { groupHitStatsByRule } from '@/utils/ruleStats';
+import { collectRuleTags, ruleMatchesTagFilter } from '@/utils/ruleTags';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
@@ -323,6 +327,8 @@ const highlightRuleId = ref<string | null>(null);
 const searchText = ref('');
 const statusFilter = ref('');
 const matchTypeFilter = ref('');
+/** 标签筛选（任一命中，多选）；判据只住 `utils/ruleTags.ts` */
+const tagsFilter = ref<string[]>([]);
 /** 表格上报的原始勾选（reserve-selection 下跨筛选、跨删除都会保留） */
 const tableSelection = ref<ProxyRule[]>([]);
 /** 计数与批量操作只认它：剔除已不存在的规则，并换回列表里的最新对象 */
@@ -353,9 +359,13 @@ const filteredRules = computed(() => {
       (statusFilter.value === 'enabled' && rule.enabled) ||
       (statusFilter.value === 'disabled' && !rule.enabled);
     const matchesMatchType = !matchTypeFilter.value || rule.matchType === matchTypeFilter.value;
-    return matchesSearch && matchesStatus && matchesMatchType;
+    return matchesSearch && matchesStatus && matchesMatchType && ruleMatchesTagFilter(rule, tagsFilter.value);
   });
 });
+
+/** 筛选下拉与表单候选都从这一份来：条数与排序的判据只住 `collectRuleTags` */
+const availableTags = computed(() => collectRuleTags(rules.value));
+const tagNames = computed(() => availableTags.value.map(entry => entry.tag));
 
 const enabledCount = computed(() => rules.value.filter(r => r.enabled).length);
 

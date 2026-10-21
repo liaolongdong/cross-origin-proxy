@@ -139,6 +139,24 @@
                 </template>
                 <span class="dnr-dead-tag">{{ t('dnrSkippedTag') }}</span>
               </el-tooltip>
+              <!-- 标签最多露两枚，其余收成 +N（悬停给全表）：一行的信息密度上限比"看全"重要 -->
+              <span
+                v-if="rowTags(row).length > 0"
+                class="rule-tags"
+                :title="rowTags(row).join(' · ')"
+              >
+                <span
+                  v-for="tag in rowTags(row).slice(0, ROW_TAG_VISIBLE)"
+                  :key="tag"
+                  class="rule-tag"
+                  >{{ tag }}</span
+                >
+                <span
+                  v-if="rowTags(row).length > ROW_TAG_VISIBLE"
+                  class="rule-tag rule-tag--more"
+                  >+{{ rowTags(row).length - ROW_TAG_VISIBLE }}</span
+                >
+              </span>
               <span class="rule-badges">
                 <el-tooltip
                   v-if="
@@ -392,12 +410,21 @@ import { ROW_STAGGER_MAX_DELAY_MS } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
 import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
+import { visibleTags } from '@/utils/ruleTags';
 import type { FlipRect } from '@/utils/transitions';
 import { applyFlip, motionTokenToMs, prefersReducedMotion, readMotionToken, readRects } from '@/utils/transitions';
 import { flipFirstRect, freshRowIds, isSameRowSet, rowMotionAffordable, type RowPosition } from '@/utils/rowMotion';
 import EmptyGuide from './EmptyGuide.vue';
 import HighlightText from './HighlightText.vue';
 import TableSkeleton from './TableSkeleton.vue';
+
+/** 一行上能露出的标签数；其余收成 +N，全表走悬停（一行的高度上限比"看全所有标签"重要） */
+const ROW_TAG_VISIBLE = 2;
+
+/** 标签从 storage 来，可能是被手改过的任何形状：非数组/非字符串一律当没有（判据同 `configRules()`） */
+function rowTags(row: unknown): string[] {
+  return visibleTags((row as { tags?: unknown }).tags);
+}
 
 /**
  * 规则表格（白色圆角卡片容器）
@@ -1087,6 +1114,33 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   display: inline-flex;
   gap: 6px;
   align-items: center;
+}
+
+/* 标签 chip：尺寸与能力徽章对齐（11px 字 + 18px 盒子），但走次要字色——它是分类物，
+   不该抢「这条规则会干什么」的注意力。字号不往 10px 走：这一格是用户自己写的中文词，
+   「结算」在这种笔画密度下 10px 就粘成一团，而本仓那条地线正是为它立的（评审 L-15）。 */
+.rule-tags {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 3px;
+  align-items: center;
+  max-width: 148px;
+  overflow: hidden;
+}
+
+.rule-tag {
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--cop-text-color-secondary);
+  white-space: nowrap;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 8px;
+}
+
+.rule-tag--more {
+  font-variant-numeric: tabular-nums;
 }
 
 .rule-badges {

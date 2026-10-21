@@ -32,6 +32,10 @@ export interface ProxyRule {
   targetUrl: string; // 目标替换 URL，如 "https://uat-api.example.com"
   matchType: 'wildcard' | 'prefix' | 'regex'; // 匹配类型
   methods?: string[]; // HTTP 方法白名单（大小写不敏感）；空/未定义=任意方法。非空时强制走 SW 通道（DNR 无法按方法过滤）
+  // 用户自起的分类标签（项目 / 环境 / 负责人……）：只为「一屏 200 条规则里挑出这一批」而存在，
+  // 不参与匹配、分流与任何判定，因此加它不改变任何一条请求的走向。
+  // 清洗、去重与上限只住在 `utils/ruleTags.ts`；`isValidRuleShape` 只判类型（与 `methods` 同一口径）
+  tags?: string[];
   queryOverrides?: Record<string, string>; // 命中后对最终 URL 追加/覆盖的查询参数（仅 SW 通道）
   headerOverrides?: Record<string, string>; // 可选请求头覆盖
   // 携带目标环境的 Cookie（SW fetch 的 credentials: 'include'）。仅 SW 通道能力：DNR 重定向由浏览器

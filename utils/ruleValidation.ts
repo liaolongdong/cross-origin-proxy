@@ -45,7 +45,13 @@ export function isValidRuleShape(rule: unknown): rule is ProxyRule {
     r.matchPattern.trim() !== '' &&
     typeof r.targetUrl === 'string' &&
     MATCH_TYPES.includes(r.matchType as string) &&
-    (r.methods === undefined || (Array.isArray(r.methods) && r.methods.every(method => typeof method === 'string')))
+    (r.methods === undefined || (Array.isArray(r.methods) && r.methods.every(method => typeof method === 'string'))) &&
+    // `tags` 与 `methods` 的严格度**刻意不同**，这里是区分过的：只有「不是数组」才拒整条规则。
+    // 非数组会真炸——表格那列对 `tags` 调 `.some()`（字符串与对象都没有），
+    // 而 `v-for` 迭代一个字符串会把它逐字渲染成一排单字 chip，比抛错还难查。
+    // 数组里混进非字符串项不连坐：所有读位置先过 `visibleTags()`（与 `configRules()` 同一口径），
+    // 导入清洗也会丢掉它并计数——标签只是分类名，为一个尾巴废掉一条好规则是本末倒置。
+    (r.tags === undefined || Array.isArray(r.tags))
   );
 }
 
