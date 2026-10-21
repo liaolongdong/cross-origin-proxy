@@ -411,7 +411,7 @@
             "name": "My rule looks right but the page doesn't change — what should I check, in order?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "In this order: whether the popup's master switch is on (turning it off also uninstalls the network-layer rules) → whether that rule itself is enabled → whether the page has been reloaded, because requests already sent are never rewritten retroactively → paste the real request URL into the URL match tester to see whether a rule with a smaller priority number shadows it → if you use a regex, confirm it covers the whole URL: the network layer replaces the entire URL with the substitution, the background channel only the matched span, so a partial regex lands on two different results — the tester now puts both addresses on the screen and points at the step where they fork. Complex rules give you one more clue — when the background actually recorded that this page never received that config push, the popup reads “This page has not received the latest rules — reloading it usually fixes it” with a “Reload this page” button sitting to the right of that sentence (it appears only when the popup actually got that page back on this read, and pressing it does exactly what the browser's own reload does), and hovering names which of the two causes it is: the document predates an install, update or reload of the extension (reloading fixes it), or the extension is disabled for this site (re-enable it from Chrome's extension menu). It only says what it is sure of: non-http(s) pages, documents still loading and pages that never had this record stay silent. One more case is a page with no rule covering it at all: the popup's “create a rule for this page” then says up front which origins look blocked by CORS — those origins carry a “suspect” marker and sort first, and they come from the page's own failing native requests that no rule caught. A CORS block, an offline page and a DNS failure are the same shape, so it is a clue about what to build first, not a verdict. If you would rather ask all of it at once, the “Self-check” chip in the popup's secondary row (the options page also opens it at #self-check) puts five existing readings on one screen in this same order: the master switch, whether this host is inside the site scope, whether the last config push reached this page, which rule the page's address matches and which channel carries it, and whether the network-layer rules are actually installed in the browser. Each cell only restates a judgement already computed elsewhere; what it cannot read stays “unknown” instead of answering for the step above it."
+              "text": "In this order: whether the popup's master switch is on (turning it off also uninstalls the network-layer rules) → whether that rule itself is enabled → whether the page has been reloaded, because requests already sent are never rewritten retroactively → paste the real request URL into the URL match tester to see whether a rule with a smaller priority number shadows it → if you use a regex, confirm it covers the whole URL: the network layer replaces the entire URL with the substitution, the background channel only the matched span, so a partial regex lands on two different results — the tester now puts both addresses on the screen and points at the step where they fork. Complex rules give you one more clue — when the background actually recorded that this page never received that config push, the popup reads “This page has not received the latest rules — reloading it usually fixes it” with a “Reload this page” button sitting to the right of that sentence (it appears only when the popup actually got that page back on this read, and pressing it does exactly what the browser's own reload does), and hovering names which of the two causes it is: the document predates an install, update or reload of the extension (reloading fixes it), or the extension is disabled for this site (re-enable it from Chrome's extension menu). It only says what it is sure of: non-http(s) pages, documents still loading and pages that never had this record stay silent. One more case is a page with no rule covering it at all: the popup's “create a rule for this page” then says up front which origins look blocked by CORS — those origins carry a “suspect” marker and sort first, and they come from the page's own failing native requests that no rule caught. A CORS block, an offline page and a DNS failure are the same shape, so it is a clue about what to build first, not a verdict. If you would rather ask all of it at once, the “Self-check” chip in the popup's secondary row (the options page also opens it at #self-check) puts five existing readings on one screen in this same order: the master switch, whether this host is inside the site scope, whether the background recorded that this page never received the last config push, which rule the page's address matches and which channel carries it, and whether the network-layer rules are actually installed in the browser. Each cell only restates a judgement already computed elsewhere; what it cannot read stays “unknown” and what has not landed yet stays “not yet”, instead of answering for the step above it."
             }
           },
           {
@@ -1167,9 +1167,10 @@
                 Chrome's network layer will not apply at all — regex syntax RE2 does not support, or a capture reference
                 out of range — is tagged "Not applied" in the list. Rules can also carry tags — up to 10 per rule, for
                 classification and filtering only: a tag takes part in neither matching, channel selection nor any
-                decision, and it is not in the copy of the rules the options page hands to the page itself, so adding
-                one never changes where a request goes. The list shows two and folds the rest into <code>+N</code>, the
-                filter is multi-select any-of, and a "(no tag)" entry picks up the ones nobody has classified yet.
+                decision, and it is not in the copy of the rules that reaches the page's own scripts — the bridge strips
+                it next to the credential fields before handing over — so adding one never changes where a request goes.
+                The list shows two and folds the rest into <code>+N</code>, the filter is multi-select any-of, and a
+                "(no tag)" entry picks up the ones nobody has classified yet.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -1199,15 +1200,18 @@
                 and the reveal switch is taken back as soon as the drawer closes. The detail view also carries a
                 “Replay” button: it hands that entry's own address, method, headers and body back to the proxy engine
                 and sends it for real under the rules that apply now — the global switch, the site scope, rule matching,
-                mock / block / delay / retry and credential expansion all run again, so the extension never keeps a
+                mock / block / delay / retry and credential expansion all run again (and a replay has no initiating page
+                host to judge, so under "only sites in the list" it is not sent at all), so the extension never keeps a
                 second model of what the proxy would do. <code>GET</code> / <code>HEAD</code> / <code>OPTIONS</code> go
                 straight out and anything else is confirmed first; the outcome is eleven distinct statements rather than
-                success/failure, and an entry whose address carries a truncation marker is never sent. The “Self-check”
-                chip in the popup's secondary row (the options page opens it at <code>#self-check</code> too) gathers
-                the judgements that used to be scattered over four places onto one screen in troubleshooting order: the
-                global switch, whether this site is in scope, whether the last config push reached this page, which rule
-                its address matches and over which channel, and whether the network-layer rules are actually installed —
-                each cell restates a predicate already computed elsewhere and draws “unknown” when it cannot read one.
+                success/failure, and an entry with a truncation marker on any of its recorded fields is never sent. The
+                “Self-check” chip in the popup's secondary row (the options page opens it at
+                <code>#self-check</code> too) gathers the judgements that used to be scattered over four places onto one
+                screen in troubleshooting order: the global switch, whether this site is in scope, whether the
+                background recorded that this page never received the last config push, which rule its address matches
+                and over which channel, and whether the network-layer rules are actually installed — each cell restates
+                a predicate already computed elsewhere, drawing “unknown” when it cannot read one and “not yet” when
+                that judgement has not landed.
               </p>
             </article>
             <article class="feature-card reveal">
@@ -2831,10 +2835,10 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 first, not a verdict. If you would rather ask all of it at once, the “Self-check” chip in the popup's
                 secondary row (the options page also opens it at <code>#self-check</code>) puts five existing readings
                 on one screen in this same order: the master switch, whether this host is inside the site scope, whether
-                the last config push reached this page, which rule the page's address matches and which channel carries
-                it, and whether the network-layer rules are actually installed in the browser. Each cell only restates a
-                judgement already computed elsewhere; what it cannot read stays “unknown” instead of answering for the
-                step above it.
+                the background recorded that this page never received the last config push, which rule the page's
+                address matches and which channel carries it, and whether the network-layer rules are actually installed
+                in the browser. Each cell only restates a judgement already computed elsewhere; what it cannot read
+                stays “unknown” and what has not landed yet stays “not yet”, instead of answering for the step above it.
               </p>
             </details>
 
