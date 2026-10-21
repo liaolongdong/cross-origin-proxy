@@ -17,12 +17,12 @@ import { MAX_RULE_TAG_LENGTH, MAX_RULE_TAGS } from '@/utils/constants';
 import {
   UNTAGGED,
   collectRuleTags,
-  normalizeTags,
   normalizeTagsWithLog,
   ruleMatchesTagFilter,
   sanitizeTags,
   visibleTags,
 } from '@/utils/ruleTags';
+import type { ProxyRule } from '@/utils/types';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -31,12 +31,13 @@ describe('sanitizeTags — 什么算一个标签', () => {
     expect(sanitizeTags(undefined)).toEqual({ dropped: 0 });
     expect(sanitizeTags('uat')).toEqual({ dropped: 0 });
     expect(sanitizeTags({ tag: 'uat' })).toEqual({ dropped: 0 });
-    expect(normalizeTags('uat')).toBeUndefined();
   });
 
   it('trim、内部空白折一格、空白项丢弃', () => {
-    expect(sanitizeTags(['  uat  ', '结算 中心', '', '   ']).tags).toEqual(['uat', '结算 中心']);
-    expect(sanitizeTags(['  uat  ', '结算 中心', '', '   ']).dropped).toBe(2);
+    // 制表符与那对空格是故意的：输入里只有一个空格时，摘掉 `.replace(/\s+/g, ' ')` 那句照样全绿
+    const r = sanitizeTags(['  uat  ', '结算\t中心', '结算  中心', '', '   ']);
+    expect(r.tags).toEqual(['uat', '结算 中心']);
+    expect(r.dropped).toBe(3); // 两个空白项，加上折叠后与第一条同名的那一条
   });
 
   it('只差大小写的重复算同一个标签，保留第一次写下的那种拼法', () => {
@@ -80,7 +81,7 @@ describe('sanitizeTags — 什么算一个标签', () => {
 
   it('全被丢光时返回 undefined 而不是空数组：无标签规则的形状要与「还没有这个字段」时逐字节相同', () => {
     expect(sanitizeTags(['', '  ']).tags).toBeUndefined();
-    expect(normalizeTags(['', '  '])).toBeUndefined();
+    expect(sanitizeTags(['', '  ']).dropped).toBe(2);
   });
 
   it('哨兵字面量不让进（它已经是「（无标签）」那一项的 value，同名标签会被读成那个意思）', () => {
@@ -98,6 +99,12 @@ describe('normalizeTagsWithLog — 导入侧留痕', () => {
     const line = String(vi.mocked(logger.warn).mock.calls[0][0]);
     expect(line).toContain('2');
     expect(line).toContain('FAT → UAT');
+  });
+
+  it('只丢掉一条也要吭声（判据是 `> 0`，不是「丢得够多」）', async () => {
+    const { logger } = await import('@/utils/logger');
+    expect(normalizeTagsWithLog(['uat', 7], 'r')).toEqual(['uat']);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
   it('干干净净的一批不吭声', async () => {
@@ -123,14 +130,19 @@ describe('visibleTags — 从 storage 读出的东西先收口再点', () => {
 });
 
 describe('collectRuleTags — 筛选下拉的那份清单', () => {
+  // 越界输入按 storage 原文的形状喂进来：类型说 `tags` 是 string[]，读侧要扛得住它不是。
+  // 用 `as Pick<ProxyRule, 'tags'>` 而不是 `as never`——后者会把实参形状一起豁免掉，
+  // 将来签名多要求一个字段也照样编译过。
+  const stored = (tags: unknown) => ({ tags }) as Pick<ProxyRule, 'tags'>;
+
   it('按用量降序、同用量按名排，坏形状的规则不参与', () => {
     const list = collectRuleTags([
-      { tags: ['结算', 'uat'] },
-      { tags: ['uat'] },
-      { tags: ['结算'] },
-      { tags: '坏数据' },
-      {},
-    ] as never[]);
+      stored(['结算', 'uat']),
+      stored(['uat']),
+      stored(['结算']),
+      stored('坏数据'),
+      stored(undefined),
+    ]);
     expect(list).toEqual([
       { tag: 'uat', count: 2 },
       { tag: '结算', count: 2 },
@@ -138,12 +150,12 @@ describe('collectRuleTags — 筛选下拉的那份清单', () => {
   });
 
   it('大小写不同的标签合并计数（下拉里不出现两条只差大小写的选项）', () => {
-    expect(collectRuleTags([{ tags: ['FAT'] }, { tags: ['fat'] }] as never[])).toEqual([{ tag: 'FAT', count: 2 }]);
+    expect(collectRuleTags([stored(['FAT']), stored(['fat'])])).toEqual([{ tag: 'FAT', count: 2 }]);
   });
 });
 
 describe('ruleMatchesTagFilter — 多选是任一命中', () => {
-  const rule = (tags?: unknown) => ({ tags }) as never;
+  const rule = (tags?: unknown) => ({ tags }) as Pick<ProxyRule, 'tags'>;
 
   it('空选择 = 不筛（与关键字/状态/匹配方式同一口径）', () => {
     expect(ruleMatchesTagFilter(rule(['uat']), [])).toBe(true);

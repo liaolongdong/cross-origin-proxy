@@ -52,9 +52,14 @@
       />
     </el-select>
 
-    <!-- 标签筛选：一条规则都没打过标签时整格不出现（空下拉只会让人觉得界面坏了） -->
+    <!--
+      标签筛选：一条规则都没打过标签时整格不出现（空下拉只会让人觉得界面坏了）。
+      但「已经选着标签」时也必须留着——把最后一条打过标签的规则删掉（批量删除 + 撤销窗口
+      是同一条路）之后，availableTags 会空下来，而 tagsFilter 还留着那个值：不留着这一格，
+      表格就停在「无匹配」上，界面上再没有任何一个能撤销这条筛选的控件。
+    -->
     <el-select
-      v-if="availableTags.length > 0"
+      v-if="availableTags.length > 0 || tagsFilter.length > 0"
       :model-value="tagsFilter"
       multiple
       collapse-tags

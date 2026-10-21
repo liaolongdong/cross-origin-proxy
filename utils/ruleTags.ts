@@ -9,8 +9,9 @@
  * - 表单侧另写一遍，就会变成「界面存得下、导入进不来」；
  * - 导入侧另写一遍，就是 `tests/importPlan.test.ts` 那条老教训的标签版（预览与实际写入判据同源）。
  *
- * `isValidRuleShape` 只做**类型**判定（是字符串数组吗），值域（长度、条数）在这里，与 `methods` 同一口径：
- * 类型不过 → 整条规则被拒（它会让界面与匹配循环读到非字符串）；值越界 → 钳制并留痕，不连坐整条规则。
+ * `isValidRuleShape` 只做**类型**判定（是数组吗），值域（长度、条数）在这里，与 `methods` 同一文件不同档：
+ * 类型不过 → 整条规则在入口被拒（否则它在界面上永远读不成标签，而下一次保存会把这个字段整个抹掉）；
+ * 值越界 → 钳制并留痕，不连坐整条规则。匹配与分流从来不看这个字段，所以它拒的是数据形状，不是请求走向。
  */
 
 import { MAX_RULE_TAG_LENGTH, MAX_RULE_TAGS } from '@/utils/constants';
@@ -73,11 +74,6 @@ export function sanitizeTags(input: unknown): TagSanitization {
     kept.length = MAX_RULE_TAGS;
   }
   return kept.length > 0 ? { tags: kept, dropped } : { dropped };
-}
-
-/** 只要标签表本身，供不关心「丢了几条」的调用方（导入清洗与恢复点回读） */
-export function normalizeTags(input: unknown): string[] | undefined {
-  return sanitizeTags(input).tags;
 }
 
 /** 导入侧的留痕：值越界只 `logger.warn`，不静默、也不连坐整条规则 */

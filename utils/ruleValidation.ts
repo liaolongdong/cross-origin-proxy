@@ -46,11 +46,15 @@ export function isValidRuleShape(rule: unknown): rule is ProxyRule {
     typeof r.targetUrl === 'string' &&
     MATCH_TYPES.includes(r.matchType as string) &&
     (r.methods === undefined || (Array.isArray(r.methods) && r.methods.every(method => typeof method === 'string'))) &&
-    // `tags` 与 `methods` 的严格度**刻意不同**，这里是区分过的：只有「不是数组」才拒整条规则。
-    // 非数组会真炸——表格那列对 `tags` 调 `.some()`（字符串与对象都没有），
-    // 而 `v-for` 迭代一个字符串会把它逐字渲染成一排单字 chip，比抛错还难查。
-    // 数组里混进非字符串项不连坐：所有读位置先过 `visibleTags()`（与 `configRules()` 同一口径），
-    // 导入清洗也会丢掉它并计数——标签只是分类名，为一个尾巴废掉一条好规则是本末倒置。
+    // `tags` 与 `methods` 的严格度**刻意不同**，分两头说：
+    // 松的那头是值域——数组里混进非字符串项不连坐，因为每个读位置都先过 `visibleTags()`
+    // （与 `configRules()` 同一口径），导入清洗也会丢掉它并计数；标签只是分类名，
+    // 为一个尾巴废掉一条好规则是本末倒置。
+    // 严的那头是类型——`tags: 'uat'` 这种原文在所有读位置都会被当成「没有标签」：界面上既看不见
+    // chip 也筛不出东西，而用户下一次保存这条规则时，表单写回的是整条替换，这个字段就此消失。
+    // 「静默吃掉用户的标签」最坏的形状不是丢几条超长的，而是整批看不见且无从发现，
+    // 所以在入口点上拒掉、把话即时说回去更便宜。这份判据同时管 `loadProfile` 与恢复点读取，
+    // 那两处没有一条可以回话的导入消息，只能靠拒收本身兜住。
     (r.tags === undefined || Array.isArray(r.tags))
   );
 }
