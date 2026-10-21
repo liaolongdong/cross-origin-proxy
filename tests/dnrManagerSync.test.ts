@@ -62,6 +62,7 @@ let sendMessage: ReturnType<typeof vi.fn>;
 
 let syncDnrRules: (config: ProxyConfig) => Promise<void>;
 let initDnrManager: () => void;
+let describeDnrInstallState: () => Promise<import('@/utils/types').DnrInstallState>;
 let sampleAggregate: SamplerMod['sampleAggregate'];
 let aggregateMatchedInfo: StatsMod['aggregateMatchedInfo'];
 let setDnrRuleIdMap: StatsMod['setDnrRuleIdMap'];
@@ -151,6 +152,7 @@ beforeEach(async () => {
   const dnr = await import('@/entrypoints/background/dnrManager');
   syncDnrRules = dnr.syncDnrRules;
   initDnrManager = dnr.initDnrManager;
+  describeDnrInstallState = dnr.describeDnrInstallState;
   sampleAggregate = (await import('@/entrypoints/background/dnrSampler')).sampleAggregate;
   const stats = await import('@/entrypoints/background/dnrStats');
   aggregateMatchedInfo = stats.aggregateMatchedInfo;
@@ -397,5 +399,80 @@ describe('读旧规则与写入之间串行', () => {
 
     expect(events).toEqual(['read', 'write', 'read', 'write', 'read', 'write']);
     expect(updateDynamicRules.mock.calls[2][0].addRules).toEqual([]);
+  });
+});
+
+/**
+ * `describeDnrInstallState`：自检面板第五行的那两个数
+ *
+ * 这一格的全部价值在于「它算的就是那条同步此刻会写进去的数量」——一旦它自己另算一份，
+ * 第五行就从读数变成第二个模型，而那正是这屏反复声明不做的事。所以这里钉的是**同源性**与只读性，
+ * 不是数字本身：同一个配置喂给 `syncDnrRules` 与它，两边的条数必须一样；它自己一条都不写。
+ */
+describe('describeDnrInstallState：与同步路径同取法，且一条都不写', () => {
+  it('expected 与真同步实际写进去的那一份同数（RE2 拒掉的那条两边都不算）', async () => {
+    const config = configOf([simpleRule(), re2Unsupported(), complexRule()]);
+    getProxyConfig.mockResolvedValue(config);
+
+    const reading = await describeDnrInstallState();
+    await syncDnrRules(config);
+
+    // 三条规则里只有一条是网络层候选：那条 RE2 拒的与那条带注头的都不算
+    expect(reading.expected).toBe(1);
+    expect(writtenRules()).toHaveLength(1);
+    expect(reading.expected).toBe(writtenRules().length);
+    // installed 说的是 Chrome 自己报的那一份（桩里是两条），不是扩展的自述
+    expect(reading.installed).toBe(2);
+    expect(reading.readable).toBe(true);
+    expect(reading.syncing).toBe(false);
+  });
+
+  it('总开关关掉时 expected 是 0——与那条同步写空集是同一个答案', async () => {
+    getProxyConfig.mockResolvedValue(configOf([simpleRule()], false));
+
+    const reading = await describeDnrInstallState();
+    await syncDnrRules(configOf([simpleRule()], false));
+
+    expect(reading.expected).toBe(0);
+    expect(writtenRules()).toEqual([]);
+  });
+
+  it('它自己不做任何写入：读一次之后 `updateDynamicRules` 一次都没被调用', async () => {
+    await describeDnrInstallState();
+
+    expect(updateDynamicRules).not.toHaveBeenCalled();
+    // 而「读」是读了的：不读就没有那两个数（这一句挡的是"整个函数被短路成返回 0 对 0"）
+    expect(getDynamicRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('任何一侧读不出时是 `readable:false`，不是抛错、也不是 0 对 0 的「正常」', async () => {
+    getDynamicRules.mockRejectedValue(new Error('chrome 侧读不出'));
+
+    await expect(describeDnrInstallState()).resolves.toMatchObject({ readable: false });
+    // 失败面唯一的出口是日志，而且日志里不许有规则内容
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn.mock.calls[0][1]).toBe('Error');
+  });
+
+  it('队列里还有没落定的同步时说 `syncing`——那一刻的差是正常态，不是「装载不全」', async () => {
+    let release: () => void = () => {};
+    updateDynamicRules.mockImplementation(
+      () =>
+        new Promise<void>(resolve => {
+          release = () => {
+            events.push('write');
+            resolve();
+          };
+        }),
+    );
+    const inflight = syncDnrRules(configOf([simpleRule()]));
+    await drain();
+
+    const reading = await describeDnrInstallState();
+    expect(reading.syncing).toBe(true);
+
+    release();
+    await inflight;
+    expect((await describeDnrInstallState()).syncing).toBe(false);
   });
 });

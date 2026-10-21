@@ -544,7 +544,7 @@
     <!--
       次级动作行：日志、导入导出、设置都不该占一张满宽卡片的垂直空间，
       而设置此前在弹窗里根本没有入口（语言、主题、自动关闭时长、站点名单、凭据变量都到不了）。
-      三颗一律 text 档、一律带图标、同一容器同一档位——与 options 顶栏的图标语义对齐。
+      四颗一律 text 档、一律带图标、同一容器同一档位——与 options 顶栏的图标语义对齐。
     -->
     <div class="action-bar">
       <button
@@ -570,6 +570,20 @@
       >
         <el-icon><Setting /></el-icon>
         <span>{{ t('actionSettings') }}</span>
+      </button>
+      <!--
+        自检：这一行里唯一一颗「我按下去它替我看一遍」的按钮。它排在最后不是随手放的——
+        同一行前三颗都是「打开一个地方」，只有这颗会去问五笔读数；而它带的是**这个弹窗当时
+        看到的那一页**的 id，读不到 id（比如那一页本身是扩展页）就带着「没有对应网页」打开，
+        那三行自己会说话，不拿猜出来的标签页凑一个答案。
+      -->
+      <button
+        type="button"
+        class="action-bar__btn"
+        @click="openOptionsPage(selfCheckHash)"
+      >
+        <el-icon><CircleCheck /></el-icon>
+        <span>{{ t('actionSelfCheck') }}</span>
       </button>
     </div>
 
@@ -663,6 +677,7 @@ import {
   Operation,
   Refresh,
   Link,
+  CircleCheck,
 } from '@element-plus/icons-vue';
 import type { TagProps } from 'element-plus';
 import { useProxyStatus } from '@/composables/useProxyStatus';
@@ -798,6 +813,14 @@ const pageUrl = ref('');
  * `null` = 这一次没问到（查询失败、或问到的那一条没有 id），此时重载按钮不许出现。
  */
 const activeTabId = ref<number | null>(null);
+/**
+ * 自检那一颗要看的「这一页」就是本弹窗当时看到的那一页，所以把 id 带过去。
+ * 读不到 id（那一页本身是扩展页、或 `tabs.query` 失败）时带不带参数的版本打开——
+ * 面板里那三行问页面的读数自己会落到「不知道」那一档，比拿一个猜出来的 tab 凑答案诚实。
+ */
+const selfCheckHash = computed(() =>
+  activeTabId.value === null ? '#self-check' : `#self-check?tab=${activeTabId.value}`,
+);
 const pageHitProxiable = ref(false);
 const pageHitRuleName = ref('');
 /** 命中规则的 id：只用于查 `dnrSkippedRuleIds`，不参与渲染 */
@@ -1426,7 +1449,7 @@ async function reloadCurrentTab() {
 
 /**
  * 打开 Options 页；带 hash 时直达对应弹窗/抽屉
- * （#add-rule / #logs / #import-export / #add-rule-from-tab=<encoded url>）。
+ * （#add-rule / #logs / #import-export / #settings / #self-check?tab=<id> / #add-rule-from-tab=<encoded url>）。
  * 优先复用已打开的 Options 标签页（通过 runtime.getContexts 查找，无需 tabs 权限），
  * 避免重复打开；更新 hash 属同文档导航，Options 侧监听 hashchange 响应直达。
  */
@@ -1819,7 +1842,7 @@ async function openOptionsPage(hash = '') {
 }
 
 /*
-  「刷新这一页」：档位与次级动作行那三颗同为 text（无边框、次要字色），只有尺寸收小一档，
+  「刷新这一页」：档位与次级动作行那四颗同为 text（无边框、次要字色），只有尺寸收小一档，
   因为这一格挤在警告句的右边。刻意**不**用 `--el-color-warning-light-N` 上底色——
   那几个浅档在暗色两条路径没有值，写上去就是靠回退色蒙过 `tests/designTokens.test.ts`，
   而那句话的颜色由 `.config-sync-warning` 自己承担就够了。
@@ -2117,9 +2140,12 @@ async function openOptionsPage(hash = '') {
 }
 
 /*
-  次级动作行：三件事都不该占一张满宽卡片的高度，但必须一眼数得出、点得到。
-  三格按内容分配剩余宽度并可折行（英文「Import / Export」比中文长 5 个字母），
-  图标按容器走——这一行三颗全带，与 options 顶栏那一组同一口径。
+  次级动作行：这四件事都不该占一张满宽卡片的高度，但必须一眼数得出、点得到。
+  四格按内容分配剩余宽度并可折行——2026-10-21 在真 Chrome 里量过（`popup-chips-en.cjs`，不入库）：
+  320px 那一行中文四颗排成一排（87.5 / 87.5 / 63.5 / 63.5），英文排成两排（153.2 / 160.8 与 149.8 / 164.2），
+  两档每颗都是 29.6px 高、`scrollWidth-clientWidth` 全 0、不越出这一行、页面横向溢出 0px。
+  折行是刻意的兜底：收字号换不来可点面积，而这一行的热区本来就在 24px 那条线之上。
+  图标按容器走——这一行四颗全带，与 options 顶栏那一组同一口径。
   档位是 text（无边框、次要字色），悬浮与聚焦才长出底色与描边：
   它们的视觉权重必须低于上面那三张卡，否则「哪个是主行动」又变成一次猜测。
 */

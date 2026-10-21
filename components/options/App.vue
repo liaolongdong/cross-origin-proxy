@@ -100,6 +100,12 @@
       :dnr-support-read="dnrSupportRead"
       :proxy-enabled="proxyEnabled"
     />
+    <SelfCheckDialog
+      v-model:visible="showSelfCheck"
+      :tab-id="selfCheckTabId"
+      :dnr-skipped-rules="dnrSkippedRules"
+      :dnr-support-read="dnrSupportRead"
+    />
     <MigrateTargetsDialog
       v-model:visible="showMigrate"
       :selected-rules="selectedRules"
@@ -184,6 +190,7 @@ const ImportExportDialog = defineAsyncComponent(() => import('./ImportExportDial
 const ProfilesDialog = defineAsyncComponent(() => import('./ProfilesDialog.vue'));
 const SettingsDialog = defineAsyncComponent(() => import('./SettingsDialog.vue'));
 const UrlTestDialog = defineAsyncComponent(() => import('./UrlTestDialog.vue'));
+const SelfCheckDialog = defineAsyncComponent(() => import('./SelfCheckDialog.vue'));
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
 const MigrateTargetsDialog = defineAsyncComponent(() => import('./MigrateTargetsDialog.vue'));
 
@@ -261,6 +268,9 @@ const generatingRules = ref(false);
 const showProfiles = ref(false);
 const showSettings = ref(false);
 const showUrlTest = ref(false);
+/** 自检面板：它问的是「那一页」，所以页 id 与开关分开存（从配置页自己的按钮进来时就是 `null`） */
+const showSelfCheck = ref(false);
+const selfCheckTabId = ref<number | null>(null);
 const showLogs = ref(false);
 const showMigrate = ref(false);
 /**
@@ -268,7 +278,8 @@ const showMigrate = ref(false);
  *
  * 键盘快捷键用它，而不是各自记一份「我该让给谁」：`N` 原先只看规则弹窗，导入弹窗开着时照样
  * 能叠一层；`/` 与 `Ctrl+F` 原先谁都不看，会把焦点交给躲在模态背后的搜索框。
- * Escape 的级联早已按「最上层优先」处理这七个入口——同一批入口，同一份判据（L-10）。
+ * Escape 的级联早已按「最上层优先」处理这批入口——同一批入口，同一份判据（L-10），
+ * 新加一个可叠开的弹窗时必须同时加进下面那一条链，否则「开着它按 / 」会把焦点交给躲在它后面的搜索框。
  */
 const anyOverlayOpen = computed(
   () =>
@@ -278,7 +289,8 @@ const anyOverlayOpen = computed(
     showSettings.value ||
     showUrlTest.value ||
     showLogs.value ||
-    showMigrate.value,
+    showMigrate.value ||
+    showSelfCheck.value,
 );
 const editingRule = ref<ProxyRule | null>(null);
 /**
@@ -496,6 +508,8 @@ function handleKeydown(e: KeyboardEvent) {
       showSettings.value = false;
     } else if (showUrlTest.value) {
       showUrlTest.value = false;
+    } else if (showSelfCheck.value) {
+      showSelfCheck.value = false;
     } else if (showMigrate.value) {
       showMigrate.value = false;
     } else if (showLogs.value) {
@@ -517,6 +531,14 @@ function handleHashNavigation() {
     showProfiles.value = true;
   } else if (hash === '#url-test') {
     showUrlTest.value = true;
+  } else if (hash === '#self-check' || hash.startsWith('#self-check?tab=')) {
+    // popup 把它当时看到的那个标签页 id 带过来：自检里有三行问的是「那一页」，而配置页自己就是
+    // `tabs.query({ active })` 眼里的那一页，拿它当被检查的对象会把「这一页还没收到配置」指向扩展页面。
+    // 这一串住在地址栏里，按不可信输入处理——`parseSelfCheckTab` 只认非负整数，别的都当「没带」
+    selfCheckTabId.value = parseSelfCheckTab(
+      hash.startsWith('#self-check?tab=') ? hash.slice('#self-check?tab='.length) : null,
+    );
+    showSelfCheck.value = true;
   } else if (hash === '#settings') {
     // popup 次级动作行的出口：整页设置（语言、主题、整张站点名单、凭据变量）此前在弹窗里没有通往的路
     showSettings.value = true;

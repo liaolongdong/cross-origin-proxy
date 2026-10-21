@@ -144,14 +144,14 @@ describe('popup 动作区的形状', () => {
     expect(actionList).not.toContain("openOptionsPage('#add-rule')");
   });
 
-  it('次级那一行三颗、全带图标、不带 type（它的权重必须低于上面的卡）', () => {
+  it('次级那一行四颗、全带图标、不带 type（它的权重必须低于上面的卡）', () => {
     const bar = templateOf(popup, '<div class="action-bar">', '    <!-- 最近请求');
     const btns = [...bar.matchAll(/<button\b[\s\S]*?>/g)];
-    expect(btns).toHaveLength(3);
-    for (const key of ['actionViewLogs', 'actionImportExport', 'actionSettings']) {
+    expect(btns).toHaveLength(4);
+    for (const key of ['actionViewLogs', 'actionImportExport', 'actionSettings', 'actionSelfCheck']) {
       expect(bar, `次级行少了 ${key}`).toContain(`t('${key}')`);
     }
-    expect(bar.match(/<el-icon>/g)).toHaveLength(3);
+    expect(bar.match(/<el-icon>/g)).toHaveLength(4);
     expect(bar).not.toContain('el-button');
   });
 

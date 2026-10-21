@@ -8,6 +8,7 @@ import {
   proxyRequestKey,
 } from './proxyHandler';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
+import { describeDnrInstallState } from './dnrManager';
 import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
 import { clearConfigUnsynced, isConfigUnsynced } from './configSyncState';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
@@ -532,6 +533,12 @@ export function setupMessageRouter(): void {
       case MessageType.GET_SW_STATS:
         sendResponse(getSwHitStats());
         return false;
+
+      case MessageType.GET_DNR_INSTALL_STATE:
+        // 只读诊断：与 `GET_DNR_STATS` / `GET_INTERCEPTOR_STATS` 同档，刻意**不加** `isTrustedSender`
+        // ——回包是两个整数加两个布尔，改不了任何状态，也不交出规则内容、地址或主机名。
+        // 它自己不触发任何同步：读不到就回 `readable: false`，界面那一格画「不知道」。
+        return respondAsync(sendResponse, describeDnrInstallState());
 
       case MessageType.INTERCEPTOR_STATS: {
         // 页面自报的展示数据：刻意不进 `STATE_MUTATING_TYPES`，也刻意**不写 storage**——

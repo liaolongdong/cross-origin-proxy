@@ -5,7 +5,7 @@ import { logger } from '@/utils/logger';
 import { MessageType } from '@/utils/types';
 import { STORAGE_KEYS } from '@/utils/constants';
 import { invalidateMatcherCache, isSimpleRule } from '@/utils/urlMatcher';
-import type { ProxyRule, ProxyConfig } from '@/utils/types';
+import type { ProxyRule, ProxyConfig, DnrInstallState } from '@/utils/types';
 import { setDnrRuleIdMap } from './dnrStats';
 import { invalidateDnrSample } from './dnrSampler';
 import { clearConfigUnsynced, markConfigUnsynced } from './configSyncState';
@@ -107,6 +107,38 @@ async function doSyncDnrRules(config: ProxyConfig): Promise<void> {
     logger.info(`DNR rules synced: ${newRules.length} rules active`);
   } catch (error) {
     logger.error('Failed to sync DNR rules:', error);
+  }
+}
+
+/**
+ * 网络层规则的装载状态：现在装着多少条、按现在这份配置应该装着多少条
+ *
+ * 存在的理由只有一个问题：「装了扩展、开了开关、规则也在，可请求就是没被改」。这一格的两个数
+ * 都出自**同一条同步路径的同一份输入**（`filterDnrApplicableRules` + `buildDnrRules`，与
+ * `doSyncDnrRules` 逐字相同的取法），所以它不是在旁边再算一份「代理会怎么做」——它算的就是那条
+ * 同步此刻会写进去的数量。差值本身不当结论：`pendingSyncCount > 0` 时答案是 `syncing`，
+ * 因为那一刻的差是排队中的正常态，把它画成「装载不全」就是拿一个还没发生的瞬间当现状（与本仓
+ * 「还没读到 ≠ 没有」「还没落定 ≠ 已落定」同一条规矩）。读不出任何一侧时 `readable: false`，
+ * 界面那一格画「不知道」，绝不画成 0 对 0。
+ */
+export async function describeDnrInstallState(): Promise<DnrInstallState> {
+  const unknown: DnrInstallState = { readable: false, syncing: pendingSyncCount > 0, installed: 0, expected: 0 };
+  try {
+    const config = await getProxyConfig();
+    const supported = await filterDnrApplicableRules(Array.isArray(config.rules) ? config.rules : []);
+    const siteState = await getSiteState();
+    const { rules: newRules } = buildDnrRules(supported, config.enabled, siteState);
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    return {
+      readable: true,
+      syncing: pendingSyncCount > 0,
+      installed: Array.isArray(existingRules) ? existingRules.length : 0,
+      expected: newRules.length,
+    };
+  } catch (error) {
+    // 这一格是只读诊断：它自己读不到，绝不影响任何一条规则的生效
+    logger.warn('describeDnrInstallState failed:', error instanceof Error ? error.name : typeof error);
+    return unknown;
   }
 }
 
