@@ -56,6 +56,20 @@ const envelope = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/**
+ * 只把 `PROXY_REQUEST` 那一次往返挂起来，取消那一笔（`CANCEL_REQUEST`）立刻给回执。
+ *
+ * 不分类型地「把 resolver 交出来」是会自伤的：`clearReplay` 现在会补发一句取消，
+ * 那句一进来就把外层那个 resolver 顶掉了，测试于是挂在一个永远不会有人应答的「代发」上——
+ * 看起来像产品超时，其实是夹具换了人。
+ */
+function hangProxyOnly(capture: (release: (value: unknown) => void) => void): void {
+  sendMessage.mockImplementation((message: { type?: string }) => {
+    if (message?.type === MessageType.PROXY_REQUEST) return new Promise(resolve => capture(resolve));
+    return Promise.resolve({ success: true, cancelled: true });
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   sendMessage.mockResolvedValue(envelope());
@@ -102,18 +116,49 @@ describe('runReplay — 发出去的那一笔', () => {
 
   it('在途那一格先立起来，回包还没落地时不许有任何读数', async () => {
     let release: (value: unknown) => void = () => {};
-    sendMessage.mockImplementation(() => new Promise(resolve => (release = resolve)));
+    hangProxyOnly(fn => (release = fn));
     const { runReplay, replayView } = useRequestReplay();
 
     const pending = runReplay(entryOf());
     expect(replayView.value).toMatchObject({ ownerId: 'log-1', running: true, reading: null, transportFailed: false });
+    // 在途那一格的耗时必须是 `0`——「还没发生的事」不许有一个数（断言它 >0 才是空话）
+    expect(replayView.value?.durationMs).toBe(0);
 
     release(envelope({ statusText: 'Mock', status: 204 }));
     await pending;
     expect(replayView.value).toMatchObject({ running: false });
     expect(replayView.value?.reading?.outcome).toBe('mock');
-    // 耗时是量出来的，不是画死的：在途那一格必须是 0
-    expect(replayView.value?.durationMs).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(replayView.value?.durationMs)).toBe(true);
+  });
+
+  it('用户不看了就把后台那一笔掐掉：重放用的可能是 POST，放弃不等于可以让它落第二遍', async () => {
+    let release: (value: unknown) => void = () => {};
+    hangProxyOnly(fn => (release = fn));
+    const { runReplay, replayView, clearReplay } = useRequestReplay();
+
+    const pending = runReplay(entryOf({ method: 'POST' }));
+    const replayCall = sendMessage.mock.calls[0][0] as { data: { requestId: string } };
+    sendMessage.mockClear();
+
+    clearReplay('log-1');
+    const cancelCall = sendMessage.mock.calls[0][0] as { type: string; data: { requestId: string } };
+    expect(cancelCall.type).toBe(MessageType.CANCEL_REQUEST);
+    // 掐的是**这一趟**，不是别的：id 必须与刚发出去那一笔一致（同页同 frame 才认得这个键）
+    expect(cancelCall.data.requestId).toBe(replayCall.data.requestId);
+
+    release(envelope());
+    await pending;
+    // 迟到那一笔不许回到屏幕上；这一半不依赖取消成功，取消安静失败时也一样
+    expect(replayView.value).toBeNull();
+  });
+
+  it('落定的那一笔不取消（没有可取消的东西，多发一句只是让后台找一个不存在的键）', async () => {
+    const { runReplay, clearReplay, replayView } = useRequestReplay();
+    await runReplay(entryOf());
+    sendMessage.mockClear();
+    clearReplay();
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(replayView.value).toBeNull();
   });
 });
 
@@ -122,11 +167,7 @@ describe('回包怎么落进屏幕', () => {
     const { runReplay, replayView } = useRequestReplay();
     sendMessage.mockResolvedValue(envelope({ status: 503, statusText: 'Service Unavailable' }));
     await runReplay(entryOf());
-    expect(replayView.value?.reading).toMatchObject({
-      outcome: 'answered',
-      status: 503,
-      statusText: 'Service Unavailable',
-    });
+    expect(replayView.value?.reading).toMatchObject({ outcome: 'answered', status: 503 });
   });
 
   it('往返失败不是「服务器报错」，也不是「没走代理」：它是「这一笔的答案没读到」', async () => {
@@ -135,13 +176,16 @@ describe('回包怎么落进屏幕', () => {
     await runReplay(entryOf());
 
     expect(replayView.value).toMatchObject({ running: false, transportFailed: true, reading: null });
-    expect(replayView.value?.durationMs).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(replayView.value?.durationMs)).toBe(true);
   });
 
   it('失败那一条日志里不许出现目标地址、方法或任何一个头（重放用的正是当初那组凭据）', async () => {
     const { runReplay } = useRequestReplay();
-    sendMessage.mockRejectedValue(new Error('boom'));
-    await runReplay(entryOf());
+    // 假错误里**故意带上**地址与 token：不带的话这条用例怎么改都过，等于没测
+    sendMessage.mockRejectedValue(
+      new Error('Failed to fetch http://secret-host.example/api/orders with authorization: Bearer secret-token-abc'),
+    );
+    await runReplay(entryOf({ originalUrl: 'http://secret-host.example/api/orders' }));
 
     const { logger } = await import('@/utils/logger');
     expect(logger.warn).toHaveBeenCalledTimes(1);
@@ -163,7 +207,7 @@ describe('回包怎么落进屏幕', () => {
 describe('迟到的那一份不算数', () => {
   it('在途期间换行并收回读数，之后落定的那一笔不许再写回屏幕', async () => {
     let release: (value: unknown) => void = () => {};
-    sendMessage.mockImplementation(() => new Promise(resolve => (release = resolve)));
+    hangProxyOnly(fn => (release = fn));
     const { runReplay, replayView, clearReplay } = useRequestReplay();
 
     const pending = runReplay(entryOf());
@@ -178,7 +222,10 @@ describe('迟到的那一份不算数', () => {
 
   it('连着点两行时，屏幕上留的是后点那一行的账，前一行迟到的回包不许盖上去', async () => {
     const releases: ((value: unknown) => void)[] = [];
-    sendMessage.mockImplementation(() => new Promise(resolve => releases.push(resolve)));
+    sendMessage.mockImplementation((message: { type?: string }) => {
+      if (message?.type === MessageType.PROXY_REQUEST) return new Promise(resolve => releases.push(resolve));
+      return Promise.resolve({ success: true, cancelled: true });
+    });
     const { runReplay, replayView } = useRequestReplay();
 
     const first = runReplay(entryOf({ id: 'log-A' }));

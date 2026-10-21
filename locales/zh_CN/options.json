@@ -426,6 +426,8 @@
   "replayNoHeaders": "这条记录没有留下请求头，所以这次只带了方法、地址与正文——它不等于当时那一笔。",
   "replayBinaryBody": "回包是二进制，正文不在这里展开。",
   "replayBodyTruncated": "正文只为显示截到前 $1 个字符（回包实际 $2 个）。",
+  "replayRefuseTruncated": "这条记录有字段在落盘时被截断过（截断标记就留在原文里）。照原样重发就是把一个残缺的地址或正文连着当初的凭据真的发出去，所以这一笔不提供重放。",
+  "replayRefuseUnusable": "这条记录缺了发出去要用的字段（地址或方法读不出），所以不提供重放。",
   "createRuleFromLogFailed": "创建规则失败：无法解析请求 URL",
   "importCurlTitle": "cURL 导入",
   "importCurlDesc": "粘贴 cURL 命令（如浏览器 DevTools 的「复制为 cURL」），自动解析为预填规则",

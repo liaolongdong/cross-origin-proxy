@@ -426,6 +426,8 @@
   "replayNoHeaders": "This entry kept no request headers, so only the method, address and body went out — it is not the same request.",
   "replayBinaryBody": "The response is binary, so its body is not shown here.",
   "replayBodyTruncated": "Shown only for display: the first $1 characters of a $2-character body.",
+  "replayRefuseTruncated": "A field in this entry was truncated when it was logged (the marker is still in the text). Sending it as-is would put a broken address or body on the wire together with the original credentials, so this one cannot be replayed.",
+  "replayRefuseUnusable": "This entry is missing a field needed to send it (the address or method cannot be read), so there is no replay for it.",
   "createRuleFromLogFailed": "Failed to create rule: cannot parse request URL",
   "importCurlTitle": "Import cURL",
   "importCurlDesc": "Paste a cURL command (e.g. DevTools \"Copy as cURL\") to prefill a rule automatically",

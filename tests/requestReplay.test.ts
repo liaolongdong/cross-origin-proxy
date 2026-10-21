@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { MAX_LOG_BODY_SIZE } from '@/utils/constants';
+import { LOG_TRUNCATION_SUFFIX } from '@/utils/formatters';
 import { needsReplayConfirm, planReplay, readReplayEnvelope, replayBodyUseful } from '@/utils/requestReplay';
 
 const httpEntry = {
@@ -38,7 +39,7 @@ describe('planReplay — 这条记录发得出去吗', () => {
   it('地址缺席或读不出，点名原因而不是发一笔空请求', () => {
     expect(planReplay({ ...httpEntry, originalUrl: '' })).toEqual({ ok: false, reason: 'noUrl' });
     expect(planReplay({ ...httpEntry, originalUrl: undefined })).toEqual({ ok: false, reason: 'noUrl' });
-    // 被截断留痕截坏的、或手改过的原文：`new URL` 抛出去就是不能发
+    // 手改过的原文：`new URL` 抛出去就是不能发（被截断留痕截坏的那一种在更早的那道闸就被拦下了）
     expect(planReplay({ ...httpEntry, originalUrl: 'not a url' })).toEqual({ ok: false, reason: 'notHttp' });
   });
 
@@ -53,23 +54,58 @@ describe('planReplay — 这条记录发得出去吗', () => {
     }
   });
 
+  it('http 与 https 都算能发（只放 https 的话，FAT/UAT 那套内网 http 环境就全在这道闸外）', () => {
+    for (const url of ['http://fat-lan.example/api/orders', 'HTTPS://Fat.Example.com/api/orders']) {
+      expect(planReplay({ ...httpEntry, originalUrl: url }).ok).toBe(true);
+    }
+  });
+
   it('方法空白就没法发（日志那侧只钳长度，不校验取值）', () => {
     expect(planReplay({ ...httpEntry, method: '  ' })).toEqual({ ok: false, reason: 'badMethod' });
     expect(planReplay({ ...httpEntry, method: 7 })).toEqual({ ok: false, reason: 'badMethod' });
   });
 
-  it('方法按 HTTP 惯例归一成大写（小写 get 发出去还是 GET）', () => {
-    const plan = planReplay({ ...httpEntry, method: ' get ' });
-    expect(plan.ok === true && plan.payload.method).toBe('GET');
+  it('发出去的方法保持记录里的写法（HTTP 方法的大小写是协议的一部分，不替它编一个规范形状）', () => {
+    const plan = planReplay({ ...httpEntry, method: ' purge ' });
+    expect(plan.ok === true && plan.payload.method).toBe('purge');
+    // 而「要不要先问一句」是判读，认大小写：上面这个非幂等动词必须落在确认那一档
+    expect(needsReplayConfirm(' purge ')).toBe(true);
   });
 
-  it('头表不是对象就当没有；对象里的非字符串值丢掉，但「留过头表」这件事照实报', () => {
+  it('带截断标记的字段一律不发——那是一个残缺地址或半截正文连着当初的真凭据', () => {
+    const marker = `${LOG_TRUNCATION_SUFFIX}5000 chars]`;
+    expect(planReplay({ ...httpEntry, originalUrl: `https://a.example/x${'\n'}${marker}` })).toEqual({
+      ok: false,
+      reason: 'truncated',
+    });
+    expect(planReplay({ ...httpEntry, requestBody: `{"a":"${'x'.repeat(8)}${'\n'}${marker}` })).toEqual({
+      ok: false,
+      reason: 'truncated',
+    });
+    // 头表的**名与值**都算：capLogEntry 两头都裁
+    expect(planReplay({ ...httpEntry, requestHeaders: { [`big${'\n'}${marker}`]: '1' } })).toEqual({
+      ok: false,
+      reason: 'truncated',
+    });
+    expect(planReplay({ ...httpEntry, requestHeaders: { cookie: `sid=1${'\n'}${marker}` } })).toEqual({
+      ok: false,
+      reason: 'truncated',
+    });
+    // 没被裁过的正常记录不受影响（判据是那条后缀，不是「字符串很长」）
+    expect(planReplay({ ...httpEntry, requestBody: 'x'.repeat(9000) }).ok).toBe(true);
+  });
+
+  it('头表不是对象就当没有；合法性交 `filterIncomingHeaders`（这里不自己长第二把尺）', () => {
     const asArray = planReplay({ ...httpEntry, requestHeaders: [['a', 'b']] });
     expect(asArray.ok && asArray.headersPresent).toBe(false);
 
     const mixed = planReplay({ ...httpEntry, requestHeaders: { a: '1', b: 2, c: null } });
     expect(mixed.ok && mixed.payload.headers).toEqual({ a: '1' });
     expect(mixed.ok && mixed.headersPresent).toBe(true);
+
+    // 一条含换行的值会被那道共同的闸门跳过——不是在这里重写一遍 RFC 7230 的理由
+    const crlf = planReplay({ ...httpEntry, requestHeaders: { a: '1', 'bad name': 'x\r\nY: injected' } });
+    expect(crlf.ok === true && crlf.payload.headers).toEqual({ a: '1' });
   });
 
   it('没有正文的记录不带 body 字段（而不是带一个空串——那是「发了个空 body」这件事）', () => {
@@ -166,13 +202,32 @@ describe('readReplayEnvelope — 这一笔到底发生了什么', () => {
     ).toBe('malformed');
   });
 
+  it('那些编码只在 status 0 上算数：服务器自己回一个 statusText 叫 Blocked 的 200，讲的是它的故事', () => {
+    // 这是这份判据唯一会读错的方向，而它读错的代价是把一次真实的 200 说成「请求没有发出」——
+    // 所以内部编码那一排先问「这一笔出过门吗」，只有没出门的那些信封才轮得到我们的编码
+    for (const statusText of ['Blocked', 'Proxy Bypass', 'Proxy Error', 'Body Too Large', 'Invalid Rule Headers']) {
+      const reading = readReplayEnvelope(envelope({ status: 200, statusText }));
+      expect(reading.outcome).toBe('answered');
+      expect(reading.status).toBe(200);
+    }
+    // Mock 是唯一不能这么办的一档：它的状态码就是规则里那个（200-599）。
+    // 残留的歧义（一个恰好把 statusText 写成 Mock 的真实回包）记在 `readReplayEnvelope` 的文件头
+    expect(readReplayEnvelope(envelope({ status: 201, statusText: 'Mock' })).outcome).toBe('mock');
+  });
+
   it('形状不对就当「没读到答案」，不拿 0 当状态码报出去', () => {
     for (const raw of [undefined, null, 'nope', [], { success: false }, { status: '200' }, { status: NaN }]) {
       const reading = readReplayEnvelope(raw);
       expect(reading.outcome).toBe('malformed');
-      expect(reading.status).toBe(0);
+      // 这一格必须是 `null` 而不是 `0`：画出一个 0 就是替屏幕说一句「服务器回了 0」
+      expect(reading.status).toBeNull();
       expect(reading.body).toBe('');
     }
+    // 认不出来的那一档也一样：有信封不等于读到了答案，正文与状态都不许留到屏幕上
+    const unknown = readReplayEnvelope(envelope({ status: 0, statusText: 'Something New', body: 'x' }));
+    expect(unknown.outcome).toBe('malformed');
+    expect(unknown.status).toBeNull();
+    expect(unknown.body).toBe('');
   });
 
   it('正文按显示上限截，并且把「截过」这件事与总长度一起交出去', () => {
@@ -187,11 +242,9 @@ describe('readReplayEnvelope — 这一笔到底发生了什么', () => {
     expect(short.bodyLength).toBe(2);
   });
 
-  it('base64 与响应头条数原样带出（界面据此说「二进制正文不在这里展开」）', () => {
-    const reading = readReplayEnvelope(envelope({ isBase64: true, headers: { a: '1', b: '2' } }));
-    expect(reading.isBase64).toBe(true);
-    expect(reading.headerCount).toBe(2);
-    expect(readReplayEnvelope(envelope({ headers: null })).headerCount).toBe(0);
+  it('二进制正文这一件事原样带出（界面据此说「不在这里展开」，不把一串 base64 塞进面板）', () => {
+    expect(readReplayEnvelope(envelope({ isBase64: true })).isBase64).toBe(true);
+    expect(readReplayEnvelope(envelope({})).isBase64).toBe(false);
   });
 
   it('内部编码那几档不再贴英文原文，对面说的话与体积上限那句留着', () => {
@@ -227,23 +280,29 @@ describe('readReplayEnvelope — 这一笔到底发生了什么', () => {
    *
    * 那一头改名而这一头不动，全仓不会有任何一处变红——所有 bypass 会一起落到 `malformed`，
    * 界面说的是「没能读到这一笔的答案」，而答案其实好好地回来了。所以这里按源码把那几个串钉住。
+   *
+   * 钉的是**出现次数**而不是「有没有出现」：`Body Too Large` 与 `Invalid Rule Headers` 各有两处
+   * （请求方向与回包方向 / 两处规则头拒绝），`Proxy Bypass` 有三处。只 `toContain` 时改掉其中一处
+   * 照样绿，而那一处正是某个方向的档位从此静默改判——数次数才数得到「这几句都还在，且一句不多一句不少」。
    */
-  it('后台那几句字面量原样存在（改了那一头必须回来同步这张判读表）', () => {
+  it('后台那几句字面量各在预期的次数上（改了那一头必须回来同步这张判读表）', () => {
     const handler = readFileSync('entrypoints/background/proxyHandler.ts', 'utf-8');
-    for (const literal of [
-      "statusText: 'Mock'",
-      "statusText: 'Blocked'",
-      "statusText: 'Body Too Large'",
-      "statusText: 'Invalid Rule Headers'",
-      "statusText: 'Proxy Error'",
-      "statusText: 'Proxy Bypass'",
-      "body: 'Site excluded'",
-      "body: 'Proxy is disabled'",
-      "body: 'No matching rule'",
-      'Request body exceeds',
-      'Response body exceeds',
-    ]) {
-      expect(handler, `proxyHandler 里找不到 ${literal}`).toContain(literal);
+    const expected: [string, number][] = [
+      ["statusText: 'Mock'", 1],
+      ["statusText: 'Blocked'", 1],
+      ["statusText: 'Body Too Large'", 2],
+      ["statusText: 'Invalid Rule Headers'", 2],
+      ["statusText: 'Proxy Error'", 1],
+      ["statusText: 'Proxy Bypass'", 3],
+      ["body: 'Site excluded'", 1],
+      ["body: 'Proxy is disabled'", 1],
+      ["body: 'No matching rule'", 1],
+      ['Request body exceeds', 1],
+      ['Response body exceeds', 1],
+    ];
+    for (const [literal, times] of expected) {
+      const found = handler.split(literal).length - 1;
+      expect(found, `proxyHandler 里 ${literal} 出现了 ${found} 次，判读表按 ${times} 次写`).toBe(times);
     }
   });
 });

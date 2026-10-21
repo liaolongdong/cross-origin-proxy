@@ -6,20 +6,26 @@
  * 于是总开关、站点范围、规则匹配、mock / block / delay / retry、凭据展开全部按原样再走一遍，
  * 界面无需（也不许）自己拼一份「代理会怎么做」的模型。第二份判据就是下一次改动里分叉的开始。
  *
- * 三条刻意的取舍：
+ * 四条刻意的取舍：
  * - **发出去的载荷来自这条记录自己**（地址、方法、当时那组请求头、当时的正文）。日志里的请求头
  *   与正文本就是原值（只有详情视图按 `headerMask` 打码显示），重发它们与原请求同一条落点，
  *   不是新的外传面；`{{名称}}` 若在头值里，那是**代发那一刻**才展开的，这里一律按字面交出。
+ * - **带截断标记的字段不发**。`storage.ts` 的 `capLogEntry` 会裁 URL / 方法 / 每个头的名与值 / 正文
+ *   并在末尾留 `…[truncated, original N chars]`，照原样重发就是把一个残缺地址连着真凭据发到现网。
+ *   `utils/mockFromLog.ts` 对同一件事选的也是拒绝，判据共用 `isTruncatedForLog` 那一份。
  * - **长连接不重放**。日志只由后台通道落，握手不经过它，而 `wss://` 交给 `fetch` 只会得到一个
  *   谁都看不懂的失败——那种「报了一个错」比「这件事我做不到」更难排查。
- * - **回包里的英文串是内部编码，不是文案**。`statusText` 与两份 bypass 的 body 由
+ * - **回包里的英文串是内部编码，不是文案**。`statusText` 与四句 bypass 的 body 由
  *   `entrypoints/background/proxyHandler.ts` 写死，这里把它们收成 `ReplayOutcome` 那几档，
- *   界面只说 i18n 的那一句；原始 statusText 作为数据另外带着。
+ *   界面只说 i18n 的那一句，原始编码不进屏幕。
  *   这层映射的全部风险是那一头改了字面量而这一头静默失配，所以判读表两侧由
- *   `tests/requestReplay.test.ts` 按源码对账，改一侧必红。
+ *   `tests/requestReplay.test.ts` 按源码**数次数**对账——那两句各写两次（请求方向与回包方向），
+ *   只 `toContain` 一处时改掉了另一处也照样绿。
  */
 
 import { MAX_LOG_BODY_SIZE } from '@/utils/constants';
+import { filterIncomingHeaders } from '@/utils/headerValidation';
+import { isTruncatedForLog } from '@/utils/formatters';
 import type { ProxyRequestMessage } from '@/utils/types';
 
 /** 一条日志记录里，重放要用的那几项（其余字段一概不看：重放的是「这笔请求」，不是它的结果） */
@@ -44,35 +50,53 @@ export type ReplayPayload = Omit<ProxyRequestMessage['data'], 'requestId' | 'rul
  * `headersPresent` / `bodyPresent` 说的是「这条记录留没留下那样东西」，与「它是不是空的」是两件事：
  * 被阻断的那一笔、失败收口的那一笔都不记请求头，此时照发一份空头请求是合法的，
  * 但界面必须说清楚——用户以为自己在重放原请求，而原请求的头根本没进过日志。
+ *
+ * `truncated` 是唯一**会真的出现在这份日志里**的拒绝理由：`storage.ts` 的 `capLogEntry` 按
+ * `MAX_LOG_FIELD_SIZE` / `MAX_LOG_BODY_SIZE` 裁过 URL、方法、每个头的名与值以及正文，
+ * 并在末尾留下 `…[truncated, original N chars]`。照原样重发就是**把一个带截断标记的残缺地址
+ * 或残缺正文，连着当初那组真凭据发到现网去**——`utils/mockFromLog.ts` 对同一件事选的是拒绝而不是警告，
+ * 这里跟它站一边（判据也共用 `isTruncatedForLog` 那一份，产出方与判读方各写一遍后缀就是下一次静默的开始）。
  */
 export type ReplayPlan =
   | { ok: true; payload: ReplayPayload; headersPresent: boolean; bodyPresent: boolean }
-  | { ok: false; reason: 'noUrl' | 'notHttp' | 'badMethod' };
+  | { ok: false; reason: 'noUrl' | 'notHttp' | 'badMethod' | 'truncated' };
 
 /** 只有 http(s) 能被 `fetch` 发出去；其余协议（含 `ws://` / `wss://`）在这里就挡下，不交给网络层报错 */
 const REPLAYABLE_PROTOCOLS: readonly string[] = ['http:', 'https:'];
 
-/** 方法是自由文本（日志的字段收口只钳长度，不校验取值），空或纯空白就没法发 */
-function readMethod(raw: unknown): string {
+/** 判读用的方法（HTTP 惯例是大写）；发出去的那一份保持记录里的原样，见 `planReplay` */
+function methodForJudgement(raw: unknown): string {
   return typeof raw === 'string' ? raw.trim().toUpperCase() : '';
 }
 
 /**
- * 把 storage / 消息里读出的头表收成 `Record<string, string>`
+ * 把 storage / 消息里读出的头表收成可发的头
  *
- * 非对象当「没有这一项」，对象里的非字符串值丢掉——代理那侧对进来的头本来就是宽容过滤
- * （`filterIncomingHeaders` 跳过个别非法项），这里提前丢一遍只是不让一个 `undefined` 混进 postMessage 式的结构化克隆。
+ * 这里只做形状收窄（非对象当「没有这一项」），**合法性一条也不自己判**：头名字符集与 CRLF
+ * 的判据住在 `utils/headerValidation.ts`，代发那一侧本来就用 `filterIncomingHeaders` 过一遍，
+ * 界面这边提前过同一份是为了不把 `undefined` 与一个换行塞进结构化克隆，而不是再发明一把尺。
  */
 function readHeaders(raw: unknown): { headers: Record<string, string>; present: boolean } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { headers: {}, present: false };
-  const headers: Record<string, string> = {};
+  const strings: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value === 'string') headers[key] = value;
+    if (typeof value === 'string') strings[key] = value;
   }
-  return { headers, present: true };
+  return { headers: filterIncomingHeaders(strings), present: true };
+}
+
+/** 这条记录的任何一个字段带着截断标记 → 它不能原样发出去 */
+function hasTruncatedField(source: ReplaySource): boolean {
+  const fields: unknown[] = [source.originalUrl, source.method, source.requestBody];
+  if (source.requestHeaders && typeof source.requestHeaders === 'object' && !Array.isArray(source.requestHeaders)) {
+    fields.push(...Object.keys(source.requestHeaders), ...Object.values(source.requestHeaders));
+  }
+  return fields.some(f => typeof f === 'string' && isTruncatedForLog(f));
 }
 
 export function planReplay(source: ReplaySource): ReplayPlan {
+  if (hasTruncatedField(source)) return { ok: false, reason: 'truncated' };
+
   const rawUrl = typeof source.originalUrl === 'string' ? source.originalUrl.trim() : '';
   if (!rawUrl) return { ok: false, reason: 'noUrl' };
 
@@ -80,13 +104,15 @@ export function planReplay(source: ReplaySource): ReplayPlan {
   try {
     protocol = new URL(rawUrl).protocol;
   } catch {
-    // 日志里的地址来自页面，理论上一定是 URL；真读不出（手改过 storage、或被截断留痕截坏了）
-    // 就说「这条记录发不出去」，不拿一个残缺地址去换一次网络错误
+    // 日志里的地址来自页面，理论上一定是 URL；真读不出（手改过 storage）就说「这条记录发不出去」，
+    // 不拿一个残缺地址去换一次网络错误
     return { ok: false, reason: 'notHttp' };
   }
   if (!REPLAYABLE_PROTOCOLS.includes(protocol)) return { ok: false, reason: 'notHttp' };
 
-  const method = readMethod(source.method);
+  // 发出去的方法保持记录里的写法（HTTP 方法的大小写是协议的一部分，认不准的动词不为它编一个规范形状）；
+  // 要不要先问一句才是判读，走 `methodForJudgement`
+  const method = typeof source.method === 'string' ? source.method.trim() : '';
   if (!method) return { ok: false, reason: 'badMethod' };
 
   const { headers, present: headersPresent } = readHeaders(source.requestHeaders);
@@ -109,7 +135,7 @@ export function planReplay(source: ReplaySource): ReplayPlan {
 const SAFE_METHODS: readonly string[] = ['GET', 'HEAD', 'OPTIONS'];
 
 export function needsReplayConfirm(method: unknown): boolean {
-  return !SAFE_METHODS.includes(readMethod(method));
+  return !SAFE_METHODS.includes(methodForJudgement(method));
 }
 
 /** `proxyHandler` 写死的内部编码（**唯一**一份判读表；改那一头必须让这里的用例红） */
@@ -150,19 +176,33 @@ export type ReplayOutcome =
   | 'failed'
   | 'malformed';
 
-/** 读回来的那笔重放结果：给界面的是收好的一档，外加原样的状态码与状态文本（后者作为数据展示） */
+/** 读回来的那笔重放结果：给界面的是收好的一档，加上作为数据展示的原文正文 */
 export interface ReplayReading {
   outcome: ReplayOutcome;
-  status: number;
-  statusText: string;
+  /**
+   * 状态码；`malformed`（压根没读到一份认得的信封）时是 `null`
+   *
+   * 那一格不许画成 `0`：`0` 在这份协议里是「没有回包」的编码，把它当一个状态码显示出来，
+   * 界面就变成「服务器回了 0」——与本仓 `hits: null` 不渲染成 0 同一条规矩。
+   */
+  status: number | null;
   body: string;
   isBase64: boolean;
-  /** 回包正文字符数（`bodyLength` 与 `body` 的长度可以不同：正文只截到显示上限） */
+  /** 回包正文字符数（与 `body` 的长度可以不同：正文只截到显示上限） */
   bodyLength: number;
   /** 正文是否为了显示被截短（`body` 因此是前缀，界面上必须点名，别让它看起来像完整响应） */
   bodyTruncated: boolean;
-  headerCount: number;
 }
+
+/** 读不出任何有效信息时交出的那一份：不猜状态码、不猜正文 */
+const NO_ANSWER: ReplayReading = {
+  outcome: 'malformed',
+  status: null,
+  body: '',
+  isBase64: false,
+  bodyLength: 0,
+  bodyTruncated: false,
+};
 
 /**
  * 哪几档值得把回包正文贴在结果下面
@@ -187,35 +227,28 @@ export function replayBodyUseful(outcome: ReplayOutcome): boolean {
 /**
  * 把 `PROXY_REQUEST` 的回包读成一档结局
  *
- * 只认「形状」与「proxyHandler 那几句写死的编码」，不猜别的东西：`status` 不是数字、
- * 或整包不是对象，一律 `malformed`，界面据此说「没能读到这一笔的答案」，而不是把 0 当状态码报出去。
+ * 两条收口都是刻意的。① 形状：`status` 不是数字、整包不是对象，一律 `malformed`，
+ * 而 `malformed` 连正文也不贴——那份「答案」我们已经读不出结构了，贴出来只会是一段看着像数据的噪声。
+ * ② 那些英文编码只在 `status === 0` 这一档上才算数：`0` 在这份协议里就是「没有回包」，
+ * 而服务器完全可能自己回一个 `statusText: 'Blocked'` 的 200，那种情况下讲的是它自己的故事，
+ * 不是我们的编码，把它念成「请求没有发出」就是替对面编话。唯一的例外是 Mock——它的回包状态码
+ * 是规则里那一个（200-599），只能按 `statusText` 认；代价是一个恰好把 `statusText` 写成 `Mock`
+ * 的真实回包会被读成规则里的 Mock。要消掉这份歧义得让后台在信封里带一个显式标志，那是改消息协议。
  */
 export function readReplayEnvelope(raw: unknown): ReplayReading {
-  const empty: ReplayReading = {
-    outcome: 'malformed',
-    status: 0,
-    statusText: '',
-    body: '',
-    isBase64: false,
-    bodyLength: 0,
-    bodyTruncated: false,
-    headerCount: 0,
-  };
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return empty;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return NO_ANSWER;
 
   const packet = raw as Record<string, unknown>;
-  const status = typeof packet.status === 'number' && Number.isFinite(packet.status) ? packet.status : NaN;
+  const status = typeof packet.status === 'number' && Number.isFinite(packet.status) ? packet.status : null;
+  if (status === null) return NO_ANSWER;
+
   const statusText = typeof packet.statusText === 'string' ? packet.statusText : '';
   const bodyText = typeof packet.body === 'string' ? packet.body : '';
   const isBase64 = packet.isBase64 === true;
-  if (!Number.isFinite(status)) return empty;
-
-  const headers = packet.headers;
-  const headerCount =
-    headers && typeof headers === 'object' && !Array.isArray(headers) ? Object.keys(headers).length : 0;
 
   let outcome: ReplayOutcome;
   if (statusText === TEXT_MOCK) outcome = 'mock';
+  else if (status !== 0) outcome = 'answered';
   else if (statusText === TEXT_BLOCKED) outcome = 'blocked';
   else if (statusText === TEXT_INVALID_RULE_HEADERS) outcome = 'invalidRuleHeaders';
   else if (statusText === TEXT_BODY_TOO_LARGE) {
@@ -228,7 +261,7 @@ export function readReplayEnvelope(raw: unknown): ReplayReading {
         : 'malformed';
   } else if (statusText === TEXT_PROXY_ERROR) outcome = 'failed';
   else if (statusText === TEXT_PROXY_BYPASS) {
-    // 三种 bypass 在页面上是同一个信封，只有 body 那一句分得开：这一格不能只说「没走代理」，
+    // 四种 bypass 在页面上是同一个信封，只有 body 那一句分得开：这一格不能只说「没走代理」，
     // 得说清是没走代理的**哪一个原因**，否则用户会去改规则，而问题在总开关或站点名单上
     outcome =
       bodyText === BYPASS_SITE_EXCLUDED
@@ -238,16 +271,16 @@ export function readReplayEnvelope(raw: unknown): ReplayReading {
           : bodyText === BYPASS_NO_RULE
             ? 'noRule'
             : 'malformed';
-  } else outcome = 'answered';
+  } else outcome = 'malformed';
+
+  if (outcome === 'malformed') return NO_ANSWER;
 
   return {
     outcome,
     status,
-    statusText,
     body: bodyText.slice(0, MAX_LOG_BODY_SIZE),
     isBase64,
     bodyLength: bodyText.length,
     bodyTruncated: bodyText.length > MAX_LOG_BODY_SIZE,
-    headerCount,
   };
 }

@@ -436,7 +436,7 @@
                 plain
                 :icon="Close"
                 :aria-label="t('closeLogDetailA11y')"
-                @click="selectedLog = null"
+                @click="closeLogDetail"
               />
             </div>
           </div>
@@ -499,6 +499,14 @@
             </el-button>
           </div>
 
+          <!-- 这一行不给重放时把原因说在这句话的位置上：默默少一颗按钮读起来像界面坏了 -->
+          <p
+            v-if="replayRefusal"
+            class="log-detail-replay-refuse"
+          >
+            {{ replayRefusal }}
+          </p>
+
           <!-- 重放的结果只活在这一屏：换行与关抽屉都把它收回——它说的是「现在」，留着就是拿一次旧往返当现状 -->
           <div
             v-if="shownReplay"
@@ -508,7 +516,7 @@
             <div class="replay-head">
               <el-tag
                 v-if="replayStatus !== null"
-                :type="statusTagType(replayStatus ?? 0)"
+                :type="replayTagType"
                 size="small"
                 >{{ replayStatus }}</el-tag
               >
@@ -519,17 +527,17 @@
                 >{{ shownReplay.durationMs }}ms</span
               >
             </div>
-            <ul class="replay-notes">
-              <!-- 这条记录没留下请求头时必须自己说：用户以为在重放原请求，而那组头根本没进过日志 -->
-              <li v-if="!shownReplay.headersPresent">{{ t('replayNoHeaders') }}</li>
-              <li v-if="shownReplay.reading?.isBase64">{{ t('replayBinaryBody') }}</li>
-              <li v-if="shownReplay.reading?.bodyTruncated">
-                {{
-                  t('replayBodyTruncated', [
-                    String(shownReplay.reading?.body.length ?? 0),
-                    String(shownReplay.reading?.bodyLength ?? 0),
-                  ])
-                }}
+            <ul
+              v-if="replayNotes.length"
+              class="replay-notes"
+            >
+              <!-- 「这条记录没留下请求头」必须自己说：用户以为在重放原请求，而那组头根本没进过日志。
+                   这一串文案由脚本侧算好（字面量 key 留在唯一的 `t()` 出口上，i18n 守卫按字面量扫得到） -->
+              <li
+                v-for="note in replayNotes"
+                :key="note"
+              >
+                {{ note }}
               </li>
             </ul>
             <pre
@@ -1108,10 +1116,39 @@ const replaySentence = computed(() => {
   }
 });
 
-/** 那枚状态码标签：在途与没读到时不画一个数（`0` 会被读成「服务器回了 0」） */
-const replayStatus = computed(() => {
-  const reading = shownReplay.value?.reading;
-  return reading && !shownReplay.value?.transportFailed ? reading.status : null;
+/** 那枚状态码标签：在途与「压根没读到一份认得的信封」都不画一个数（`0` 会被读成「服务器回了 0」） */
+const replayStatus = computed(() => shownReplay.value?.reading?.status ?? null);
+const replayTagType = computed(() => (replayStatus.value === null ? 'info' : statusTagType(replayStatus.value)));
+
+/**
+ * 结果块下面那几句补充（没留下请求头 / 二进制 / 为显示截过正文）
+ *
+ * 收成一支数组而不是三个 `<li v-if>`：同一格要决定「这一串到底要不要出现」，
+ * 三条各写一道 `v-if` 时容器会在一条都不成立时留着——那是 6px 的一段空列表，
+ * 谁也不会去查它为什么在那儿。字面量 key 仍然只有 `t()` 这一处出口，i18n 的源码扫描照旧查得到。
+ */
+const replayNotes = computed(() => {
+  const view = shownReplay.value;
+  if (!view) return [];
+  const notes: string[] = [];
+  if (!view.headersPresent) notes.push(t('replayNoHeaders'));
+  const reading = view.reading;
+  if (reading?.isBase64) notes.push(t('replayBinaryBody'));
+  if (reading?.bodyTruncated)
+    notes.push(t('replayBodyTruncated', [String(reading.body.length), String(reading.bodyLength)]));
+  return notes;
+});
+
+/**
+ * 这一行为什么不给重放（`replayPlan.ok === false` 时才有话）
+ *
+ * 按钮按同一份判据决定画不画，可被拒的那一档必须自己说清为什么——被截断过的记录**是会出现在
+ * 这份日志里的**（正文 32K、其余字段 8K，超出就留后缀），默默少一颗按钮读起来像界面坏了。
+ */
+const replayRefusal = computed(() => {
+  const plan = replayPlan.value;
+  if (!plan || plan.ok) return '';
+  return plan.reason === 'truncated' ? t('replayRefuseTruncated') : t('replayRefuseUnusable');
 });
 
 /** 展开的正文：只贴「对面说的话」那几档，内部编码的英文原文不重复一遍（哪几档见 `replayBodyUseful`） */
@@ -1213,6 +1250,12 @@ function toggleLogDetail(row: RequestLogEntry) {
   clearReplay(selectedLog.value?.id);
   selectedLog.value = isSame ? null : row;
   if (!isSame) detailTab.value = 'request';
+}
+
+/** 详情面板上那颗关闭：走与点行收起同一条路，别让它成为「唯一一处不清重放读数的收起」 */
+function closeLogDetail() {
+  const row = selectedLog.value;
+  if (row) toggleLogDetail(row);
 }
 
 /**
@@ -1635,6 +1678,15 @@ function copyAsCurl() {
 
 .replay-duration {
   font-size: 12px;
+  color: var(--cop-text-color-secondary, #909399);
+}
+
+/* 这一行为什么不能重放：与摘要同档的次要字色，不做红——它不是错误，是一个做不了的动作 */
+.log-detail-replay-refuse {
+  padding: 8px 16px 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--cop-text-color-secondary, #909399);
 }
 

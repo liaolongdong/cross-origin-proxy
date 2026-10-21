@@ -21,6 +21,8 @@ import type { ReplayReading } from '@/utils/requestReplay';
 export interface ReplayView {
   /** 这一次重放属于哪条日志：界面上只有它与当前行对上才画，避免把上一行的结局挂在下一行下面 */
   ownerId: string;
+  /** 这一趟的登记号，也是取消那一笔时唯一能对上后台的坐标（只在 composable 内部用） */
+  requestId: string;
   /** 在途：这一趟往返还没有落定，任何读数都还没落地 */
   running: boolean;
   /** 发出去的时候，这条记录有没有留下请求头（没留下时界面必须点名，用户以为在重放原请求） */
@@ -50,8 +52,9 @@ export function useRequestReplay() {
   /**
    * 发这一笔。调用方负责先问用户（非幂等方法那一句确认）
    *
-   * 记录本身发不出去（没有地址、不是 http、方法读不出）时**什么都不做**：界面上那颗按钮
-   * 按同一份判据决定画不画，所以这里不是「静默失败」，而是「这条路本来就没入口」。
+   * 记录本身发不出去（没有地址、不是 http、方法读不出、字段带着截断标记）时**什么都不做**：
+   * 界面上那颗按钮按同一份判据决定画不画，被拒的那一档还会把理由写在按钮该在的位置上，
+   * 所以这里不是「静默失败」，而是「这条路本来就没有入口」。
    */
   async function runReplay(entry: RequestLogEntry): Promise<void> {
     const plan = planReplay(entry);
@@ -59,8 +62,10 @@ export function useRequestReplay() {
 
     const thisRound = ++round;
     const startedAt = Date.now();
+    const requestId = `replay-${generateId()}`;
     replayView.value = {
       ownerId: entry.id,
+      requestId,
       running: true,
       headersPresent: plan.headersPresent,
       bodyPresent: plan.bodyPresent,
@@ -74,7 +79,7 @@ export function useRequestReplay() {
       // 把当时那条规则的 id 递过去，等于替用户假定他现在关心的还是同一条。
       const raw: unknown = await chrome.runtime.sendMessage({
         type: MessageType.PROXY_REQUEST,
-        data: { requestId: `replay-${generateId()}`, ...plan.payload },
+        data: { requestId, ...plan.payload },
       });
       if (thisRound !== round) return;
       replayView.value = {
@@ -99,12 +104,24 @@ export function useRequestReplay() {
   /**
    * 收回这一屏的重放读数
    *
-   * 给了 `ownerId` 就只收那一行的账（换行时把上一行的结果留在原地是没有意义的，但把**新**那一行
+   * 给了 `ownerId` 就只收那一行的账（换行时把上一行的结果留在原地没有意义，但把**新**那一行
    * 刚点出来的在途状态抹掉更没有意义）；不给就是整段丢弃（关抽屉、清空日志）。
    * 两种都要 `++round`：不然一趟还没落定的往返会在下一次别处点开时突然落在这屏上。
+   *
+   * 在途那一趟顺手掐掉：用户已经不看这一笔了，而重放用的可能是 `POST`——「页面已经放弃」
+   * 不该等于「服务端收到两遍」。这一句是尽力而为：登记键是 `(tabId, frameId, requestId)`，
+   * 两次调用都出自同一张扩展页，坐标一致才掐得住；坐标对不上时它安静地不做任何事，
+   * 那一笔照常落定并被 `thisRound !== round` 丢掉（与摘掉这一句时完全一样）。
    */
   function clearReplay(ownerId?: string): void {
-    if (ownerId && replayView.value?.ownerId !== ownerId) return;
+    const view = replayView.value;
+    if (ownerId && view?.ownerId !== ownerId) return;
+    if (view?.running) {
+      chrome.runtime
+        .sendMessage({ type: MessageType.CANCEL_REQUEST, data: { requestId: view.requestId } })
+        // 取消不成不是故障：那一笔的结果本来就不要了。吞掉拒绝，不进任何日志
+        .catch(() => {});
+    }
     round++;
     replayView.value = null;
   }
