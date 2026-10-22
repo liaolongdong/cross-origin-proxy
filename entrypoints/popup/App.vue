@@ -338,6 +338,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionOpenConfigDesc')"
         @click="openOptionsPage('#add-rule')"
         @keydown.enter.space.prevent="openOptionsPage('#add-rule')"
       >
@@ -346,7 +347,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionOpenConfig') }}</div>
-          <div class="action-card__desc">{{ t('actionOpenConfigDesc') }}</div>
         </div>
       </div>
 
@@ -354,6 +354,8 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="createRuleFromTabDesc"
+        :class="{ 'is-expanded': apiPicker }"
         :aria-expanded="apiPicker ? 'true' : 'false'"
         @click="handleCreateRuleFromTab"
         @keydown.enter.space.prevent="handleCreateRuleFromTab"
@@ -363,7 +365,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionCreateRuleFromTab') }}</div>
-          <div class="action-card__desc">{{ createRuleFromTabDesc }}</div>
         </div>
       </div>
 
@@ -434,6 +435,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionViewLogsDesc')"
         @click="openOptionsPage('#logs')"
         @keydown.enter.space.prevent="openOptionsPage('#logs')"
       >
@@ -442,7 +444,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionViewLogs') }}</div>
-          <div class="action-card__desc">{{ t('actionViewLogsDesc') }}</div>
         </div>
       </div>
 
@@ -450,6 +451,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionImportExportDesc')"
         @click="openOptionsPage('#import-export')"
         @keydown.enter.space.prevent="openOptionsPage('#import-export')"
       >
@@ -458,7 +460,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionImportExport') }}</div>
-          <div class="action-card__desc">{{ t('actionImportExportDesc') }}</div>
         </div>
       </div>
 
@@ -466,6 +467,8 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionProfilesDesc')"
+        :class="{ 'is-expanded': profilePicker }"
         :aria-expanded="profilePicker ? 'true' : 'false'"
         @click="handleProfilesCard"
         @keydown.enter.space.prevent="handleProfilesCard"
@@ -475,7 +478,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionProfiles') }}</div>
-          <div class="action-card__desc">{{ t('actionProfilesDesc') }}</div>
         </div>
       </div>
 
@@ -1419,12 +1421,16 @@ async function openOptionsPage(hash = '') {
 }
 
 /* 头部 */
+
+/* 这一段的总高要压进 Chrome 弹窗的 600px 上限（内容自然高 ≈ 598px，中文是最坏一档）：
+   每处只收一两像素看不出差别，叠起来才装得下「最近请求」的空态与它那句提示。
+   再往下调之前先量一次——量法见 `.test-tmp/probe/ui-verify-1022.cjs` 的 container.bottom + body 8px。 */
 .header {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--cop-border-color-light);
 }
 
@@ -1453,9 +1459,9 @@ async function openOptionsPage(hash = '') {
 .toggle-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;
@@ -1617,8 +1623,8 @@ async function openOptionsPage(hash = '') {
 
 /* 数据点 + 拦截器活动（两者共用同一条分隔线，间距与拆分前一致） */
 .metrics-block {
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--cop-border-color-light);
 }
 
@@ -1628,7 +1634,7 @@ async function openOptionsPage(hash = '') {
   /* 三格顶部对齐：只有第三格带注释行，居中会让前两格的数字下沉半行 */
   align-items: flex-start;
   justify-content: space-around;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .metric {
@@ -1918,19 +1924,22 @@ async function openOptionsPage(hash = '') {
   color: var(--el-color-warning);
 }
 
-/* 动作卡片列表 */
+/* 动作卡排成两列宫格：单列五张卡要占 300 多像素，把「最近请求」整个挤出首屏。
+   两列之后五个入口仍全部可见，首屏高度回到 600px 以内；卡片里的描述文字改作
+   `title` 悬停提示（宫格宽度放不下第二行，截断读起来比不显示更糟）。 */
 .action-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .action-card {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
+  min-width: 0;
+  padding: 8px 10px;
   cursor: pointer;
   user-select: none;
   outline: none;
@@ -1948,6 +1957,7 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-primary-bg-hover);
   border-color: var(--cop-primary-border);
   box-shadow: 0 2px 8px rgb(var(--cop-primary-rgb) / 10%);
+  transform: translateY(-1px);
 }
 
 .action-card:active {
@@ -1966,9 +1976,9 @@ async function openOptionsPage(hash = '') {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
   border-radius: 50%;
 }
 
@@ -1995,22 +2005,22 @@ async function openOptionsPage(hash = '') {
 }
 
 .action-card__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--cop-text-color-primary);
 }
 
-.action-card__desc {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--cop-text-color-secondary);
+/* 展开中的那张卡用主色边框点一句「面板从这里出来」，收起即复原 */
+.action-card.is-expanded {
+  background: var(--cop-primary-bg-hover);
+  border-color: var(--cop-primary-border);
 }
 
 /* 候选面板（「为当前页创建规则」点开后）：与动作卡同一套圆角与底色，
    靠主色边框表示「这是刚才那次点击展开的东西」，而不是第四张卡 */
 .api-picker {
+  grid-column: 1 / -1;
   padding: 10px 12px 12px;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-primary-border);
@@ -2188,26 +2198,22 @@ async function openOptionsPage(hash = '') {
 }
 
 /* 最近请求 */
-.recent-section {
-  padding-top: 4px;
-}
-
 .recent-title {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--cop-text-color-primary);
 }
 
 .recent-empty {
-  padding: 12px 0;
+  padding: 6px 0;
   font-size: 12px;
   color: var(--cop-text-color-placeholder);
   text-align: center;
 }
 
 .recent-empty-hint {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font-size: 11px;
   color: var(--cop-text-color-secondary);
   text-align: center;
@@ -2275,7 +2281,7 @@ async function openOptionsPage(hash = '') {
 
 /* 可折叠规则列表 */
 .rules-section {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   overflow: hidden;
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;

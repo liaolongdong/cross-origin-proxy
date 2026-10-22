@@ -18,51 +18,8 @@
           :aria-label="!statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled')"
         ></span>
       </h1>
-    </div>
 
-    <!-- 第二行：操作按钮 -->
-    <div class="header-actions-row">
-      <div class="header-actions">
-        <el-button
-          type="primary"
-          :icon="Plus"
-          @click="$emit('addRule')"
-        >
-          {{ t('addRule') }}
-        </el-button>
-        <el-button
-          :icon="Document"
-          @click="$emit('openLogs')"
-        >
-          {{ t('tabLogs') }}
-        </el-button>
-        <el-button
-          :icon="Search"
-          @click="$emit('openUrlTest')"
-        >
-          {{ t('urlTest') }}
-        </el-button>
-        <el-button
-          :icon="FolderOpened"
-          @click="$emit('openImportExport')"
-        >
-          {{ t('importExportConfig') }}
-        </el-button>
-        <el-button
-          :icon="Collection"
-          @click="$emit('openProfiles')"
-        >
-          {{ t('openProfiles') }}
-        </el-button>
-        <el-button
-          :icon="Setting"
-          @click="$emit('openSettings')"
-        >
-          {{ t('tabSettings') }}
-        </el-button>
-      </div>
-
-      <!-- 代理总开关：毛玻璃 pill -->
+      <!-- 代理总开关：与状态灯同一行，第二行只留工具栏 -->
       <div class="proxy-toggle-pill">
         <span class="proxy-toggle-label">
           {{ !statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled') }}
@@ -74,6 +31,47 @@
         />
       </div>
     </div>
+
+    <!-- 第二行：操作按钮 -->
+    <div class="header-actions">
+      <el-button
+        type="primary"
+        :icon="Plus"
+        @click="$emit('addRule')"
+      >
+        {{ t('addRule') }}
+      </el-button>
+      <el-button
+        :icon="Document"
+        @click="$emit('openLogs')"
+      >
+        {{ t('tabLogs') }}
+      </el-button>
+      <el-button
+        :icon="Search"
+        @click="$emit('openUrlTest')"
+      >
+        {{ t('urlTest') }}
+      </el-button>
+      <el-button
+        :icon="FolderOpened"
+        @click="$emit('openImportExport')"
+      >
+        {{ t('importExportConfig') }}
+      </el-button>
+      <el-button
+        :icon="Collection"
+        @click="$emit('openProfiles')"
+      >
+        {{ t('openProfiles') }}
+      </el-button>
+      <el-button
+        :icon="Setting"
+        @click="$emit('openSettings')"
+      >
+        {{ t('tabSettings') }}
+      </el-button>
+    </div>
   </div>
 </template>
 
@@ -84,8 +82,8 @@ import { useI18n } from '@/composables/useI18n';
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
- * 包含标题、版本号、代理状态信号灯、主操作按钮（添加规则）
- * 与毛玻璃半透明按钮（日志/URL 测试/导入导出/环境配置/设置），右侧为代理总开关 pill。
+ * 包含标题、版本号、代理状态信号灯（与代理总开关 pill 同一行），
+ * 以及第二行工具栏：主操作（添加规则）与一组透明底工具按钮（日志/URL 测试/导入导出/环境配置/设置）。
  */
 defineProps<{
   /** 当前插件版本号 */
@@ -124,7 +122,7 @@ const { t } = useI18n();
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 24px 32px;
+  padding: 20px 28px;
   margin-bottom: 24px;
   color: var(--cop-text-color-on-primary);
   background: linear-gradient(135deg, var(--cop-primary) 0%, var(--cop-primary-hover) 100%);
@@ -133,7 +131,10 @@ const { t } = useI18n();
 
 .header-title-row {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
+  justify-content: space-between;
 }
 
 .header-title-row h1 {
@@ -204,46 +205,50 @@ const { t } = useI18n();
   }
 }
 
-.header-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
+/* 工具之间 4px：按钮自带 12px 内边距，悬停底块贴得近才像同一条工具栏；
+   主操作与工具组之间再留 8px（净距 12px），一眼分得出哪颗是主按钮。
+   `.el-button + .el-button` 的默认 12px 外边距在下面归零，间距只由 gap 说一次。 */
 .header-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 4px;
+  align-items: center;
 }
 
 .header-actions :deep(.el-button + .el-button) {
   margin-left: 0;
 }
 
-/* 毛玻璃半透明按钮（「新增规则」那颗反色主按钮除外，它另走一张卡片底）
-   颜色与投影走 90ms、上浮走同样的时长：悬停反馈要「立刻跟上指针」，
-   200ms 以上就会觉得按钮比手慢。显式列属性而不是 `all`——`all` 会把
-   按钮宽度（语言切换时文案变长）也纳入过渡。 */
+/* 工具按钮不再各自套描边：六颗半透明胶囊并排时，描边比文字更抢眼，
+   读起来像六个互不相干的操作。改成透明底，悬停才浮出一层浅底——
+   层级由「有没有底」表达，而不是由六条边表达。
+   显式列过渡属性而不是 `all`：`all` 会把语言切换时变化的按钮宽度也纳入过渡。 */
 :deep(.header-actions .el-button) {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--cop-text-color-on-primary);
-  background: rgb(var(--cop-on-primary-rgb) / 15%);
-  border: 1px solid rgb(var(--cop-on-primary-rgb) / 25%);
-  backdrop-filter: blur(10px);
+  background: transparent;
+  border: 1px solid transparent;
   transition:
     color var(--cop-duration-instant) var(--cop-ease-standard),
     background-color var(--cop-duration-instant) var(--cop-ease-standard),
-    border-color var(--cop-duration-instant) var(--cop-ease-standard),
-    box-shadow var(--cop-duration-instant) var(--cop-ease-standard),
-    transform var(--cop-duration-instant) var(--cop-ease-enter);
+    border-color var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
-:deep(.header-actions .el-button:hover) {
+:deep(.header-actions .el-button:not(.el-button--primary):hover) {
+  background: rgb(var(--cop-on-primary-rgb) / 14%);
+}
+
+:deep(.header-actions .el-button:not(.el-button--primary):active) {
   background: rgb(var(--cop-on-primary-rgb) / 20%);
-  border-color: rgb(var(--cop-on-primary-rgb) / 40%);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
-  transform: translateY(-1px);
+}
+
+/* 键盘焦点环走 on-primary 通道，暗色下随顶栏一起翻成深墨；EP 默认环在渐变底上不够显眼 */
+:deep(.header-actions .el-button:focus-visible) {
+  outline: 2px solid rgb(var(--cop-on-primary-rgb) / 70%);
+  outline-offset: 2px;
 }
 
 /* 多带一个 `.el-button` 是承重的：`entrypoints/options/styles.css` 里暗色模式那条
@@ -252,10 +257,18 @@ const { t } = useI18n();
    深墨字压在深色底上，按钮文字等于消失。加上 `.el-button` 抬到 4 个类级，
    胜负不再由样式表顺序决定。 */
 :deep(.header-actions .el-button.el-button--primary) {
+  padding: 0 14px;
+  margin-right: 8px;
   font-weight: 500;
   color: var(--cop-primary);
   background: var(--cop-bg-color);
   border: 1px solid var(--cop-bg-color);
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    background-color var(--cop-duration-instant) var(--cop-ease-standard),
+    border-color var(--cop-duration-instant) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-instant) var(--cop-ease-standard),
+    transform var(--cop-duration-instant) var(--cop-ease-enter);
 }
 
 :deep(.header-actions .el-button--primary:hover) {
@@ -266,12 +279,18 @@ const { t } = useI18n();
   transform: translateY(-1px);
 }
 
+:deep(.header-actions .el-button--primary:active) {
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  transform: translateY(0);
+}
+
 /* 总开关 pill：毛玻璃底 + 状态文案 */
 .proxy-toggle-pill {
   display: flex;
-  gap: 10px;
+  flex-shrink: 0;
+  gap: 8px;
   align-items: center;
-  padding: 6px 14px;
+  padding: 5px 12px;
   background: rgb(var(--cop-on-primary-rgb) / 15%);
   border: 1px solid rgb(var(--cop-on-primary-rgb) / 25%);
   border-radius: 999px;
@@ -319,14 +338,29 @@ const { t } = useI18n();
     font-size: 20px;
   }
 
-  .header-actions-row {
-    flex-direction: column;
-    gap: 12px;
+  /* 六颗按钮挤在一行会掉成 5 + 1（「设置」孤零零居中）。
+     3 列网格让它们整齐地排成两行三颗，每颗等宽、命中区也更大。 */
+  .header-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
   }
 
-  .header-actions {
-    justify-content: center;
+  .header-actions :deep(.el-button) {
     width: 100%;
+    margin-right: 0;
+  }
+
+  .header-actions :deep(.el-button.el-button--primary) {
+    margin-right: 0;
+  }
+}
+
+/* 极窄窗口再退一档：三列放不下「导入/导出配置」时改两列 */
+@media (width <= 560px) {
+  .header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
