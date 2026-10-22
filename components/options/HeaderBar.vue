@@ -5,25 +5,32 @@
       <h1>
         <el-icon class="logo"><Promotion /></el-icon>
         {{ t('extensionName') }}
-        <el-tag
-          size="small"
-          type="info"
-          class="version-tag"
-          >v{{ currentVersion }}</el-tag
+        <a
+          class="version-tag-link"
+          :href="GITHUB_RELEASES_PAGE_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          :title="t('versionLinkTitle')"
         >
+          <el-tag
+            size="small"
+            type="info"
+            class="version-tag"
+            >v{{ currentVersion }}</el-tag
+          >
+        </a>
         <span
           class="status-dot"
           :class="{ 'is-on': statusKnown && proxyEnabled, 'is-unknown': !statusKnown }"
           role="img"
-          :aria-label="!statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled')"
+          :title="t('statusDotTitle', [statusText])"
+          :aria-label="statusText"
         ></span>
       </h1>
 
       <!-- 代理总开关：与状态灯同一行，第二行只留工具栏 -->
       <div class="proxy-toggle-pill">
-        <span class="proxy-toggle-label">
-          {{ !statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled') }}
-        </span>
+        <span class="proxy-toggle-label">{{ statusText }}</span>
         <el-switch
           :model-value="proxyEnabled"
           :aria-label="t('proxyToggleA11y')"
@@ -76,16 +83,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Plus, Document, Search, FolderOpened, Collection, Setting, Promotion } from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
+import { GITHUB_RELEASES_PAGE_URL } from '@/utils/constants';
 
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
- * 包含标题、版本号、代理状态信号灯（与代理总开关 pill 同一行），
- * 以及第二行工具栏：主操作（添加规则）与一组透明底工具按钮（日志/URL 测试/导入导出/环境配置/设置）。
+ * 包含标题、可点击的版本徽标、代理状态信号灯（与代理总开关 pill 同一行），
+ * 以及第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置）。
+ * 间距与按钮皮肤对齐 account-password-helper 的顶栏实现。
  */
-defineProps<{
+const props = defineProps<{
   /** 当前插件版本号 */
   currentVersion: string;
   /** 代理总开关状态 */
@@ -112,6 +122,11 @@ defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+/** 状态灯与总开关共用同一句状态话，悬停提示也只在标题行这一处拼 */
+const statusText = computed(() =>
+  !props.statusKnown ? t('statusUnknown') : props.proxyEnabled ? t('statusEnabled') : t('statusDisabled'),
+);
 </script>
 
 <style scoped>
@@ -122,7 +137,7 @@ const { t } = useI18n();
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 20px 28px;
+  padding: 24px 32px;
   margin-bottom: 24px;
   color: var(--cop-text-color-on-primary);
   background: linear-gradient(135deg, var(--cop-primary) 0%, var(--cop-primary-hover) 100%);
@@ -152,17 +167,39 @@ const { t } = useI18n();
   color: var(--cop-text-color-on-primary);
 }
 
+/* 版本号链接：弱化的可点击徽标，hover 提亮反馈，不争夺标题注意力。
+   点开直达 GitHub Releases 查看最新版本与构建产物，与 Popup 帮助弹窗的版本链接同一心智。 */
+.version-tag-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: 10px;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.version-tag-link:hover .version-tag {
+  color: var(--cop-text-color-on-primary);
+  background: rgb(var(--cop-on-primary-rgb) / 28%);
+}
+
+.version-tag-link:focus-visible {
+  outline: 2px solid rgb(var(--cop-on-primary-rgb) / 80%);
+  outline-offset: 1px;
+}
+
 .version-tag {
   flex-shrink: 0;
   padding: 0 6px;
-  margin-left: 10px;
   font-size: 11px;
   line-height: 18px;
   color: rgb(var(--cop-on-primary-rgb) / 70%);
-  cursor: default;
+  cursor: pointer;
   user-select: none;
   background: rgb(var(--cop-on-primary-rgb) / 15%);
   border-color: rgb(var(--cop-on-primary-rgb) / 20%);
+  transition:
+    color var(--cop-duration-fast) var(--cop-ease-standard),
+    background-color var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 /* 代理状态信号灯：一眼可见的红绿小圆点
@@ -175,10 +212,21 @@ const { t } = useI18n();
   width: 8px;
   height: 8px;
   margin-left: 10px;
+  cursor: help;
   background: var(--el-color-danger, #f56c6c);
   border-radius: 50%;
   box-shadow: 0 0 0 2px rgb(var(--cop-on-primary-rgb) / 35%);
-  transition: background-color var(--cop-duration-base) var(--cop-ease-standard);
+  transition:
+    background-color var(--cop-duration-base) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+/* 悬停提示由原生 title 承载（与参考实现的健康信号灯同一做法）；
+   光圈只负责说「这里有东西可看」，不改变红绿结论 */
+.status-dot:hover {
+  box-shadow:
+    0 0 0 2px rgb(var(--cop-on-primary-rgb) / 35%),
+    0 0 0 5px rgb(var(--cop-on-primary-rgb) / 18%);
 }
 
 .status-dot.is-on {
@@ -205,13 +253,13 @@ const { t } = useI18n();
   }
 }
 
-/* 工具之间 4px：按钮自带 12px 内边距，悬停底块贴得近才像同一条工具栏；
-   主操作与工具组之间再留 8px（净距 12px），一眼分得出哪颗是主按钮。
-   `.el-button + .el-button` 的默认 12px 外边距在下面归零，间距只由 gap 说一次。 */
+/* 间距与 button skin 对齐 account-password-helper 的顶栏：
+   工具之间 12px，`.el-button + .el-button` 的默认 12px 外边距在下面归零，
+   间距只由 gap 说一次（否则实际会变成 24px，正是旧顶栏看起来松散的原因）。 */
 .header-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -219,9 +267,9 @@ const { t } = useI18n();
   margin-left: 0;
 }
 
-/* 工具按钮不再各自套描边：六颗半透明胶囊并排时，描边比文字更抢眼，
-   读起来像六个互不相干的操作。改成透明底，悬停才浮出一层浅底——
-   层级由「有没有底」表达，而不是由六条边表达。
+/* 工具按钮是玻璃胶囊：15% on-primary 底 + 25% 边（亮色下即白色，暗色随令牌翻成深墨），
+   悬停提到 20% / 40% 并抬 1px。与主操作的白色实心区分层级，但六颗仍读作同一条工具栏，
+   而不是六个互不相干的操作。
    显式列过渡属性而不是 `all`：`all` 会把语言切换时变化的按钮宽度也纳入过渡。 */
 :deep(.header-actions .el-button) {
   height: 32px;
@@ -229,20 +277,28 @@ const { t } = useI18n();
   font-size: 13px;
   font-weight: 400;
   color: var(--cop-text-color-on-primary);
-  background: transparent;
-  border: 1px solid transparent;
+  background: rgb(var(--cop-on-primary-rgb) / 15%);
+  border: 1px solid rgb(var(--cop-on-primary-rgb) / 25%);
+  backdrop-filter: blur(10px);
   transition:
     color var(--cop-duration-instant) var(--cop-ease-standard),
     background-color var(--cop-duration-instant) var(--cop-ease-standard),
-    border-color var(--cop-duration-instant) var(--cop-ease-standard);
+    border-color var(--cop-duration-instant) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-instant) var(--cop-ease-standard),
+    transform var(--cop-duration-instant) var(--cop-ease-enter);
 }
 
 :deep(.header-actions .el-button:not(.el-button--primary):hover) {
-  background: rgb(var(--cop-on-primary-rgb) / 14%);
+  background: rgb(var(--cop-on-primary-rgb) / 20%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 40%);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+  transform: translateY(-1px);
 }
 
 :deep(.header-actions .el-button:not(.el-button--primary):active) {
-  background: rgb(var(--cop-on-primary-rgb) / 20%);
+  background: rgb(var(--cop-on-primary-rgb) / 24%);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  transform: translateY(0);
 }
 
 /* 键盘焦点环走 on-primary 通道，暗色下随顶栏一起翻成深墨；EP 默认环在渐变底上不够显眼 */
@@ -258,7 +314,6 @@ const { t } = useI18n();
    胜负不再由样式表顺序决定。 */
 :deep(.header-actions .el-button.el-button--primary) {
   padding: 0 14px;
-  margin-right: 8px;
   font-weight: 500;
   color: var(--cop-primary);
   background: var(--cop-bg-color);
@@ -343,17 +398,12 @@ const { t } = useI18n();
   .header-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 12px;
     width: 100%;
   }
 
   .header-actions :deep(.el-button) {
     width: 100%;
-    margin-right: 0;
-  }
-
-  .header-actions :deep(.el-button.el-button--primary) {
-    margin-right: 0;
   }
 }
 

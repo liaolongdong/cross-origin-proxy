@@ -1,5 +1,7 @@
 {
   "optionsPageTitle": "跨域代理助手 - 配置",
+  "versionLinkTitle": "查看最新版本与下载",
+  "statusDotTitle": "代理状态：$1",
   "tabLogs": "请求日志",
   "tabSettings": "设置",
   "importExportConfig": "导入/导出配置",

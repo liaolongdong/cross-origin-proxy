@@ -1,5 +1,8 @@
 import type { ProxyConfig } from '@/utils/types';
 
+/** 仓库 Releases 页：顶栏版本徽标点开即看最新版本与构建产物 */
+export const GITHUB_RELEASES_PAGE_URL = 'https://github.com/liaolongdong/cross-origin-proxy/releases';
+
 // Storage keys
 export const STORAGE_KEYS = {
   PROXY_CONFIG: 'proxy_config',

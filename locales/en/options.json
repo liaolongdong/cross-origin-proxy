@@ -1,5 +1,7 @@
 {
   "optionsPageTitle": "Cross-Origin Proxy - Options",
+  "versionLinkTitle": "View the latest release and downloads",
+  "statusDotTitle": "Proxy status: $1",
   "tabLogs": "Request Logs",
   "tabSettings": "Settings",
   "importExportConfig": "Import / Export",
