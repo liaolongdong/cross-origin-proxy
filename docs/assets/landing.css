@@ -437,6 +437,33 @@ html.js .site-nav > a[aria-current]::after {
   border-color: var(--lp-line-strong);
 }
 
+/* 页头那颗常驻的商店入口。前面几颗是「换个地方」，这一颗是「现在就装」，
+   所以只有它用实底主色——长页面上它是唯一一个随时够得着的转化入口。
+   `.nav-actions` 那层前缀是必需的：不带它只有 0-1-0，输给了 `.nav-actions a` 的 0-1-1。 */
+.nav-actions .nav-install {
+  padding: 0 14px;
+  color: #fff;
+  background: var(--lp-primary);
+  border-color: transparent;
+}
+
+.nav-actions .nav-install:hover {
+  color: #fff;
+  background: #2c86e8;
+  border-color: transparent;
+}
+
+.nav-actions .nav-install svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* 移动端下拉里的同一颗：面板每条都是浅底文字，这里只保留主色与字重。 */
+.nav-menu-exits .nav-install {
+  font-weight: 600;
+  color: var(--lp-primary-strong);
+}
+
 /* 小屏汉堡菜单：`<details>` 实现，禁用 JS 也能展开——窄屏下它接替
    .site-nav 的锚点条，「完整对比」一并收进下拉里。桌面宽度整体隐藏。
    下面几处 reset 是必需的：FAQ 的 `details` / `summary` 元素选择器会给每个
@@ -2644,6 +2671,104 @@ html.js .copy-btn {
   color: var(--lp-danger);
 }
 
+/* ---------- 代码块的一键复制 ---------- */
+
+/* 按钮钉在右上角，文本从兄弟 <code> 现读（`data-copy-from`），
+   于是每条命令在 HTML 里只写一份，改命令不会漏改按钮上那一份。 */
+.code-shell {
+  position: relative;
+}
+
+/* 包一层之后 `p + pre` 那条相邻选择器不再命中，这里补回同样的间距。 */
+p + .code-shell {
+  margin-top: 14px;
+}
+
+/* 给右侧那颗胶囊让位：长命令行本来就能横向滚动，不会被它挡住。 */
+.code-shell pre {
+  padding-right: 74px;
+}
+
+.code-copy {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: none;
+  gap: 5px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--lp-code-ink);
+  cursor: pointer;
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 999px;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+/* 与页脚那颗同一档：无 JS 时按钮不出现，命令本身是可选中的文本。 */
+html.js .code-copy {
+  display: inline-flex;
+}
+
+.code-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.code-copy:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 18%);
+  border-color: rgb(255 255 255 / 42%);
+}
+
+.code-copy:active {
+  transform: scale(0.96);
+}
+
+.code-copy.is-copied {
+  color: #06231a;
+  background: var(--lp-accent);
+  border-color: transparent;
+  animation: lp-copy-pop 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.code-copy.is-failed {
+  color: #fff;
+  background: var(--lp-danger);
+  border-color: transparent;
+}
+
+/* 复制结果对屏幕阅读器继续播报，但按钮自己已经换了字，视线里不该再多一行。 */
+.code-shell .copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* 成功那一下只弹一次：0.42s 走完就停在终态底色上，2s 后脚本再换回「复制」。 */
+@keyframes lp-copy-pop {
+  0% {
+    transform: scale(0.9);
+  }
+
+  55% {
+    transform: scale(1.06);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
 /* ---------- 页脚 ---------- */
 
 .site-footer {
@@ -3327,6 +3452,7 @@ html.js .tool-card:hover::before {
   details,
   summary,
   .copy-btn,
+  .code-copy,
   .try-verdict,
   .try-action,
   .btn-primary::after,
@@ -3341,6 +3467,11 @@ html.js .tool-card:hover::before {
   /* 按下的 1px 下沉也是位移：减弱档连它一起收，按钮只换底色。 */
   .try-action:active {
     transform: none;
+  }
+
+  /* 复制成功那一下弹一下同样是位移：减弱档只让它换底色。 */
+  .code-copy.is-copied {
+    animation: none;
   }
 
   html.js .reveal,

@@ -440,17 +440,36 @@
     };
   };
 
-  all('[data-copy]').forEach(btn => {
-    const text = btn.getAttribute('data-copy');
+  all('[data-copy], [data-copy-from]').forEach(btn => {
     const okMsg = btn.getAttribute('data-copied') || 'Copied';
     const errMsg = btn.getAttribute('data-copy-failed') || 'Copy failed';
     const status = btn.parentElement ? btn.parentElement.querySelector('.copy-status') : null;
     const report = statusReporter(status);
+    const label = btn.querySelector('.code-copy-text');
+    const idleLabel = label ? label.textContent : '';
+    let resetTimer = null;
 
     btn.addEventListener('click', async () => {
+      const literal = btn.getAttribute('data-copy');
+      // `data-copy-from` 让按钮从同一个 .code-shell 里的 <code> 现读文本：
+      // 命令只在 HTML 写一份，按钮不再存第二份，改命令时不会漏改一处。
+      const shell = literal ? null : btn.closest('.code-shell');
+      const code = shell ? shell.querySelector('code') : null;
+      const text = literal || (code ? code.textContent.replace(/\s+$/, '') : '');
       if (!text) return;
       const copied = await copyText(text);
       report(copied ? okMsg : errMsg, copied);
+      if (!label) return;
+      // 提示区是给辅助技术的，按钮才是视线里的那个：两处都换，成功时再补一下形。
+      label.textContent = copied ? okMsg : errMsg;
+      btn.classList.toggle('is-copied', copied);
+      btn.classList.toggle('is-failed', !copied);
+      if (resetTimer !== null) clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        label.textContent = idleLabel;
+        btn.classList.remove('is-copied', 'is-failed');
+        resetTimer = null;
+      }, 2000);
     });
   });
 

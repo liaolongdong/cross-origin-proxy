@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-23"
+            "dateModified": "2026-10-24"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-23",
+            "dateModified": "2026-10-24",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -557,6 +557,11 @@
             <a href="#install">Install</a>
             <a href="#faq">FAQ</a>
             <div class="nav-menu-exits">
+              <a
+                class="nav-install"
+                href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+                >Add to Chrome</a
+              >
               <a href="en-alternatives.html">Alternatives</a>
               <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
               <a
@@ -596,6 +601,23 @@
             hreflang="zh"
             lang="zh"
             >中文</a
+          >
+          <a
+            class="nav-install"
+            href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+            ><svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 2.5v7.5" />
+              <path d="m4.8 7 3.2 3.2L11.2 7" />
+              <path d="M3 13.5h10" /></svg
+            >Add to Chrome</a
           >
         </nav>
       </div>
@@ -1868,10 +1890,43 @@
                 <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
                 — once the first one exists, unzipping it is all the install needs.
               </p>
-              <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
+              <div class="code-shell">
+                <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
 cd cross-origin-proxy
 pnpm install
 pnpm build</code></pre>
+                <button
+                  class="code-copy"
+                  type="button"
+                  data-copy-from="code"
+                  data-copied="Copied ✓"
+                  data-copy-failed="Copy failed — select it manually"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="6"
+                      y="6"
+                      width="7.5"
+                      height="7.5"
+                      rx="1.5"
+                    />
+                    <path d="M10 4.5A2 2 0 0 0 8 2.5H4.5A2 2 0 0 0 2.5 4.5V8a2 2 0 0 0 2 2" />
+                  </svg>
+                  <span class="code-copy-text">Copy</span>
+                </button>
+                <span
+                  class="copy-status"
+                  role="status"
+                ></span>
+              </div>
             </article>
             <article class="step-card reveal">
               <div class="step-num">02</div>
@@ -2479,7 +2534,8 @@ pnpm build</code></pre>
             </div>
             <div class="card">
               <h3>Developer commands</h3>
-              <pre><code>pnpm dev          # WXT dev server with HMR (port 8899)
+              <div class="code-shell">
+                <pre><code>pnpm dev          # WXT dev server with HMR (port 8899)
 pnpm build        # production build → .output/chrome-mv3
 pnpm build:zip    # zip for store upload
 pnpm test         # vitest unit tests
@@ -2487,6 +2543,38 @@ pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 pnpm lint:style   # stylelint
 pnpm assets       # regenerate store and landing images</code></pre>
+                <button
+                  class="code-copy"
+                  type="button"
+                  data-copy-from="code"
+                  data-copied="Copied ✓"
+                  data-copy-failed="Copy failed — select it manually"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="6"
+                      y="6"
+                      width="7.5"
+                      height="7.5"
+                      rx="1.5"
+                    />
+                    <path d="M10 4.5A2 2 0 0 0 8 2.5H4.5A2 2 0 0 0 2.5 4.5V8a2 2 0 0 0 2 2" />
+                  </svg>
+                  <span class="code-copy-text">Copy</span>
+                </button>
+                <span
+                  class="copy-status"
+                  role="status"
+                ></span>
+              </div>
             </div>
           </div>
         </div>
@@ -3196,7 +3284,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.5.1</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-10-23</span>
+            <span>Last updated 2026-10-24</span>
             <span
               ><a
                 href="./"

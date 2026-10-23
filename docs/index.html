@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-23"
+            "dateModified": "2026-10-24"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-23",
+            "dateModified": "2026-10-24",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -557,6 +557,11 @@
             <a href="#install">安装</a>
             <a href="#faq">常见问题</a>
             <div class="nav-menu-exits">
+              <a
+                class="nav-install"
+                href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+                >添加到 Chrome</a
+              >
               <a href="alternatives.html">完整对比</a>
               <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
               <a
@@ -596,6 +601,23 @@
             hreflang="en"
             lang="en"
             >EN</a
+          >
+          <a
+            class="nav-install"
+            href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+            ><svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 2.5v7.5" />
+              <path d="m4.8 7 3.2 3.2L11.2 7" />
+              <path d="M3 13.5h10" /></svg
+            >添加到 Chrome</a
           >
         </nav>
       </div>
@@ -1781,10 +1803,43 @@
                 <a href="https://github.com/liaolongdong/cross-origin-proxy/releases">Releases</a>
                 附上预构建 zip，解压即可——先确认那里已有发布记录。
               </p>
-              <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
+              <div class="code-shell">
+                <pre><code>git clone https://github.com/liaolongdong/cross-origin-proxy
 cd cross-origin-proxy
 pnpm install
 pnpm build</code></pre>
+                <button
+                  class="code-copy"
+                  type="button"
+                  data-copy-from="code"
+                  data-copied="已复制 ✓"
+                  data-copy-failed="复制失败，请手动选中"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="6"
+                      y="6"
+                      width="7.5"
+                      height="7.5"
+                      rx="1.5"
+                    />
+                    <path d="M10 4.5A2 2 0 0 0 8 2.5H4.5A2 2 0 0 0 2.5 4.5V8a2 2 0 0 0 2 2" />
+                  </svg>
+                  <span class="code-copy-text">复制</span>
+                </button>
+                <span
+                  class="copy-status"
+                  role="status"
+                ></span>
+              </div>
             </article>
             <article class="step-card reveal">
               <div class="step-num">02</div>
@@ -2369,7 +2424,8 @@ pnpm build</code></pre>
             </div>
             <div class="card">
               <h3>开发命令</h3>
-              <pre><code>pnpm dev          # WXT 开发服务，带热更新（端口 8899）
+              <div class="code-shell">
+                <pre><code>pnpm dev          # WXT 开发服务，带热更新（端口 8899）
 pnpm build        # 生产构建 → .output/chrome-mv3
 pnpm build:zip    # 商店上传用 zip
 pnpm test         # vitest 单元测试
@@ -2377,6 +2433,38 @@ pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 pnpm lint:style   # stylelint
 pnpm assets       # 重新生成商店与落地页图片</code></pre>
+                <button
+                  class="code-copy"
+                  type="button"
+                  data-copy-from="code"
+                  data-copied="已复制 ✓"
+                  data-copy-failed="复制失败，请手动选中"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="6"
+                      y="6"
+                      width="7.5"
+                      height="7.5"
+                      rx="1.5"
+                    />
+                    <path d="M10 4.5A2 2 0 0 0 8 2.5H4.5A2 2 0 0 0 2.5 4.5V8a2 2 0 0 0 2 2" />
+                  </svg>
+                  <span class="code-copy-text">复制</span>
+                </button>
+                <span
+                  class="copy-status"
+                  role="status"
+                ></span>
+              </div>
             </div>
           </div>
         </div>
@@ -3029,7 +3117,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.5.1</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-10-23</span>
+            <span>最后更新 2026-10-24</span>
             <span
               ><a
                 href="en.html"

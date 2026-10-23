@@ -174,6 +174,7 @@ import { collectRuleTags, ruleMatchesTagFilter } from '@/utils/ruleTags';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
+import { parseSelfCheckTab } from '@/utils/selfCheck';
 import HeaderBar from './HeaderBar.vue';
 import SearchFilterBar from './SearchFilterBar.vue';
 import RuleTable from './RuleTable.vue';
