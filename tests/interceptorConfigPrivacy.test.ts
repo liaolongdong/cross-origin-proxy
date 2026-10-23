@@ -103,17 +103,29 @@ describe('toInterceptorConfig — 页面侧凭据面收窄', () => {
     expect(pageRule).not.toHaveProperty('sendCredentials');
   });
 
+  it('标签不下发页面：它不是能力开关，是用户起的分类名（项目 / 负责人 / 内网环境名都会写进去）', () => {
+    const [pageRule] = toInterceptorConfig(configOf([httpComplexRule({ tags: ['结算', 'uat'] })])).rules;
+    expect(pageRule).not.toHaveProperty('tags');
+
+    // 用真的 WS 复杂规则，并先证明它确实下发了（否则「没有 tags」只是「整条被过滤掉」的假象）
+    const [wsRule] = toInterceptorConfig(configOf([{ ...wsComplexRule(), tags: ['长连接'] }])).rules;
+    expect(wsRule.queryOverrides).toEqual({ session: 's-abc' });
+    expect(wsRule).not.toHaveProperty('tags');
+  });
+
   it('仅因 sendCredentials 转 SW 的规则照样下发（否则页面不拦截、凭据路径直接失效）', () => {
     const credentialed = makeRule({
       id: 'cred',
       matchPattern: 'https://fat.example.com/api/*',
       targetUrl: 'https://uat.example.com/api',
       sendCredentials: true,
+      tags: ['内网'],
     });
 
     const out = toInterceptorConfig(configOf([credentialed]));
     expect(out.rules.map(r => r.id)).toEqual(['cred']);
     expect(out.rules[0]).not.toHaveProperty('sendCredentials');
+    expect(out.rules[0]).not.toHaveProperty('tags');
   });
 
   // 收窄这一步同时是「配置进页面 world 前的最后一道形状判据」：`storage.local` 里的 `rules`

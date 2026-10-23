@@ -13,16 +13,26 @@ import { useI18n } from '@/composables/useI18n';
  * 因此结果是 ref 而非 computed。
  *
  * 规则数组每次变化重算一次，并丢弃过期结果：并发时后发先至会让旧快照覆盖新判定。
+ *
+ * 第二个返回值 `dnrSupportRead` 回答的是另一件事：**这份判定有没有真的落到过一次**。
+ * 空 Map 有两种来路——「判过了，没有规则被跳过」与「还没判完 / 判的过程抛了」，
+ * 而消费方（URL 匹配预演的两通道差异那一格）需要区分它们：拿「没被跳过」当「会被应用」，
+ * 就会在浏览器根本不应用这条规则时断言出「网络层拿到 X」。与本仓 `statusEverRead`、
+ * `logsEverRead` 同一族，只在**成功**那一次置真（失败时保持原样，不假装读到过）。
  */
 export function useDnrSupport(rules: Ref<ProxyRule[]>) {
   const dnrSkippedRules = ref<Map<string, DnrSkipReason>>(new Map());
+  const dnrSupportRead = ref(false);
   let checkSeq = 0;
 
   async function recheck() {
     const seq = ++checkSeq;
     try {
       const skipped = await findDnrSkippedRules(rules.value);
-      if (seq === checkSeq) dnrSkippedRules.value = skipped;
+      if (seq === checkSeq) {
+        dnrSkippedRules.value = skipped;
+        dnrSupportRead.value = true;
+      }
     } catch (error) {
       logger.error('DNR applicability check failed:', error);
     }
@@ -32,7 +42,7 @@ export function useDnrSupport(rules: Ref<ProxyRule[]>) {
   // deep：启用开关、目标 URL 等就地修改同样决定规则是否还走 DNR
   watch(rules, recheck, { deep: true });
 
-  return { dnrSkippedRules };
+  return { dnrSkippedRules, dnrSupportRead };
 }
 
 /**

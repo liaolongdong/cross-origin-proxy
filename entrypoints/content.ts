@@ -16,6 +16,8 @@ import { logger } from '@/utils/logger';
  * 代理时 SW 会用 storage 里的完整规则重新应用这些能力，因此它们没有理由出现在发往页面的副本里。
  * `sendCredentials` 同属此类：拦截器不做任何 fetch，带不带 Cookie 完全由 SW 决定，
  * 页侧读到它没有任何作用，只是多一条可被同源脚本监听的规则能力画像。
+ * `tags` 也属此类，但理由不同——它不是能力开关，而是**用户自己起的分类名**（项目名、负责人、
+ * 内网环境名都会写进去）。它只在扩展界面里用于筛选，页面侧从不读，因此同样不该广播给用户访问的站点。
  */
 const PAGE_IRRELEVANT_FIELDS = [
   'headerOverrides',
@@ -23,6 +25,7 @@ const PAGE_IRRELEVANT_FIELDS = [
   'responseOverrides',
   'mockResponse',
   'sendCredentials',
+  'tags',
 ] as const;
 
 /**

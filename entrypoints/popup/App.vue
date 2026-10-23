@@ -196,14 +196,28 @@
         <span class="interceptor-text">{{ interceptorText }}</span>
       </div>
 
-      <!-- 配置广播没送达：这一页还在拿旧规则干活，是唯一一条「现在就刷新」能解决的话 -->
-      <p
+      <!-- 配置广播没送达：这一页还在拿旧规则干活，是唯一一条「现在就刷新」能解决的话——
+           所以这句话旁边就得有一个能按的按钮，而不是让用户关掉弹窗自己去摸地址栏的刷新键 -->
+      <div
         v-if="configSyncVisible"
-        class="config-sync-warning"
-        :title="t('configNotSyncedHint')"
+        class="config-sync-row"
       >
-        {{ t('configNotSynced') }}
-      </p>
+        <p
+          class="config-sync-warning"
+          :title="t('configNotSyncedHint')"
+        >
+          {{ t('configNotSynced') }}
+        </p>
+        <button
+          v-if="activeTabId !== null"
+          type="button"
+          class="config-sync-reload"
+          @click="reloadCurrentTab"
+        >
+          <el-icon><Refresh /></el-icon>
+          <span>{{ t('configNotSyncedReload') }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- 这一台站点的生效范围：判据在 utils/siteScope.ts，这里只说结果 -->
@@ -332,22 +346,110 @@
       </div>
     </div>
 
-    <!-- 动作卡片列表 -->
+    <!--
+      动作卡片列表：两列宫格、七个入口同一档。
+      形状跟 main（662c363）——单列五张卡会把「最近请求」整个挤出首屏，宫格把首屏压回 600px 一档；
+      入口集合与语义跟这一轮（5fa33db）——环境配置排第一（切环境最勤），「规则管理」开的是配置页根
+      而不是添加弹窗（标签说的是管理，动作就得是管理），设置与自检各占一格：这一格里前六颗都是
+      「打开一个地方」，只有最后一颗会去问五笔读数，它排最后不是随手放的。
+    -->
     <div class="action-list">
       <div
         class="action-card"
         role="button"
         tabindex="0"
-        :title="t('actionOpenConfigDesc')"
-        @click="openOptionsPage('#add-rule')"
-        @keydown.enter.space.prevent="openOptionsPage('#add-rule')"
+        :title="t('actionProfilesDesc')"
+        :class="{ 'is-expanded': profilePicker }"
+        :aria-expanded="profilePicker ? 'true' : 'false'"
+        @click="handleProfilesCard"
+        @keydown.enter.space.prevent="handleProfilesCard"
       >
         <div class="action-card__icon action-card__icon--primary">
-          <el-icon><Setting /></el-icon>
+          <el-icon><Collection /></el-icon>
         </div>
         <div class="action-card__content">
-          <div class="action-card__title">{{ t('actionOpenConfig') }}</div>
+          <div class="action-card__title">{{ t('actionProfiles') }}</div>
         </div>
+      </div>
+
+      <!--
+        环境快照面板：切环境是这个扩展最勤的动作，不值得为它开一次标签页。
+        复用「这一页在调谁」那套面板样式与真按钮行——同一层交互不该有两种键盘路径。
+        确认这一步做在面板里而不是 `ElMessageBox`：弹窗模块一旦进 popup 首屏就是白涨的体积，
+        而这里要的只是「把后果说清楚 + 再点一下」。措辞必须点名两件副作用（整套替换、总开关被打开），
+        这是 `utils/storage.ts` 的 `loadProfile` 既有语义，本轮刻意不改。
+      -->
+      <div
+        v-if="profilePicker"
+        class="api-picker"
+        role="group"
+        :aria-label="t('profilePickerTitle')"
+      >
+        <p class="api-picker-title">{{ t('profilePickerTitle') }}</p>
+        <template
+          v-for="profile in profiles"
+          :key="profile.id"
+        >
+          <button
+            type="button"
+            class="api-picker-row"
+            :class="{ 'is-pending': pendingProfileId === profile.id }"
+            :aria-expanded="pendingProfileId === profile.id ? 'true' : 'false'"
+            :disabled="switchingProfile || profile.damaged"
+            :title="profile.damaged ? t('profilePickerDamaged') : undefined"
+            @click="chooseProfile(profile.id)"
+          >
+            <span
+              class="api-picker-origin"
+              :title="profile.name"
+              >{{ profile.name }}</span
+            >
+            <span
+              v-if="profile.damaged"
+              class="api-picker-count api-picker-count--damaged"
+              >{{ t('profilePickerDamaged') }}</span
+            >
+            <span
+              v-else
+              class="api-picker-count"
+              >{{ t('profilePickerRuleCount', String(profile.ruleCount ?? 0)) }}</span
+            >
+          </button>
+          <div
+            v-if="pendingProfileId === profile.id"
+            class="profile-confirm"
+          >
+            <p class="profile-confirm-text">
+              {{ t('profilePickerConfirm', [profile.name, profile.ruleCount ?? 0]) }}
+            </p>
+            <!-- 次序与 options 的弹窗 footer 同一条：取消在左、主行动在最右 -->
+            <div class="profile-confirm-actions">
+              <button
+                type="button"
+                class="profile-confirm-btn"
+                :disabled="switchingProfile"
+                @click="pendingProfileId = ''"
+              >
+                {{ t('cancel') }}
+              </button>
+              <button
+                type="button"
+                class="profile-confirm-btn profile-confirm-btn--apply"
+                :disabled="switchingProfile"
+                @click="applyProfile(profile)"
+              >
+                {{ switchingProfile ? t('profilePickerApplying') : t('profilePickerApply') }}
+              </button>
+            </div>
+          </div>
+        </template>
+        <button
+          type="button"
+          class="api-picker-row api-picker-row--muted"
+          @click="openOptionsPage('#profiles')"
+        >
+          <span class="api-picker-origin">{{ t('profilePickerManage') }}</span>
+        </button>
       </div>
 
       <div
@@ -360,7 +462,7 @@
         @click="handleCreateRuleFromTab"
         @keydown.enter.space.prevent="handleCreateRuleFromTab"
       >
-        <div class="action-card__icon action-card__icon--tint">
+        <div class="action-card__icon action-card__icon--accent">
           <el-icon><Plus /></el-icon>
         </div>
         <div class="action-card__content">
@@ -435,11 +537,27 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionOpenConfigDesc')"
+        @click="openOptionsPage()"
+        @keydown.enter.space.prevent="openOptionsPage()"
+      >
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><Operation /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionOpenConfig') }}</div>
+        </div>
+      </div>
+
+      <div
+        class="action-card"
+        role="button"
+        tabindex="0"
         :title="t('actionViewLogsDesc')"
         @click="openOptionsPage('#logs')"
         @keydown.enter.space.prevent="openOptionsPage('#logs')"
       >
-        <div class="action-card__icon action-card__icon--accent">
+        <div class="action-card__icon action-card__icon--tint">
           <el-icon><Document /></el-icon>
         </div>
         <div class="action-card__content">
@@ -467,97 +585,34 @@
         class="action-card"
         role="button"
         tabindex="0"
-        :title="t('actionProfilesDesc')"
-        :class="{ 'is-expanded': profilePicker }"
-        :aria-expanded="profilePicker ? 'true' : 'false'"
-        @click="handleProfilesCard"
-        @keydown.enter.space.prevent="handleProfilesCard"
+        @click="openOptionsPage('#settings')"
+        @keydown.enter.space.prevent="openOptionsPage('#settings')"
       >
         <div class="action-card__icon action-card__icon--tint">
-          <el-icon><Collection /></el-icon>
+          <el-icon><Setting /></el-icon>
         </div>
         <div class="action-card__content">
-          <div class="action-card__title">{{ t('actionProfiles') }}</div>
+          <div class="action-card__title">{{ t('actionSettings') }}</div>
         </div>
       </div>
 
       <!--
-        环境快照面板：切环境是这个扩展最勤的动作，不值得为它开一次标签页。
-        复用「这一页在调谁」那套面板样式与真按钮行——同一层交互不该有两种键盘路径。
-        确认这一步做在面板里而不是 `ElMessageBox`：弹窗模块一旦进 popup 首屏就是白涨的体积，
-        而这里要的只是「把后果说清楚 + 再点一下」。措辞必须点名两件副作用（整套替换、总开关被打开），
-        这是 `utils/storage.ts` 的 `loadProfile` 既有语义，本轮刻意不改。
+        自检带的是**这个弹窗当时看到的那一页**的 id；读不到 id（比如那一页本身是扩展页）就带着
+        「没有对应网页」打开，那几行自己会说话，不拿猜出来的标签页凑一个答案。
       -->
       <div
-        v-if="profilePicker"
-        class="api-picker"
-        role="group"
-        :aria-label="t('profilePickerTitle')"
+        class="action-card"
+        role="button"
+        tabindex="0"
+        @click="openOptionsPage(selfCheckHash)"
+        @keydown.enter.space.prevent="openOptionsPage(selfCheckHash)"
       >
-        <p class="api-picker-title">{{ t('profilePickerTitle') }}</p>
-        <template
-          v-for="profile in profiles"
-          :key="profile.id"
-        >
-          <button
-            type="button"
-            class="api-picker-row"
-            :class="{ 'is-pending': pendingProfileId === profile.id }"
-            :aria-expanded="pendingProfileId === profile.id ? 'true' : 'false'"
-            :disabled="switchingProfile || profile.damaged"
-            :title="profile.damaged ? t('profilePickerDamaged') : undefined"
-            @click="chooseProfile(profile.id)"
-          >
-            <span
-              class="api-picker-origin"
-              :title="profile.name"
-              >{{ profile.name }}</span
-            >
-            <span
-              v-if="profile.damaged"
-              class="api-picker-count api-picker-count--damaged"
-              >{{ t('profilePickerDamaged') }}</span
-            >
-            <span
-              v-else
-              class="api-picker-count"
-              >{{ t('profilePickerRuleCount', String(profile.ruleCount ?? 0)) }}</span
-            >
-          </button>
-          <div
-            v-if="pendingProfileId === profile.id"
-            class="profile-confirm"
-          >
-            <p class="profile-confirm-text">
-              {{ t('profilePickerConfirm', [profile.name, profile.ruleCount ?? 0]) }}
-            </p>
-            <div class="profile-confirm-actions">
-              <button
-                type="button"
-                class="profile-confirm-btn profile-confirm-btn--apply"
-                :disabled="switchingProfile"
-                @click="applyProfile(profile)"
-              >
-                {{ switchingProfile ? t('profilePickerApplying') : t('profilePickerApply') }}
-              </button>
-              <button
-                type="button"
-                class="profile-confirm-btn"
-                :disabled="switchingProfile"
-                @click="pendingProfileId = ''"
-              >
-                {{ t('cancel') }}
-              </button>
-            </div>
-          </div>
-        </template>
-        <button
-          type="button"
-          class="api-picker-row api-picker-row--muted"
-          @click="openOptionsPage('#profiles')"
-        >
-          <span class="api-picker-origin">{{ t('profilePickerManage') }}</span>
-        </button>
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><CircleCheck /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionSelfCheck') }}</div>
+        </div>
       </div>
     </div>
 
@@ -648,7 +703,10 @@ import {
   ArrowDown,
   Timer,
   Plus,
+  Operation,
+  Refresh,
   Link,
+  CircleCheck,
 } from '@element-plus/icons-vue';
 import type { TagProps } from 'element-plus';
 import { useProxyStatus } from '@/composables/useProxyStatus';
@@ -682,8 +740,11 @@ import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@
 /**
  * Popup 弹窗（动作卡片风格，参照 account-password-helper）
  *
- * 结构：头部 → 开关状态行 → 数据点 → 动作卡片（直达不同目标）→ 最近请求列表。
- * 动作卡片通过 URL hash 直达 Options 的对应弹窗/抽屉，并支持按当前标签页地址预填新规则。
+ * 结构：头部 → 开关状态行 → 数据点 → 动作区（两列宫格七张卡，按使用频率排）→ 最近请求列表。
+ * 主卡要么就地展开面板（环境配置、为当前页创建规则），要么直达 Options 的规则列表；
+ * 次级那一行（请求日志 / 导入导出 / 设置）经 URL hash 直达 Options 的对应弹窗或抽屉。
+ * 卡片与次级行都排在诊断三块（数据点 / 站点范围 / 本页命中）之后——「这一页有没有生效」
+ * 是这个弹窗的存在理由，不为按钮上移而挪它。
  */
 const { t } = useI18n();
 const { diagnosisText } = useDiagnosisText();
@@ -776,6 +837,19 @@ async function fetchTabDnrStats(tabId: number | undefined) {
 // ─── 当前页命中预览 ────────────────────────────────────────────────────
 
 const pageUrl = ref('');
+/**
+ * 活动标签页的 id：只有「配置没送达」那一行会用它去重载这一页。
+ * `null` = 这一次没问到（查询失败、或问到的那一条没有 id），此时重载按钮不许出现。
+ */
+const activeTabId = ref<number | null>(null);
+/**
+ * 自检那一颗要看的「这一页」就是本弹窗当时看到的那一页，所以把 id 带过去。
+ * 读不到 id（那一页本身是扩展页、或 `tabs.query` 失败）时带不带参数的版本打开——
+ * 面板里那三行问页面的读数自己会落到「不知道」那一档，比拿一个猜出来的 tab 凑答案诚实。
+ */
+const selfCheckHash = computed(() =>
+  activeTabId.value === null ? '#self-check' : `#self-check?tab=${activeTabId.value}`,
+);
 const pageHitProxiable = ref(false);
 const pageHitRuleName = ref('');
 /** 命中规则的 id：只用于查 `dnrSkippedRuleIds`，不参与渲染 */
@@ -827,6 +901,7 @@ async function computePageHit() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? '';
+    activeTabId.value = typeof tab?.id === 'number' ? tab.id : null;
     pageUrl.value = url;
     pageHost.value = hostnameOf(url);
     const proxiable = /^https?:/i.test(url);
@@ -1381,8 +1456,29 @@ async function applyProfile(profile: { id: string; name: string }) {
 }
 
 /**
+ * 重载这一页——弹窗里那句「刷新这一页通常可恢复」唯一能把话兑现的入口。
+ *
+ * `chrome.tabs.reload` 不需要额外权限（本扩展已有 `<all_urls>`），也不写任何状态。
+ * 点了之后标签页导航、弹窗随之关闭，所以刻意不给成功提示：那是一句没人会看到的话。
+ * 失败要说话——这一行既然出现了，用户已经知道这一页在拿旧规则干活，静默失败等于什么都没做。
+ */
+async function reloadCurrentTab() {
+  const tabId = activeTabId.value;
+  if (typeof tabId !== 'number') {
+    ElMessage.error(t('configNotSyncedReloadFailed'));
+    return;
+  }
+  try {
+    await chrome.tabs.reload(tabId);
+  } catch (error) {
+    logger.warn('重载当前标签页失败:', error);
+    ElMessage.error(t('configNotSyncedReloadFailed'));
+  }
+}
+
+/**
  * 打开 Options 页；带 hash 时直达对应弹窗/抽屉
- * （#add-rule / #logs / #import-export / #add-rule-from-tab=<encoded url>）。
+ * （#add-rule / #logs / #import-export / #settings / #self-check?tab=<id> / #add-rule-from-tab=<encoded url>）。
  * 优先复用已打开的 Options 标签页（通过 runtime.getContexts 查找，无需 tabs 权限），
  * 避免重复打开；更新 hash 属同文档导航，Options 侧监听 hashchange 响应直达。
  */
@@ -1507,6 +1603,7 @@ async function openOptionsPage(hash = '') {
 
 .auto-off-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1514,9 +1611,12 @@ async function openOptionsPage(hash = '') {
   五格等宽：内容宽 320px 减去这一行左右的 14px 内边距与四段 6px 间隙，
   中英文最长的「4小时 / 4h」都放得下（2026-09-30 用一次性探针在 320px 下逐个量过，见交付说明）。
   选中态不只靠颜色：字重与边框同时变，`aria-pressed` 再说给读屏。
+  `min-width` + `flex-wrap` 是兜底：文案本身不可收缩，将来任一语种出现更长的档位词，
+  这一格要么折行、要么把相邻那格挤到读不清——没有第三种。
 */
 .auto-off-chip {
-  flex: 1;
+  flex: 1 0 auto;
+  min-width: 52px;
   padding: 4px 0;
   font-family: inherit;
   font-size: 11px;
@@ -1751,16 +1851,74 @@ async function openOptionsPage(hash = '') {
   color: var(--el-color-success, #67c23a);
 }
 
-/* 配置没送达：这一页仍在用旧规则干活，用户当下唯一能做的动作就是刷新，所以给告警色而非次要色 */
+/* 配置没送达这一行：文字 + 那句唯一 remedy 的按钮，窄屏放不下就折行、不挤压文字 */
+.config-sync-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+
+  /* 与拦截器那一行同一种进场：两条提示都会在读数到位后突然出现，抖动的方式得一致 */
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
+}
+
+/* 这一页仍在用旧规则干活，用户当下唯一能做的动作就是刷新，所以用告警色而非次要色 */
 .config-sync-warning {
-  margin: 10px 0 0;
+  flex: 1 1 180px;
+  min-width: 0;
   font-size: 11px;
   line-height: 1.4;
   color: var(--el-color-warning, #e6a23c);
   cursor: default;
+}
 
-  /* 与拦截器那一行同一种进场：两条提示都会在读数到位后突然出现，抖动的方式得一致 */
-  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
+/*
+  「刷新这一页」：档位与动作卡之下的次要按钮同为 text（无边框、次要字色），只有尺寸收小一档，
+  因为这一格挤在警告句的右边。刻意**不**用 `--el-color-warning-light-N` 上底色——
+  那几个浅档在暗色两条路径没有值，写上去就是靠回退色蒙过 `tests/designTokens.test.ts`，
+  而那句话的颜色由 `.config-sync-warning` 自己承担就够了。
+  热区下限 24px 由 padding 凑够（11 × 1.4 + 4 × 2 + 1 × 2 ≈ 25.4），刻意**不**用
+  `min-height` 配一条改口径的声明去凑：这个文件里那条声明一次都没出现过，那正是
+  「内容宽 320 / 渲染宽 352 / 视口 368」这笔算式的前提，由 `tests/docs-consistency.test.ts`
+  逐文件守着——写进去的那一刻，文档里那三个数就不再彼此推得出来。
+*/
+.config-sync-reload {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cop-text-color-regular);
+  cursor: pointer;
+  background: var(--cop-bg-color);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 6px;
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    background-color var(--cop-duration-instant) var(--cop-ease-standard),
+    border-color var(--cop-duration-instant) var(--cop-ease-standard);
+}
+
+.config-sync-reload :deep(.el-icon) {
+  font-size: 12px;
+}
+
+.config-sync-reload:hover {
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg);
+  border-color: var(--cop-primary-border);
+}
+
+.config-sync-reload:focus-visible {
+  color: var(--cop-primary);
+  outline: none;
+  border-color: var(--cop-primary);
+  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 25%);
 }
 
 /* 站点生效范围那一格：与本页命中卡同一套底色，靠边说明「按主机判定」 */
@@ -1924,8 +2082,8 @@ async function openOptionsPage(hash = '') {
   color: var(--el-color-warning);
 }
 
-/* 动作卡排成两列宫格：单列五张卡要占 300 多像素，把「最近请求」整个挤出首屏。
-   两列之后五个入口仍全部可见，首屏高度回到 600px 以内；卡片里的描述文字改作
+/* 动作卡排成两列宫格：单列七张卡要占 400 多像素，把「最近请求」整个挤出首屏。
+   两列之后七个入口仍全部可见（四行），首屏高度回到 600px 一档；卡片里的描述文字改作
    `title` 悬停提示（宫格宽度放不下第二行，截断读起来比不显示更糟）。 */
 .action-list {
   display: grid;
@@ -2153,6 +2311,7 @@ async function openOptionsPage(hash = '') {
 .profile-confirm-actions {
   display: flex;
   gap: 6px;
+  justify-content: flex-end;
   margin-top: 8px;
 }
 

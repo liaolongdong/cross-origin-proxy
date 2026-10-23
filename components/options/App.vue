@@ -19,6 +19,8 @@
       v-model:search-text="searchText"
       v-model:status-filter="statusFilter"
       v-model:match-type-filter="matchTypeFilter"
+      v-model:tags-filter="tagsFilter"
+      :available-tags="availableTags"
       :selected-count="selectedRules.length"
       :total-rules="rules.length"
       @batch-toggle="handleBatchToggle"
@@ -75,6 +77,7 @@
       :initial-data="templateInitialData"
       :derived-draft="derivedDraft"
       :target-suggestions="targetSuggestions"
+      :tag-suggestions="tagNames"
       @save="handleSaveRule"
     />
     <ImportExportDialog
@@ -94,7 +97,14 @@
       v-model:visible="showUrlTest"
       :rules="rules"
       :dnr-skipped-rules="dnrSkippedRules"
+      :dnr-support-read="dnrSupportRead"
       :proxy-enabled="proxyEnabled"
+    />
+    <SelfCheckDialog
+      v-model:visible="showSelfCheck"
+      :tab-id="selfCheckTabId"
+      :dnr-skipped-rules="dnrSkippedRules"
+      :dnr-support-read="dnrSupportRead"
     />
     <MigrateTargetsDialog
       v-model:visible="showMigrate"
@@ -160,6 +170,7 @@ import {
 import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import { groupHitStatsByRule } from '@/utils/ruleStats';
+import { collectRuleTags, ruleMatchesTagFilter } from '@/utils/ruleTags';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
@@ -179,6 +190,7 @@ const ImportExportDialog = defineAsyncComponent(() => import('./ImportExportDial
 const ProfilesDialog = defineAsyncComponent(() => import('./ProfilesDialog.vue'));
 const SettingsDialog = defineAsyncComponent(() => import('./SettingsDialog.vue'));
 const UrlTestDialog = defineAsyncComponent(() => import('./UrlTestDialog.vue'));
+const SelfCheckDialog = defineAsyncComponent(() => import('./SelfCheckDialog.vue'));
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
 const MigrateTargetsDialog = defineAsyncComponent(() => import('./MigrateTargetsDialog.vue'));
 
@@ -244,7 +256,8 @@ const {
 const { exportConfig } = useImportExport();
 
 // 「DNR 不会应用」的规则（RE2 不兼容 / 捕获引用越界）：这类规则界面显示已启用，实际零作用
-const { dnrSkippedRules } = useDnrSupport(rules);
+// dnrSupportRead 是这份判定「落到过一次」的旗标——空 Map 不等于「都会应用」，见 composables
+const { dnrSkippedRules, dnrSupportRead } = useDnrSupport(rules);
 const { skipReasonText } = useDnrSkipText();
 
 // UI 状态
@@ -255,6 +268,9 @@ const generatingRules = ref(false);
 const showProfiles = ref(false);
 const showSettings = ref(false);
 const showUrlTest = ref(false);
+/** 自检面板：它问的是「那一页」，所以页 id 与开关分开存（从配置页自己的按钮进来时就是 `null`） */
+const showSelfCheck = ref(false);
+const selfCheckTabId = ref<number | null>(null);
 const showLogs = ref(false);
 const showMigrate = ref(false);
 /**
@@ -262,7 +278,8 @@ const showMigrate = ref(false);
  *
  * 键盘快捷键用它，而不是各自记一份「我该让给谁」：`N` 原先只看规则弹窗，导入弹窗开着时照样
  * 能叠一层；`/` 与 `Ctrl+F` 原先谁都不看，会把焦点交给躲在模态背后的搜索框。
- * Escape 的级联早已按「最上层优先」处理这七个入口——同一批入口，同一份判据（L-10）。
+ * Escape 的级联早已按「最上层优先」处理这批入口——同一批入口，同一份判据（L-10），
+ * 新加一个可叠开的弹窗时必须同时加进下面那一条链，否则「开着它按 / 」会把焦点交给躲在它后面的搜索框。
  */
 const anyOverlayOpen = computed(
   () =>
@@ -272,7 +289,8 @@ const anyOverlayOpen = computed(
     showSettings.value ||
     showUrlTest.value ||
     showLogs.value ||
-    showMigrate.value,
+    showMigrate.value ||
+    showSelfCheck.value,
 );
 const editingRule = ref<ProxyRule | null>(null);
 /**
@@ -321,6 +339,8 @@ const highlightRuleId = ref<string | null>(null);
 const searchText = ref('');
 const statusFilter = ref('');
 const matchTypeFilter = ref('');
+/** 标签筛选（任一命中，多选）；判据只住 `utils/ruleTags.ts` */
+const tagsFilter = ref<string[]>([]);
 /** 表格上报的原始勾选（reserve-selection 下跨筛选、跨删除都会保留） */
 const tableSelection = ref<ProxyRule[]>([]);
 /** 计数与批量操作只认它：剔除已不存在的规则，并换回列表里的最新对象 */
@@ -351,9 +371,13 @@ const filteredRules = computed(() => {
       (statusFilter.value === 'enabled' && rule.enabled) ||
       (statusFilter.value === 'disabled' && !rule.enabled);
     const matchesMatchType = !matchTypeFilter.value || rule.matchType === matchTypeFilter.value;
-    return matchesSearch && matchesStatus && matchesMatchType;
+    return matchesSearch && matchesStatus && matchesMatchType && ruleMatchesTagFilter(rule, tagsFilter.value);
   });
 });
+
+/** 筛选下拉与表单候选都从这一份来：条数与排序的判据只住 `collectRuleTags` */
+const availableTags = computed(() => collectRuleTags(rules.value));
+const tagNames = computed(() => availableTags.value.map(entry => entry.tag));
 
 const enabledCount = computed(() => rules.value.filter(r => r.enabled).length);
 
@@ -484,6 +508,8 @@ function handleKeydown(e: KeyboardEvent) {
       showSettings.value = false;
     } else if (showUrlTest.value) {
       showUrlTest.value = false;
+    } else if (showSelfCheck.value) {
+      showSelfCheck.value = false;
     } else if (showMigrate.value) {
       showMigrate.value = false;
     } else if (showLogs.value) {
@@ -505,6 +531,17 @@ function handleHashNavigation() {
     showProfiles.value = true;
   } else if (hash === '#url-test') {
     showUrlTest.value = true;
+  } else if (hash === '#self-check' || hash.startsWith('#self-check?tab=')) {
+    // popup 把它当时看到的那个标签页 id 带过来：自检里有三行问的是「那一页」，而配置页自己就是
+    // `tabs.query({ active })` 眼里的那一页，拿它当被检查的对象会把「这一页还没收到配置」指向扩展页面。
+    // 这一串住在地址栏里，按不可信输入处理——`parseSelfCheckTab` 只认非负整数，别的都当「没带」
+    selfCheckTabId.value = parseSelfCheckTab(
+      hash.startsWith('#self-check?tab=') ? hash.slice('#self-check?tab='.length) : null,
+    );
+    showSelfCheck.value = true;
+  } else if (hash === '#settings') {
+    // popup 动作区「设置」那一格的出口：整页设置（语言、主题、整张站点名单、凭据变量）此前在弹窗里没有通往的路
+    showSettings.value = true;
   } else if (hash.startsWith('#add-rule-from-tab=')) {
     // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）
     handleCreateRuleFromUrl(decodeURIComponent(hash.slice('#add-rule-from-tab='.length)));

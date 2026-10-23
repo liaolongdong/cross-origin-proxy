@@ -367,3 +367,47 @@ describe('同步契约 — 判据只有一份，取值集那几份并列清单�
     }
   });
 });
+
+/**
+ * `tags` 的类型闸门（值域归 `utils/ruleTags.ts`，见 tests/ruleTags.test.ts）
+ *
+ * 拒的是形状，不是「会炸」：每个读位置都先过 `visibleTags()`，一条 `tags: 'uat'` 的规则不会让谁抛错，
+ * 它只是**永远读不成标签**——列表没 chip、下拉不出现，而用户下一次保存这条规则时表单写回的是整条替换，
+ * 这个字段就此消失。坏数据最坏的形状是被静默吞掉，所以让它在入口红一次、把原因说回去。
+ * 越界的**值**（超长、条数、非字符串项）不连坐整条规则：标签只是分类名，为它丢一条好规则是本末倒置。
+ */
+describe('tags 形状 — 类型闸门在结构判据，值域在导入清洗', () => {
+  it('「不是数组」才拒整条规则；数组里的非字符串项交给清洗（不连坐）', () => {
+    expect(isValidRuleShape(shape())).toBe(true);
+    expect(isValidRuleShape(shape({ tags: [] }))).toBe(true);
+    expect(isValidRuleShape(shape({ tags: ['uat', '结算'] }))).toBe(true);
+    expect(isValidRuleShape(shape({ tags: ['uat', 7] }))).toBe(true);
+    expect(isValidRuleShape(shape({ tags: 'uat' }))).toBe(false);
+    expect(isValidRuleShape(shape({ tags: null }))).toBe(false);
+    expect(isValidRuleShape(shape({ tags: { 0: 'uat' } }))).toBe(false);
+  });
+
+  it('导入侧把越界的值钳掉而不是丢整条规则，并把空数组收口成「没有这个字段」', () => {
+    const [clamped] = normalizeImportedRules([shape({ tags: ['a'.repeat(60), 7, '', 'uat', 'UAT'] })]);
+    expect(clamped.tags).toEqual(['a'.repeat(24), 'uat']);
+    const [noTags] = normalizeImportedRules([shape({ tags: [] })]);
+    expect('tags' in noTags).toBe(false);
+    const [untouched] = normalizeImportedRules([shape()]);
+    expect('tags' in untouched).toBe(false);
+  });
+
+  // 删掉最后一条打过标签的规则，下拉的候选会空下来，而这条筛选的**值**还留着。
+  // 那时那一格必须还在：不然表格停在「无匹配」上，界面上没有任何一个能撤销这条筛选的控件，
+  // 用户看到的就是「我的规则不见了」。
+  it('标签那一格的显示条件把「已经选着标签」算进去，不留筛不回来的死路', () => {
+    const filterSrc = readFileSync('components/options/SearchFilterBar.vue', 'utf-8');
+    const gate =
+      /v-if="availableTags\.length > 0(?: \|\| tagsFilter\.length > 0)?"[\s\S]{0,600}?class="tag-select"/.exec(
+        filterSrc,
+      );
+    expect(gate, '找不到标签那一格（class="tag-select"）').not.toBeNull();
+    expect(gate?.[0].slice(0, 120), '只按候选数决定显隐：筛选值还留着时那一格会消失').toContain(
+      'tagsFilter.length > 0',
+    );
+  });
+});

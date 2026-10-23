@@ -399,41 +399,45 @@
                 :active-text="t('revealSensitive')"
                 :aria-label="t('revealSensitive')"
               />
+              <!--
+                这四颗是对同一笔日志的四个平行动作，没有主次之分：同容器同档位（`plain` + `small`、
+                一律带图标、一律不带 `type`）。此前它们是 success / warning / primary / 无型四种，
+                于是「哪个更危险」被读成「哪个是主行动」，而这里压根没有主行动。
+                图标走 `:icon` prop，不再用内联 `style="margin-right"` 手摆间距。
+              -->
               <el-button
                 size="small"
-                type="success"
                 plain
+                :icon="Plus"
                 @click="handleCreateRuleFromLog"
               >
-                <el-icon style="margin-right: 4px"><Plus /></el-icon>
                 {{ t('createRuleFromLog') }}
               </el-button>
               <!-- 只在判据说这一笔能变成 Mock 时出现；不能的那些在面板下面说清是哪一档 -->
               <el-button
                 v-if="mockDraft?.ok"
                 size="small"
-                type="warning"
                 plain
+                :icon="Document"
                 @click="handleCreateMockFromLog"
               >
-                <el-icon style="margin-right: 4px"><Document /></el-icon>
                 {{ t('mockFromLogButton') }}
               </el-button>
               <el-button
                 size="small"
-                type="primary"
                 plain
+                :icon="CopyDocument"
                 @click="copyAsCurl"
               >
                 {{ t('copyAsCurl') }}
               </el-button>
               <el-button
                 size="small"
+                plain
+                :icon="Close"
                 :aria-label="t('closeLogDetailA11y')"
-                @click="selectedLog = null"
-              >
-                <el-icon><Close /></el-icon>
-              </el-button>
+                @click="closeLogDetail"
+              />
             </div>
           </div>
 
@@ -477,6 +481,69 @@
               class="log-detail-duration"
               >{{ selectedLog.duration }}ms</span
             >
+            <!--
+              「重放」走 `link` 档：它与上面那四颗不是一类东西——那四颗都在**这条记录**上做文章
+              （建规则、存 Mock、复制命令、收起面板），而这一颗是往现在发一次请求。
+              档位表里 `link` 的示例本来就有「重试」这一类。
+            -->
+            <el-button
+              v-if="replayPlan?.ok"
+              class="log-detail-replay-trigger"
+              size="small"
+              link
+              :icon="VideoPlay"
+              :loading="replayBusy"
+              @click="handleReplay"
+            >
+              {{ t('replayButton') }}
+            </el-button>
+          </div>
+
+          <!-- 这一行不给重放时把原因说在这句话的位置上：默默少一颗按钮读起来像界面坏了 -->
+          <p
+            v-if="replayRefusal"
+            class="log-detail-replay-refuse"
+          >
+            {{ replayRefusal }}
+          </p>
+
+          <!-- 重放的结果只活在这一屏：换行与关抽屉都把它收回——它说的是「现在」，留着就是拿一次旧往返当现状 -->
+          <div
+            v-if="shownReplay"
+            class="log-detail-replay"
+            role="status"
+          >
+            <div class="replay-head">
+              <el-tag
+                v-if="replayStatus !== null"
+                :type="replayTagType"
+                size="small"
+                >{{ replayStatus }}</el-tag
+              >
+              <span class="replay-sentence">{{ replaySentence }}</span>
+              <span
+                v-if="!shownReplay.running && shownReplay.durationMs"
+                class="replay-duration"
+                >{{ shownReplay.durationMs }}ms</span
+              >
+            </div>
+            <ul
+              v-if="replayNotes.length"
+              class="replay-notes"
+            >
+              <!-- 「这条记录没留下请求头」必须自己说：用户以为在重放原请求，而那组头根本没进过日志。
+                   这一串文案由脚本侧算好（字面量 key 留在唯一的 `t()` 出口上，i18n 守卫按字面量扫得到） -->
+              <li
+                v-for="note in replayNotes"
+                :key="note"
+              >
+                {{ note }}
+              </li>
+            </ul>
+            <pre
+              v-if="replayBody"
+              class="detail-body-content replay-body"
+              >{{ replayBody }}</pre>
           </div>
 
           <!-- 失败原因提到标签页之外：它此前只出现在「响应」页，而行点击会把
@@ -593,7 +660,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onUnmounted } from 'vue';
-import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-plus/icons-vue';
+import { Delete, Document, CopyDocument, Refresh, Close, Plus, VideoPlay } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import type { RequestLogEntry, DnrHitStat, ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
@@ -607,6 +674,8 @@ import type { SwStatsState } from '@/composables/useRequestLog';
 import { useRenderWindow } from '@/composables/useRenderWindow';
 import { resolveLogRowKey } from '@/utils/logRowNavigation';
 import { buildMockDraftFromLog } from '@/utils/mockFromLog';
+import { needsReplayConfirm, planReplay, replayBodyUseful } from '@/utils/requestReplay';
+import { useRequestReplay } from '@/composables/useRequestReplay';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
 import TableSkeleton from './TableSkeleton.vue';
 
@@ -984,6 +1053,143 @@ const mockRefuseText = computed(() => {
 });
 const detailTab = ref('request');
 
+// ─── 重放这一笔 ──────────────────────────────────────────────────────────────
+
+const { replayView, runReplay, clearReplay } = useRequestReplay();
+
+/**
+ * 这一行能不能重放（判据与真正发出去那一份同源）
+ *
+ * 不能的时候**那颗按钮根本不画**：给一个点了什么也不会发生的入口，比没有入口更糟——
+ * 用户会以为是网络或后端的问题，而这里连请求都没出门。
+ * 至于为什么不能（长连接、地址读不出、方法空白），那几档理由由 `planReplay` 说，
+ * 而它们对应的记录类型本来就不会出现在这份日志里（日志只由后台通道落），所以这一格不必解释。
+ */
+const replayPlan = computed(() => (selectedLog.value ? planReplay(selectedLog.value) : null));
+
+/** 屏幕上那段读数：只画属于当前这一行的那一份（迟到的回包由 composable 的轮次令牌挡在外面） */
+const shownReplay = computed(() => {
+  const view = replayView.value;
+  return view && selectedLog.value?.id === view.ownerId ? view : null;
+});
+
+/** 重放中不许再点第二下：一趟还没落定的往返，第二次只会让屏幕上的数不知道是谁的 */
+const replayBusy = computed(() => replayView.value?.running === true);
+
+/**
+ * 一句话说明这一笔到底发生了什么
+ *
+ * 每一档一句字面量 key，与「为什么不给 Mock」那一段同一条规矩：拼出来的 key 打错了不红，
+ * 而表现是把那句解释画成裸键名。
+ */
+const replaySentence = computed(() => {
+  const view = shownReplay.value;
+  if (!view) return '';
+  if (view.running) return t('replayRunning');
+  // 往返没走完与「走完了但回包不是信封」合成一句「答案没读到」：
+  // 这一档既不是服务器报错，也不是代理没生效，说成任何一边都是在替别人编话
+  if (view.transportFailed || !view.reading) return t('replayNoAnswer');
+  const reading = view.reading;
+  switch (reading.outcome) {
+    case 'answered':
+      return t('replayAnswered');
+    case 'mock':
+      return t('replayMock');
+    case 'blocked':
+      return t('replayBlocked');
+    case 'noRule':
+      return t('replayNoRule');
+    case 'siteExcluded':
+      return t('replaySiteExcluded');
+    case 'disabled':
+      return t('replayDisabled');
+    case 'invalidRuleHeaders':
+      return t('replayInvalidRuleHeaders');
+    case 'requestTooLarge':
+      return t('replayRequestTooLarge');
+    case 'responseTooLarge':
+      return t('replayResponseTooLarge');
+    case 'failed':
+      return t('replayFailed');
+    default:
+      return t('replayNoAnswer');
+  }
+});
+
+/** 那枚状态码标签：在途与「压根没读到一份认得的信封」都不画一个数（`0` 会被读成「服务器回了 0」） */
+const replayStatus = computed(() => shownReplay.value?.reading?.status ?? null);
+const replayTagType = computed(() => (replayStatus.value === null ? 'info' : statusTagType(replayStatus.value)));
+
+/**
+ * 结果块下面那几句补充（没留下请求头 / 二进制 / 为显示截过正文）
+ *
+ * 收成一支数组而不是三个 `<li v-if>`：同一格要决定「这一串到底要不要出现」，
+ * 三条各写一道 `v-if` 时容器会在一条都不成立时留着——那是 6px 的一段空列表，
+ * 谁也不会去查它为什么在那儿。字面量 key 仍然只有 `t()` 这一处出口，i18n 的源码扫描照旧查得到。
+ */
+const replayNotes = computed(() => {
+  const view = shownReplay.value;
+  if (!view) return [];
+  const notes: string[] = [];
+  if (!view.headersPresent) notes.push(t('replayNoHeaders'));
+  const reading = view.reading;
+  if (reading?.isBase64) notes.push(t('replayBinaryBody'));
+  if (reading?.bodyTruncated)
+    notes.push(t('replayBodyTruncated', [String(reading.body.length), String(reading.bodyLength)]));
+  return notes;
+});
+
+/**
+ * 这一行为什么不给重放（`replayPlan.ok === false` 时才有话）
+ *
+ * 按钮按同一份判据决定画不画，可被拒的那一档必须自己说清为什么——被截断过的记录**是会出现在
+ * 这份日志里的**（正文 32K、其余字段 8K，超出就留后缀），默默少一颗按钮读起来像界面坏了。
+ */
+const replayRefusal = computed(() => {
+  const plan = replayPlan.value;
+  if (!plan || plan.ok) return '';
+  return plan.reason === 'truncated' ? t('replayRefuseTruncated') : t('replayRefuseUnusable');
+});
+
+/** 展开的正文：只贴「对面说的话」那几档，内部编码的英文原文不重复一遍（哪几档见 `replayBodyUseful`） */
+const replayBody = computed(() => {
+  const reading = shownReplay.value?.reading;
+  if (!reading || reading.isBase64 || !replayBodyUseful(reading.outcome)) return '';
+  return formatBody(reading.body);
+});
+
+/**
+ * 点「重放」：先问一句，再交出去
+ *
+ * 确认那道闸门留在这一侧，因为它是界面语言与 `ElMessageBox` 的事。判据本身在
+ * `utils/requestReplay.ts`：`GET` / `HEAD` / `OPTIONS` 直发，其余一律先问——
+ * 「一次下单两张单」是这类工具最贵的错，而代价只是多一次点击。
+ */
+async function handleReplay(): Promise<void> {
+  const log = selectedLog.value;
+  const plan = replayPlan.value;
+  if (!log || !plan?.ok || replayBusy.value) return;
+
+  if (needsReplayConfirm(plan.payload.method)) {
+    try {
+      await ElMessageBox.confirm(
+        t('replayConfirmBody', [plan.payload.method, log.originalUrl]),
+        t('replayConfirmTitle'),
+        {
+          confirmButtonText: t('confirm'),
+          cancelButtonText: t('cancel'),
+          type: 'warning',
+        },
+      );
+    } catch {
+      // 用户取消：这一笔没有出门，屏幕上什么都不该多出来
+      return;
+    }
+  }
+
+  await runReplay(log);
+}
+
 /**
  * 「本次会话显示凭据原值」开关，默认关。
  *
@@ -1011,6 +1217,8 @@ function displayHeaderValue(name: string, value: string): string {
 // tests/full-verification.test.ts 的「无 visible watcher」清单里，那个契约不许它长出一个。
 function handleDrawerClose() {
   revealSensitive.value = false;
+  // 重放那一格跟「显示凭据原值」同一档：只活在这一次打开里，不落任何地方
+  clearReplay();
   // 窗口退回首屏那一截：关掉之后表格仍然挂着（`el-drawer` 只在第一次打开时渲染内容，
   // 之后靠 v-show 隐藏），留着 500 行就等于让自动刷新的每一拍都在替一个看不见的表格重渲染。
   // 重新打开时由 `App.vue` 的那次重拉再 arm 起来。
@@ -1037,8 +1245,17 @@ function handleRowClick(row: RequestLogEntry) {
 /** 展开 / 收起某一行的详情：指针与键盘两条路都只走这一个出口，避免长成两套逻辑 */
 function toggleLogDetail(row: RequestLogEntry) {
   const isSame = selectedLog.value?.id === row.id;
+  // 换行、收起、再点开，都把上一段重放读数收回：那一格说的是「刚刚那一次往返的结果」，
+  // 挂在另一行下面就是拿别人的答案当这一行的现状（composable 的轮次令牌是同一件事的另一半）
+  clearReplay(selectedLog.value?.id);
   selectedLog.value = isSame ? null : row;
   if (!isSame) detailTab.value = 'request';
+}
+
+/** 详情面板上那颗关闭：走与点行收起同一条路，别让它成为「唯一一处不清重放读数的收起」 */
+function closeLogDetail() {
+  const row = selectedLog.value;
+  if (row) toggleLogDetail(row);
 }
 
 /**
@@ -1434,6 +1651,56 @@ function copyAsCurl() {
 .log-detail-duration {
   font-size: 12px;
   color: var(--cop-text-color-secondary, #909399);
+}
+
+/* 摘要行窄的时候这颗不许被挤成两行：它左边那条规则名是 `flex: 1`，空间不足时先让名字缩 */
+.log-detail-replay-trigger {
+  flex-shrink: 0;
+}
+
+/* 重放那一格排在摘要行下面：上面说的是「当时」，这一格说的是「刚刚这一次」 */
+.log-detail-replay {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+}
+
+.replay-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.replay-sentence {
+  flex: 1;
+  font-size: 12px;
+  color: var(--cop-text-color-regular, #606266);
+}
+
+.replay-duration {
+  font-size: 12px;
+  color: var(--cop-text-color-secondary, #909399);
+}
+
+/* 这一行为什么不能重放：与摘要同档的次要字色，不做红——它不是错误，是一个做不了的动作 */
+.log-detail-replay-refuse {
+  padding: 8px 16px 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cop-text-color-secondary, #909399);
+}
+
+.replay-notes {
+  padding-left: 18px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cop-text-color-secondary, #909399);
+  list-style: disc;
+}
+
+.replay-body {
+  margin-top: 8px;
 }
 
 .log-detail-tabs {

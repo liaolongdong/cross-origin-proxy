@@ -185,6 +185,36 @@
           </div>
         </el-form-item>
 
+        <el-form-item :label="t('tagsLabel')">
+          <div class="header-overrides">
+            <el-select
+              v-model="tagsList"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              clearable
+              :multiple-limit="MAX_RULE_TAGS"
+              :placeholder="t('tagsPlaceholder')"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="tag in tagOptions"
+                :key="tag"
+                :label="tag"
+                :value="tag"
+              />
+            </el-select>
+            <div class="field-hint">{{ t('tagsHint', [String(tagsList.length), String(MAX_RULE_TAGS)]) }}</div>
+            <div
+              v-if="tagsDropped > 0"
+              class="field-hint field-hint--warn"
+            >
+              {{ t('tagsDropped', [String(tagsDropped)]) }}
+            </div>
+          </div>
+        </el-form-item>
+
         <el-form-item :label="t('queryOverridesLabel')">
           <div class="header-overrides">
             <div
@@ -843,7 +873,8 @@ import { Delete, Plus, Close } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
-import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
+import { DEFAULT_RULE_PRIORITY, MAX_RULE_TAGS } from '@/utils/constants';
+import { sanitizeTags, visibleTags } from '@/utils/ruleTags';
 import { useI18n } from '@/composables/useI18n';
 import { findInvalidHeaderNames } from '@/utils/headerValidation';
 import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule, sameOriginNoRewrite } from '@/utils/urlMatcher';
@@ -875,6 +906,8 @@ const props = defineProps<{
   derivedDraft?: boolean;
   /** 最近用过的目标环境（父组件从存储层与现有规则各取一份，判据同 `utils/recentTargets.ts`） */
   targetSuggestions?: string[];
+  /** 现有规则已经用过的标签，下拉里当候选（用户仍可直接输入新标签）。判据在 `utils/ruleTags.ts` */
+  tagSuggestions?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -1092,6 +1125,12 @@ const mockConditions = ref<MockConditionRow[]>([]);
 
 // 规则级 HTTP 方法白名单（空=任意方法）与查询参数追加/覆盖列表
 const methodsList = ref<string[]>([]);
+/** 规则标签（纯分类，不参与匹配）：清洗与上限走 `utils/ruleTags.ts` 那一份判据 */
+const tagsList = ref<string[]>([]);
+/** 上一次保存时被清洗掉的标签条数，>0 时在那一格下面点名，不静默 */
+const tagsDropped = ref(0);
+/** 下拉里的候选：别的规则已经用过的标签。允许直接输入新的（`allow-create`），所以候选只是省一次打字 */
+const tagOptions = computed(() => props.tagSuggestions ?? []);
 const queryList = ref<PairRow[]>([]);
 
 // Test panel state
@@ -1333,6 +1372,8 @@ watch(
           : [];
         mockConditions.value = toMockConditionRows(props.rule.mockResponse);
         methodsList.value = props.rule.methods ? [...props.rule.methods] : [];
+        tagsList.value = visibleTags(props.rule.tags);
+        tagsDropped.value = 0;
         queryList.value = props.rule.queryOverrides
           ? Object.entries(props.rule.queryOverrides).map(([key, value]) => withUid({ key, value }))
           : [];
@@ -1380,6 +1421,8 @@ watch(
         responseHeaderList.value = [];
         bodyReplacementList.value = [];
         methodsList.value = [];
+        tagsList.value = [];
+        tagsDropped.value = 0;
         queryList.value = [];
       }
       // 基线取的是「存储里那条规则」而不是刚填进表单的数据：预填路径（initialData）带着
@@ -1598,6 +1641,14 @@ async function submitRule() {
     result.methods = [...methodsList.value];
   }
 
+  // 标签走 `utils/ruleTags.ts` 那一份清洗（trim、大小写去重、码点截断、条数上限）。
+  // 越界不拦保存——标签只是分类名，为它拦下用户要存的规则是本末倒置；但要说一句：
+  // 静默把用户打的标签吃掉，与「存了却看不见」同样难查。
+  const tagResult = sanitizeTags(tagsList.value);
+  tagsDropped.value = tagResult.dropped;
+  if (tagResult.tags) result.tags = tagResult.tags;
+  if (tagResult.dropped > 0) ElMessage.warning(t('tagsDropped', [String(tagResult.dropped)]));
+
   if (Object.keys(queryOverrides).length > 0) {
     result.queryOverrides = queryOverrides;
   }
@@ -1763,6 +1814,11 @@ function runTest() {
   font-size: 12px;
   line-height: 1.5;
   color: var(--el-text-color-secondary);
+}
+
+/* 被清洗掉的标签条数：与「这条规则不会被浏览器应用」同一档色相，都是「你要的效果少了一块」 */
+.field-hint--warn {
+  color: var(--el-color-warning, #e6a23c);
 }
 
 .header-pair {

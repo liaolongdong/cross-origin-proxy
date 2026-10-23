@@ -32,6 +32,10 @@ export interface ProxyRule {
   targetUrl: string; // 目标替换 URL，如 "https://uat-api.example.com"
   matchType: 'wildcard' | 'prefix' | 'regex'; // 匹配类型
   methods?: string[]; // HTTP 方法白名单（大小写不敏感）；空/未定义=任意方法。非空时强制走 SW 通道（DNR 无法按方法过滤）
+  // 用户自起的分类标签（项目 / 环境 / 负责人……）：只为「一屏 200 条规则里挑出这一批」而存在，
+  // 不参与匹配、分流与任何判定，因此加它不改变任何一条请求的走向。
+  // 清洗、去重与上限只住在 `utils/ruleTags.ts`；`isValidRuleShape` 只判类型（与 `methods` 同一口径）
+  tags?: string[];
   queryOverrides?: Record<string, string>; // 命中后对最终 URL 追加/覆盖的查询参数（仅 SW 通道）
   headerOverrides?: Record<string, string>; // 可选请求头覆盖
   // 携带目标环境的 Cookie（SW fetch 的 credentials: 'include'）。仅 SW 通道能力：DNR 重定向由浏览器
@@ -162,6 +166,13 @@ export enum MessageType {
   CLEAR_REQUEST_LOG = 'CLEAR_REQUEST_LOG',
   GET_DNR_STATS = 'GET_DNR_STATS', // Popup/Options → SW：DNR 命中采样（可选按标签页）
   GET_SW_STATS = 'GET_SW_STATS', // Options → SW：SW 通道规则级命中统计
+  /**
+   * Options → SW：网络层规则「现在装着几条」与「按现在这份配置该装着几条」（只读）
+   *
+   * 与 `GET_DNR_STATS` 同档，刻意**不加** `isTrustedSender`：回包是两个整数加两个布尔，
+   * 改不了任何状态，也不交出规则内容、地址或主机名。
+   */
+  GET_DNR_INSTALL_STATE = 'GET_DNR_INSTALL_STATE',
 
   // 拦截器活动（MAIN world 自报，只用于展示）
   /** 注入脚本 → SW：本页四个计数（页面可伪造，故纯展示、不改任何状态，见 `InterceptorStats`） */
@@ -415,6 +426,26 @@ export interface GetSwStatsMessage {
   type: MessageType.GET_SW_STATS;
 }
 
+/**
+ * 网络层规则的装载状态（`describeDnrInstallState` 的回包形状）
+ *
+ * 两个数是**同一份输入**的两端：`installed` 是 Chrome 此刻装着多少条，`expected` 是按此刻这份
+ * 配置同步一次会写进多少条。`readable: false` 表示两侧至少有一侧没读到——那时两个 0 只是占位，
+ * 界面必须画「不知道」，绝不能读成「0 对 0，一切正常」。`syncing` 留给「队列里还有没落定的同步」，
+ * 那一刻的差值是正常态，不是结论。
+ */
+export interface DnrInstallState {
+  readable: boolean;
+  syncing: boolean;
+  installed: number;
+  expected: number;
+}
+
+/** 读取网络层规则装载状态（无载荷：它说的是这台浏览器，不是某一个标签页） */
+export interface GetDnrInstallStateMessage {
+  type: MessageType.GET_DNR_INSTALL_STATE;
+}
+
 /** 获取请求日志 */
 export interface GetRequestLogMessage {
   type: MessageType.GET_REQUEST_LOG;
@@ -664,6 +695,7 @@ export type RuntimeMessage =
   | ReorderRulesMessage
   | GetDnrStatsMessage
   | GetSwStatsMessage
+  | GetDnrInstallStateMessage
   | InterceptorStatsMessage
   | GetInterceptorStatsMessage
   | GetConfigSyncMessage

@@ -52,12 +52,57 @@
       />
     </el-select>
 
+    <!--
+      标签筛选：一条规则都没打过标签时整格不出现（空下拉只会让人觉得界面坏了）。
+      但「已经选着标签」时也必须留着——把最后一条打过标签的规则删掉（批量删除 + 撤销窗口
+      是同一条路）之后，availableTags 会空下来，而 tagsFilter 还留着那个值：不留着这一格，
+      表格就停在「无匹配」上，界面上再没有任何一个能撤销这条筛选的控件。
+    -->
+    <el-select
+      v-if="availableTags.length > 0 || tagsFilter.length > 0"
+      :model-value="tagsFilter"
+      multiple
+      collapse-tags
+      collapse-tags-tooltip
+      clearable
+      class="tag-select"
+      :placeholder="t('filterTags')"
+      @update:model-value="$emit('update:tagsFilter', $event ?? [])"
+    >
+      <el-option
+        :label="t('filterTagsUntagged')"
+        :value="UNTAGGED"
+      />
+      <el-option
+        v-for="option in availableTags"
+        :key="option.tag"
+        :label="`${option.tag} (${option.count})`"
+        :value="option.tag"
+      />
+    </el-select>
+
     <!-- 有勾选时出现的批量操作 -->
     <template v-if="selectedCount > 0">
-      <el-button @click="$emit('batchToggle', true)"> {{ t('batchEnable') }} ({{ selectedCount }}) </el-button>
-      <el-button @click="$emit('batchToggle', false)"> {{ t('batchDisable') }} ({{ selectedCount }}) </el-button>
-      <el-button @click="$emit('batchMigrate')"> {{ t('batchMigrate') }} </el-button>
       <el-button
+        class="batch-action"
+        @click="$emit('batchToggle', true)"
+      >
+        {{ t('batchEnable') }} ({{ selectedCount }})
+      </el-button>
+      <el-button
+        class="batch-action"
+        @click="$emit('batchToggle', false)"
+      >
+        {{ t('batchDisable') }} ({{ selectedCount }})
+      </el-button>
+      <el-button
+        class="batch-action"
+        @click="$emit('batchMigrate')"
+      >
+        {{ t('batchMigrate') }}
+      </el-button>
+      <el-button
+        class="batch-action"
         type="danger"
         plain
         @click="$emit('batchDelete')"
@@ -78,6 +123,7 @@
 import { ref, watch, onUnmounted } from 'vue';
 import { Search } from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
+import { UNTAGGED } from '@/utils/ruleTags';
 
 /**
  * 规则搜索筛选栏（白色圆角卡片）
@@ -91,6 +137,10 @@ const props = defineProps<{
   statusFilter: string;
   /** 匹配类型筛选：'' | 'wildcard' | 'prefix' | 'regex' */
   matchTypeFilter: string;
+  /** 标签筛选（多选，任一命中；含 UNTAGGED 哨兵表示「没打标签的」）。判据在 `utils/ruleTags.ts` */
+  tagsFilter: string[];
+  /** 现有规则用到的标签与各自条数，按用量降序（`collectRuleTags` 的产物） */
+  availableTags: { tag: string; count: number }[];
   /** 表格勾选数量（>0 时显示批量按钮） */
   selectedCount: number;
   /** 规则总数（>0 时显示全部启用/停用按钮） */
@@ -101,6 +151,7 @@ const emit = defineEmits<{
   'update:searchText': [value: string];
   'update:statusFilter': [value: string];
   'update:matchTypeFilter': [value: string];
+  'update:tagsFilter': [value: string[]];
   /** 批量启用/停用勾选规则 */
   batchToggle: [enabled: boolean];
   /** 批量删除勾选规则 */
@@ -146,6 +197,18 @@ onUnmounted(() => {
   margin-left: 0;
 }
 
+/*
+  勾选一下才出现的四颗批量按钮：此前它们是凭空长出来的（第一次勾一行，整组直接跳出来），
+  而「取消勾选」那一组同时消失——同一件事的两个方向都只有一半交代。
+  复用 `tokens.css` 的 `cop-rise-in`（不新建关键帧、不写第二份时长表），
+  时长走 `base`：这一格是被用户自己的勾选叫出来的，不是按下的跟手反馈。
+  不写 fill——`both` / `forwards` 会把 `transform` 冻在末帧，而动画在级联里排在 `:hover` 之前，
+  悬浮抬升会当场失效且没有任何报错。reduce 那一档由 `tokens.css` 的全局 `*` 段接住。
+*/
+.batch-action {
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
+}
+
 .search-input {
   flex: 1 1 260px;
   min-width: 220px;
@@ -159,6 +222,12 @@ onUnmounted(() => {
 .match-type-select {
   flex-shrink: 0;
   width: 130px;
+}
+
+/* 标签是多选、会挤成两枚 chip + 「+N」，比那两枚单选宽一点才不用悬停才知道筛了什么 */
+.tag-select {
+  flex-shrink: 0;
+  width: 176px;
 }
 
 @media (width <= 768px) {

@@ -925,12 +925,16 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
     'components/options/RuleFormDialog.vue',
     'components/options/ProfilesDialog.vue',
     'components/options/SettingsDialog.vue',
+    // 自检面板那五行全靠这一次 run()，而它进来的两条路与上面三张卡一样：hash 在 App.vue 的
+    // onMounted 里同步置位时分片还没取回，watcher 不带 immediate 就是**一屏「不知道」永远不刷新**。
+    // 它的 watcher 源是一个数组（还要跟着 tabId 与那份 RE2 判定重算），所以判据收两种形状。
+    'components/options/SelfCheckDialog.vue',
   ];
 
   it('承担初始化/数据拉取的 props.visible watcher 一律带 immediate', () => {
     for (const file of initializingDialogs) {
       const src = fs.readFileSync(file, 'utf-8');
-      expect(src, file).toMatch(/\(\)\s*=>\s*props\.visible,/);
+      expect(src, file).toMatch(/\(\)\s*=>\s*(?:\[\s*)?props\.visible\s*(?:,|\])/);
       // watcher 结尾必须是 `{ immediate: true }`（回调体里的 return 不算选项对象）
       expect(src, file).toMatch(/\{\s*immediate:\s*true\s*\},\s*\n\);/);
     }
@@ -947,7 +951,7 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
     const appSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
     const start = appSrc.indexOf('function handleHashNavigation');
     const router = appSrc.slice(start, appSrc.indexOf('\n}\n', start));
-    // 五个 hash 入口：#add-rule / #logs / #import-export / #profiles / #url-test（+ 带参的 from-tab）
+    // 六个 hash 入口：#add-rule / #logs / #import-export / #profiles / #url-test / #settings（+ 带参的 from-tab）
     expect(router).toContain('#add-rule');
     expect(router).toContain('#logs');
     expect(router).toContain('#import-export');
@@ -955,6 +959,13 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
     expect(router).toContain('#add-rule-from-tab=');
     // #url-test 是 popup「本页地址」卡的出口（可见性批次）：它打开的是既有纯受控弹窗
     expect(router).toContain('#url-test');
+    // #settings 是 popup 动作区那一颗卡的出口：SettingsDialog 的初始化 watcher 已带 immediate，
+    // 所以「分片带着 visible===true 挂载」那条竞态对它同样成立，不需要新加守卫分支。
+    expect(router).toContain('#settings');
+    // #self-check 是同一行那颗「自检」的出口，带参形式 `?tab=<id>` 把弹窗当时看到的那一页交过去
+    // （地址栏里的那一串按不可信输入处理，判据只住 `utils/selfCheck.ts` 的 `parseSelfCheckTab`）。
+    expect(router).toContain('#self-check');
+    expect(router).toContain('#self-check?tab=');
     // 对应组件：RuleFormDialog 与 ProfilesDialog 已在清单内；
     // ImportExportDialog / UrlTestDialog 为纯受控组件（无 visible watcher），
     // LogDrawer 的数据由 App.vue 自身的 watch(showLogs) 拉取——父组件 setup 早于 onMounted，不受本竞态影响。
