@@ -1073,6 +1073,56 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 落地页特性区的三列门槛：不能比它自己的单卡下限还窄
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * 基准规则是 `repeat(auto-fit, minmax(300px, 1fr))`——300px 是这张版式自己给
+   * 单卡定的下限。而旧的三列断点写在 900px：那时内容宽 860px，三列每张只剩
+   * 274.7px，比下限还窄一截，恰好是「断点一过卡片反而变窄」那种跳变。
+   * 2026-10-23 在 CFT 155 里量过中英两页：900px 时特性区 3678.8 / 5245.5px 高，
+   * 英文页单卡被压到 2240.7px；同样宽度改回两列后是 3584.7 / 4841.8px，单卡最高
+   * 1330.2px。所以门槛按「三列都还不窄于下限」反算：3×300 + 2×18 间距 + 40 内边距
+   * 得 976，取整到 1000。
+   *
+   * node 环境没有布局，这里钉的是这条算术：门槛、内边距、间距、下限四处任一改动
+   * 只要让单卡重新掉到 300px 以下，这条就红。
+   */
+  describe('落地页特性区的三列门槛守得住单卡下限', () => {
+    it('断点处算回来的单卡宽度不低于 auto-fit 那条 300px 下限', () => {
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      const gridRule = /\.feature-grid\s*\{([^}]*)\}/.exec(css)?.[1];
+      expect(gridRule, '落地页找不到 .feature-grid 基准规则，这条守卫形同空转').toBeTruthy();
+
+      const floor = /minmax\(\s*(\d+)px\s*,\s*1fr\s*\)/.exec(gridRule!)?.[1];
+      expect(floor, '基准规则不再是 auto-fit + minmax(Npx, 1fr)：单卡下限没有出处了').toBeTruthy();
+      expect(gridRule!, '基准规则不再是 auto-fit：门槛以下就没有列数了').toContain('repeat(auto-fit');
+      const gap = Number(/gap:\s*(\d+)px/.exec(gridRule!)?.[1]);
+      expect(Number.isFinite(gap) && gap > 0, '特性区的 gap 读不出来，下面的减法算不出单卡宽度').toBe(true);
+
+      const wrapRule = /\.wrap\s*\{([^}]*)\}/.exec(css)?.[1];
+      expect(wrapRule, '落地页找不到 .wrap 规则').toBeTruthy();
+      const pad = Number(/padding:\s*0\s+(\d+)px/.exec(wrapRule!)?.[1]);
+      expect(Number.isFinite(pad) && pad > 0, '.wrap 的左右内边距读不出来，下面的减法算不出内容宽').toBe(true);
+
+      // 三列那一档：找到写 repeat(6, 1fr) 的那条 `width >= Npx` 媒体查询。
+      const threeUp = [...css.matchAll(/@media \(width >= (\d+)px\)\s*\{([\s\S]*?)\n\}/g)].find(m =>
+        m[2].includes('repeat(6, 1fr)'),
+      );
+      expect(threeUp, '找不到把 .feature-grid 切成六列（每卡跨两列）的那条媒体查询').toBeTruthy();
+
+      const threshold = Number(threeUp![1]);
+      const cardAtThreshold = (threshold - 2 * pad - 2 * gap) / 3;
+      expect(
+        cardAtThreshold,
+        `三列门槛 ${threshold}px 处单卡只有 ${cardAtThreshold.toFixed(1)}px，低于版式自己给的 ${floor}px 下限——` +
+          '门槛一过卡片反而更窄、内容被压高，这正是这条守卫要拦的跳变',
+      ).toBeGreaterThanOrEqual(Number(floor));
+    });
+  });
+
   describe('落地页菜单顺序跟随正文', () => {
     /**
      * 菜单是滚动的目录，不是「动作项收尾」的排版偏好：读者照着菜单往下走，

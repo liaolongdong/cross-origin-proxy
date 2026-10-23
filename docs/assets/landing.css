@@ -1189,7 +1189,11 @@ section[aria-labelledby] {
   border-color: color-mix(in srgb, var(--lp-primary) 26%, var(--lp-line));
 }
 
-@media (width >= 900px) {
+/* 三列的门槛按「每张卡都还不窄于下面那条 300px 下限」反算：三列 900px 加两条
+   18px 间距是 936，再补上 .wrap 左右各 20px 的内边距，得 976。旧值 900 让每张卡
+   只剩 274.7px——比 auto-fit 的 300px 下限还窄，英文页一张卡能被压到 2240px 高，
+   同一个宽度下特性区（3678.8 / 5245.5px）反而比两列（3584.7 / 4841.8px）更长。 */
+@media (width >= 1000px) {
   .feature-grid {
     grid-template-columns: repeat(6, 1fr);
   }
