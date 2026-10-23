@@ -8,8 +8,8 @@
  *    （无 JS 时仍是可横向滑动的 scroll-snap 轨道）；
  * 2. 区块滚动淡入，并给同一容器里的 `.reveal` 编号（`--lp-rank`），让它们依次进场；
  * 3. 导航当前区块高亮；
- * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`，点选链接后收起下拉
- *    （`<details>` 本身无 JS 也能开合）；
+ * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`；三种收起方式——再点一次按钮（原生）、
+ *    点面板之外、Esc（并把焦点交还按钮），点选链接后同样收起（`<details>` 本身无 JS 也能开合）；
  * 5. 回顶 / 到底导轨（与第 7 项共用一份按帧合流的滚动读数通道，整页只挂一次监听）；
  * 6. 一键复制：微信号与预演面板共用同一条剪贴板路径（按钮文字不保证被播报，结果另写进
  *    `role="status"` 区域，4 秒后收回）；无 JS 时按钮不出现，号码本身是可选中的文本；
@@ -335,7 +335,7 @@
     sections.forEach(section => navObserver.observe(section));
   }
 
-  /* ─────────────── 4. 小屏汉堡菜单：展开状态与点选后收起 ─────────────── */
+  /* ─────────────── 4. 小屏汉堡菜单：展开状态与三种收起方式 ─────────────── */
 
   const navMenu = document.querySelector('.nav-menu');
 
@@ -348,10 +348,36 @@
       if (summary) summary.setAttribute('aria-expanded', String(navMenu.open));
     };
 
+    /* 收起后焦点要有个去处：面板一 `display: none`，停在面板里的焦点就落回 body，
+       键盘用户得从头 Tab 一遍才回到菜单按钮。Esc 这一路把焦点交还给 summary。 */
+    const closeMenu = ({ restoreFocus = false } = {}) => {
+      if (!navMenu.open) return;
+      navMenu.removeAttribute('open');
+      if (restoreFocus && summary) summary.focus();
+    };
+
     navMenu.addEventListener('toggle', syncExpanded);
     navMenu.addEventListener('click', event => {
-      if (event.target.closest('a')) navMenu.removeAttribute('open');
+      if (event.target.closest('a')) closeMenu();
     });
+
+    /* 点面板之外即收起。触屏上「点空白处」是比「再点一次那颗按钮」更常见的期待，
+       而 `<details>` 原生只认 summary。判据是 `contains(event.target)`：
+       面板内边距上那几像素仍算面板，点到那里不收——把那一层也当「外面」，
+       贴着边缘的点击就会被读成误触。 */
+    document.addEventListener('pointerdown', event => {
+      if (!navMenu.open) return;
+      if (navMenu.contains(event.target)) return;
+      closeMenu();
+    });
+
+    /* Esc 收起并把焦点送回按钮。只认这棵树自己的 keydown，
+       FAQ 那些 `<details>` 不归这里管，别顺手替它们关。 */
+    navMenu.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      closeMenu({ restoreFocus: true });
+    });
+
     syncExpanded();
   }
 
