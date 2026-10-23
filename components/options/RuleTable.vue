@@ -107,7 +107,7 @@
         <el-table-column
           prop="name"
           :label="t('colName')"
-          min-width="120"
+          :min-width="narrowCols ? 100 : compactCols ? 140 : 120"
         >
           <template #default="{ row }">
             <span class="rule-name-cell">
@@ -232,7 +232,7 @@
         <el-table-column
           prop="matchPattern"
           :label="t('colMatchPattern')"
-          min-width="200"
+          :min-width="narrowCols ? 160 : compactCols ? 190 : 200"
         >
           <template #default="{ row }">
             <HighlightText
@@ -243,6 +243,7 @@
           </template>
         </el-table-column>
         <el-table-column
+          v-if="!compactCols"
           prop="matchType"
           :label="t('colMatchType')"
           width="100"
@@ -260,7 +261,7 @@
         <el-table-column
           prop="targetUrl"
           :label="t('colTargetUrl')"
-          min-width="200"
+          :min-width="narrowCols ? 160 : compactCols ? 190 : 200"
         >
           <template #default="{ row }">
             <HighlightText
@@ -271,12 +272,14 @@
           </template>
         </el-table-column>
         <el-table-column
+          v-if="!narrowCols"
           prop="priority"
           :label="t('colPriority')"
           width="80"
           align="center"
         />
         <el-table-column
+          v-if="!narrowCols"
           :label="t('hitCountLabel')"
           width="96"
           align="center"
@@ -340,10 +343,10 @@
         </el-table-column>
         <el-table-column
           :label="t('colActions')"
-          width="140"
+          :width="narrowCols ? 120 : 140"
           align="center"
           header-align="center"
-          fixed="right"
+          :fixed="narrowCols ? false : 'right'"
         >
           <template #default="{ row }">
             <div class="row-actions">
@@ -399,7 +402,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
 import type { TableInstance } from 'element-plus';
@@ -562,6 +565,37 @@ function clearSelection(): void {
 defineExpose({ clearSelection });
 
 /**
+ * 窄屏列收口
+ *
+ * 十列合计 1100px，加上两侧 32px 外边距、卡片 8px 内边距与滚动条，视口窄于约 1200px 时
+ * 表格就开始横向滚动；而操作列 `fixed="right"` 会浮在内容上，正好盖住状态开关——看起来
+ * 像「开关点不动」。两档收：≤1200 收起匹配方式（模式文本本身已经说明了类型），省下的宽度
+ * 让给名称列（140px），长名称不在中途折行；≤1100 再收起优先级与命中数、收窄三列的最小宽度，
+ * 并把操作列改回普通列。拖拽把手始终保留：它是调整列表顺序唯一的直接入口，收起它等于在
+ * 窄窗口里拿走一个功能。
+ */
+const compactCols = ref(false);
+const narrowCols = ref(false);
+let compactMql: MediaQueryList | null = null;
+let narrowMql: MediaQueryList | null = null;
+
+/** 两档断点与列宽是同一组数，改一档要连 `syncResponsiveCols` 与列上的绑定一起看 */
+function syncResponsiveCols(): void {
+  compactCols.value = compactMql?.matches ?? false;
+  narrowCols.value = narrowMql?.matches ?? false;
+  // 列是 `v-if` 增删的，布局要等这一轮渲染落地再算，否则固定列还停在旧宽度上
+  void nextTick(() => tableRef.value?.doLayout());
+}
+
+onMounted(() => {
+  compactMql = window.matchMedia('(max-width: 1200px)');
+  narrowMql = window.matchMedia('(max-width: 1100px)');
+  compactMql.addEventListener('change', syncResponsiveCols);
+  narrowMql.addEventListener('change', syncResponsiveCols);
+  syncResponsiveCols();
+});
+
+/**
  * 「筛选无结果」时 `v-else` 会把整个表格卸载，存活在表格内部的保留勾选随之丢失，
  * 而父组件还拿着上一份选中项。表格分支只在 `rules.length > 0` 时存在，故直接监听
  * 这个渲染条件：翻转成「不渲染」后补发一次空选择，避免计数与真实勾选分叉。
@@ -582,6 +616,10 @@ onBeforeUnmount(() => {
     clearTimeout(settleTimer);
     settleTimer = null;
   }
+  compactMql?.removeEventListener('change', syncResponsiveCols);
+  narrowMql?.removeEventListener('change', syncResponsiveCols);
+  compactMql = null;
+  narrowMql = null;
 });
 
 /** 该规则是否会被 DNR 同步跳过（返回原因，undefined 表示可正常应用） */

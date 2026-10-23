@@ -2110,6 +2110,43 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
        */
       expect(notesAction, '切片器开始读仓库里的脚本文件了——旧 tag 的树里可能没有它').not.toContain('scripts/');
     });
+
+    /**
+     * 从 `.output/` 挂产物的 `upload-artifact@v4`，必须显式写 `include-hidden-files: true`。
+     *
+     * 这条是被一次真红逼出来的：v4 默认把「路径里任何一段以 `.` 开头」的匹配全部丢掉（它把这一步
+     * 翻成 @actions/glob 的 `excludeHiddenFiles`），而 WXT 的产物恰好住在 `.output/` 下——整条
+     * glob 因此命中零个文件。它在 `if-no-files-found: warn` 的那几个月里就是这么静默挂着零产物：
+     * CI run 68 的 artifacts 列表是空的，而同一次运行的构建日志里那句
+     * `└─ .output/cross-origin-proxy-1.5.1-chrome.zip  357.95 kB` 照样打得好好的。改成 error 才红出来。
+     *
+     * 判据按「步」走而不是整文件 grep：把 `include-hidden-files` 从那一格挪到别处必须红。
+     * `path` 用子串匹配，因此 `${{ steps.zip.outputs.path }}` 这种**间接**的也算——store-publish
+     * 那一格收的就是两步之前现算出来的 `.output/<name>-<version>-chrome.zip`。多要求一格无害的
+     * `include-hidden-files: true` 是这条口径的代价，比漏掉一格静默零产物轻得多。
+     */
+    it('从 .output/ 挂产物的 upload-artifact 步骤，都显式打开了 include-hidden-files', () => {
+      const workflows: Array<[string, string]> = [
+        ['ci.yml', ci],
+        ['deploy-pages.yml', pages],
+        ['release.yml', release],
+        ['release-please.yml', releasePlease],
+        ['store-publish.yml', storePublish],
+      ];
+      let checked = 0;
+      for (const [file, yaml] of workflows) {
+        for (const step of stepsOf(yaml)) {
+          if (!/uses: actions\/upload-artifact@/.test(step.body)) continue;
+          if (!stepField(step.body, 'path').includes('.output')) continue;
+          checked += 1;
+          expect(
+            step.body,
+            `${file} 的「${step.name}」从 .output/ 挂产物却没打开 include-hidden-files——它会静默挂一个空产物`,
+          ).toContain('include-hidden-files: true');
+        }
+      }
+      expect(checked, '一格从 .output/ 挂产物的步骤都没数到：产物搬家了，要么就是提取口径坏了').toBeGreaterThan(0);
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

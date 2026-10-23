@@ -6,8 +6,9 @@
  * ① 有人把 `el-button` 的 `type` 当「动作类别色带」用（success=生成、warning=选文件），
  *    于是同一屏出现四种档位、数不出主行动——`ImportExportDialog` 与 `LogDrawer` 都曾是这样；
  * ② popup 加一颗新按钮、选了一个 options 没有的 hash——点了什么也不会发生，且没有任何报错；
- * ③ 动作区的形状（几张卡、哪张在第一、次级行几颗）——本轮把它按「离用户的手多近」重排过，
- *    没有守卫的话下一次加功能默认会继续往上堆卡片，而不是想清楚它排第几。
+ * ③ 动作区的形状（几张卡、哪张在第一、次级动作有没有又长回一行）——本轮把它按「离用户的手多近」
+ *    重排过，并与同期进 main 的两列宫格合流成「七张卡一档」；没有守卫的话，下一次加功能默认会
+ *    继续往上堆卡片或另起一行，而不是想清楚它排第几。
  *
  * 例外两处，形状写死在断言里而不是靠注释：`link` 档的按钮可以带 `type`，因为它承担的只是色相
  * （全仓现存两枚：规则表单「收起测试面板」、设置页「回退这一份恢复点」）。
@@ -131,39 +132,55 @@ describe('popup → options 的出口', () => {
 });
 
 describe('popup 动作区的形状', () => {
-  const actionList = templateOf(popup, '<div class="action-list">', '次级动作行');
+  const actionList = templateOf(popup, '<div class="action-list">', '\n    <!-- 最近请求');
 
-  it('三张主卡，第一张是环境配置（切环境是这个扩展最勤的动作）', () => {
+  it('两列宫格七张卡，第一张是环境配置（切环境是这个扩展最勤的动作）', () => {
     const cards = [...actionList.matchAll(/class="action-card"/g)];
-    expect(cards).toHaveLength(3);
+    expect(cards, '动作区的卡数变了：新增入口要回来把这一格与 AGENTS 的档位表一起改').toHaveLength(7);
     expect(actionList).toContain('@click="handleProfilesCard"');
-    expect(actionList.indexOf('handleProfilesCard'), '环境配置不在第一张').toBeLessThan(
-      actionList.indexOf('handleCreateRuleFromTab'),
-    );
+    const order = ['handleProfilesCard', 'handleCreateRuleFromTab', 'openOptionsPage()'];
+    const at = order.map(name => actionList.indexOf(name));
+    at.forEach((index, i) => expect(index, `第 ${i + 1} 颗找不到 "${order[i]}"`).toBeGreaterThan(-1));
+    expect(at[0] < at[1] && at[1] < at[2], '顺序不再是「离手多近」：环境配置 → 为当前页 → 规则管理').toBe(true);
     expect(actionList, '规则管理那张不许再指向添加弹窗').toContain('openOptionsPage()');
     expect(actionList).not.toContain("openOptionsPage('#add-rule')");
   });
 
-  it('次级那一行四颗、全带图标、不带 type（它的权重必须低于上面的卡）', () => {
-    const bar = templateOf(popup, '<div class="action-bar">', '    <!-- 最近请求');
-    const btns = [...bar.matchAll(/<button\b[\s\S]*?>/g)];
-    expect(btns).toHaveLength(4);
-    for (const key of ['actionViewLogs', 'actionImportExport', 'actionSettings', 'actionSelfCheck']) {
-      expect(bar, `次级行少了 ${key}`).toContain(`t('${key}')`);
+  it('七个入口都在卡里，且每一颗都有能落地的 hash', () => {
+    for (const [key, handler] of [
+      ['actionProfiles', 'handleProfilesCard'],
+      ['actionCreateRuleFromTab', 'handleCreateRuleFromTab'],
+      ['actionOpenConfig', 'openOptionsPage()'],
+      ['actionViewLogs', "openOptionsPage('#logs')"],
+      ['actionImportExport', "openOptionsPage('#import-export')"],
+      ['actionSettings', "openOptionsPage('#settings')"],
+      ['actionSelfCheck', 'openOptionsPage(selfCheckHash)'],
+    ] as const) {
+      expect(actionList, `动作区少了 ${key}`).toContain(`t('${key}')`);
+      expect(actionList, `${key} 的动作变了`).toContain(handler);
     }
-    expect(bar.match(/<el-icon>/g)).toHaveLength(4);
-    expect(bar).not.toContain('el-button');
+    // 图标按容器走：七颗卡全带，少一颗就是「同一容器两种形状」
+    expect(actionList.match(/<el-icon>/g), '动作卡的图标不是全带就是全不带').toHaveLength(7);
+  });
+
+  it('次级那一行已经收进宫格： markup 与 CSS 都不许留尸', () => {
+    expect(popup, '.action-bar 的 markup 还在，说明有两套动作区形状并存').not.toContain('class="action-bar"');
+    expect(popup, '.action-bar 的样式还在（死代码）').not.toContain('.action-bar {');
+  });
+
+  it('宫格是两列、卡里的描述改作 title 悬停（宫格宽度放不下第二行）', () => {
+    const css = templateOf(popup, '.action-list {', '\n.action-card {');
+    expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(popup).toMatch(/\.action-card__content \{[\s\S]*?\}/);
+    expect(actionList, '卡片里又长出第二行文字：那会把「最近请求」重新挤出首屏').not.toContain('action-card__desc');
+    // 五张「有话说得清」的卡各带一条 `title`（第六、七颗只有标签本身，没有第二句可给）；
+    // 数的是 `:title="t('action`，两块内联面板里那些 `:title` 说的是别的事，不能一起算
+    expect(actionList.match(/:title="t\(\x27action/g), '描述行改作悬停提示这件事被回退了').toHaveLength(4);
   });
 
   it('自动关闭那五格有折行兜底（文案不可收缩，没有 wrap 就是挤压）', () => {
     expect(popup).toMatch(/\.auto-off-chips \{[\s\S]*?flex-wrap: wrap;/);
     expect(popup).toMatch(/\.auto-off-chip \{[\s\S]*?min-width: 52px;/);
-  });
-
-  it('次级行的样式与卡片同一节奏（instant 跟手、颜色走令牌而不是字面量）', () => {
-    const css = templateOf(popup, '.action-bar__btn {', '\n.action-bar__btn:hover');
-    expect(css).toContain('var(--cop-duration-instant)');
-    expect(css).not.toMatch(/#[0-9a-f]{3,6}/i);
   });
 });
 

@@ -540,7 +540,7 @@ function handleHashNavigation() {
     );
     showSelfCheck.value = true;
   } else if (hash === '#settings') {
-    // popup 次级动作行的出口：整页设置（语言、主题、整张站点名单、凭据变量）此前在弹窗里没有通往的路
+    // popup 动作区「设置」那一格的出口：整页设置（语言、主题、整张站点名单、凭据变量）此前在弹窗里没有通往的路
     showSettings.value = true;
   } else if (hash.startsWith('#add-rule-from-tab=')) {
     // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）

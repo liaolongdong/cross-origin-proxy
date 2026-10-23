@@ -346,12 +346,20 @@
       </div>
     </div>
 
-    <!-- 动作卡片列表 -->
+    <!--
+      动作卡片列表：两列宫格、七个入口同一档。
+      形状跟 main（662c363）——单列五张卡会把「最近请求」整个挤出首屏，宫格把首屏压回 600px 一档；
+      入口集合与语义跟这一轮（5fa33db）——环境配置排第一（切环境最勤），「规则管理」开的是配置页根
+      而不是添加弹窗（标签说的是管理，动作就得是管理），设置与自检各占一格：这一格里前六颗都是
+      「打开一个地方」，只有最后一颗会去问五笔读数，它排最后不是随手放的。
+    -->
     <div class="action-list">
       <div
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionProfilesDesc')"
+        :class="{ 'is-expanded': profilePicker }"
         :aria-expanded="profilePicker ? 'true' : 'false'"
         @click="handleProfilesCard"
         @keydown.enter.space.prevent="handleProfilesCard"
@@ -361,7 +369,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionProfiles') }}</div>
-          <div class="action-card__desc">{{ t('actionProfilesDesc') }}</div>
         </div>
       </div>
 
@@ -444,10 +451,13 @@
           <span class="api-picker-origin">{{ t('profilePickerManage') }}</span>
         </button>
       </div>
+
       <div
         class="action-card"
         role="button"
         tabindex="0"
+        :title="createRuleFromTabDesc"
+        :class="{ 'is-expanded': apiPicker }"
         :aria-expanded="apiPicker ? 'true' : 'false'"
         @click="handleCreateRuleFromTab"
         @keydown.enter.space.prevent="handleCreateRuleFromTab"
@@ -457,7 +467,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionCreateRuleFromTab') }}</div>
-          <div class="action-card__desc">{{ createRuleFromTabDesc }}</div>
         </div>
       </div>
 
@@ -528,6 +537,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionOpenConfigDesc')"
         @click="openOptionsPage()"
         @keydown.enter.space.prevent="openOptionsPage()"
       >
@@ -536,55 +546,74 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionOpenConfig') }}</div>
-          <div class="action-card__desc">{{ t('actionOpenConfigDesc') }}</div>
         </div>
       </div>
-    </div>
 
-    <!--
-      次级动作行：日志、导入导出、设置都不该占一张满宽卡片的垂直空间，
-      而设置此前在弹窗里根本没有入口（语言、主题、自动关闭时长、站点名单、凭据变量都到不了）。
-      四颗一律 text 档、一律带图标、同一容器同一档位——与 options 顶栏的图标语义对齐。
-    -->
-    <div class="action-bar">
-      <button
-        type="button"
-        class="action-bar__btn"
+      <div
+        class="action-card"
+        role="button"
+        tabindex="0"
+        :title="t('actionViewLogsDesc')"
         @click="openOptionsPage('#logs')"
+        @keydown.enter.space.prevent="openOptionsPage('#logs')"
       >
-        <el-icon><Document /></el-icon>
-        <span>{{ t('actionViewLogs') }}</span>
-      </button>
-      <button
-        type="button"
-        class="action-bar__btn"
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><Document /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionViewLogs') }}</div>
+        </div>
+      </div>
+
+      <div
+        class="action-card"
+        role="button"
+        tabindex="0"
+        :title="t('actionImportExportDesc')"
         @click="openOptionsPage('#import-export')"
+        @keydown.enter.space.prevent="openOptionsPage('#import-export')"
       >
-        <el-icon><FolderOpened /></el-icon>
-        <span>{{ t('actionImportExport') }}</span>
-      </button>
-      <button
-        type="button"
-        class="action-bar__btn"
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><FolderOpened /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionImportExport') }}</div>
+        </div>
+      </div>
+
+      <div
+        class="action-card"
+        role="button"
+        tabindex="0"
         @click="openOptionsPage('#settings')"
+        @keydown.enter.space.prevent="openOptionsPage('#settings')"
       >
-        <el-icon><Setting /></el-icon>
-        <span>{{ t('actionSettings') }}</span>
-      </button>
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><Setting /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionSettings') }}</div>
+        </div>
+      </div>
+
       <!--
-        自检：这一行里唯一一颗「我按下去它替我看一遍」的按钮。它排在最后不是随手放的——
-        同一行前三颗都是「打开一个地方」，只有这颗会去问五笔读数；而它带的是**这个弹窗当时
-        看到的那一页**的 id，读不到 id（比如那一页本身是扩展页）就带着「没有对应网页」打开，
-        那三行自己会说话，不拿猜出来的标签页凑一个答案。
+        自检带的是**这个弹窗当时看到的那一页**的 id；读不到 id（比如那一页本身是扩展页）就带着
+        「没有对应网页」打开，那几行自己会说话，不拿猜出来的标签页凑一个答案。
       -->
-      <button
-        type="button"
-        class="action-bar__btn"
+      <div
+        class="action-card"
+        role="button"
+        tabindex="0"
         @click="openOptionsPage(selfCheckHash)"
+        @keydown.enter.space.prevent="openOptionsPage(selfCheckHash)"
       >
-        <el-icon><CircleCheck /></el-icon>
-        <span>{{ t('actionSelfCheck') }}</span>
-      </button>
+        <div class="action-card__icon action-card__icon--tint">
+          <el-icon><CircleCheck /></el-icon>
+        </div>
+        <div class="action-card__content">
+          <div class="action-card__title">{{ t('actionSelfCheck') }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- 最近请求 -->
@@ -711,7 +740,7 @@ import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@
 /**
  * Popup 弹窗（动作卡片风格，参照 account-password-helper）
  *
- * 结构：头部 → 开关状态行 → 数据点 → 三张主卡（按使用频率排）→ 次级动作一行 → 最近请求列表。
+ * 结构：头部 → 开关状态行 → 数据点 → 动作区（两列宫格七张卡，按使用频率排）→ 最近请求列表。
  * 主卡要么就地展开面板（环境配置、为当前页创建规则），要么直达 Options 的规则列表；
  * 次级那一行（请求日志 / 导入导出 / 设置）经 URL hash 直达 Options 的对应弹窗或抽屉。
  * 卡片与次级行都排在诊断三块（数据点 / 站点范围 / 本页命中）之后——「这一页有没有生效」
@@ -1488,12 +1517,16 @@ async function openOptionsPage(hash = '') {
 }
 
 /* 头部 */
+
+/* 这一段的总高要压进 Chrome 弹窗的 600px 上限（内容自然高 ≈ 598px，中文是最坏一档）：
+   每处只收一两像素看不出差别，叠起来才装得下「最近请求」的空态与它那句提示。
+   再往下调之前先量一次——量法见 `.test-tmp/probe/ui-verify-1022.cjs` 的 container.bottom + body 8px。 */
 .header {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--cop-border-color-light);
 }
 
@@ -1522,9 +1555,9 @@ async function openOptionsPage(hash = '') {
 .toggle-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;
@@ -1690,8 +1723,8 @@ async function openOptionsPage(hash = '') {
 
 /* 数据点 + 拦截器活动（两者共用同一条分隔线，间距与拆分前一致） */
 .metrics-block {
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--cop-border-color-light);
 }
 
@@ -1701,7 +1734,7 @@ async function openOptionsPage(hash = '') {
   /* 三格顶部对齐：只有第三格带注释行，居中会让前两格的数字下沉半行 */
   align-items: flex-start;
   justify-content: space-around;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .metric {
@@ -1842,7 +1875,7 @@ async function openOptionsPage(hash = '') {
 }
 
 /*
-  「刷新这一页」：档位与次级动作行那四颗同为 text（无边框、次要字色），只有尺寸收小一档，
+  「刷新这一页」：档位与动作卡之下的次要按钮同为 text（无边框、次要字色），只有尺寸收小一档，
   因为这一格挤在警告句的右边。刻意**不**用 `--el-color-warning-light-N` 上底色——
   那几个浅档在暗色两条路径没有值，写上去就是靠回退色蒙过 `tests/designTokens.test.ts`，
   而那句话的颜色由 `.config-sync-warning` 自己承担就够了。
@@ -2049,19 +2082,22 @@ async function openOptionsPage(hash = '') {
   color: var(--el-color-warning);
 }
 
-/* 动作卡片列表 */
+/* 动作卡排成两列宫格：单列七张卡要占 400 多像素，把「最近请求」整个挤出首屏。
+   两列之后七个入口仍全部可见（四行），首屏高度回到 600px 一档；卡片里的描述文字改作
+   `title` 悬停提示（宫格宽度放不下第二行，截断读起来比不显示更糟）。 */
 .action-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .action-card {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
+  min-width: 0;
+  padding: 8px 10px;
   cursor: pointer;
   user-select: none;
   outline: none;
@@ -2079,6 +2115,7 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-primary-bg-hover);
   border-color: var(--cop-primary-border);
   box-shadow: 0 2px 8px rgb(var(--cop-primary-rgb) / 10%);
+  transform: translateY(-1px);
 }
 
 .action-card:active {
@@ -2097,9 +2134,9 @@ async function openOptionsPage(hash = '') {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
   border-radius: 50%;
 }
 
@@ -2126,78 +2163,22 @@ async function openOptionsPage(hash = '') {
 }
 
 .action-card__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--cop-text-color-primary);
 }
 
-.action-card__desc {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--cop-text-color-secondary);
-}
-
-/*
-  次级动作行：这四件事都不该占一张满宽卡片的高度，但必须一眼数得出、点得到。
-  四格按内容分配剩余宽度并可折行——2026-10-21 在真 Chrome 里量过（`popup-chips-en.cjs`，不入库）：
-  320px 那一行中文四颗排成一排（87.5 / 87.5 / 63.5 / 63.5），英文排成两排（153.2 / 160.8 与 149.8 / 164.2），
-  两档每颗都是 29.6px 高、`scrollWidth-clientWidth` 全 0、不越出这一行、页面横向溢出 0px。
-  折行是刻意的兜底：收字号换不来可点面积，而这一行的热区本来就在 24px 那条线之上。
-  图标按容器走——这一行四颗全带，与 options 顶栏那一组同一口径。
-  档位是 text（无边框、次要字色），悬浮与聚焦才长出底色与描边：
-  它们的视觉权重必须低于上面那三张卡，否则「哪个是主行动」又变成一次猜测。
-*/
-.action-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: stretch;
-  margin: 0 0 12px;
-}
-
-.action-bar__btn {
-  display: flex;
-  flex: 1 1 auto;
-  gap: 5px;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 8px;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--cop-text-color-regular);
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  transition:
-    color var(--cop-duration-instant) var(--cop-ease-standard),
-    background-color var(--cop-duration-instant) var(--cop-ease-standard),
-    border-color var(--cop-duration-instant) var(--cop-ease-standard);
-}
-
-.action-bar__btn :deep(.el-icon) {
-  font-size: 14px;
-}
-
-.action-bar__btn:hover {
-  color: var(--cop-primary);
-  background: var(--cop-primary-bg);
+/* 展开中的那张卡用主色边框点一句「面板从这里出来」，收起即复原 */
+.action-card.is-expanded {
+  background: var(--cop-primary-bg-hover);
   border-color: var(--cop-primary-border);
-}
-
-.action-bar__btn:focus-visible {
-  color: var(--cop-primary);
-  outline: none;
-  border-color: var(--cop-primary);
-  box-shadow: 0 0 0 2px rgb(var(--cop-primary-rgb) / 25%);
 }
 
 /* 候选面板（「为当前页创建规则」点开后）：与动作卡同一套圆角与底色，
    靠主色边框表示「这是刚才那次点击展开的东西」，而不是第四张卡 */
 .api-picker {
+  grid-column: 1 / -1;
   padding: 10px 12px 12px;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-primary-border);
@@ -2376,26 +2357,22 @@ async function openOptionsPage(hash = '') {
 }
 
 /* 最近请求 */
-.recent-section {
-  padding-top: 4px;
-}
-
 .recent-title {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--cop-text-color-primary);
 }
 
 .recent-empty {
-  padding: 12px 0;
+  padding: 6px 0;
   font-size: 12px;
   color: var(--cop-text-color-placeholder);
   text-align: center;
 }
 
 .recent-empty-hint {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font-size: 11px;
   color: var(--cop-text-color-secondary);
   text-align: center;
@@ -2463,7 +2440,7 @@ async function openOptionsPage(hash = '') {
 
 /* 可折叠规则列表 */
 .rules-section {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   overflow: hidden;
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;

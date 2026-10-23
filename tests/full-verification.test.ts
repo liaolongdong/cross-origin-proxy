@@ -959,7 +959,7 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
     expect(router).toContain('#add-rule-from-tab=');
     // #url-test 是 popup「本页地址」卡的出口（可见性批次）：它打开的是既有纯受控弹窗
     expect(router).toContain('#url-test');
-    // #settings 是 popup 次级动作行的出口：SettingsDialog 的初始化 watcher 已带 immediate，
+    // #settings 是 popup 动作区那一颗卡的出口：SettingsDialog 的初始化 watcher 已带 immediate，
     // 所以「分片带着 visible===true 挂载」那条竞态对它同样成立，不需要新加守卫分支。
     expect(router).toContain('#settings');
     // #self-check 是同一行那颗「自检」的出口，带参形式 `?tab=<id>` 把弹窗当时看到的那一页交过去

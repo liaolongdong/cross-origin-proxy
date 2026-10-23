@@ -199,6 +199,10 @@ jobs:
           name: store-publish-zip
           path: ${{ steps.zip.outputs.path }}
           if-no-files-found: error
+          # 同 ci.yml 那一格：产物住在 `.output/` 下，而 upload-artifact@v4 默认连「路径里
+          # 任何一段以 . 开头」的匹配一起丢掉。这一格是 `error`，所以它不会静默——它会在
+          # 第一次真发版时把 prepare 作业直接判红，审批人连那份可下载的包都拿不到。
+          include-hidden-files: true
 
   # 这一格什么都不做，它存在的意义就是那个 `environment:`：GitHub 在该环境配置了
   # **Required reviewers** 时，会把作业挂起直到有人点批准（30 天没人批准则自动失败）。
