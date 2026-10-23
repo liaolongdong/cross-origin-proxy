@@ -249,7 +249,13 @@ describe('Mock 五档拒绝 — 判据、界面文案与说明文档只许有一
   const logDrawerSource = fs.readFileSync('components/options/LogDrawer.vue', 'utf8');
   const readmeZh = fs.readFileSync('README.md', 'utf8');
   const readmeEn = fs.readFileSync('README.en.md', 'utf8');
-  const changelogDraft = fs.readFileSync('CHANGELOG.md', 'utf8').split('\n## [')[0];
+  // 锚在**整份 CHANGELOG 的第一处提及**，而不是「第一个 `## [` 之前」那一段。
+  // 后者在 2026-10-23 第一次真正的发版并节里红了：那句「五种情况不提供」原本住在「待发布」草稿区，
+  // 按 RELEASING.md §2 前置第 2 步 b 并进当次新开的 `## [x.y.z]` 小节之后，草稿区被清空，
+  // 于是切片里根本没有这句话，`zhCount` 交出 null——守卫的意图（文档的档数 == 类型定义的档数）一条没查，
+  // 却以「文本没找到」的形式红。取第一处提及的语义是：有草稿时读草稿（下一次改档数的人必须先把它写进草稿），
+  // 没有时读最新那个已发布小节；而已发布小节是冻结的历史，不该被回改，所以红字指向的永远是「该写一条新草稿」那一步。
+  const changelogMentions = fs.readFileSync('CHANGELOG.md', 'utf8');
 
   const union = mockSource.match(/export type MockDraftRefusal =([^;]+);/);
   const reasons = union ? (union[1].match(/'([^']+)'/g) || []).map(s => s.slice(1, -1)) : [];
@@ -302,8 +308,8 @@ describe('Mock 五档拒绝 — 判据、界面文案与说明文档只许有一
     };
     expect(zhCount(readmeZh)).toBe(reasons.length);
     expect(enCount(readmeEn)).toBe(reasons.length);
-    expect(zhCount(changelogDraft)).toBe(reasons.length);
-    expect(enCount(changelogDraft)).toBe(reasons.length);
+    expect(zhCount(changelogMentions)).toBe(reasons.length);
+    expect(enCount(changelogMentions)).toBe(reasons.length);
   });
 });
 
