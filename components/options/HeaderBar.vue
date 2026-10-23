@@ -29,7 +29,7 @@
       </h1>
 
       <!-- 代理总开关：与状态灯同一行，第二行只留工具栏 -->
-      <div class="proxy-toggle-pill">
+      <div class="proxy-toggle">
         <span class="proxy-toggle-label">{{ statusText }}</span>
         <el-switch
           :model-value="proxyEnabled"
@@ -91,9 +91,9 @@ import { GITHUB_RELEASES_PAGE_URL } from '@/utils/constants';
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
- * 包含标题、可点击的版本徽标、代理状态信号灯（与代理总开关 pill 同一行），
+ * 包含标题、可点击的版本徽标、代理状态信号灯（与代理总开关同一行），
  * 以及第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置）。
- * 间距与按钮皮肤对齐 account-password-helper 的顶栏实现。
+ * 间距与按钮皮肤对齐 account-password-helper 的顶栏实现；总开关刻意不套胶囊，见样式里的说明。
  */
 const props = defineProps<{
   /** 当前插件版本号 */
@@ -339,48 +339,67 @@ const statusText = computed(() =>
   transform: translateY(0);
 }
 
-/* 总开关 pill：毛玻璃底 + 状态文案 */
-.proxy-toggle-pill {
-  display: flex;
+/* 总开关：不套胶囊。顶栏本身就是主色实底，再包一层薄膜等于在同一行里叠出第三个
+   盒子（标题、按钮条之外），而它 44px 的高度还是这一行最高的东西——「看着没对齐」
+   其实是被它拽下去的。这里只留「状态话 + 开关」，行高交还给标题自己。 */
+.proxy-toggle {
+  display: inline-flex;
   flex-shrink: 0;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
-  padding: 5px 12px;
-  background: rgb(var(--cop-on-primary-rgb) / 15%);
-  border: 1px solid rgb(var(--cop-on-primary-rgb) / 25%);
-  border-radius: 999px;
-  backdrop-filter: blur(10px);
 }
 
-/* 开关本体：Element Plus 用 `left` 移动滑块、`transition: all` 一视同仁。
-   这里把时长压到 220ms、换成末段减速的进场曲线（滑块是「被推过去后停住」，
-   不是匀速滑过去），并只留真正会变的三个属性。
-   不用带超调的弹簧曲线：轨道只有 40px、滑块离边只有 1px，超调会让滑块探出胶囊外沿。 */
-:deep(.proxy-toggle-pill .el-switch__core) {
+.proxy-toggle-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--cop-on-primary-rgb) / 92%);
+  user-select: none;
+}
+
+/* 开关本体换色不换形：轨道改成「在主色底上压暗一层」，滑块用实心 on-primary 配一点投影。
+   留着 Element Plus 那抹默认灰（#dcdfe6）会在主色底上糊成一团——按上一版带薄膜胶囊时实拍
+   量过：轨道对薄膜 1.50:1、白滑块对灰轨道 1.34:1，等于看不出旋钮在哪。开启态整个反过来：
+   实心 on-primary 轨道 + 主色滑块（滑块取渐变右端的 --cop-primary-hover，看着像从轨道上
+   透出底色的一个孔）。暗色下 on-primary 翻成深墨，两态一起跟着翻。 */
+:deep(.proxy-toggle .el-switch) {
+  height: 20px;
+}
+
+:deep(.proxy-toggle .el-switch__core) {
+  background: rgb(0 0 0 / 14%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 40%);
   transition:
     background-color var(--cop-duration-base) var(--cop-ease-enter),
     border-color var(--cop-duration-base) var(--cop-ease-enter);
 }
 
-:deep(.proxy-toggle-pill .el-switch__core .el-switch__action) {
+:deep(.proxy-toggle .el-switch:hover .el-switch__core) {
+  border-color: rgb(var(--cop-on-primary-rgb) / 65%);
+}
+
+:deep(.proxy-toggle .el-switch__core .el-switch__action) {
+  background: rgb(var(--cop-on-primary-rgb) / 100%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
   transition:
     left var(--cop-duration-base) var(--cop-ease-enter),
     background-color var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
-.proxy-toggle-label {
-  font-size: 13px;
-  color: rgb(var(--cop-on-primary-rgb) / 90%);
-  user-select: none;
+:deep(.proxy-toggle .el-switch.is-checked .el-switch__core) {
+  background: rgb(var(--cop-on-primary-rgb) / 100%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 100%);
 }
 
-:deep(.proxy-toggle-pill .el-switch.is-checked .el-switch__core) {
-  background: rgb(var(--cop-on-primary-rgb) / 90%);
-  border-color: rgb(var(--cop-on-primary-rgb) / 90%);
+:deep(.proxy-toggle .el-switch.is-checked .el-switch__core .el-switch__action) {
+  background: var(--cop-primary-hover);
+  box-shadow: none;
 }
 
-:deep(.proxy-toggle-pill .el-switch.is-checked .el-switch__core .el-switch__action) {
-  background: var(--cop-primary);
+/* 焦点环也走 on-primary：EP 默认用 --el-switch-on-color（即主题蓝）描边，
+   而这一层底色就是主色渐变，蓝环压在蓝底上等于看不见 */
+:deep(.proxy-toggle .el-switch__input:focus-visible ~ .el-switch__core) {
+  outline: 2px solid rgb(var(--cop-on-primary-rgb) / 80%);
+  outline-offset: 2px;
 }
 
 /* 响应式 */
