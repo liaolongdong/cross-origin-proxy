@@ -514,7 +514,15 @@ html.js .site-nav > a[aria-current]::after {
   top: 100%;
   right: 0;
   left: 0;
+
+  /* 面板是绝对定位、包含块是吸顶的 .site-header，因此它比视口高时既不会
+     被页面滚动带走、也没有任何东西替它滚——底部几个入口就永远够不到。
+     上限按「视口高 − 页头高」算：这里的 100% 解析的是包含块（页头）的高度，
+     正好等于 top: 100% 那段偏移。内容超出时由面板自己滚。 */
+  max-height: calc(100dvh - 100%);
   padding: 6px 0 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--lp-bg);
   border-bottom: 1px solid var(--lp-line);
   box-shadow: var(--lp-shadow-lg);
