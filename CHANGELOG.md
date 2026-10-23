@@ -88,6 +88,48 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 - **导入面板多了一条「导入 OpenAPI / Swagger 文档」**：选一份接口文档（OpenAPI 3 或 Swagger 2 的 JSON），按它 `servers` 声明的来源逐条创建代理规则——同一套读法也吃 Swagger 2 的 `host` + `basePath` + `schemes`。目标环境可选，填了就整批指过去并默认启用（面板上可取消），且**目标会带上文档自己的 basePath**（文档说这套 API 挂在 `/v3`，换环境后不该落到根上）；留空则与这条进口存在之前一样：自映射、默认停用。读不出 http(s) 来源的条目跳过并在提示里点名条数，绝不产出匹配不上的坏规则；失败按「不是 JSON（YAML 请先转）」「不是接口文档」「没有可用地址」分别说一句。**这条进口全程在界面侧解析**（只有一次 JSON.parse 与几次 URL 解析，没有 HAR 那种逐条建规则的重活），并与 HAR 那条共用同一份「目标环境」判据（`composables/useTargetEnv.ts`）——第二条进口最坏的一次分叉，就是两边对「什么算一个环境」给出不同答案。
   **The import panel gained an "Import an OpenAPI / Swagger document" entrance.** Pick an API document (OpenAPI 3 or Swagger 2, as JSON) and create one proxy rule per origin its `servers` declare — the same reader handles Swagger 2's `host` + `basePath` + `schemes`. The target environment is optional: set it and the whole batch points there and arrives enabled (untickable on the panel), with **the document's own basePath kept on the target** (a document that says the API lives under `/v3` should not land on the root after the switch); leave it empty and the output is what it was before this entrance existed — self-mapping and disabled. Origins that yield no readable http(s) address are skipped and counted in the toast instead of becoming rules that match nothing, and the three ways a document can fail (not JSON — convert YAML first; not an API document; no usable address) each get their own sentence. Parsing stays page-side (one `JSON.parse` plus a few URL reads, none of HAR's per-entry work), and the target-environment judgement is shared with the HAR entrance (`composables/useTargetEnv.ts`) — the worst fork a second entrance can introduce is two different answers to "what counts as an environment".
 
+## [1.6.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.5.1...v1.6.0) (2026-10-23)
+
+
+### Added
+
+* **dev-round:** 1.5.1 之后的 20 笔——导入与派生、站点生效范围、动效补格、评分入口、落地页带走规则、配置页顶栏重排 ([2a36333](https://github.com/liaolongdong/cross-origin-proxy/commit/2a363331b71895c72c7adf8ff2c77ca42cb66835))
+* **dev-round:** 1.6.0 之后的第二批——规则标签、日志重放、连通性自检、两通道差异点名、弹窗可达性与两批界面合流 ([e03e0b2](https://github.com/liaolongdong/cross-origin-proxy/commit/e03e0b21fe78785138dffcc674737e81be2f9f42))
+* **extension:** 多了一屏「连通性自检」，把「装了、开了、规则也在，可就是没被改」按顺序问完 ([8caf43c](https://github.com/liaolongdong/cross-origin-proxy/commit/8caf43c64e3ac9909728b44e7c3454b7eb2e626f))
+* **extension:** 日志详情多了一颗「重放这一笔」，把「当时」那一行交给现在的规则再走一次 ([c787ba9](https://github.com/liaolongdong/cross-origin-proxy/commit/c787ba9a8c3c176e4f8030c0106ff05158ef0275))
+* **extension:** 规则可以打标签，列表露两枚、筛选按任一命中 ([b8e82d6](https://github.com/liaolongdong/cross-origin-proxy/commit/b8e82d633a451818199f3fab136750da47bb3118))
+* **import:** HAR 抓到的凭据可以搬进变量表，规则里只留引用 ([655460c](https://github.com/liaolongdong/cross-origin-proxy/commit/655460c586d1de2f2ad94bcf2bcaa779b50eaf88))
+* **import:** 导入面板多了一条 OpenAPI / Swagger 进口，目标环境判据收成一份 ([1eb8a0b](https://github.com/liaolongdong/cross-origin-proxy/commit/1eb8a0b94e20f14cad664058a5c24526b7137f5d))
+* **log:** 日志一键存为 Mock，并把这一批的四件事一起说进文档 ([151d070](https://github.com/liaolongdong/cross-origin-proxy/commit/151d07027a40fcaaedf6f486cb1ba9e14b71b1f2))
+* **motion:** 首屏那一次「还没读到」改画骨架，规则表的筛选有了带性能闸门的行级过渡 ([51706ce](https://github.com/liaolongdong/cross-origin-proxy/commit/51706ce979a2ec3efe9c75b7ac053053e3ab9c68))
+* **options:** URL 匹配预演点名「同一条正则，两条通道算出两个地址」 ([145fc82](https://github.com/liaolongdong/cross-origin-proxy/commit/145fc822ba50c9992cae1767240428d21f7bdffd))
+* **options:** 勾选叫出来的那组批量按钮补上出现的那一下 ([61ce40b](https://github.com/liaolongdong/cross-origin-proxy/commit/61ce40b60a7a2af5c89c8d8e47d9a5640a038378))
+* **options:** 顶栏对齐参考实现：12px 玻璃工具栏、版本徽标链到 Releases、状态点补悬停提示 ([8416523](https://github.com/liaolongdong/cross-origin-proxy/commit/8416523e730c6079cd8282509dab17f911a0f7da))
+* **options:** 顶栏总开关两态改按「空 / 满」分开，关掉态收成空心描边 ([6b2c03c](https://github.com/liaolongdong/cross-origin-proxy/commit/6b2c03c19c75f352d81d35b04bba46a100d41542))
+* **options:** 顶栏总开关去掉玻璃胶囊，改简约裸排并重配两态配色 ([8532b44](https://github.com/liaolongdong/cross-origin-proxy/commit/8532b442c2cd1fad80b0b5fdbb5ad6bc7e408bd9))
+* **options:** 顶栏改成一主操作加轻量工具、规则表按宽度收列、弹窗首屏压回 600px ([662c363](https://github.com/liaolongdong/cross-origin-proxy/commit/662c3635e6ab03407c102e4aae0fc78e52b36172))
+* **popup:** 动作区按「离用户的手多近」重排，按钮档位收成一份能对账的表 ([5fa33db](https://github.com/liaolongdong/cross-origin-proxy/commit/5fa33db5258e46e263a3fa922afb8e17f8d3dff1))
+* **popup:** 那句「刷新这一页通常可恢复」旁边终于有了一枚能按的按钮 ([292ef0d](https://github.com/liaolongdong/cross-origin-proxy/commit/292ef0dae23d423c5ead4d691edd438abdc23a14))
+* **rules:** 派生规则一步到位——HAR 换目标环境、表单里点凭据名、最近目标候选 ([732c740](https://github.com/liaolongdong/cross-origin-proxy/commit/732c740410a68a21fa4fdea0171885f2368b8157))
+* **site:** 总开关之下加一档「这台站点」，判据按主机、两条通道同一个答案 ([e018887](https://github.com/liaolongdong/cross-origin-proxy/commit/e01888711cc0b30f95b7f0174fe7361f6a9c0964))
+* **site:** 落地页试出来的规则可以直接带走，导出按导入格式写、合并导入不动总开关 ([ad1514a](https://github.com/liaolongdong/cross-origin-proxy/commit/ad1514a9ea32abf6fae1b0722b7e4b85477119f7))
+* **store:** 设置页多了一行常驻的「如果觉得好用」，形态按政策挑 ([c4dd5d2](https://github.com/liaolongdong/cross-origin-proxy/commit/c4dd5d2e3eeca236acc7f55cc791d721264ab198))
+* **ui:** 弹窗按钮档位表、两通道差异点名、刷新这一页按钮 ([ffab080](https://github.com/liaolongdong/cross-origin-proxy/commit/ffab08042fa275caa330344a41e7c0fc1585e302))
+
+
+### Fixed
+
+* **ci:** 挂产物那一格从未真挂上过——.output 是隐藏目录，v4 默认把命中全丢掉 ([3f6d3e8](https://github.com/liaolongdong/cross-origin-proxy/commit/3f6d3e8ed77b82f292d19d0542ea5c50ab0cc7ad))
+* **ci:** 挂产物那一格从未真挂上过——`.output` 是隐藏目录，v4 默认把命中全丢掉 ([88dc269](https://github.com/liaolongdong/cross-origin-proxy/commit/88dc269b13278d5a89e2555aae00ddebf6e5b957))
+* **extension:** 修复站点范围与派生导入并统一构建和按钮布局 ([d532e1e](https://github.com/liaolongdong/cross-origin-proxy/commit/d532e1e493d5f1584baf97f5d0dc114de2b8d841))
+* **extension:** 站点名单满员改为拒绝、三档读数各说各话、长连接不再被目标环境带走 ([e6ceb87](https://github.com/liaolongdong/cross-origin-proxy/commit/e6ceb87d1664ce5a8b222ca26e683114e12cbafc))
+* **extension:** 评审标签这一批——筛不回来的死路、空白折叠的空转断言、闸门理由说错了对象 ([77418f1](https://github.com/liaolongdong/cross-origin-proxy/commit/77418f1be1105912e0a68502aee7e970c6ad4d88))
+* **extension:** 评审重放这一批——截断标记的记录不能发、内部编码只在 status 0 上算数、没读到时不许画一个 0 ([863c752](https://github.com/liaolongdong/cross-origin-proxy/commit/863c7520d580c36828faef9bda87a6f0ec2614b3))
+* **import:** 真机点了一轮，HAR 那颗按钮别再自称「导入配置」，成功提示不再替用户多算一步 ([f15a300](https://github.com/liaolongdong/cross-origin-proxy/commit/f15a300d6862c5206d5ae117a603cc78c0d98bb8))
+* **options:** 独立评审抓出的四处——预演不许替浏览器说话、引用扫描收成一把尺、文档不许 overstated ([2de9ce1](https://github.com/liaolongdong/cross-origin-proxy/commit/2de9ce127fedb0b91cd92411d3f5280aa346e725))
+* **site:** 落地页导出的目标地址剥掉 userinfo、query 与 hash ([a01e935](https://github.com/liaolongdong/cross-origin-proxy/commit/a01e93574d68f775eba002f68882b925309fd75e))
+* **theme:** 暗色顶栏反色按钮的字被同权重压掉，商店与落地页截图按 1.5.1 实拍重拍 ([99e8384](https://github.com/liaolongdong/cross-origin-proxy/commit/99e8384166ebf76ba6c5ec175cfaf0a4ecefbb9d))
+
 ## [1.5.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.5.0...v1.5.1) (2026-10-17)
 
 ### Added
