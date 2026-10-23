@@ -28,6 +28,10 @@ jobs:
         uses: ./.github/actions/verify
 
       # Verify 里的 `pnpm build` 已经单次产出 zip，这里只负责挂产物。
+      # `include-hidden-files` 必须显式打开：upload-artifact@v4 默认把「路径里任何一段以 . 开头」
+      # 的匹配全部丢掉（`src/shared/search.ts` 把它翻成 @actions/glob 的 excludeHiddenFiles），
+      # 而产物住在 `.output/` 下——整条 glob 因此命中零个文件。这一步在 `if-no-files-found: warn`
+      # 的那几个月里就是这么静默挂着零产物的（run 68 的 artifacts 列表是空的），改成 error 才红出来。
       - name: Attach zip artifact
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
@@ -35,3 +39,4 @@ jobs:
           name: chrome-mv3-zip
           path: .output/*.zip
           if-no-files-found: error
+          include-hidden-files: true
