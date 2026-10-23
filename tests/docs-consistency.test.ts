@@ -1061,6 +1061,15 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(body, '面板滚到尽头会把整页一起带着滚').toContain('overscroll-behavior: contain');
       // 写死像素会在页头变高时重新出界。
       expect(body, '上限不该是固定像素：页头一变高就又出界了').not.toMatch(/max-height:\s*\d+px/);
+
+      // 面板成了滚动容器（overflow-y: auto 会把另一轴也变成 auto），满宽链接的焦点环
+      // 若还画在盒外，左右各会被切掉 5px（3px 环 + 2px 偏移）——必须向内画。
+      const focusRule = /\.nav-menu-panel a:focus-visible\s*\{([^}]*)\}/.exec(css)?.[1];
+      expect(focusRule, '面板链接没有专属的焦点环规则，满宽行在滚动容器里会被切边').toBeTruthy();
+      expect(
+        focusRule!.replace(/\s+/g, ' '),
+        '焦点环要向内画（负 outline-offset），否则被面板这个滚动容器裁掉左右两边',
+      ).toMatch(/outline-offset:\s*-\d+px/);
     });
   });
 

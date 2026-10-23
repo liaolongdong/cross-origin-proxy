@@ -542,6 +542,12 @@ html.js .site-nav > a[aria-current]::after {
   color: var(--lp-ink-soft);
 }
 
+/* 面板成了滚动容器（overflow-y: auto 会把另一轴也算成 auto），满宽链接的焦点环
+   画在盒外就会被左右两边各切掉一截。改成向内画，四边都还在。 */
+.nav-menu-panel a:focus-visible {
+  outline-offset: -3px;
+}
+
 .nav-menu-panel a:hover {
   color: var(--lp-primary-strong);
   background: var(--lp-primary-faint);
