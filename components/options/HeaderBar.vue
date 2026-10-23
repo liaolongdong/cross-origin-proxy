@@ -356,30 +356,33 @@ const statusText = computed(() =>
   user-select: none;
 }
 
-/* 开关本体换色不换形：轨道改成「在主色底上压暗一层」，滑块用实心 on-primary 配一点投影。
-   留着 Element Plus 那抹默认灰（#dcdfe6）会在主色底上糊成一团——按上一版带薄膜胶囊时实拍
-   量过：轨道对薄膜 1.50:1、白滑块对灰轨道 1.34:1，等于看不出旋钮在哪。开启态整个反过来：
-   实心 on-primary 轨道 + 主色滑块（滑块取渐变右端的 --cop-primary-hover，看着像从轨道上
-   透出底色的一个孔）。暗色下 on-primary 翻成深墨，两态一起跟着翻。 */
+/* 开关本体：两态靠「空 / 满」分开，不靠颜色深浅。
+   关掉态 = 空心：轨道不填色，只留一圈描边，滑块收成七成不透明度；
+   开启态 = 实心：整条轨道填满 on-primary，滑块反过来透出渐变右端的底色，
+   像从轨道上打了一个孔。
+   为什么不用 Element Plus 那抹默认灰（#dcdfe6）：按带薄膜胶囊那版实拍量过，轨道对底
+   只有 1.50:1、白滑块对灰轨道 1.34:1，旋钮找不着；而上一版把关掉态画成「压暗的实心
+   轨道 + 纯白滑块」，两态都是实心，用户实拍反馈「看不出是开着还是关着」。
+   形状层面的空/满比位置（滑块在左在右）更好读，暗色下 on-primary 翻成深墨，两态一起翻。 */
 :deep(.proxy-toggle .el-switch) {
   height: 20px;
 }
 
 :deep(.proxy-toggle .el-switch__core) {
-  background: rgb(0 0 0 / 14%);
-  border-color: rgb(var(--cop-on-primary-rgb) / 40%);
+  background: transparent;
+  border-color: rgb(var(--cop-on-primary-rgb) / 55%);
   transition:
     background-color var(--cop-duration-base) var(--cop-ease-enter),
     border-color var(--cop-duration-base) var(--cop-ease-enter);
 }
 
 :deep(.proxy-toggle .el-switch:hover .el-switch__core) {
-  border-color: rgb(var(--cop-on-primary-rgb) / 65%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 78%);
 }
 
 :deep(.proxy-toggle .el-switch__core .el-switch__action) {
-  background: rgb(var(--cop-on-primary-rgb) / 100%);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+  background: rgb(var(--cop-on-primary-rgb) / 72%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
   transition:
     left var(--cop-duration-base) var(--cop-ease-enter),
     background-color var(--cop-duration-fast) var(--cop-ease-standard);
