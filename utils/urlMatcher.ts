@@ -194,8 +194,12 @@ export function isRegexSafe(pattern: string): boolean {
 
 /**
  * 获取/缓存编译后的 RegExp（用于 regex 类型规则）
+ *
+ * 导出供 `utils/channelDivergence.ts` 复用：两通道差异那一格必须用**同一道**编译与 ReDoS
+ * 闸门去匹配用户输入的地址——自己 `new RegExp` 就是第三份匹配器，那条模式后台通道根本不
+ * 会命中，判据却照样渲染出一个「后台通道的结果」。
  */
-function getCompiledRegex(pattern: string): RegExp | null {
+export function getCompiledRegex(pattern: string): RegExp | null {
   const cacheKey = `regex:${pattern}`;
   const cached = compiledRegexCache.get(cacheKey);
   if (cached) return cached;

@@ -304,3 +304,58 @@ describe('读取端判据', () => {
     expect(MessageType.GET_CONFIG_SYNC).toBe('GET_CONFIG_SYNC');
   });
 });
+
+/**
+ * 那句警告的修法入口（2026-10-20 补）：这一行本来就是全弹窗唯一一句
+ * 「你现在做一件事就能解决」的话，所以它旁边必须真的有一个能按的东西。
+ * 钉的是三件会静默坏掉的事：读不到标签页却画出一个必然失败的按钮；
+ * 失败路径不出声；以及这个新入口悄悄长出别的副作用（写存储、发消息）。
+ */
+describe('[弹窗] 那句「刷新这一页」现在按得动', () => {
+  const popup = readFileSync('entrypoints/popup/App.vue', 'utf8');
+  const handler = popup.slice(popup.indexOf('async function reloadCurrentTab'));
+  const body = handler.slice(0, handler.indexOf('\n}\n'));
+
+  it('按钮是原生 button、带图标，且只在真的拿到标签页 id 时出现', () => {
+    const row = popup.slice(popup.indexOf('class="config-sync-row"'));
+    // 压平空白再比：prettier 会把属性折成一行一个，按原始行匹配等于把断言绑在格式上。
+    // 属性也不按顺序断言——这一格要钉的是「有什么」，不是「谁写在谁前面」
+    const block = row.slice(0, row.indexOf('</div>')).replace(/\s+/g, ' ');
+    const btn = block.match(/<button[^>]*>/)?.[0] ?? '';
+    expect(btn, '这一格要的是真按钮，不是又一个 div role=button').toContain('type="button"');
+    expect(btn).toContain('class="config-sync-reload"');
+    expect(btn, '读不到标签页就不该出现一个必然失败的按钮').toContain('v-if="activeTabId !== null"');
+    expect(block).toContain('<el-icon><Refresh /></el-icon>');
+    expect(block, '可见文案不许写死').toContain("t('configNotSyncedReload')");
+  });
+
+  it('没拿到 id 时不出静默按钮，而是明确说一句失败（两条失败面都出声）', () => {
+    expect(body).toContain("typeof tabId !== 'number'");
+    expect(body.match(/configNotSyncedReloadFailed/g)?.length, '早退与 catch 各要提示一次').toBe(2);
+    expect(body).toContain('catch (error)');
+  });
+
+  it('这个入口只做一件事：调一次 tabs.reload，不写存储、不发 runtime 消息', () => {
+    expect(body.match(/chrome\.tabs\.reload/g)?.length).toBe(1);
+    expect(body).not.toContain('storage');
+    expect(body).not.toContain('sendMessage');
+  });
+
+  it('热区按自己那几条声明算得回 24px 下限（不靠改口径的声明凑）', () => {
+    const start = popup.indexOf('.config-sync-reload {');
+    expect(start, '这条规则不在了').toBeGreaterThanOrEqual(0);
+    const rule = popup.slice(start, popup.indexOf('}', start));
+    // 与 tests/docs-consistency.test.ts 同一个前提：popup 的样式里那条「改口径」的声明一次都没有，
+    // 所以高度只能由内容盒 + padding + 边框凑出来。凑不够就是热区塌到 24 以下——
+    // 这一条是真机量出来之后补的：padding 收小一档（4 → 3）时它是 23.4px，而界面上什么都看不出来
+    expect(rule, '这一格不许换口径').not.toMatch(/box-sizing/);
+    expect(rule, '下限由 padding 凑，不许用 min-height 顶').not.toMatch(/min-height/);
+    const numOf = (re: RegExp) => Number(re.exec(rule)?.[1]);
+    const fontSize = numOf(/font-size:\s*(\d+(?:\.\d+)?)px/);
+    const lineHeight = numOf(/line-height:\s*(\d+(?:\.\d+)?)(?!px)/);
+    const paddingY = numOf(/padding:\s*(\d+(?:\.\d+)?)px/);
+    const borderY = numOf(/border:\s*(\d+(?:\.\d+)?)px\s+solid/);
+    expect([fontSize, lineHeight, paddingY, borderY], '那几条声明读不出来，本条算式要跟着改').not.toContain(NaN);
+    expect(fontSize * lineHeight + paddingY * 2 + borderY * 2, '热区低于 24px 下限').toBeGreaterThanOrEqual(24);
+  });
+});

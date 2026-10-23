@@ -269,3 +269,55 @@ describe('useDnrSkipText — 三种原因说三种话', () => {
     expect(skipReasonLines(undefined)).toEqual([]);
   });
 });
+
+/**
+ * `dnrSupportRead` 回答的是另一件事：这份判定**落到过一次没有**。
+ *
+ * 它存在的唯一理由是空 Map 有两种来路——「判过了，一条都不跳过」与「还没判完 / 判的过程抛了」，
+ * 而 URL 匹配预演那格的两通道差异断言（「网络层实际拿到 X」）只在第一种情况下成立。
+ * RE2 校验走 chrome API，是异步的，所以少了这根旗标，首屏那一回合就会替浏览器说了一句它没说的话。
+ */
+describe('useDnrSupport — dnrSupportRead 只回答「判过没有」', () => {
+  it('第一回合还在路上时是 false；落定哪怕结论是「都不跳过」也算读到过', async () => {
+    const pending = deferred();
+    findDnrSkippedRules.mockImplementationOnce(() => pending.promise);
+    const rules = ref<ProxyRule[]>([makeRule('r1')]);
+    const { dnrSkippedRules, dnrSupportRead } = useDnrSupport(rules);
+
+    rules.value = [makeRule('r1')]; // 本环境不触发挂载钩子，改数组才是发起那一轮
+    await flush();
+    expect(dnrSkippedRules.value.size, '这一轮还没落定').toBe(0);
+    expect(dnrSupportRead.value, '没落定就不算读到过').toBe(false);
+
+    pending.resolve(new Map());
+    await flush();
+    expect(dnrSkippedRules.value.size, '落定的是一份空判定').toBe(0);
+    expect(dnrSupportRead.value, '空 Map 这一次说的是「都会应用」').toBe(true);
+  });
+
+  it('判定抛错时不假装读到过：旗标留在 false，消费方继续闭嘴', async () => {
+    findDnrSkippedRules.mockRejectedValueOnce(new Error('RE2 校验挂了'));
+    const rules = ref<ProxyRule[]>([makeRule('r1')]);
+    const { dnrSupportRead } = useDnrSupport(rules);
+
+    rules.value = [makeRule('r1')];
+    await flush();
+    expect(dnrSupportRead.value).toBe(false);
+  });
+
+  it('成功过之后再来一轮失败的，旗标不回退：手里仍是上一次那份真判定', async () => {
+    findDnrSkippedRules.mockResolvedValueOnce(new Map([['r1', 'regexUnsupported' satisfies DnrSkipReason]]));
+    const rules = ref<ProxyRule[]>([makeRule('r1')]);
+    const { dnrSkippedRules, dnrSupportRead } = useDnrSupport(rules);
+
+    rules.value = [makeRule('r1')];
+    await flush();
+    expect(dnrSupportRead.value).toBe(true);
+
+    findDnrSkippedRules.mockRejectedValueOnce(new Error('RE2 校验挂了'));
+    rules.value[0].enabled = false;
+    await flush();
+    expect(dnrSupportRead.value, '「读到过一份判定」不会因为下一轮失败而作废').toBe(true);
+    expect(dnrSkippedRules.value.get('r1'), '维持上一份被采纳的结论').toBe('regexUnsupported');
+  });
+});

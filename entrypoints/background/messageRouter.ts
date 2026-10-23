@@ -8,6 +8,7 @@ import {
   proxyRequestKey,
 } from './proxyHandler';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
+import { describeDnrInstallState } from './dnrManager';
 import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
 import { clearConfigUnsynced, isConfigUnsynced } from './configSyncState';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
@@ -47,6 +48,7 @@ import { apiOriginOf } from '@/utils/pageApiOrigins';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
+import { normalizeTagsWithLog } from '@/utils/ruleTags';
 import { inspectProfileRules, isStoredProfileEntry } from '@/utils/profileValidation';
 import { planImport } from '@/utils/importPlan';
 import { generateId } from '@/utils/generateId';
@@ -94,6 +96,12 @@ export function normalizeImportedRules(rawRules: unknown[]): ProxyRule[] {
     const headerOverrides = sanitizeImportedHeaderMap(rule.headerOverrides);
     if (headerOverrides) normalized.headerOverrides = headerOverrides;
     else delete normalized.headerOverrides;
+    // 标签的值域（超长、条数、只差大小写的重复）在这一侧收口，判据与表单保存同一份
+    // （`utils/ruleTags.ts`）。类型不过的整条已被 `isValidRuleShape` 拒了，走到这里只剩「能存但太大」。
+    // 空数组刻意删掉而不是留着：一条没有标签的规则，导入后的形状要与「还没有这个字段」时逐字节相同。
+    const tags = normalizeTagsWithLog(rule.tags, rule.name);
+    if (tags) normalized.tags = tags;
+    else delete normalized.tags;
     return normalizeRuleTimings(normalized);
   });
 }
@@ -525,6 +533,12 @@ export function setupMessageRouter(): void {
       case MessageType.GET_SW_STATS:
         sendResponse(getSwHitStats());
         return false;
+
+      case MessageType.GET_DNR_INSTALL_STATE:
+        // 只读诊断：与 `GET_DNR_STATS` / `GET_INTERCEPTOR_STATS` 同档，刻意**不加** `isTrustedSender`
+        // ——回包是两个整数加两个布尔，改不了任何状态，也不交出规则内容、地址或主机名。
+        // 它自己不触发任何同步：读不到就回 `readable: false`，界面那一格画「不知道」。
+        return respondAsync(sendResponse, describeDnrInstallState());
 
       case MessageType.INTERCEPTOR_STATS: {
         // 页面自报的展示数据：刻意不进 `STATE_MUTATING_TYPES`，也刻意**不写 storage**——

@@ -289,7 +289,10 @@ describe('[键盘选行] 判据在 utils/logRowNavigation.ts，这里只钉界�
 
   it('键盘与指针共用同一个展开出口（两条路不能长成两套逻辑）', () => {
     expect([...logDrawerSrc.matchAll(/function toggleLogDetail\(/g)]).toHaveLength(1);
-    expect([...logDrawerSrc.matchAll(/toggleLogDetail\(row\)/g)]).toHaveLength(2);
+    // 三处调用点：指针点行、键盘 Enter / 空格、详情面板那颗关闭。第三处是**收起**，走同一个出口
+    // 而不是自己 `selectedLog = null`——那一格现在还要顺手收回这一行的重放读数，
+    // 少一处就是留一条「唯一不清读数的收起」。多一处同样要红：再来一处就说明有人开了第二条逻辑。
+    expect([...logDrawerSrc.matchAll(/toggleLogDetail\(row\)/g)]).toHaveLength(3);
     expect(logDrawerSrc).toMatch(/function handleRowClick[\s\S]*?toggleLogDetail\(row\)/);
   });
 

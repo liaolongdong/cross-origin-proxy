@@ -54,7 +54,11 @@ describe('[Space 键] 可聚焦的 role="button" 元素必须 Enter 与 Space �
 
   it('.prevent 不能丢（少了它 Space 就是把页面滚走，等于没激活）', () => {
     const both = keyboardSites.reduce((n, s) => n + s.bothKeys, 0);
-    expect(both).toBeGreaterThanOrEqual(9);
+    // 9 → 7：弹窗动作区重排那天，「请求日志」「导入导出」两张 `div role="button"` 卡片
+    // 换成了次级行里的原生 `<button>`——按钮自己就在 Enter 与 Space 上派发 click，
+    // 不需要监听器，也不需要 `.prevent`（Space 在按钮上是激活，不是滚页）。
+    // 上面那条「role="button" 枚数 == 监听枚数」才是承重的判据，这条只是规模哨兵。
+    expect(both).toBeGreaterThanOrEqual(7);
     expect([...optionsSrc.matchAll(/@keydown\.enter=/g)]).toHaveLength(0);
   });
 });
