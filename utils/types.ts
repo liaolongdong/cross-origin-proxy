@@ -112,6 +112,21 @@ export type VariableStore = Record<string, string>;
 /**
  * 全局代理配置
  */
+/**
+ * 站点维度的生效范围（总开关之外的那一档，判据唯一出口是 `utils/siteScope.ts`）
+ *
+ * `hosts` 记的是**主机名**而不是 origin：网络层（DNR）的 initiator 条件只认域名、不认端口与协议，
+ * 两侧用不同的键就会出现「同一台站点上 :3000 关了、:4000 还在改写」这种通道分叉。
+ */
+export type SiteScopeMode = 'all' | 'site-off' | 'site-only';
+
+export interface SiteState {
+  /** `all` = 这一层不参与；`site-off` = 名单内不代理；`site-only` = 只代理名单内 */
+  mode: SiteScopeMode;
+  /** 规范化后的小写主机名，判定按网络层口径连子域一起算 */
+  hosts: string[];
+}
+
 export interface ProxyConfig {
   enabled: boolean; // 总开关
   rules: ProxyRule[]; // 规则列表
@@ -187,6 +202,23 @@ export enum MessageType {
   // 凭据变量（仅扩展页面可用：GET 回的是真值表，内容脚本一旦能读就等于把密钥交给站点）
   GET_VARIABLES = 'GET_VARIABLES',
   SET_VARIABLES = 'SET_VARIABLES',
+
+  /**
+   * Options → SW：读最近用过的目标环境候选
+   *
+   * 与上面两条同档过 `isTrustedSender`：判据不是「它属于读取」，而是「页面永远不会问它，
+   * 而回包是用户配过的内网域名清单」（见 messageRouter 的 `CREDENTIAL_READING_TYPES`）。
+   */
+  GET_RECENT_TARGETS = 'GET_RECENT_TARGETS',
+
+  /**
+   * 读/写「站点维度的生效范围」（总开关之外的那一档，见 `utils/siteScope.ts`）
+   *
+   * 读侧与 `GET_RECENT_TARGETS` 同档过 `isTrustedSender`——判据同样是「页面永远不会问它，而回包是
+   * 用户在哪几台站点上关掉过代理」，那份清单本身就是内网拓扑。写侧是状态修改类。
+   */
+  GET_SITE_STATE = 'GET_SITE_STATE',
+  SET_SITE_STATE = 'SET_SITE_STATE',
 }
 
 /**
@@ -242,10 +274,16 @@ export interface GetProxyConfigMessage {
   type: MessageType.GET_PROXY_CONFIG;
 }
 
-/** 更新代理配置 */
+/**
+ * 更新代理配置
+ *
+ * 后台向内容脚本广播时额外带一份 `siteState`，让 ISOLATED bridge 能按**自己这个 frame** 的 hostname
+ * 收窄；这份名单不会经 `toInterceptorConfig` 进入 MAIN world。Options 发给 SW 的写入载荷仍只是
+ * `ProxyConfig`，因此该字段刻意可选，不要求调用方伪造站点范围。
+ */
 export interface UpdateProxyConfigMessage {
   type: MessageType.UPDATE_PROXY_CONFIG;
-  data: ProxyConfig;
+  data: ProxyConfig & { siteState?: SiteState };
 }
 
 /** 切换总开关 */
@@ -498,10 +536,30 @@ export interface ExportHarMessage {
   data?: { sanitize?: boolean };
 }
 
-/** 导入 HAR */
+/**
+ * 导入 HAR
+ *
+ * `targetOrigin` / `enableOnImport` 是「把这一批抓包直接指到另一个环境」的那一步：它们随消息
+ * 进后台，由 SW 自己按 `apiOriginOf` 重判（载荷属不可信输入，绕过界面不代表后台该照单全收），
+ * 判据与其余 HAR 闸门同处。两者都不传时后台产出与本功能存在之前逐字节相同。
+ *
+ * `relocateCredentials` 把抓到的 `Authorization` / `Cookie` / `x-api-key` 原值搬进凭据变量表、
+ * 规则里只留 `{{名称}}` 引用（口径见 `utils/harCredentialVars.ts`）。同样只认严格 `true`。
+ */
 export interface ImportHarMessage {
   type: MessageType.IMPORT_HAR;
-  data: HarImportPayload;
+  data: HarImportPayload & { targetOrigin?: string; enableOnImport?: boolean; relocateCredentials?: boolean };
+}
+
+/** `IMPORT_HAR` 的回包：规则交回界面写入，`relocated` / `keptRaw` 是给成功提示用的计数 */
+export interface ImportHarResult {
+  success: boolean;
+  error?: string;
+  rules?: ProxyRule[];
+  /** 改成 `{{名称}}` 引用的凭据头数量 */
+  relocated?: number;
+  /** 因变量表装不下而保留原值的数量（界面必须把这一档说出来） */
+  keptRaw?: number;
 }
 
 /** 获取环境配置列表 */
@@ -541,6 +599,27 @@ export interface GetVariablesMessage {
 export interface SetVariablesMessage {
   type: MessageType.SET_VARIABLES;
   data: { variables: VariableStore };
+}
+
+/** 读取最近用过的目标环境候选（无载荷） */
+export interface GetRecentTargetsMessage {
+  type: MessageType.GET_RECENT_TARGETS;
+}
+
+/** 读取站点生效范围（无载荷） */
+export interface GetSiteStateMessage {
+  type: MessageType.GET_SITE_STATE;
+}
+
+/**
+ * 整体写入站点生效范围
+ *
+ * 用「整包写」而不是「增删一条」：名单只有十几条、界面又是单选切换，增删两条消息只会多两处
+ * 可以各写一半判据的地方（与凭据变量表同一口径）。载荷属不可信输入，SW 侧一律过 `sanitizeSiteState`。
+ */
+export interface SetSiteStateMessage {
+  type: MessageType.SET_SITE_STATE;
+  data: { mode: SiteScopeMode; hosts: string[] };
 }
 
 /** HAR 导入载荷 */
@@ -603,7 +682,10 @@ export type RuntimeMessage =
   | LoadProfileMessage
   | DeleteProfileMessage
   | GetVariablesMessage
-  | SetVariablesMessage;
+  | SetVariablesMessage
+  | GetRecentTargetsMessage
+  | GetSiteStateMessage
+  | SetSiteStateMessage;
 
 /**
  * 请求日志条目

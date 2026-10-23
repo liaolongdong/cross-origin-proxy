@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-17"
+            "dateModified": "2026-10-20"
           },
           {
             "@type": "SoftwareApplication",
@@ -175,7 +175,7 @@
             "applicationCategory": "DeveloperApplication",
             "applicationSubCategory": "浏览器扩展",
             "operatingSystem": "Google Chrome（Manifest V3）",
-            "softwareVersion": "1.3.0",
+            "softwareVersion": "1.5.1",
             "url": "https://liaolongdong.github.io/cross-origin-proxy/",
             "codeRepository": "https://github.com/liaolongdong/cross-origin-proxy",
             "downloadUrl": "https://github.com/liaolongdong/cross-origin-proxy/releases",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-17",
+            "dateModified": "2026-10-20",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -222,9 +222,9 @@
               "URL 匹配测试：实时预览命中规则、重写结果、转发通道，以及还有哪些规则同样命中、但被它遮蔽",
               "零规则空状态提供快速模板，另有复制规则、撤销删除、批量启停与批量删除",
               "带变更预览的目标域名批量迁移",
-              "最近 500 条请求日志，支持筛选、详情查看与按原始请求地址复制为 cURL",
+              "最近 500 条请求日志，支持筛选、详情查看、按原始请求地址复制为 cURL，以及把某条响应一键存成 Mock 规则",
               "两条通道各自的命中统计（DNR 近 5 分钟、后台通道自配置变更起累计；后者是内存计数，工作线程被回收后从 0 重新开始），弹窗另按当前标签页给出网络层命中数",
-              "HAR 1.2 导出（与配置导出共用「分享模式」，默认剔除凭据类请求/响应头，正文与 URL 保留），以及把抓包记录转成规则的 HAR 导入（新规则默认停用，确认后自行启用）",
+              "HAR 1.2 导出（与配置导出共用「分享模式」，默认剔除凭据类请求/响应头，正文与 URL 保留），以及把抓包记录转成规则的 HAR 导入（填了目标环境才默认启用，否则停用等你确认）",
               "粘贴 DevTools「复制为 cURL」命令预填规则",
               "JSON 配置导出（默认开启分享模式，剔除凭据），导入时支持覆盖与合并两种模式，写入前可先预览预计新增几条、哪些同名同模式的旧规则被保留",
               "环境配置快照，在弹窗里点一下就把整套规则换成另一个环境",
@@ -464,6 +464,22 @@
           },
           {
             "@type": "Question",
+            "name": "落地页上试出来的规则，怎么装进扩展？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "在「试一条规则」面板里点「复制配置 JSON」或「下载 .json」，再打开扩展设置页的「导入/导出配置」，选中这个文件；导入模式选「合并（保留现有，追加新规则）」后确认。合并不会动你现有的规则，也不会替你打开总开关，所以导入后代理还关着的话，去弹窗里打开即可。这份配置里只有一条规则，带匹配类型、匹配模式与目标地址，不含请求头、查询参数或任何凭据。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "能把 Vite / webpack 的 devServer proxy 配置直接导进来吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "不能。devServer 的代理按站点内的相对路径（例如 /api）转发，浏览器看到的请求仍然是同源的；要去的后端环境写在 devServer 配置里，从不出现在浏览器实际请求的 URL 上，而扩展的规则按请求 URL 匹配——这份配置里没有一条能对上真实地址，它的字段结构也不是扩展的导入格式。正确做法是按真实 API 来源建一条通配符规则：把 https://fat-api.example.com/* 指向 https://uat-api.example.com，面板里的「用测试地址填匹配模式」可以直接生成这个模式。"
+            }
+          },
+          {
+            "@type": "Question",
             "name": "我的数据会被上传到服务器吗？",
             "acceptedAnswer": {
               "@type": "Answer",
@@ -639,7 +655,7 @@
               <span>无埋点无遥测</span>
               <span>不需要后端改动</span>
               <span>网络层零 JS 快通道</span>
-              <span>HAR · cURL · JSON</span>
+              <span>HAR · OpenAPI · cURL · JSON</span>
               <span>中英双语界面</span>
               <span>6 套主题</span>
             </div>
@@ -789,7 +805,7 @@
                 </tr>
                 <tr>
                   <td>抓包工具里录下流量，再手工复现一次请求去验证异常分支。</td>
-                  <td>导入 HAR 或粘贴 cURL 命令，规则自动预填。</td>
+                  <td>导入 HAR / OpenAPI 文档，或粘贴 cURL 命令，规则自动预填。</td>
                 </tr>
               </tbody>
             </table>
@@ -1174,7 +1190,8 @@
                 JSON 配置导出，默认开启分享模式，自动剔除 Authorization、Cookie 等请求头/响应头与 token
                 类查询参数，取消勾选即原样备份；导入时可选择覆盖或与现有规则合并，写入前还能先预览这个文件会新增几条、
                 哪些同名同模式的旧规则被保留（预览与写入同一份判据）；HAR 1.2 导出捕获到的流量，导入 HAR
-                则把录制到的请求自动变成规则（新规则默认停用，确认后自行启用）；粘贴 cURL
+                则把录制到的请求自动变成规则（填了目标环境才默认启用，否则停用等你确认）；导入 OpenAPI / Swagger
+                文档会按它声明的 `servers` 逐条建规则（读不出的来源跳过并点名）；粘贴 cURL
                 预填表单；每条日志都能按原始请求地址复制为 cURL。环境快照保存整套规则的命名副本，FAT / UAT / PROD
                 不用先开配置页——弹窗里点「环境配置」就列出已存的快照，点一下那一行、再确认一次就整套换过去（换之前先把当前配置记成一份恢复点，也会把总开关打开）；环境换域名时，批量迁移会先给出变更预览；覆盖导入、加载快照、真正删掉了东西的批量删除这三类整套替换，会把自己换掉的那份规则集留在「设置
                 → 配置恢复点」里（最近 5 份），随时一键回退。请求头与查询参数的值还能写成
@@ -1334,7 +1351,7 @@
                 <figure>
                   <img
                     src="assets/img/rule-editor.jpg"
-                    alt="规则编辑弹窗：正则匹配模式、重写目标、HTTP 方法、查询参数与请求头覆盖"
+                    alt="规则编辑弹窗：通配符匹配模式、重写目标、HTTP 方法、查询参数与请求头覆盖"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1384,7 +1401,8 @@
                     ><span
                       >最近 500 条，按方法、状态、规则与 URL
                       筛选，可开自动刷新；列表把原始地址与代理后的地址并排给出，详情视图支持复制为 cURL 与导出
-                      HAR，网络层与后台通道各自的命中统计分区显示。</span
+                      HAR，还能把某一条响应一键存成 Mock
+                      规则（按路径匹配、默认停用，交给表单确认），网络层与后台通道各自的命中统计分区显示。</span
                     >
                   </figcaption>
                 </figure>
@@ -1393,7 +1411,7 @@
                 <figure>
                   <img
                     src="assets/img/popup.jpg"
-                    alt="扩展弹窗：总开关、启用规则数与快捷入口"
+                    alt="扩展弹窗：总开关与自动关闭、活跃规则与当日请求数、按主机生效的站点开关，以及本页命中与改写结果"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1402,8 +1420,7 @@
                   <figcaption>
                     <b>弹窗</b
                     ><span
-                      >总开关、启用规则数、经扩展请求数（只统计后台通道）、本页近 5
-                      分钟网络层命中数、最近请求、规则快捷启停、自动关闭倒计时、本页地址命中预览，以及「为当前页创建规则」。</span
+                      >总开关与自动关闭档位、活跃规则与当日经扩展请求数；「这台站点的代理」按主机决定这一站是否生效（含子域，协议与端口不分家）；「本页地址」当场给出命中规则、转发通道与改写结果。</span
                     >
                   </figcaption>
                 </figure>
@@ -1412,7 +1429,7 @@
                 <figure>
                   <img
                     src="assets/img/config-import.jpg"
-                    alt="导入前预览：预计写入 2 条规则、2 条同键规则将被跳过，并点名不会生效的目标地址"
+                    alt="导入前预览：预计写入 1 条规则、2 条同键规则将被跳过，并点名不会生效的目标地址"
                     width="1200"
                     height="750"
                     loading="lazy"
@@ -1905,6 +1922,22 @@ pnpm build</code></pre>
                 />
               </label>
             </div>
+            <div class="try-tools">
+              <button
+                type="button"
+                class="try-fill"
+                data-try-fill
+                data-filled="已按测试地址填好匹配模式"
+                data-fill-failed="先在「测试地址」里填一个 http(s) 或 ws(s) 地址"
+              >
+                用测试地址填匹配模式
+              </button>
+              <span
+                class="try-fill-status"
+                role="status"
+                data-try-fill-status
+              ></span>
+            </div>
             <p
               class="try-verdict"
               role="status"
@@ -1947,6 +1980,52 @@ pnpm build</code></pre>
             >
               两行不一样不是坏在谁身上：后台通道只把匹配到的那段字符换掉，网络层则是整个地址被替换成替换串。走哪一行，看上面点名的那条通道。
             </p>
+            <div
+              class="try-take"
+              data-try-take
+              hidden
+            >
+              <p class="try-take-lede">这一笔已经通过预演，可以连同模式和目标一起带走：</p>
+              <div class="try-actions">
+                <button
+                  type="button"
+                  class="try-action try-action-primary"
+                  data-try-copy
+                  data-copied="配置 JSON 已复制"
+                  data-copy-failed="复制失败，请改用「下载 .json」"
+                >
+                  复制配置 JSON
+                </button>
+                <button
+                  type="button"
+                  class="try-action"
+                  data-try-download
+                  data-downloaded="已开始下载"
+                  data-filename="cross-origin-proxy-rule.json"
+                >
+                  下载 .json
+                </button>
+                <span
+                  class="try-status"
+                  role="status"
+                  data-try-status
+                ></span>
+              </div>
+              <details class="try-guide">
+                <summary>怎么把这条规则装进扩展（3 步）</summary>
+                <ol>
+                  <li>点「下载 .json」，或复制 JSON 自己存成 <code>.json</code> 文件。</li>
+                  <li>在扩展的设置页打开「导入/导出配置」，选中这个文件。</li>
+                  <li>
+                    <strong>导入模式选「合并（保留现有，追加新规则）」</strong
+                    >，再确认导入。选「替换」会整包覆盖你现有的规则，并把总开关关掉。
+                  </li>
+                </ol>
+                <p>
+                  这条规则本身是启用的，但文件不会替你打开总开关：如果代理还关着，在弹窗里打开即可。配置里只有匹配类型、匹配模式与目标地址，没有任何请求头或凭据。
+                </p>
+              </details>
+            </div>
             <ul
               class="try-why"
               data-try-codes
@@ -2198,7 +2277,7 @@ pnpm build</code></pre>
                 </tr>
                 <tr class="reveal">
                   <th scope="row">规则可用普通本地文件分享</th>
-                  <td class="col-us"><span class="mark-yes">JSON / HAR / cURL</span></td>
+                  <td class="col-us"><span class="mark-yes">JSON / HAR / OpenAPI / cURL</span></td>
                   <td><span class="mark-yes">随仓库代码共享</span></td>
                   <td><span class="mark-part">会话文件</span></td>
                   <td><span class="mark-part">常需云端同步</span></td>
@@ -2708,6 +2787,24 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                 返回时结果已就绪」这个契约，异步化只会让页面读到一个空响应。唯一的例外是阻断规则：被阻断的请求绝不会被原生回退重放。
               </p>
             </details>
+            <details>
+              <summary>落地页上试出来的规则，怎么装进扩展？</summary>
+              <p>
+                在「试一条规则」面板里点「复制配置 JSON」或「下载
+                .json」，再打开扩展设置页的「导入/导出配置」，选中这个文件；导入模式选「合并（保留现有，追加新规则）」后确认。合并不会动你现有的规则，也不会替你打开总开关，所以导入后代理还关着的话，去弹窗里打开即可。这份配置里只有一条规则，带匹配类型、匹配模式与目标地址，不含请求头、查询参数或任何凭据。
+              </p>
+            </details>
+            <details>
+              <summary>能把 Vite / webpack 的 devServer proxy 配置直接导进来吗？</summary>
+              <p>
+                不能。devServer 的代理按站点内的相对路径（例如
+                <code>/api</code>）转发，浏览器看到的请求仍然是同源的；要去的后端环境写在 devServer
+                配置里，从不出现在浏览器实际请求的 URL 上，而扩展的规则按请求 URL
+                匹配——这份配置里没有一条能对上真实地址，它的字段结构也不是扩展的导入格式。正确做法是按真实 API
+                来源建一条通配符规则：把 <code>https://fat-api.example.com/*</code> 指向
+                <code>https://uat-api.example.com</code>，面板里的「用测试地址填匹配模式」可以直接生成这个模式。
+              </p>
+            </details>
 
             <h3
               class="faq-category"
@@ -2767,7 +2864,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
                   <a href="#faq-mock">Mock 与故障注入<span class="faq-toc-n">3</span></a>
                 </li>
                 <li>
-                  <a href="#faq-sharing">分享、限制与安全兜底<span class="faq-toc-n">3</span></a>
+                  <a href="#faq-sharing">分享、限制与安全兜底<span class="faq-toc-n">5</span></a>
                 </li>
                 <li>
                   <a href="#faq-privacy">隐私与兼容性<span class="faq-toc-n">2</span></a>
@@ -2914,9 +3011,9 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
           </p>
           <div class="footer-meta">
             <span>MIT 开源协议</span>
-            <span>v1.3.0</span>
+            <span>v1.5.1</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-10-17</span>
+            <span>最后更新 2026-10-20</span>
             <span
               ><a
                 href="en.html"

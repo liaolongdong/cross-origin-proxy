@@ -51,9 +51,42 @@
           <el-input
             v-model="form.targetUrl"
             :placeholder="t('targetUrlPlaceholder')"
+            @input="targetTouched = true"
           />
           <div class="field-hint">
             {{ t('targetUrlHint') }}
+          </div>
+          <!-- 派生草稿上的一句现状陈述：目标与来源同 origin 时这条根本不改写地址。
+               措辞是中性的，因为「只注入头/参数」是合法的自映射；它也不拦保存。 -->
+          <div
+            v-if="showSameOriginHint"
+            class="field-hint field-hint-warning"
+          >
+            {{ t('derivedSameTargetHint') }}
+          </div>
+          <div
+            v-if="suggestions.length"
+            class="target-suggest"
+          >
+            <span class="target-suggest-label">{{ t('targetCandidateLabel') }}</span>
+            <el-select
+              :model-value="''"
+              size="small"
+              class="target-suggest-select"
+              filterable
+              allow-create
+              default-first-option
+              :aria-label="t('targetCandidateLabel')"
+              :placeholder="t('targetCandidatePlaceholder')"
+              @change="applyTargetCandidate"
+            >
+              <el-option
+                v-for="item in suggestions"
+                :key="item"
+                :label="item"
+                :value="item"
+              />
+            </el-select>
           </div>
           <!-- 正则的「捕获组 ↔ 引用」对照条
                判据全部取自 `utils/dnrRules.ts`（`captureGroupOffsets` / `buildRegexSubstitution` /
@@ -168,6 +201,7 @@
                 v-model="query.value"
                 :placeholder="t('queryValuePlaceholder')"
                 style="width: 40%"
+                @focus="lastFocusedQueryUid = query.uid"
               />
               <el-button
                 type="danger"
@@ -186,6 +220,22 @@
               <el-icon><Plus /></el-icon>
               {{ t('addQueryParam') }}
             </el-button>
+            <!-- 同一份名字在查询参数这一侧也给一遍；长连接规则刻意不给——那一侧由页面自己拼，读不到变量表 -->
+            <div
+              v-if="variableNames.length && !isWsRule"
+              class="variable-chips"
+            >
+              <span class="variable-chips-label">{{ t('variableInsertLabel') }}</span>
+              <button
+                v-for="name in variableNames"
+                :key="name"
+                type="button"
+                class="variable-chip"
+                @click="insertVariableRef(queryList, addQuery, name, lastFocusedQueryUid)"
+              >
+                {{ name }}
+              </button>
+            </div>
             <div class="field-hint">{{ t('queryOverridesHint') }}</div>
           </div>
         </el-form-item>
@@ -206,6 +256,7 @@
                 v-model="header.value"
                 :placeholder="t('headerValuePlaceholder')"
                 style="width: 40%"
+                @focus="lastFocusedHeaderUid = header.uid"
               />
               <el-button
                 type="danger"
@@ -224,6 +275,40 @@
               <el-icon><Plus /></el-icon>
               {{ t('addHeader') }}
             </el-button>
+            <!-- 凭据变量名：点一下把 `{{名称}}` 接进最后一行的值里。这里只出现名字，值从不进模板 -->
+            <div
+              v-if="variableNames.length"
+              class="variable-chips"
+            >
+              <span class="variable-chips-label">{{ t('variableInsertLabel') }}</span>
+              <button
+                v-for="name in variableNames"
+                :key="name"
+                type="button"
+                class="variable-chip"
+                @click="insertVariableRef(headerList, addHeader, name, lastFocusedHeaderUid)"
+              >
+                {{ name }}
+              </button>
+            </div>
+            <div
+              v-else-if="!variableNamesLoaded && !variableNamesFailed"
+              class="field-hint"
+            >
+              {{ t('variableLoadingHint') }}
+            </div>
+            <div
+              v-else-if="variableNamesFailed"
+              class="field-hint"
+            >
+              {{ t('variableLoadFailedHint') }}
+            </div>
+            <div
+              v-else
+              class="field-hint"
+            >
+              {{ t('variableEmptyHint') }}
+            </div>
             <div class="field-hint">{{ t('headerOverridesHint') }}</div>
           </div>
         </el-form-item>
@@ -761,7 +846,8 @@ import { HTTP_METHODS } from '@/utils/types';
 import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { findInvalidHeaderNames } from '@/utils/headerValidation';
-import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule } from '@/utils/urlMatcher';
+import { matchRule, rewriteUrl, applyQueryOverrides, isWebSocketRule, sameOriginNoRewrite } from '@/utils/urlMatcher';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import {
   captureGroupOffsets,
   substitutionRefs,
@@ -780,6 +866,15 @@ const props = defineProps<{
   rule: ProxyRule | null;
   /** 模板预填充数据（仅在 rule 为 null 时生效，用于快速模板） */
   initialData?: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> | null;
+  /**
+   * 这份草稿是不是从一条真实地址派生出来的（cURL / 日志 / 本页接口）
+   *
+   * 同源提示只在这种草稿上出现：模板卡里有「注入认证头」那种**故意**自映射的形状，
+   * 给它们也挂同一句警告，教会用户的是忽略它。
+   */
+  derivedDraft?: boolean;
+  /** 最近用过的目标环境（父组件从存储层与现有规则各取一份，判据同 `utils/recentTargets.ts`） */
+  targetSuggestions?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -793,6 +888,8 @@ const { t } = useI18n();
 const { variables, loadVariables } = useVariables();
 /** 变量表是否读到过：没读到就别拿它去否决用户的保存 */
 const variableNamesLoaded = ref(false);
+/** 这一趟读取是否已经失败：「还在路上」与「读不到」在界面上必须说两句不同的话 */
+const variableNamesFailed = ref(false);
 /**
  * 变量表这一趟读取的 promise（打开弹窗时挂上）
  *
@@ -851,6 +948,72 @@ const defaultForm = {
 };
 
 const form = reactive({ ...defaultForm });
+
+/**
+ * 这一次打开表单，用户有没有自己动手改过目标地址
+ *
+ * 只在 `@input` 与「从候选里选了一项」这两处置真，不走 `watch(form.targetUrl)`：预填本身就会
+ * 写这个字段，用监听器等于在打开那一刻把提示判成「用户已经改过了」，而那条提示恰恰只在
+ * 用户还没动过的时候才有意义。
+ */
+const targetTouched = ref(false);
+
+/** 派生草稿 + 用户没动过目标 + 判据说两侧同源，三者齐了才提一句（措辞中性、不拦保存） */
+const showSameOriginHint = computed(
+  () =>
+    props.derivedDraft === true &&
+    !targetTouched.value &&
+    sameOriginNoRewrite({ matchType: form.matchType, matchPattern: form.matchPattern, targetUrl: form.targetUrl }),
+);
+
+/** 候选里剔掉「选了等于没选」的两类：本条规则的来源，以及当前已经填着的目标 */
+const suggestions = computed(() => {
+  const source = apiOriginOf(form.matchPattern.replace(/\*+$/, ''));
+  return (props.targetSuggestions ?? []).filter(item => item !== source && item !== form.targetUrl);
+});
+
+/** 从候选里挑一项当作这条规则的目标环境（下拉本身不持有值，它是一次动作） */
+function applyTargetCandidate(value: string): void {
+  form.targetUrl = value;
+  targetTouched.value = true;
+}
+
+/**
+ * 当前表单是不是长连接规则
+ *
+ * WS 的查询参数由 MAIN world 拦截器在**页面那一侧**拼，那个 world 读不到变量表，
+ * 所以表单在保存时就拒绝这种组合（`variableWsQueryUnsupportedError`）——既然注定被拒，
+ * 就不该在查询参数那一段旁边提供一条通往它的入口。
+ */
+const isWsRule = computed(() => isWebSocketRule({ matchPattern: form.matchPattern, targetUrl: form.targetUrl }));
+
+/**
+ * 凭据变量的**名字**（值从不进模板：真值只在后台代发那一刻展开，见 `utils/variables.ts`）
+ *
+ * 这份表本来就已经为「保存前的引用校验」读进来了，这里只是把它的键名露出来——
+ * 用户此前要新开设置弹窗、看一眼名字、回来自己打 `{{}}`，那是同一个界面里的两次往返。
+ */
+const variableNames = computed(() => Object.keys(variables.value));
+
+const lastFocusedHeaderUid = ref<number | null>(null);
+const lastFocusedQueryUid = ref<number | null>(null);
+
+/**
+ * 把 `{{名称}}` 接进这一段最后聚焦过的行；一行都没有时先补一行
+ *
+ * 只填值、不猜头名：同一个凭据在不同站点上头名不一样（Authorization / x-api-key / api-key），
+ * 替用户造一行「名字已经填好」的覆盖，比让用户自己点一行更容易留下无效配置。
+ */
+function insertVariableRef(
+  list: { uid: number; value: string }[],
+  addRow: () => void,
+  name: string,
+  lastFocusedUid: number | null,
+): void {
+  if (list.length === 0) addRow();
+  const row = list.find(item => item.uid === lastFocusedUid) ?? list[list.length - 1];
+  if (row) row.value = `${row.value}{{${name}}}`;
+}
 
 /**
  * 可编辑行的稳定 key
@@ -1118,9 +1281,13 @@ watch(
     if (val) {
       // 每次打开重新拉一遍引用名：设置页可能刚改过表，拿旧表校验会误报「未定义」
       variableNamesLoaded.value = false;
+      variableNamesFailed.value = false;
       saving.value = false;
+      // 每一次打开重新判断「要不要提那句同源」：上一次编辑留下的痕迹不该替这一次作决定
+      targetTouched.value = false;
       variablesLoad = loadVariables().then(ok => {
         variableNamesLoaded.value = ok;
+        variableNamesFailed.value = !ok;
         return ok;
       });
       if (props.rule) {
@@ -1390,6 +1557,7 @@ async function submitRule() {
   if (!variableNamesLoaded.value) {
     await (variablesLoad ??= loadVariables().then(ok => {
       variableNamesLoaded.value = ok;
+      variableNamesFailed.value = !ok;
       return ok;
     }));
   }
@@ -1644,6 +1812,62 @@ function runTest() {
    而不是弹一条会自己飘走的 toast——用户当时正在看的就是这一格。 */
 .field-hint-warning {
   color: var(--el-color-warning, #e6a23c);
+}
+
+/* 目标环境候选：一行标签 + 一个下拉，宽度跟着表单走，不另起一块面板 */
+.target-suggest {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.target-suggest-label {
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+}
+
+.target-suggest-select {
+  width: 240px;
+  max-width: 100%;
+}
+
+/* 凭据变量名的一排芯片：只出现名字，点一下把 `{{名称}}` 接进最后一行 */
+.variable-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.variable-chips-label {
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+}
+
+.variable-chip {
+  padding: 2px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--cop-text-color-regular);
+  cursor: pointer;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 10px;
+  transition:
+    color var(--cop-duration-fast) var(--cop-ease-standard),
+    background-color var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+.variable-chip:hover {
+  color: var(--cop-primary);
+  background: rgb(var(--cop-primary-rgb) / 10%);
+}
+
+.variable-chip:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 1px;
 }
 
 .field-hint-value {

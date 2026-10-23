@@ -35,8 +35,15 @@ import {
   saveVariables,
   getConfigHistory,
   restoreConfigHistory,
+  getRecentTargets,
+  getSiteState,
+  readSiteState,
+  saveSiteState,
 } from '@/utils/storage';
+import { hostnameOf, siteAllows } from '@/utils/siteScope';
 import { logsToHar, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
+import { relocateHarCredentialHeaders } from '@/utils/harCredentialVars';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { sanitizeExportedLogs } from '@/utils/exportSanitize';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
@@ -230,6 +237,7 @@ const STATE_MUTATING_TYPES = new Set([
   MessageType.CLEAR_REQUEST_LOG,
   MessageType.IMPORT_CONFIG,
   MessageType.IMPORT_HAR,
+  MessageType.SET_SITE_STATE,
   MessageType.RESTORE_CONFIG_HISTORY,
   MessageType.SAVE_PROFILE,
   MessageType.LOAD_PROFILE,
@@ -248,9 +256,20 @@ const STATE_MUTATING_TYPES = new Set([
  * `GET_CONFIG_HISTORY` 同档：恢复点是那次成套替换所换掉的整包配置，里面的 `headerOverrides` 是
  * **原样落盘的真实请求头**（凭据变量库之前录入的规则尤其如此），一份历史等于把配好几种环境的会话全交出去。
  *
- * 新增读取类消息时不要照这里加：判据是「页面从不读取 + 回的是凭据类数据」，两者缺一就别加。
+ * `GET_RECENT_TARGETS` 同档，但理由不是「它回凭据」：那份候选是用户配过的**目标环境 origin 清单**，
+ * 对内网拓扑的说明力比界面看上去需要的多，而页面永远不会问它（配置页是唯一读者）。
+ *
+ * 新增读取类消息时不要照这里加：判据是「页面从不读取 + 回的是凭据或本地数据」，两者缺一就别加。
  */
-const CREDENTIAL_READING_TYPES = new Set([MessageType.GET_VARIABLES, MessageType.GET_CONFIG_HISTORY]);
+const CREDENTIAL_READING_TYPES = new Set([
+  MessageType.GET_VARIABLES,
+  MessageType.GET_CONFIG_HISTORY,
+  MessageType.GET_RECENT_TARGETS,
+  // 「在哪几台站点上关掉过代理」这份清单，对内网拓扑的说明力不比「配过哪些目标环境」小
+  // （`fat-api.corp.example.com` 这种主机名就是答案），而页面永远不会问它：桥接层通往 SW 的
+  // 四个出口里没有这一条，配置页是唯一读者。判据仍是那两条，缺一就别加。
+  MessageType.GET_SITE_STATE,
+]);
 
 /**
  * 统一处理异步消息响应：resolve 时回传结果，reject 时回传 { success: false, error }
@@ -263,6 +282,21 @@ function respondAsync(sendResponse: (response?: unknown) => void, promise: Promi
       sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) }),
     );
   return true;
+}
+
+/**
+ * 从 HAR 导入消息里收口出「目标环境」那一步
+ *
+ * 载荷属不可信输入，所以不采信界面已经判过的那一遍：`apiOriginOf` 认不出（空串、非 http(s)、
+ * 解析不了）就当没填，此时后台的产出与本功能存在之前逐字节相同。启用开关绑在合法目标之后，
+ * 且只认严格 `true`——没有换环境就默认启用这批规则，等于凭空打开一整套转发。
+ */
+function harTargetFromMessage(message: RuntimeMessage): { targetOrigin: string; enabled: boolean } | undefined {
+  if (message.type !== MessageType.IMPORT_HAR) return undefined;
+  const raw = message.data.targetOrigin;
+  const targetOrigin = typeof raw === 'string' ? apiOriginOf(raw) : '';
+  if (!targetOrigin) return undefined;
+  return { targetOrigin, enabled: message.data.enableOnImport === true };
 }
 
 /**
@@ -307,8 +341,13 @@ export function setupMessageRouter(): void {
         // 而它至少被压到「每伪造一次要付一次规则匹配」，不再是无成本地空转。
         return respondAsync(
           sendResponse,
-          handleProxyRequest(message.data, proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId), () =>
-            countProxyRequestForTab(sender.tab?.id, sender.frameId),
+          handleProxyRequest(
+            message.data,
+            proxyRequestKey(sender.tab?.id, sender.frameId, payload.requestId),
+            () => countProxyRequestForTab(sender.tab?.id, sender.frameId),
+            // 发起 frame 的主机由 Chrome 写的 `sender.url` 给出。顶层 `tab.url` 不能替 iframe 回答
+            // 站点范围问题，否则 DNR 按 frame 排除、SW 却按顶层放行，复杂规则仍会带着凭据代发。
+            hostnameOf(sender.url),
           ),
         );
       }
@@ -334,7 +373,18 @@ export function setupMessageRouter(): void {
         // （见 `configSyncState` 与 `broadcastConfigToTabs` 的时序说明）。
         const requesterTabId = sender.tab?.id;
         if (typeof requesterTabId === 'number') clearConfigUnsynced(requesterTabId);
-        return respondAsync(sendResponse, getProxyConfig());
+        // 内容脚本按**自己 frame** 的 host 收窄；扩展页虽然也可能带 `sender.tab`，但它的 `sender.url`
+        // 不是 http(s) 网页，不隶属于「某一台站点」，必须始终拿到完整配置。
+        return respondAsync(
+          sendResponse,
+          (async () => {
+            const config = await getProxyConfig();
+            const requesterHost = hostnameOf(sender.url);
+            if (!requesterHost) return config;
+            const siteState = await getSiteState();
+            return siteAllows(siteState, requesterHost) ? config : { ...config, rules: [] };
+          })(),
+        );
       }
 
       case MessageType.UPDATE_PROXY_CONFIG:
@@ -541,6 +591,30 @@ export function setupMessageRouter(): void {
         }
         return respondAsync(sendResponse, restoreConfigHistory(message.data.id));
 
+      case MessageType.GET_SITE_STATE:
+        // 已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是「用户在哪几台站点上停用/独占了代理」。
+        // 这里用 `readSiteState()` 而不是执行侧的 fail-open 默认值：界面必须分得清「读到 all」和「没读到」。
+        return respondAsync(sendResponse, readSiteState());
+
+      case MessageType.SET_SITE_STATE: {
+        // 载荷属不可信输入：模式只认三个字面量，名单必须是字符串数组，其余一律当默认值处理
+        const mode = message.data?.mode;
+        const hosts = message.data?.hosts;
+        if (mode !== 'all' && mode !== 'site-off' && mode !== 'site-only') {
+          sendResponse({ success: false, error: 'Invalid site mode' });
+          return false;
+        }
+        if (hosts !== undefined && !Array.isArray(hosts)) {
+          sendResponse({ success: false, error: 'Invalid site hosts' });
+          return false;
+        }
+        // 回包里带回收口的状态：界面按「storage 里现在是什么」画，而不是按「我刚提交了什么」画
+        return respondAsync(
+          sendResponse,
+          saveSiteState({ mode, hosts: Array.isArray(hosts) ? hosts : [] }).then(() => ({ success: true })),
+        );
+      }
+
       case MessageType.EXPORT_HAR: {
         // 「分享模式」同样管住 HAR：日志里的 Cookie / Authorization 是用户当时那个会话的凭据，
         // 贴进工单就等于把会话交出去。缺省按脱敏处理——只有显式传 false（界面上取消勾选）
@@ -565,9 +639,35 @@ export function setupMessageRouter(): void {
           sendResponse({ success: false, error: 'HAR_TOO_MANY_ENTRIES' });
           return false;
         }
-        const rules = harEntriesToRules(entries);
-        sendResponse({ success: true, rules });
-        return false;
+        const rules = harEntriesToRules(entries, harTargetFromMessage(message));
+        // 凭据搬家是**用户勾了才做**的一步：默认形状与这个选项存在之前逐字节相同。
+        // 只认严格 true（与 `sendCredentials` 同一档写法），且变量写失败就整笔失败——
+        // 静默回退成原值等于把用户明确要的那一步偷偷取消掉。
+        if (message.data.relocateCredentials !== true) {
+          sendResponse({ success: true, rules });
+          return false;
+        }
+        return respondAsync(
+          sendResponse,
+          (async () => {
+            const existing = await getVariables();
+            const moved = relocateHarCredentialHeaders(rules, existing);
+            const created = Object.keys(moved.variables);
+            if (created.length > 0) {
+              // 收口函数自己那条上限在这里是第二道：真丢了条目，规则会引用一条不存在的变量、
+              // 运行时原样发出 `{{HAR_x}}` 并被上游 401——那就不是「省一步手工粘贴」而是埋一条坏配置，
+              // 所以宁可让这次导入整体失败（回包的 error 只进日志，界面说的是 `importHarFailed`）。
+              const { dropped } = await saveVariables({ ...existing, ...moved.variables });
+              if (dropped > 0) throw new Error('VARIABLES_DROPPED');
+            }
+            return {
+              success: true,
+              rules: moved.rules,
+              relocated: moved.relocated,
+              keptRaw: moved.keptRaw,
+            };
+          })(),
+        );
       }
 
       case MessageType.GET_PROFILES:
@@ -608,6 +708,11 @@ export function setupMessageRouter(): void {
       case MessageType.GET_VARIABLES:
         // 走到这里说明已过 `CREDENTIAL_READING_TYPES` 那道 sender 校验；回的是真值表
         return respondAsync(sendResponse, getVariables());
+
+      case MessageType.GET_RECENT_TARGETS:
+        // 同上那道校验：回的是用户配过的目标环境清单。读侧自己把异常收成空数组，
+        // 所以这里不需要接手人——候选坏了的正确表现就是「没有候选」。
+        return respondAsync(sendResponse, getRecentTargets());
 
       case MessageType.SET_VARIABLES:
         // 整表写入（与 UPDATE_PROXY_CONFIG 同形态）：非键值对象在 `saveVariables` 里抛错，

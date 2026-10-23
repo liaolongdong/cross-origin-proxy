@@ -7,11 +7,13 @@
  * 用户看到的只是数字变了，没有任何一处会报错——这正是需要运行时用例的那类「静默失效」面。
  *
  * 断言都按「这一格改了以后谁会受害」来选：
- * - 默认停用：「新规则默认停用、确认后自行启用」这句（英文 "those rules arrive disabled until you
- *   enable them"）在中英两侧各写着四处 —— `README` 两份、站点根落地页（`index.html` / `en.html`）、
- *   `docs/llms.txt`、`CHROMEWEBSTORE.md`，另外 `docs/llms-full.txt` 那一行里中英各还有一份；
- *   `docs/alternatives.html` 两份倒是都没提，别照着它以为这句只有一处。
- *   翻成 `true` 等于让一份在别的机器上抓的包当场接管这个 origin 的流量。
+ * - 默认停用：2026-10-19 之前这句在中英两侧各写着四处（`README` 两份、站点根落地页
+ *   `index.html` / `en.html` 各两处、`docs/llms.txt`、`docs/llms-full.txt`、`.github/docs/CHROMEWEBSTORE.md`），
+ *   写的是「新规则默认停用、确认后自行启用」，而 `docs/alternatives.html` 两份都没提——别照着它以为只有一处。
+ *   现在它成了**条件句**：填了合法的目标环境，这批规则默认启用（界面上那个复选框可取消）；
+ *   留空才照旧停用。所以这六处都改成了「不设目标环境就默认停用」这一类说法，翻成无条件
+ *   `enabled: true` 或反过来把条件句改回无条件，都等于让文档与实现对不上——而
+ *   「一份在别的机器上抓的包当场接管这个 origin 的流量」这条代价仍然成立。
  * - 按 origin 去重、先到先得：Chrome DevTools 导出的 HAR 里同一个后端通常有几十条请求，
  *   不去重就是几十条同键规则（合并键取 `name` + `matchType` + `matchPattern`，见
  *   `utils/ruleConflicts.ts` 的 `ruleMergeKey`，而这里生成的名字与模式都由 origin 决定），
@@ -31,7 +33,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
+import { distinctHarOrigins, harEntriesToRules, harEntriesOverLimit } from '@/utils/har';
 import { MAX_HAR_IMPORT_ENTRIES } from '@/utils/constants';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import type { HarEntry } from '@/utils/types';
@@ -193,6 +195,31 @@ describe('harEntriesToRules — HAR 条目转代理规则', () => {
   });
 
   /**
+   * 「目标环境」按 `apiOriginOf` 定义，只能是 http(s) 的源，所以它换不动长连接那一档。
+   * 把 `wss://a.com/*` 指向 `https://uat…` 不是跨环境，是把这条规则变成连不上：
+   * `new WebSocket('https://…')` 在页面侧当场被判非法地址，用户看到的症状是「装了扩展之后
+   * 这个页面 WebSocket 全坏」，而日志里一句代理记录都不会有（长连接不走 SW 代发）。
+   */
+  it('目标环境不改写也不启用长连接条目：wss → https 是一条连不上的规则', () => {
+    const rules = harEntriesToRules([entry('wss://socket.a.com/live'), entry('https://api.a.com/x')] as HarEntry[], {
+      targetOrigin: 'https://uat.example.com',
+      enabled: true,
+    });
+    const ws = rules.find(r => r.matchPattern.startsWith('wss://'))!;
+    const http = rules.find(r => r.matchPattern.startsWith('https://api.a.com'))!;
+
+    expect(ws.targetUrl, '长连接留在自己的 origin 上').toBe('wss://socket.a.com');
+    expect(ws.enabled, '换环境没换到它，就不该跟着被启用成一条自映射的活动规则').toBe(false);
+    expect(http.targetUrl).toBe('https://uat.example.com');
+    expect(http.enabled).toBe(true);
+
+    // 确认文案问的就是「会被搬走的那些来源」，所以它必须与这里的选址同一份口径
+    expect(distinctHarOrigins([entry('wss://socket.a.com/live'), entry('https://api.a.com/x')] as HarEntry[])).toEqual([
+      'https://api.a.com',
+    ]);
+  });
+
+  /**
    * 白名单与「分享模式」判据必须同源：这里抄进规则的是**别人机器上的真实凭据**，
    * 而它们离开本机的唯一关口就是 `utils/exportSanitize.ts` 那张敏感头表。
    * 两张表今天重合（`authorization` / `x-api-key` / `cookie` 都在表里），纯靠巧合——
@@ -205,7 +232,8 @@ describe('harEntriesToRules — HAR 条目转代理规则', () => {
    */
   it('HAR 抄进规则的头名，全部落在分享模式的敏感表里', () => {
     const src = readFileSync('utils/har.ts', 'utf-8');
-    const whitelisted = [...src.matchAll(/name === '([^']+)'/g)].map(m => m[1]);
+    const setLiteral = src.match(/HAR_CREDENTIAL_HEADER_NAMES\s*=\s*new Set\(\[([^\]]+)\]\)/)?.[1] ?? '';
+    const whitelisted = [...setLiteral.matchAll(/'([^']+)'/g)].map(m => m[1]);
 
     // 抓不到东西就是这条契约失效（而不是通过）：白名单被换成了 grep 认不出的写法
     expect(whitelisted.length).toBeGreaterThanOrEqual(3);
@@ -251,5 +279,76 @@ describe('harEntriesOverLimit — 多少条算超', () => {
         /entries\.length\s*[<>]=?\s*MAX_HAR_IMPORT_ENTRIES/,
       );
     }
+  });
+});
+
+/**
+ * 目标环境那一步（`opts`）：把「导入抓包 → 一堆自映射规则、还得逐条手改」折成一次输入就可用。
+ *
+ * 承重的是**它的缺席**：不传 `opts`（或传了个读不出 origin 的值）时，产出必须与本功能存在之前
+ * 逐字节相同——默认停用那句承诺在中英七处文档里写着，而「填了目标才启用」是唯一新增的启用路径。
+ * 少一条这条方向的断言，将来有人把 `enabled` 写成无条件 `true` 就只会由文档那一侧发现，而文档不会红。
+ */
+describe('harEntriesToRules — 目标环境（opts.targetOrigin / opts.enabled）', () => {
+  /** 去掉每次运行都不同的三个字段，好让「逐字节相同」这件事可比 */
+  function comparable(rules: ReturnType<typeof harEntriesToRules>) {
+    return rules.map(({ id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest }) => rest);
+  }
+
+  it('不传 opts：产出就是历史形状（自映射 + 停用 + 优先级 100）', () => {
+    expect(comparable(harEntriesToRules([entry('https://fat.example.com/api/x')]))).toEqual([
+      {
+        name: 'Imported: fat.example.com',
+        enabled: false,
+        matchPattern: 'https://fat.example.com/*',
+        targetUrl: 'https://fat.example.com',
+        matchType: 'wildcard',
+        priority: 100,
+      },
+    ]);
+  });
+
+  it('合法目标 + enabled：目标换过去、这一批默认启用', () => {
+    const [rule] = harEntriesToRules([entry('https://fat.example.com/api/x')], {
+      targetOrigin: 'https://uat.example.com',
+      enabled: true,
+    });
+    expect(rule.targetUrl).toBe('https://uat.example.com');
+    expect(rule.enabled).toBe(true);
+    // 匹配侧一个字都不动：改的只是「指到哪」
+    expect(rule.matchPattern).toBe('https://fat.example.com/*');
+  });
+
+  it('目标粘成整条 URL 也只取 origin（协议+域名+端口）', () => {
+    const [rule] = harEntriesToRules([entry('https://fat.example.com/api/x')], {
+      targetOrigin: 'https://uat.example.com/some/path?token=abc',
+      enabled: true,
+    });
+    expect(rule.targetUrl).toBe('https://uat.example.com');
+  });
+
+  it.each([
+    ['空串', ''],
+    ['读不出 URL 的串', 'not a url'],
+    ['非 http(s) 协议', 'file:///tmp/uat'],
+    ['不透明 origin', 'null'],
+  ])('目标为%s时一律当没填：回落历史形状，哪怕 enabled 传了 true', (_label, raw) => {
+    expect(
+      comparable(harEntriesToRules([entry('https://fat.example.com/api/x')], { targetOrigin: raw, enabled: true })),
+    ).toEqual(comparable(harEntriesToRules([entry('https://fat.example.com/api/x')])));
+  });
+
+  it('没换环境就不凭空启用：targetOrigin 缺省时 enabled 一律为 false', () => {
+    const [withFlag] = harEntriesToRules([entry('https://fat.example.com')], { enabled: true });
+    expect(withFlag.enabled).toBe(false);
+  });
+
+  it('多个源 origin 折叠后各自指向同一个目标', () => {
+    const rules = harEntriesToRules(
+      [entry('https://a.example.com/x'), entry('https://a.example.com/y'), entry('https://b.example.com/z')],
+      { targetOrigin: 'https://uat.example.com', enabled: true },
+    );
+    expect(rules.map(r => r.matchPattern)).toEqual(['https://a.example.com/*', 'https://b.example.com/*']);
+    expect(rules.every(r => r.targetUrl === 'https://uat.example.com' && r.enabled)).toBe(true);
   });
 });

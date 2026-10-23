@@ -5,68 +5,32 @@
       <h1>
         <el-icon class="logo"><Promotion /></el-icon>
         {{ t('extensionName') }}
-        <el-tag
-          size="small"
-          type="info"
-          class="version-tag"
-          >v{{ currentVersion }}</el-tag
+        <a
+          class="version-tag-link"
+          :href="GITHUB_RELEASES_PAGE_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          :title="t('versionLinkTitle')"
         >
+          <el-tag
+            size="small"
+            type="info"
+            class="version-tag"
+            >v{{ currentVersion }}</el-tag
+          >
+        </a>
         <span
           class="status-dot"
           :class="{ 'is-on': statusKnown && proxyEnabled, 'is-unknown': !statusKnown }"
           role="img"
-          :aria-label="!statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled')"
+          :title="t('statusDotTitle', [statusText])"
+          :aria-label="statusText"
         ></span>
       </h1>
-    </div>
 
-    <!-- 第二行：操作按钮 -->
-    <div class="header-actions-row">
-      <div class="header-actions">
-        <el-button
-          type="primary"
-          :icon="Plus"
-          @click="$emit('addRule')"
-        >
-          {{ t('addRule') }}
-        </el-button>
-        <el-button
-          :icon="Document"
-          @click="$emit('openLogs')"
-        >
-          {{ t('tabLogs') }}
-        </el-button>
-        <el-button
-          :icon="Search"
-          @click="$emit('openUrlTest')"
-        >
-          {{ t('urlTest') }}
-        </el-button>
-        <el-button
-          :icon="FolderOpened"
-          @click="$emit('openImportExport')"
-        >
-          {{ t('importExportConfig') }}
-        </el-button>
-        <el-button
-          :icon="Collection"
-          @click="$emit('openProfiles')"
-        >
-          {{ t('openProfiles') }}
-        </el-button>
-        <el-button
-          :icon="Setting"
-          @click="$emit('openSettings')"
-        >
-          {{ t('tabSettings') }}
-        </el-button>
-      </div>
-
-      <!-- 代理总开关：毛玻璃 pill -->
-      <div class="proxy-toggle-pill">
-        <span class="proxy-toggle-label">
-          {{ !statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled') }}
-        </span>
+      <!-- 代理总开关：与状态灯同一行，第二行只留工具栏 -->
+      <div class="proxy-toggle">
+        <span class="proxy-toggle-label">{{ statusText }}</span>
         <el-switch
           :model-value="proxyEnabled"
           :aria-label="t('proxyToggleA11y')"
@@ -74,20 +38,64 @@
         />
       </div>
     </div>
+
+    <!-- 第二行：操作按钮 -->
+    <div class="header-actions">
+      <el-button
+        type="primary"
+        :icon="Plus"
+        @click="$emit('addRule')"
+      >
+        {{ t('addRule') }}
+      </el-button>
+      <el-button
+        :icon="Document"
+        @click="$emit('openLogs')"
+      >
+        {{ t('tabLogs') }}
+      </el-button>
+      <el-button
+        :icon="Search"
+        @click="$emit('openUrlTest')"
+      >
+        {{ t('urlTest') }}
+      </el-button>
+      <el-button
+        :icon="FolderOpened"
+        @click="$emit('openImportExport')"
+      >
+        {{ t('importExportConfig') }}
+      </el-button>
+      <el-button
+        :icon="Collection"
+        @click="$emit('openProfiles')"
+      >
+        {{ t('openProfiles') }}
+      </el-button>
+      <el-button
+        :icon="Setting"
+        @click="$emit('openSettings')"
+      >
+        {{ t('tabSettings') }}
+      </el-button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Plus, Document, Search, FolderOpened, Collection, Setting, Promotion } from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
+import { GITHUB_RELEASES_PAGE_URL } from '@/utils/constants';
 
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
- * 包含标题、版本号、代理状态信号灯、主操作按钮（添加规则）
- * 与毛玻璃半透明按钮（日志/URL 测试/导入导出/环境配置/设置），右侧为代理总开关 pill。
+ * 包含标题、可点击的版本徽标、代理状态信号灯（与代理总开关同一行），
+ * 以及第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置）。
+ * 间距与按钮皮肤对齐 account-password-helper 的顶栏实现；总开关刻意不套胶囊，见样式里的说明。
  */
-defineProps<{
+const props = defineProps<{
   /** 当前插件版本号 */
   currentVersion: string;
   /** 代理总开关状态 */
@@ -114,6 +122,11 @@ defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+/** 状态灯与总开关共用同一句状态话，悬停提示也只在标题行这一处拼 */
+const statusText = computed(() =>
+  !props.statusKnown ? t('statusUnknown') : props.proxyEnabled ? t('statusEnabled') : t('statusDisabled'),
+);
 </script>
 
 <style scoped>
@@ -133,7 +146,10 @@ const { t } = useI18n();
 
 .header-title-row {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
+  justify-content: space-between;
 }
 
 .header-title-row h1 {
@@ -151,17 +167,39 @@ const { t } = useI18n();
   color: var(--cop-text-color-on-primary);
 }
 
+/* 版本号链接：弱化的可点击徽标，hover 提亮反馈，不争夺标题注意力。
+   点开直达 GitHub Releases 查看最新版本与构建产物，与 Popup 帮助弹窗的版本链接同一心智。 */
+.version-tag-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: 10px;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.version-tag-link:hover .version-tag {
+  color: var(--cop-text-color-on-primary);
+  background: rgb(var(--cop-on-primary-rgb) / 28%);
+}
+
+.version-tag-link:focus-visible {
+  outline: 2px solid rgb(var(--cop-on-primary-rgb) / 80%);
+  outline-offset: 1px;
+}
+
 .version-tag {
   flex-shrink: 0;
   padding: 0 6px;
-  margin-left: 10px;
   font-size: 11px;
   line-height: 18px;
   color: rgb(var(--cop-on-primary-rgb) / 70%);
-  cursor: default;
+  cursor: pointer;
   user-select: none;
   background: rgb(var(--cop-on-primary-rgb) / 15%);
   border-color: rgb(var(--cop-on-primary-rgb) / 20%);
+  transition:
+    color var(--cop-duration-fast) var(--cop-ease-standard),
+    background-color var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 /* 代理状态信号灯：一眼可见的红绿小圆点
@@ -174,10 +212,21 @@ const { t } = useI18n();
   width: 8px;
   height: 8px;
   margin-left: 10px;
+  cursor: help;
   background: var(--el-color-danger, #f56c6c);
   border-radius: 50%;
   box-shadow: 0 0 0 2px rgb(var(--cop-on-primary-rgb) / 35%);
-  transition: background-color var(--cop-duration-base) var(--cop-ease-standard);
+  transition:
+    background-color var(--cop-duration-base) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+/* 悬停提示由原生 title 承载（与参考实现的健康信号灯同一做法）；
+   光圈只负责说「这里有东西可看」，不改变红绿结论 */
+.status-dot:hover {
+  box-shadow:
+    0 0 0 2px rgb(var(--cop-on-primary-rgb) / 35%),
+    0 0 0 5px rgb(var(--cop-on-primary-rgb) / 18%);
 }
 
 .status-dot.is-on {
@@ -204,24 +253,28 @@ const { t } = useI18n();
   }
 }
 
-.header-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
+/* 间距与 button skin 对齐 account-password-helper 的顶栏：
+   工具之间 12px，`.el-button + .el-button` 的默认 12px 外边距在下面归零，
+   间距只由 gap 说一次（否则实际会变成 24px，正是旧顶栏看起来松散的原因）。 */
 .header-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  align-items: center;
 }
 
-/* 毛玻璃半透明按钮（「新增规则」那颗反色主按钮除外，它另走一张卡片底）
-   颜色与投影走 90ms、上浮走同样的时长：悬停反馈要「立刻跟上指针」，
-   200ms 以上就会觉得按钮比手慢。显式列属性而不是 `all`——`all` 会把
-   按钮宽度（语言切换时文案变长）也纳入过渡。 */
+.header-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+/* 工具按钮是玻璃胶囊：15% on-primary 底 + 25% 边（亮色下即白色，暗色随令牌翻成深墨），
+   悬停提到 20% / 40% 并抬 1px。与主操作的白色实心区分层级，但六颗仍读作同一条工具栏，
+   而不是六个互不相干的操作。
+   显式列过渡属性而不是 `all`：`all` 会把语言切换时变化的按钮宽度也纳入过渡。 */
 :deep(.header-actions .el-button) {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--cop-text-color-on-primary);
   background: rgb(var(--cop-on-primary-rgb) / 15%);
@@ -235,18 +288,42 @@ const { t } = useI18n();
     transform var(--cop-duration-instant) var(--cop-ease-enter);
 }
 
-:deep(.header-actions .el-button:hover) {
+:deep(.header-actions .el-button:not(.el-button--primary):hover) {
   background: rgb(var(--cop-on-primary-rgb) / 20%);
   border-color: rgb(var(--cop-on-primary-rgb) / 40%);
   box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
   transform: translateY(-1px);
 }
 
-:deep(.header-actions .el-button--primary) {
+:deep(.header-actions .el-button:not(.el-button--primary):active) {
+  background: rgb(var(--cop-on-primary-rgb) / 24%);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  transform: translateY(0);
+}
+
+/* 键盘焦点环走 on-primary 通道，暗色下随顶栏一起翻成深墨；EP 默认环在渐变底上不够显眼 */
+:deep(.header-actions .el-button:focus-visible) {
+  outline: 2px solid rgb(var(--cop-on-primary-rgb) / 70%);
+  outline-offset: 2px;
+}
+
+/* 多带一个 `.el-button` 是承重的：`entrypoints/options/styles.css` 里暗色模式那条
+   `:root[data-mode='dark'] .el-button--primary` 与本选择器同为 3 个类级权重，而它排在
+   组件样式之后，于是暗色的 on-primary 深墨字色会盖掉这里反色按钮的 `--cop-primary`——
+   深墨字压在深色底上，按钮文字等于消失。加上 `.el-button` 抬到 4 个类级，
+   胜负不再由样式表顺序决定。 */
+:deep(.header-actions .el-button.el-button--primary) {
+  padding: 0 14px;
   font-weight: 500;
   color: var(--cop-primary);
   background: var(--cop-bg-color);
   border: 1px solid var(--cop-bg-color);
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    background-color var(--cop-duration-instant) var(--cop-ease-standard),
+    border-color var(--cop-duration-instant) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-instant) var(--cop-ease-standard),
+    transform var(--cop-duration-instant) var(--cop-ease-enter);
 }
 
 :deep(.header-actions .el-button--primary:hover) {
@@ -257,47 +334,75 @@ const { t } = useI18n();
   transform: translateY(-1px);
 }
 
-/* 总开关 pill：毛玻璃底 + 状态文案 */
-.proxy-toggle-pill {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 6px 14px;
-  background: rgb(var(--cop-on-primary-rgb) / 15%);
-  border: 1px solid rgb(var(--cop-on-primary-rgb) / 25%);
-  border-radius: 999px;
-  backdrop-filter: blur(10px);
+:deep(.header-actions .el-button--primary:active) {
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  transform: translateY(0);
 }
 
-/* 开关本体：Element Plus 用 `left` 移动滑块、`transition: all` 一视同仁。
-   这里把时长压到 220ms、换成末段减速的进场曲线（滑块是「被推过去后停住」，
-   不是匀速滑过去），并只留真正会变的三个属性。
-   不用带超调的弹簧曲线：轨道只有 40px、滑块离边只有 1px，超调会让滑块探出胶囊外沿。 */
-:deep(.proxy-toggle-pill .el-switch__core) {
+/* 总开关：不套胶囊。顶栏本身就是主色实底，再包一层薄膜等于在同一行里叠出第三个
+   盒子（标题、按钮条之外），而它 44px 的高度还是这一行最高的东西——「看着没对齐」
+   其实是被它拽下去的。这里只留「状态话 + 开关」，行高交还给标题自己。 */
+.proxy-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 10px;
+  align-items: center;
+}
+
+.proxy-toggle-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--cop-on-primary-rgb) / 92%);
+  user-select: none;
+}
+
+/* 开关本体：两态靠「空 / 满」分开，不靠颜色深浅。
+   关掉态 = 空心：轨道不填色，只留一圈描边，滑块收成七成不透明度；
+   开启态 = 实心：整条轨道填满 on-primary，滑块反过来透出渐变右端的底色，
+   像从轨道上打了一个孔。
+   为什么不用 Element Plus 那抹默认灰（#dcdfe6）：按带薄膜胶囊那版实拍量过，轨道对底
+   只有 1.50:1、白滑块对灰轨道 1.34:1，旋钮找不着；而上一版把关掉态画成「压暗的实心
+   轨道 + 纯白滑块」，两态都是实心，用户实拍反馈「看不出是开着还是关着」。
+   形状层面的空/满比位置（滑块在左在右）更好读，暗色下 on-primary 翻成深墨，两态一起翻。 */
+:deep(.proxy-toggle .el-switch) {
+  height: 20px;
+}
+
+:deep(.proxy-toggle .el-switch__core) {
+  background: transparent;
+  border-color: rgb(var(--cop-on-primary-rgb) / 55%);
   transition:
     background-color var(--cop-duration-base) var(--cop-ease-enter),
     border-color var(--cop-duration-base) var(--cop-ease-enter);
 }
 
-:deep(.proxy-toggle-pill .el-switch__core .el-switch__action) {
+:deep(.proxy-toggle .el-switch:hover .el-switch__core) {
+  border-color: rgb(var(--cop-on-primary-rgb) / 78%);
+}
+
+:deep(.proxy-toggle .el-switch__core .el-switch__action) {
+  background: rgb(var(--cop-on-primary-rgb) / 72%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
   transition:
     left var(--cop-duration-base) var(--cop-ease-enter),
     background-color var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
-.proxy-toggle-label {
-  font-size: 13px;
-  color: rgb(var(--cop-on-primary-rgb) / 90%);
-  user-select: none;
+:deep(.proxy-toggle .el-switch.is-checked .el-switch__core) {
+  background: rgb(var(--cop-on-primary-rgb) / 100%);
+  border-color: rgb(var(--cop-on-primary-rgb) / 100%);
 }
 
-:deep(.proxy-toggle-pill .el-switch.is-checked .el-switch__core) {
-  background: rgb(var(--cop-on-primary-rgb) / 90%);
-  border-color: rgb(var(--cop-on-primary-rgb) / 90%);
+:deep(.proxy-toggle .el-switch.is-checked .el-switch__core .el-switch__action) {
+  background: var(--cop-primary-hover);
+  box-shadow: none;
 }
 
-:deep(.proxy-toggle-pill .el-switch.is-checked .el-switch__core .el-switch__action) {
-  background: var(--cop-primary);
+/* 焦点环也走 on-primary：EP 默认用 --el-switch-on-color（即主题蓝）描边，
+   而这一层底色就是主色渐变，蓝环压在蓝底上等于看不见 */
+:deep(.proxy-toggle .el-switch__input:focus-visible ~ .el-switch__core) {
+  outline: 2px solid rgb(var(--cop-on-primary-rgb) / 80%);
+  outline-offset: 2px;
 }
 
 /* 响应式 */
@@ -310,14 +415,24 @@ const { t } = useI18n();
     font-size: 20px;
   }
 
-  .header-actions-row {
-    flex-direction: column;
+  /* 六颗按钮挤在一行会掉成 5 + 1（「设置」孤零零居中）。
+     3 列网格让它们整齐地排成两行三颗，每颗等宽、命中区也更大。 */
+  .header-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
+    width: 100%;
   }
 
-  .header-actions {
-    justify-content: center;
+  .header-actions :deep(.el-button) {
     width: 100%;
+  }
+}
+
+/* 极窄窗口再退一档：三列放不下「导入/导出配置」时改两列 */
+@media (width <= 560px) {
+  .header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

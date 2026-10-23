@@ -392,14 +392,20 @@ describe('[P2-6] 导入失败保留输入（弹窗与父组件的契约）', () 
     expect(handle).toContain("t('importSchemaTooNew'");
   });
 
-  it('HAR 选中的文件不跨次打开残留（弹窗分片不随关闭销毁，再点一次会导入两遍）', () => {
-    expect(dialogSrc).toContain('@closed="resetHarPick"');
+  it('两条派生进口的选中文件都不跨次打开残留（弹窗分片不随关闭销毁，再点一次会导入两遍）', () => {
+    // 同一个关闭回调现在要收起两份picked 文件、两份「目标环境」——漏掉新那一份的话，
+    // 第二次打开弹窗时上一份文档还留在内存里，点一次会导两遍
+    expect(dialogSrc).toContain('@closed="resetDerivedPicks"');
     const reset = dialogSrc.slice(
-      dialogSrc.indexOf('function resetHarPick'),
+      dialogSrc.indexOf('function resetDerivedPicks'),
       dialogSrc.indexOf('async function handleImportHar'),
     );
     expect(reset).toContain('harFileContent.value = null');
     expect(reset).toContain('harUploadRef.value?.clearFiles()');
+    expect(reset).toContain('harTarget.reset()');
+    expect(reset).toContain('openApiFileContent.value = null');
+    expect(reset).toContain('openApiUploadRef.value?.clearFiles()');
+    expect(reset).toContain('openApiTarget.reset()');
   });
 
   it('父组件只监听 imported，不再自行调用 importConfig', () => {
@@ -408,19 +414,30 @@ describe('[P2-6] 导入失败保留输入（弹窗与父组件的契约）', () 
     expect(appSrc).not.toContain('importConfig(');
   });
 
-  it('HAR 的成功提示由执行写入的父组件发出（弹窗里 emit 是同步的，拿不到成败）', () => {
+  it('派生进口的成功提示由执行写入的父组件发出（弹窗里 emit 是同步的，拿不到成败）', () => {
+    // 两条进口都不许在弹窗里报成功：那时批量写入还没落盘，提示会说谎
     expect(dialogSrc).not.toContain('importHarSuccess');
-    const harHandler = appSrc.slice(
-      appSrc.indexOf('async function handleImportHarRules'),
-      appSrc.indexOf('\n}\n', appSrc.indexOf('async function handleImportHarRules')),
-    );
-    expect(harHandler).toContain("ElMessage.success(t('importHarSuccess'");
-    // 顺序要求：提示在写入之后；关窗只在 try 内（位于 catch 之前），失败时弹窗保持打开
-    expect(harHandler.indexOf('await batchAddRules')).toBeLessThan(
-      harHandler.indexOf("ElMessage.success(t('importHarSuccess'"),
-    );
-    expect(harHandler.indexOf('showImportExport.value = false')).toBeLessThan(harHandler.indexOf('catch'));
-    expect(harHandler).toContain('showAddFailedMessage');
+    expect(dialogSrc).not.toContain('importOpenApiSuccess');
+    const cut = (name: string) =>
+      appSrc.slice(
+        appSrc.indexOf(`async function ${name}`),
+        appSrc.indexOf('\n}\n', appSrc.indexOf(`async function ${name}`)),
+      );
+    const harHandler = cut('handleImportHarRules');
+    const openApiHandler = cut('handleImportOpenApiRules');
+    expect(harHandler).toContain("t('importHarSuccess'");
+    // 填了目标环境就说清「指到哪去了」：只报条数会让用户以为这批规则与他刚填的地址无关
+    expect(harHandler).toContain("t('importHarSuccessWithTarget'");
+    expect(openApiHandler).toContain("t('importOpenApiSuccessWithTarget'");
+    // 读不出的来源也要在提示里点名：文档写了 4 个 server 却只出 2 条而不说，就是少了一件事
+    expect(openApiHandler).toContain("t('importOpenApiSkipped'");
+    // 两个 handler 都必须走那一份共用写入路径——「提示在写入之后、失败不关窗」只在那里能钉一次
+    expect(harHandler).toContain('await addGeneratedRules(');
+    expect(openApiHandler).toContain('await addGeneratedRules(');
+    const writer = cut('addGeneratedRules');
+    expect(writer.indexOf('await batchAddRules')).toBeLessThan(writer.indexOf('ElMessage.success('));
+    expect(writer.indexOf('showImportExport.value = false')).toBeLessThan(writer.indexOf('catch'));
+    expect(writer).toContain('showAddFailedMessage');
   });
 });
 

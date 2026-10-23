@@ -1707,7 +1707,8 @@ html.js.try-ready .try {
   margin: 14px 0 4px;
 }
 
-.try-presets button {
+.try-presets button,
+.try-fill {
   padding: 5px 11px;
   font: inherit;
   font-size: 13px;
@@ -1718,7 +1719,8 @@ html.js.try-ready .try {
   border-radius: 999px;
 }
 
-.try-presets button:hover {
+.try-presets button:hover,
+.try-fill:hover {
   background: var(--lp-primary-soft);
 }
 
@@ -1746,6 +1748,162 @@ html.js.try-ready .try {
   background: var(--lp-bg);
   border: 1px solid var(--lp-line-strong);
   border-radius: var(--lp-radius-sm);
+}
+
+/* 工具行与结论区共用一条小按钮语言：预设按钮是「换个例子看看」（浅底胶囊），
+   这里的两枚是「对这条规则做点什么」（白底 + 描边），形状一致、分量不同。 */
+.try-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.try-fill-status,
+.try-status {
+  font-size: 13px;
+  color: var(--lp-ink-soft);
+}
+
+.try-fill-status.is-failed,
+.try-status.is-failed {
+  color: var(--lp-warn);
+}
+
+/* 匹配模式是被脚本改写的，没有这一下闪亮，读者会以为自己刚才就填过。
+   只染描边与一圈柔光、不动尺寸；不写 fill，动画收尾后属性回到静止态。 */
+.try-field input.is-filled {
+  animation: try-fill-pulse 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes try-fill-pulse {
+  0% {
+    border-color: var(--lp-primary);
+    box-shadow: 0 0 0 3px var(--lp-primary-soft);
+  }
+
+  100% {
+    border-color: var(--lp-line-strong);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* 「带走这条规则」：只在预演真的说出一条能用的规则时由脚本摘掉 `hidden`。
+   显式 `display: grid` 会压过 UA 的 `[hidden]`，所以下面那一条必须留着。 */
+.try-take {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  background: var(--lp-primary-faint);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-sm);
+}
+
+.try-take[hidden] {
+  display: none;
+}
+
+.try-take-lede {
+  margin: 0;
+  font-size: 13.6px;
+  color: var(--lp-ink-soft);
+}
+
+.try-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.try-action {
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lp-primary-strong);
+  cursor: pointer;
+  background: var(--lp-bg);
+  border: 1px solid var(--lp-line-strong);
+  border-radius: 999px;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.try-action:hover {
+  background: var(--lp-primary-soft);
+  border-color: var(--lp-primary);
+}
+
+.try-action:active {
+  transform: translateY(1px);
+}
+
+/* 主按钮不用白字压 `--lp-primary`（#409eff 上白字只有 2.9:1）：
+   深主色配页面底色反过来是 5.9:1，与 `--lp-primary-strong` 其余几处用法同档。 */
+.try-action-primary {
+  color: var(--lp-bg);
+  background: var(--lp-primary-strong);
+  border-color: var(--lp-primary-strong);
+}
+
+.try-action-primary:hover {
+  color: var(--lp-bg);
+  background: var(--lp-primary-strong);
+  border-color: var(--lp-primary-strong);
+  box-shadow: 0 0 0 3px var(--lp-primary-soft);
+}
+
+/* 导入三步默认收起：它是拿到文件之后的下一步，在还没带走之前展开没有意义。
+   全局 `details` 那张白底卡片放进这一格里会与面板同级、像另一块内容，所以整块收平，
+   只留上方一条虚线把它和按钮隔开。 */
+.try-guide {
+  margin-top: 2px;
+  font-size: 13.4px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.try-guide[open] {
+  border: 0;
+  box-shadow: none;
+}
+
+.try-guide > summary {
+  min-height: 0;
+  padding: 10px 46px 10px 0;
+  font-size: 13.4px;
+  color: var(--lp-primary-strong);
+  border-top: 1px dashed var(--lp-line-strong);
+  border-radius: 0;
+}
+
+.try-guide ol {
+  padding: 0 0 0 20px;
+  margin: 4px 0 10px;
+  color: var(--lp-ink-soft);
+}
+
+.try-guide li + li {
+  margin-top: 6px;
+}
+
+.try-guide strong {
+  color: var(--lp-ink);
+}
+
+/* 全局 `details p` 带 18px 内边距（卡片里的答案要缩进）；这一格没有卡片边，
+   那段缩进会读成错位。 */
+.try-guide p {
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--lp-ink-faint);
 }
 
 /* 结论换档要看得出「刚刚那句话已经作废」：`data-try-state` 是脚本一次写定的，
@@ -3133,6 +3291,11 @@ html.js .tool-card:hover::before {
     animation: none;
   }
 
+  /* 「填好了」那一下闪亮是纯提示层：减弱动效下不留延迟，输入框直接落到已填好的静止态。 */
+  .try-field input.is-filled {
+    animation: none;
+  }
+
   /* 光扫与追光是纯装饰层，没有「慢一点」的意义，直接收掉比留着强。 */
   .btn-primary::after,
   html.js .feature-card::before,
@@ -3165,6 +3328,7 @@ html.js .tool-card:hover::before {
   summary,
   .copy-btn,
   .try-verdict,
+  .try-action,
   .btn-primary::after,
   html.js .feature-card::before,
   html.js .tool-card::before,
@@ -3172,6 +3336,11 @@ html.js .tool-card:hover::before {
   summary::before,
   summary::after {
     transition: none;
+  }
+
+  /* 按下的 1px 下沉也是位移：减弱档连它一起收，按钮只换底色。 */
+  .try-action:active {
+    transform: none;
   }
 
   html.js .reveal,

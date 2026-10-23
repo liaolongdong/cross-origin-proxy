@@ -67,6 +67,8 @@ export default [
         requestAnimationFrame: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        Blob: 'readonly',
+        URL: 'readonly',
       },
     },
   },

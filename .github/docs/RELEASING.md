@@ -41,7 +41,7 @@
       └─ 人在 Actions 里手动起跑（workflow_dispatch）—— §3 补跑 / 四档执行深度
       ├─ Validate release inputs  mode 只认四档白名单，非法值几秒内红
       ├─ Store preflight (offline) 离线判凭据形状（scripts/store-preflight.mjs，一个字节不出网）
-      ├─ Verify            复用 ⓪ 那份 .github/actions/verify（lint/style/format/typecheck/build:zip/test）
+      ├─ Verify            复用 ⓪ 那份 .github/actions/verify（lint/style/format/typecheck/build/test；build 单次产出 zip）
       ├─ Guard             tag 必须等于 package.json 的 version，否则终止
       ├─ GitHub Release    附 .output/*-chrome.zip，说明取 CHANGELOG 对应小节
       ├─ 清标签            把 release-please 的 `autorelease: pending` 换成 `tagged`（§2 末）
@@ -76,7 +76,7 @@
 
 ### 1.1 手动建商店条目并上传首个包
 
-1. `pnpm build:zip` → `.output/cross-origin-proxy-<version>-chrome.zip`。
+1. `pnpm build` → `.output/cross-origin-proxy-<version>-chrome.zip`（`pnpm build:zip` 是它的别名）。
 2. [Developer Dashboard](https://chrome.google.com/webstore/devconsole) → **New item** → 上传该 zip。
 3. 从条目编辑页 URL 取 Extension ID。它是 32 位字母串，且**只含 `a`–`p`**（不含 `q`–`z`），形如 `abcdefghijklmnopqrstuvwxyzabcdef`；复制时别带进空格或换行，它们是不可见的，但会让 Secrets 里的值一直鉴权失败。
 4. 按 `CHROMEWEBSTORE.md` §1–§5 填名称/摘要/详细描述/截图/权限理由/数据披露，**先不提审**——自动化从第二个版本开始接管，或者在本机配好凭据后用 §3 的手动补跑把首个版本也交出去。

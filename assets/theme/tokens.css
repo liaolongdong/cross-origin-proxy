@@ -90,6 +90,13 @@
   --cop-duration-base: 220ms;
   --cop-duration-slow: 320ms;
   --cop-duration-recolour: 280ms;
+
+  /* 骨架屏上那道来回扫的光。它不属于上面那把「离用户的手多近」的阶梯：那一档量的是「一次反馈
+     要多快落定」，而这一条是循环——循环的节拍按「看得出动、又不像指示灯那样催」定，
+     比最长那一档（320ms）慢四倍才读成「在忙」而不是「在闪」。收在这里而不是留在组件里，
+     是因为 `RuleTable` 与 `LogDrawer` 两处骨架共用它：同一次冷启动里两张屏各扫各的节奏，
+     正是这层令牌要避免的事。 */
+  --cop-duration-sheen: 1.4s;
   --cop-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --cop-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --cop-ease-exit: cubic-bezier(0.4, 0, 0.9, 1);
@@ -426,6 +433,19 @@
   from {
     opacity: 0;
     transform: translateY(6px);
+  }
+}
+
+/* 骨架屏的那道光：本底与高亮各按主题给（见 `--cop-primary-rgb` 那一族两处暗色档位），
+ * 所以关键帧只移动 `background-position`——`background-image` 由使用方自己写，
+ * 在这里写死等于替两个界面选同一种浓度。`background-size: 200%` 是使用侧的前提。 */
+@keyframes cop-skeleton-sheen {
+  from {
+    background-position: 150% 0;
+  }
+
+  to {
+    background-position: -50% 0;
   }
 }
 

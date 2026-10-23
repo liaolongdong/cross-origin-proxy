@@ -186,7 +186,13 @@ body .el-button {
 
 .dialog-footer {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: flex-end;
+}
+
+.dialog-footer .el-button + .el-button {
+  margin-left: 0;
 }
 
 /* 弹窗内容滚动容器（保留兼容）：滚动由 el-dialog__body 统一处理 */

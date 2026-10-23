@@ -1,5 +1,8 @@
 import type { ProxyConfig } from '@/utils/types';
 
+/** 仓库 Releases 页：顶栏版本徽标点开即看最新版本与构建产物 */
+export const GITHUB_RELEASES_PAGE_URL = 'https://github.com/liaolongdong/cross-origin-proxy/releases';
+
 // Storage keys
 export const STORAGE_KEYS = {
   PROXY_CONFIG: 'proxy_config',
@@ -11,6 +14,8 @@ export const STORAGE_KEYS = {
   AUTO_OFF_MINUTES: 'auto_off_minutes', // 代理自动关闭时长（分钟），0 表示不自动关闭
   VARIABLES: 'variables', // 凭据变量表（规则里以 {{名称}} 引用，真值只存这一处）
   CONFIG_HISTORY: 'config_history', // 配置恢复点（成套替换所换掉的那份整包配置，见 utils/storage.ts）
+  RECENT_TARGETS: 'recent_targets', // 最近用过的目标环境 origin（便利候选，不参与判定、不进任何导出）
+  SITE_STATE: 'site_proxy_state', // 站点维度的生效范围（见 utils/siteScope.ts）；不进任何导出
 } as const;
 
 // Theme modes
@@ -90,6 +95,16 @@ export const MAX_IMPORT_FILE_SIZE = 2 * 1024 * 1024;
  * 而 HAR 这条通道没有去重可言，用户无从核对少了哪些）。
  */
 export const MAX_HAR_IMPORT_ENTRIES = 5000;
+
+/**
+ * 单份 OpenAPI / Swagger 文档允许导出的**接口来源**条数上限
+ *
+ * 与 {@link MAX_HAR_IMPORT_ENTRIES} 同一族但量级小得多：HAR 数的是请求条目（一份抓包可以几千条），
+ * 这里数的是文档里折叠出来的 `servers` 来源——正常文档 1–5 条，几十条已经是异常文件。
+ * 取 50：既拦住「把不该是 servers 的东西当成 servers 读」，又远不到 `MAX_RULES=200` 的写入天花板，
+ * 所以越界只可能来自坏文件而不是用户真有几百个环境。超出部分**计数并跳过**，界面要把跳过几句说清。
+ */
+export const MAX_OPENAPI_ORIGINS = 50;
 
 // 规则默认值
 /**
@@ -241,6 +256,24 @@ export const CONFIG_SYNC_TAB_CACHE_SIZE = 200;
  * 每次代理请求整表读进内存，且它和配置一样不申请 `unlimitedStorage`。
  */
 export const MAX_VARIABLES = 50;
+/**
+ * 最近目标环境候选的上限
+ *
+ * 收这么紧是因为它只是便利：一个人同时在几个环境之间切换，两位数足够；而这份列表读回来
+ * 会直接渲染成下拉选项，无界列表在配置页首屏上是看得见的成本。
+ */
+export const MAX_RECENT_TARGETS = 8;
+
+// 站点维度生效范围
+/**
+ * 「停用/仅此站点」名单里最多记多少台主机
+ *
+ * 判据按**主机**记（不是 origin）——网络层那条通道的 initiator 条件只认域名、不认端口与协议，
+ * 两边用不同的键就会分叉（同一台站点上 `:3000` 关掉了、`:4000` 还开着，是本仓最贵的那类不一致）。
+ * 上限取 50：这是「我手头的环境」这种量级的清单，不是收藏夹；越界的新条目被丢弃并由写入方点名，
+ * 静默截断等于让界面说不清自己记了哪些。
+ */
+export const MAX_SITE_STATE_HOSTS = 50;
 /** 变量名长度上限，与 `VARIABLE_NAME_RE` 的 1+63 对齐 */
 export const MAX_VARIABLE_NAME_LENGTH = 64;
 /**
@@ -287,3 +320,24 @@ export const SCHEMA_VERSION = 2;
  * `tests/deleteUndo.test.ts` 按这个前提钉住两处用的是同一个常量。
  */
 export const DELETE_UNDO_WINDOW_MS = 5000;
+
+// ─── 行级过渡预算（components/options/RuleTable） ──────────────────────────────
+/**
+ * 「可见行集合变了」这一次重排，最多给多少行做行级过渡（FLIP 归位 + 新行错峰落位）
+ *
+ * 这不是审美阈值而是性能阈值：2026-09-25 满负载实测里，日志抽屉 500 行的「点击 → 首行出现」
+ * 要 3.7–4.9s（归因是组件实例数，不是过渡代码），同一份夹具 50 行只要 392ms。
+ * FLIP 那一遍是每行一次 `getBoundingClientRect()`（同步布局）加一次 `animate()`，
+ * 行数一上去就把「重排本来的一次代价」换成「几百次」，而筛选是用户一边打字一边触发的。
+ * 越过这条线就直接重排：内容照样立刻换对，只是不动。
+ */
+export const MAX_ANIMATED_ROWS = 60;
+/**
+ * 新行错峰落位的最大延迟（毫秒）
+ *
+ * 阶梯本身写在 `RuleTable.vue` 的 `:nth-child(n + k)` 里（60 / 120 / 180ms 三档），
+ * 这里只留「最高那一档」给 JS 侧算「类名什么时候摘掉」。两处必须是同一个数：
+ * 提前摘就是在动画中途把行抽回静止态，滞后摘则让下一次筛选复用上一批的类名。
+ * 由 `tests/rowMotion.test.ts` 按 CSS 里实际出现过的最大 `animation-delay` 对账。
+ */
+export const ROW_STAGGER_MAX_DELAY_MS = 180;

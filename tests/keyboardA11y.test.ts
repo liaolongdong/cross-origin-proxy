@@ -114,6 +114,8 @@ describe('[撤销入口] 删除提示里的「撤销」必须是原生可聚焦�
 
   it('提示的存续时长就是撤销窗口本身：分家就会出现看得见却点不动的入口', () => {
     expect(undoBlock).toContain('duration: DELETE_UNDO_WINDOW_MS');
-    expect(optionsSrc).toContain("import { MAX_RULES, DELETE_UNDO_WINDOW_MS } from '@/utils/constants'");
+    expect(optionsSrc).toContain(
+      "import { MAX_RULES, MAX_RECENT_TARGETS, DELETE_UNDO_WINDOW_MS } from '@/utils/constants'",
+    );
   });
 });

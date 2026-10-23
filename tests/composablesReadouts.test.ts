@@ -922,8 +922,10 @@ describe('几个读数旗标怎么被界面用（本环境测不到的那半）'
   it('顶栏：没有读到过配置时画「未知」与中性点，不画红色「已禁用」', () => {
     expect(headerSrc).toContain('statusKnown: boolean;');
     expect(headerSrc).toContain("'is-unknown': !statusKnown");
+    // 三档各一句话，未知排最前；这句住在 `statusText` computed 里，状态灯的 title、
+    // 开关那一行的文案与 `aria-label` 共用同一份，不再各拼一遍
     expect(headerSrc).toContain(
-      "!statusKnown ? t('statusUnknown') : proxyEnabled ? t('statusEnabled') : t('statusDisabled')",
+      "!props.statusKnown ? t('statusUnknown') : props.proxyEnabled ? t('statusEnabled') : t('statusDisabled')",
     );
     // 未知态必须有自己那条规则：只改文案、点仍是 `--el-color-danger`，等于仍在说「关着」
     expect(headerSrc).toContain('.status-dot.is-unknown');

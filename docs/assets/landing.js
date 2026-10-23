@@ -11,7 +11,8 @@
  * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`，点选链接后收起下拉
  *    （`<details>` 本身无 JS 也能开合）；
  * 5. 回顶 / 到底导轨（与第 7 项共用一份按帧合流的滚动读数通道，整页只挂一次监听）；
- * 6. 微信号一键复制（无 JS 时按钮不出现，号码本身是可选中的文本）；
+ * 6. 一键复制：微信号与预演面板共用同一条剪贴板路径（按钮文字不保证被播报，结果另写进
+ *    `role="status"` 区域，4 秒后收回）；无 JS 时按钮不出现，号码本身是可选中的文本；
  * 7. 页头下沿的滚动进度条，以及页头离顶后的投影（无 JS 时两者都不出现）；
  * 8. 首屏流程图的「数据包巡航」只在真正滚进视口后才放行（样式默认按住，循环动效不在没人看的地方跑）；
  * 9. 卡片的指针追光：把光斑坐标按帧写进 `--lp-x/--lp-y`（卡片外框按悬停缓存，不逐事件量），
@@ -19,6 +20,8 @@
  * 10. 重写预演：把界面上四项输入交给 `assets/preview-engine.js`（`utils/urlMatcher.ts` 与
  *     `utils/dnrRules.ts` 的手工副本），当场说出这一笔命中与否、走哪条通道、两通道各改写成了什么。
  *     判据与措辞各归其位——引擎只回理由码，句子全部住在 HTML 里，脚本只负责挑出对应的那句；
+ *     预演通过时再把这一笔折成可导入的配置（复制 / 下载），导出按钮只在 `buildConfig` 给出结果时出现；
+ *     另有一个「用测试地址填匹配模式」的派生按钮，取来源补 `/*` 并切回通配符；
  * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
@@ -371,17 +374,60 @@
       bottom.addEventListener('click', () => window.scrollTo({ top: root.scrollHeight, behavior: scrollBehavior() }));
   }
 
-  /* ─────────────── 6. 微信号一键复制 ─────────────── */
+  /* ─────────────── 6. 一键复制（微信号与预演面板共用） ─────────────── */
 
-  all('[data-copy]').forEach(btn => {
-    const text = btn.getAttribute('data-copy');
-    const okMsg = btn.getAttribute('data-copied') || 'Copied';
-    const errMsg = btn.getAttribute('data-copy-failed') || 'Copy failed';
-    const status = btn.parentElement ? btn.parentElement.querySelector('.copy-status') : null;
+  /**
+   * 兜底路径：非安全上下文与旧浏览器只有 execCommand 能写剪贴板，用完即删。
+   * @param {string} text 要写入的文本
+   * @returns {boolean} execCommand 是否报告成功
+   */
+  const legacyCopy = text => {
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.position = 'fixed';
+    box.style.top = '-40px';
+    box.style.opacity = '0';
+    document.body.appendChild(box);
+    box.select();
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      // 视口外的临时 textarea 被拒绝时按复制失败处理，交给下面的提示文案
+    }
+    box.remove();
+    return copied;
+  };
+
+  /**
+   * 把一段文本写进剪贴板，失败不抛。
+   * @param {string} text 要写入的文本
+   * @returns {Promise<boolean>} 是否真的写进去了
+   */
+  const copyText = async text => {
+    if (!text) return false;
+    let copied = false;
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch {
+        // 权限或焦点受限时 writeText 会 reject，落到下面的 execCommand 兜底
+      }
+    }
+    return copied || legacyCopy(text);
+  };
+
+  /**
+   * 在一块 `role="status"` 区域里播报一次结果，4 秒后收回。
+   * 按钮文字变化不一定会被辅助技术播报，这个区域会。
+   * @param {Element|null} status 播报区域
+   * @returns {(message: string, ok: boolean) => void} 播报函数
+   */
+  const statusReporter = status => {
     let timer = null;
-
-    /** 结果写在 `role="status"` 区域：按钮文字变化不一定会被辅助技术播报，这个区域会。 */
-    const report = (message, ok) => {
+    return (message, ok) => {
       if (status) {
         status.textContent = message;
         status.classList.toggle('is-failed', !ok);
@@ -392,39 +438,18 @@
         timer = null;
       }, 4000);
     };
+  };
 
-    /** 兜底路径：非安全上下文与旧浏览器只有 execCommand 能写剪贴板，用完即删。 */
-    const legacyCopy = () => {
-      const box = document.createElement('textarea');
-      box.value = text;
-      box.setAttribute('readonly', '');
-      box.style.position = 'fixed';
-      box.style.top = '-40px';
-      box.style.opacity = '0';
-      document.body.appendChild(box);
-      box.select();
-      let copied = false;
-      try {
-        copied = document.execCommand('copy');
-      } catch {
-        // 视口外的临时 textarea 被拒绝时按复制失败处理，交给下面的提示文案
-      }
-      box.remove();
-      return copied;
-    };
+  all('[data-copy]').forEach(btn => {
+    const text = btn.getAttribute('data-copy');
+    const okMsg = btn.getAttribute('data-copied') || 'Copied';
+    const errMsg = btn.getAttribute('data-copy-failed') || 'Copy failed';
+    const status = btn.parentElement ? btn.parentElement.querySelector('.copy-status') : null;
+    const report = statusReporter(status);
 
     btn.addEventListener('click', async () => {
       if (!text) return;
-      let copied = false;
-      if (navigator.clipboard && window.isSecureContext) {
-        try {
-          await navigator.clipboard.writeText(text);
-          copied = true;
-        } catch {
-          // 权限或焦点受限时 writeText 会 reject，落到下面的 execCommand 兜底
-        }
-      }
-      if (!copied) copied = legacyCopy();
+      const copied = await copyText(text);
       report(copied ? okMsg : errMsg, copied);
     });
   });
@@ -612,6 +637,17 @@
     const rowOf = name => tryBlock.querySelector(`[data-row="${name}"]`);
     const extRow = rowOf('ext');
     const netRow = rowOf('net');
+    const takeBox = tryBlock.querySelector('[data-try-take]');
+    const copyButton = tryBlock.querySelector('[data-try-copy]');
+    const downloadButton = tryBlock.querySelector('[data-try-download]');
+    const fillButton = tryBlock.querySelector('[data-try-fill]');
+    const reportTake = statusReporter(tryBlock.querySelector('[data-try-status]'));
+    const reportFill = statusReporter(tryBlock.querySelector('[data-try-fill-status]'));
+
+    /** 当前这份输入能导出的配置；`null` 时「带走」那一块整个不出现。 */
+    let currentConfig = null;
+
+    const fieldOf = key => fields.find(([name]) => name === key)?.[1] || null;
 
     /** 结论词写成 `data-*` 放在句子里，语言由 HTML 决定，脚本只挑属性名。 */
     const say = (el, key) => {
@@ -651,6 +687,11 @@
       codeList.forEach(span => {
         span.hidden = result.codes.indexOf(span.getAttribute('data-code')) === -1;
       });
+
+      /* 「带走」的闸门就是引擎自己的 `buildConfig`：没命中、模式被拒、网络层算不出可跳转地址，
+         它都回 `null`，这一块连同两个按钮一起消失——页面上不存在一条没预演过的配置。 */
+      currentConfig = engine.buildConfig({ ...input, matchType: input.matchType || 'wildcard' }, { now: Date.now() });
+      if (takeBox) takeBox.hidden = !currentConfig;
     };
 
     fields.forEach(([, el]) => {
@@ -668,6 +709,69 @@
         render();
       }),
     );
+
+    /* 「用测试地址填匹配模式」：派生判据在引擎里（`patternFromUrl`），这里只搬运结果。
+       派生出来的一定是「来源/*」，所以匹配类型一并切回通配符——留着正则只会让刚填好的模式
+       被当成一段正则去编译。失败时不改任何输入，只把原因写进状态区。 */
+    if (fillButton) {
+      fillButton.addEventListener('click', () => {
+        const urlField = fieldOf('url');
+        const derived = engine.patternFromUrl(urlField ? urlField.value : '');
+        if (!derived) {
+          reportFill(fillButton.getAttribute('data-fill-failed') || 'Fill in an address first', false);
+          return;
+        }
+        const typeField = fieldOf('matchType');
+        const patternField = fieldOf('pattern');
+        if (typeField) typeField.value = 'wildcard';
+        if (patternField) {
+          patternField.value = derived;
+          /* 一次性高亮：告诉读者「改的是这一格」，不循环、不位移。减弱动效下 CSS 已经把
+             `animation` 关掉，但 `animationend` 也就不会来——这时连类名和监听器都不挂，
+             省得每次点击积一个永远等不到事件的监听器。 */
+          if (!reduceMotionQuery.matches) {
+            patternField.classList.remove('is-filled');
+            void patternField.offsetWidth;
+            patternField.classList.add('is-filled');
+            patternField.addEventListener('animationend', () => patternField.classList.remove('is-filled'), {
+              once: true,
+            });
+          }
+        }
+        render();
+        reportFill(fillButton.getAttribute('data-filled') || 'Pattern filled', true);
+      });
+    }
+
+    if (copyButton) {
+      copyButton.addEventListener('click', async () => {
+        if (!currentConfig) return;
+        const copied = await copyText(JSON.stringify(currentConfig, null, 2));
+        reportTake(
+          copied
+            ? copyButton.getAttribute('data-copied') || 'Copied'
+            : copyButton.getAttribute('data-copy-failed') || 'Copy failed',
+          copied,
+        );
+      });
+    }
+
+    if (downloadButton) {
+      downloadButton.addEventListener('click', () => {
+        if (!currentConfig) return;
+        const blob = new Blob([JSON.stringify(currentConfig, null, 2)], { type: 'application/json' });
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = href;
+        link.download = downloadButton.getAttribute('data-filename') || 'cross-origin-proxy-rule.json';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        /* 立刻 revoke 会让部分浏览器来不及取走数据，交回事件循环再收。 */
+        setTimeout(() => URL.revokeObjectURL(href), 0);
+        reportTake(downloadButton.getAttribute('data-downloaded') || 'Downloaded', true);
+      });
+    }
 
     root.classList.add('try-ready');
     render();

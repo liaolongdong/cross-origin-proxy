@@ -60,6 +60,14 @@ export function truncateUrl(url: string, maxLen: number = 40): string {
 }
 
 /**
+ * 截断标记的开头那一段，产出方与判读方共用一份
+ *
+ * 判读侧（`utils/mockFromLog.ts`）要认出「这条正文落盘时被裁过」，硬编码两处字面量就是
+ * 让它们在下次改动里漂开——那正是「日志抽屉说它是完整响应、Mock 却交付半截 JSON」的形状。
+ */
+export const LOG_TRUNCATION_SUFFIX = '…[truncated, original ';
+
+/**
  * 截断待写入的日志正文，并在末尾标注原始长度。
  *
  * 标记是必须的：没有它，用户会把截断后的 JSON 当成完整载荷排查半天。
@@ -67,7 +75,12 @@ export function truncateUrl(url: string, maxLen: number = 40): string {
  */
 export function truncateForLog(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
-  return `${value.slice(0, maxChars)}\n…[truncated, original ${value.length} chars]`;
+  return `${value.slice(0, maxChars)}\n${LOG_TRUNCATION_SUFFIX}${value.length} chars]`;
+}
+
+/** 这条字符串是不是被 `truncateForLog` 裁过的 */
+export function isTruncatedForLog(value: string): boolean {
+  return value.includes(`\n${LOG_TRUNCATION_SUFFIX}`) && value.endsWith(' chars]');
 }
 
 /**

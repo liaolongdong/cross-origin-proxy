@@ -1,8 +1,9 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { MessageType } from '@/utils/types';
-import type { ProxyConfig } from '@/utils/types';
 import { CONTENT_SCRIPT_CHANNEL, PAGE_API_PROBE, PAGE_CORS_PROBE, CORS_SUSPECTS } from '@/utils/constants';
 import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
+import { rulesForSite } from '@/utils/siteScope';
+import type { ProxyConfig, SiteState } from '@/utils/types';
 import { summarizeApiOrigins } from '@/utils/pageApiOrigins';
 import { parseCorsSuspects, type CorsSuspect } from '@/utils/corsSuspects';
 import { normalizeProxyResponse } from '@/utils/proxyResponse';
@@ -42,6 +43,21 @@ const PAGE_IRRELEVANT_FIELDS = [
  * 导出仅为可测性（同 `messageRouter` 的 `isTrustedSender`）——桥接层跑在 ISOLATED world，
  * 这条纯函数是页面侧凭据不外泄的唯一出口。
  */
+/**
+ * 把后台广播的「整标签页配置」收成当前 frame 的那一份。
+ *
+ * `tabs.sendMessage` 一次抵达所有 frame，顶层 tab URL 不能替 iframe 回答站点范围问题。
+ * ISOLATED world 可以短暂持有 `siteState`，但 `toInterceptorConfig` 只把 enabled/rules 交给
+ * MAIN world，用户配过哪些主机不会因此进入页面可监听的 postMessage。
+ */
+function scopeConfigForFrame(config: ProxyConfig & { siteState?: SiteState }): ProxyConfig {
+  if (!config.siteState) return { enabled: config.enabled, rules: config.rules };
+  return {
+    enabled: config.enabled,
+    rules: rulesForSite(Array.isArray(config.rules) ? config.rules : [], config.siteState, window.location.hostname),
+  };
+}
+
 export function toInterceptorConfig(config: ProxyConfig): ProxyConfig {
   return {
     enabled: config.enabled,
@@ -216,7 +232,7 @@ export default defineContentScript({
     // 而预填一条通配符规则用不到它们，少给一份就少一份外泄面（本机内网地址同样敏感）。
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.type === MessageType.UPDATE_PROXY_CONFIG) {
-        postSyncRules(message.data as ProxyConfig);
+        postSyncRules(scopeConfigForFrame(message.data as ProxyConfig & { siteState?: SiteState }));
         sendResponse({ received: true });
         return;
       }

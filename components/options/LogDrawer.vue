@@ -225,9 +225,11 @@
            翻不开它。这里把表格自身变成一个焦点位：上下方向键移动高亮行、回车或空格展开——
            与点击共用同一个 `toggleLogDetail`，两条路看到的是同一件事，不存在「键盘版是另一套逻辑」。
            这些属性透传到 `.el-table` 根 div（EP 没有设 `inheritAttrs: false`），而裸 `<div>` 上的
-           `aria-label` 不会被念出来，所以同时给 `role="group"`。 -->
+           `aria-label` 不会被念出来，所以同时给 `role="group"`。
+           `v-loading` 只在**已经读到过一次**之后再盖：首屏那一次由空位上的骨架回答（见下面的 `#empty`），
+           两张叠在一起就是把「还没读到」画成「蒙了一层布的空白」。 -->
       <el-table
-        v-loading="loading"
+        v-loading="loading && logsEverRead"
         :data="windowedLogs"
         :row-class-name="rowClassName"
         row-key="id"
@@ -357,9 +359,19 @@
           </template>
         </el-table-column>
 
-        <!-- 空状态 -->
+        <!-- 空状态：首屏那一次往返还在路上时先画骨架，读完仍为空才说那三句话
+             （`logsEmptyText`，其中「从来没有读到过」那一档从此只在「还没读到就结束」时出现） -->
         <template #empty>
-          <div class="empty-state">
+          <TableSkeleton
+            v-if="firstReadPending"
+            :label="t('logsSkeletonA11y')"
+            :columns="SKELETON_COLUMNS"
+            :rows="SKELETON_ROW_COUNT"
+          />
+          <div
+            v-else
+            class="empty-state"
+          >
             <el-icon
               :size="48"
               :color="'var(--cop-text-color-placeholder)'"
@@ -396,6 +408,17 @@
                 <el-icon style="margin-right: 4px"><Plus /></el-icon>
                 {{ t('createRuleFromLog') }}
               </el-button>
+              <!-- 只在判据说这一笔能变成 Mock 时出现；不能的那些在面板下面说清是哪一档 -->
+              <el-button
+                v-if="mockDraft?.ok"
+                size="small"
+                type="warning"
+                plain
+                @click="handleCreateMockFromLog"
+              >
+                <el-icon style="margin-right: 4px"><Document /></el-icon>
+                {{ t('mockFromLogButton') }}
+              </el-button>
               <el-button
                 size="small"
                 type="primary"
@@ -413,6 +436,22 @@
               </el-button>
             </div>
           </div>
+
+          <!-- 「把这条响应存成 Mock」的三条边界，在点之前就先说；拒给的那一档点名为什么不能 -->
+          <ul
+            v-if="mockDraft?.ok"
+            class="log-detail-mock-notes"
+          >
+            <li>{{ t('mockFromLogQueryNote') }}</li>
+            <li>{{ t('mockFromLogScopeNote') }}</li>
+            <li>{{ t('mockFromLogBodyNote') }}</li>
+          </ul>
+          <p
+            v-else-if="mockRefuseText"
+            class="log-detail-mock-refuse"
+          >
+            {{ mockRefuseText }}
+          </p>
 
           <div class="log-detail-summary">
             <el-tag
@@ -556,7 +595,7 @@
 import { computed, ref, watch, nextTick, onUnmounted } from 'vue';
 import { Delete, Document, CopyDocument, Refresh, Close, Plus } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
-import type { RequestLogEntry, DnrHitStat } from '@/utils/types';
+import type { RequestLogEntry, DnrHitStat, ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
 import type { DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
@@ -567,7 +606,9 @@ import { REFRESH_INTERVAL_PRESETS } from '@/composables/useRequestLog';
 import type { SwStatsState } from '@/composables/useRequestLog';
 import { useRenderWindow } from '@/composables/useRenderWindow';
 import { resolveLogRowKey } from '@/utils/logRowNavigation';
+import { buildMockDraftFromLog } from '@/utils/mockFromLog';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
+import TableSkeleton from './TableSkeleton.vue';
 
 /**
  * 请求日志抽屉（由原 RequestLogPanel 标签页改造）
@@ -605,6 +646,8 @@ const emit = defineEmits<{
   refreshDnrStats: [];
   /** 基于某条日志快速创建规则（父组件预填充规则表单） */
   createRuleFromLog: [log: RequestLogEntry];
+  /** 把某条日志的响应存成 Mock 草稿（判据在 `utils/mockFromLog.ts`，父组件交给规则表单确认） */
+  createMockFromLog: [draft: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>];
 }>();
 
 const { t, locale } = useI18n();
@@ -669,6 +712,30 @@ const logsEmptyText = computed(() => {
   if (!props.logsEverRead) return t('statusUnknown');
   return t('noLogs');
 });
+
+/**
+ * 首屏那一次往返还在路上：空位上画骨架，不画那三句话
+ *
+ * 与 `RuleTable` 同一个判据（`loading && !everRead`）。这里换掉的是「未知」那一档——
+ * 它本来就在说「还没读到」，只是没有形状；骨架把同一句话说得不用猜。
+ * 读失败时 `loading` 落回 false，那一格立刻交还给 `logsReadFailed` 那句话，
+ * 所以「读不到」不会被画成「还在加载」。
+ */
+const firstReadPending = computed(() => props.loading && !props.logsEverRead);
+
+/** 骨架的七格，按这张表的列轮廓：时间 / 规则 / 方法 / 原 URL / 改写 URL / 状态 / 耗时 */
+const SKELETON_COLUMNS = [
+  { width: '96px' },
+  { width: '16%' },
+  { width: '52px' },
+  { flex: 1 },
+  { flex: 1 },
+  { width: '56px' },
+  { width: '44px' },
+];
+
+/** 骨架画几行：抽屉比规则表窄、又比它矮（上面还压着两格统计），六行够把「这是一张表」说清 */
+const SKELETON_ROW_COUNT = 6;
 
 /**
  * 「这一轮日志没读到、手里这几行是旧账」那一句
@@ -882,6 +949,39 @@ async function handleClear() {
 // ─── Log Detail Viewer ───────────────────────────────────────────────────────
 
 const selectedLog = ref<RequestLogEntry | null>(null);
+
+/**
+ * 这一笔能不能变成 Mock
+ *
+ * 判据不在这里，全仓只有 `utils/mockFromLog.ts` 一处；本组件只按 `reason` 挑一句文案。
+ * 少了这道收口，「为什么不给」就会在模板里长出第二份 `responseIsBase64` 判断——
+ * 那正是抽屉与日志写入两侧口径分叉的开始。
+ */
+const mockDraft = computed(() => (selectedLog.value ? buildMockDraftFromLog(selectedLog.value) : null));
+
+/**
+ * 拒给那一句的文案：五种理由各写一个字面量 key
+ *
+ * 刻意不用模板拼 key 的那种 `t()`：`tests/i18n.test.ts` 只扫字面量调用，拼出来的那个 key
+ * 打错了不会红，而表现是那句「为什么不能」画成裸键名。
+ */
+const mockRefuseText = computed(() => {
+  if (!mockDraft.value || mockDraft.value.ok) return '';
+  switch (mockDraft.value.reason) {
+    case 'noBody':
+      return t('mockFromLogNoBody');
+    case 'noStatus':
+      return t('mockFromLogNoStatus');
+    case 'base64':
+      return t('mockFromLogBase64');
+    case 'truncated':
+      return t('mockFromLogTruncated');
+    case 'badUrl':
+      return t('mockFromLogBadUrl');
+    default:
+      return '';
+  }
+});
 const detailTab = ref('request');
 
 /**
@@ -971,6 +1071,11 @@ function handleTableKeydown(event: KeyboardEvent) {
 function handleCreateRuleFromLog() {
   if (!selectedLog.value) return;
   emit('createRuleFromLog', selectedLog.value);
+}
+
+/** 交草稿给父组件的规则表单确认——不在这里写存储：派生 → 表单 → 保存是同一条既有路径 */
+function handleCreateMockFromLog() {
+  if (mockDraft.value?.ok) emit('createMockFromLog', mockDraft.value.draft);
 }
 
 function formatBody(body: string): string {
@@ -1287,7 +1392,28 @@ function copyAsCurl() {
 
 .log-detail-actions {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.log-detail-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.log-detail-mock-notes,
+.log-detail-mock-refuse {
+  padding: 8px 16px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cop-text-color-secondary);
+  background: var(--cop-bg-color-secondary);
+  border-bottom: 1px solid var(--cop-border-color, var(--el-border-color-lighter, #ebeef5));
+}
+
+.log-detail-mock-notes {
+  padding-left: 32px;
 }
 
 .log-detail-summary {

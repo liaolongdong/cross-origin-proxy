@@ -1,10 +1,18 @@
 import { findMatchingRule, matchRule, rewriteUrl, applyQueryOverrides, isRegexSafe } from '@/utils/urlMatcher';
 import { filterIncomingHeaders, isValidHeaderEntry, validateRuleHeaders } from '@/utils/headerValidation';
-import { configRules, getProxyConfig, addRequestLog, getRequestLogs, getVariables } from '@/utils/storage';
+import {
+  configRules,
+  getProxyConfig,
+  getSiteState,
+  addRequestLog,
+  getRequestLogs,
+  getVariables,
+} from '@/utils/storage';
 import { collectRuleVariableRefs, resolveVariableMap } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
 import { AUTO_OFF_ALARM } from '@/utils/constants';
 import { normalizeRuleTimings } from '@/utils/ruleValidation';
+import { siteAllows } from '@/utils/siteScope';
 import { logger } from '@/utils/logger';
 import type {
   ProxyStatus,
@@ -411,13 +419,14 @@ export async function handleProxyRequest(
   data: ProxyRequestPayload,
   requestKey?: string,
   onProxied?: () => void,
+  senderHost = '',
 ): Promise<ProxyResponsePayload> {
-  if (!requestKey) return runProxyRequest(data, undefined, onProxied);
+  if (!requestKey) return runProxyRequest(data, undefined, onProxied, senderHost);
 
   const controller = new AbortController();
   inFlightRequests.set(requestKey, controller);
   try {
-    return await runProxyRequest(data, controller.signal, onProxied);
+    return await runProxyRequest(data, controller.signal, onProxied, senderHost);
   } finally {
     inFlightRequests.delete(requestKey);
   }
@@ -427,9 +436,23 @@ async function runProxyRequest(
   data: ProxyRequestPayload,
   signal?: AbortSignal,
   onProxied?: () => void,
+  senderHost = '',
 ): Promise<ProxyResponsePayload> {
   const startTime = Date.now();
   const config = await getProxyConfig();
+
+  // 站点范围在这里再判一次，且 `senderHost` 来自 Chrome 写的 frame `sender.url`：桥接层拿到的那份
+  // 配置本应已经把这台站点摘掉，走到这一步说明要么是伪造请求、要么两边判据已经分叉。两种都不该代发。
+  if (siteAllows(await getSiteState(), senderHost) === false) {
+    return {
+      requestId: data.requestId,
+      status: 0,
+      statusText: 'Proxy Bypass',
+      headers: {},
+      body: 'Site excluded',
+      isBase64: false,
+    };
+  }
 
   if (!config.enabled) {
     return {

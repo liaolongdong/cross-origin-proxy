@@ -48,6 +48,7 @@
       :rules="filteredRules"
       :loading="ruleLoading"
       :has-any-rules="rules.length > 0"
+      :ever-read="configEverRead"
       :read-failed="configReadFailed"
       :highlight-rule-id="highlightRuleId"
       :search-text="searchText"
@@ -72,13 +73,17 @@
       v-model:visible="showRuleDialog"
       :rule="editingRule"
       :initial-data="templateInitialData"
+      :derived-draft="derivedDraft"
+      :target-suggestions="targetSuggestions"
       @save="handleSaveRule"
     />
     <ImportExportDialog
       v-model:visible="showImportExport"
+      :busy="generatingRules"
       @export="handleExport"
       @imported="handleImported"
       @import-har-rules="handleImportHarRules"
+      @import-open-api-rules="handleImportOpenApiRules"
       @import-curl="handleImportCurl"
     />
     <ProfilesDialog
@@ -124,6 +129,7 @@
       @update:refresh-interval="setRefreshInterval"
       @refresh-dnr-stats="fetchDnrStats"
       @create-rule-from-log="handleCreateRuleFromLog"
+      @create-mock-from-log="handleCreateMockFromLog"
     />
   </div>
 </template>
@@ -132,7 +138,9 @@
 import { ref, computed, watch, onMounted, onUnmounted, h, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { ImportResultStats, ProxyRule } from '@/utils/types';
-import { MAX_RULES, DELETE_UNDO_WINDOW_MS } from '@/utils/constants';
+import { MessageType } from '@/utils/types';
+import { MAX_RULES, MAX_RECENT_TARGETS, DELETE_UNDO_WINDOW_MS } from '@/utils/constants';
+import { distinctTargetOrigins, sanitizeRecentTargets } from '@/utils/recentTargets';
 import { useRuleManagement } from '@/composables/useRuleManagement';
 import { useDeleteUndo } from '@/composables/useDeleteUndo';
 import { useDnrSupport, useDnrSkipText } from '@/composables/useDnrSupport';
@@ -242,6 +250,8 @@ const { skipReasonText } = useDnrSkipText();
 // UI 状态
 const showRuleDialog = ref(false);
 const showImportExport = ref(false);
+/** 派生进口正在批量写规则：弹窗用它锁住所有生成按钮，避免连点把同一批写两遍 */
+const generatingRules = ref(false);
 const showProfiles = ref(false);
 const showSettings = ref(false);
 const showUrlTest = ref(false);
@@ -273,6 +283,38 @@ const editingRule = ref<ProxyRule | null>(null);
  */
 const savingRule = ref(false);
 const templateInitialData = ref<Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'> | null>(null);
+/**
+ * 这一次打开表单，是不是从「一条真实地址」派生出来的（cURL / 日志 / 本页接口）
+ *
+ * 同源提示只在这种草稿上出现：模板卡里有「注入认证头」那种**故意**自映射的形状，
+ * 给它也永久挂一句警告，教会用户的是忽略这句话，而不是换环境。
+ */
+const derivedDraft = ref(false);
+/** 最近用过的目标环境（存储层在规则落盘后记的，见 `utils/recentTargets.ts`） */
+const recentTargets = ref<string[]>([]);
+/**
+ * `目标URL` 那一格的下拉候选：最近用过的 ∪ 现有规则里换过环境的
+ *
+ * 两份都出自同一份判据（`distinctTargetOrigins`），所以不会出现「保存时记了、下拉里没有」。
+ * 读不到候选就是「没有候选」——它是便利列表，坏了不该在配置页冒出错误。
+ */
+const targetSuggestions = computed(() => {
+  const merged: string[] = [];
+  for (const origin of [...recentTargets.value, ...distinctTargetOrigins(rules.value)]) {
+    if (!merged.includes(origin)) merged.push(origin);
+  }
+  return merged.slice(0, MAX_RECENT_TARGETS);
+});
+
+/** 打开配置页时读一次候选；失败只记日志，界面上什么都不说 */
+async function loadRecentTargets(): Promise<void> {
+  try {
+    const result = (await chrome.runtime.sendMessage({ type: MessageType.GET_RECENT_TARGETS })) as unknown;
+    recentTargets.value = sanitizeRecentTargets(result);
+  } catch (error) {
+    logger.debug('Recent targets unavailable:', error);
+  }
+}
 const highlightRuleId = ref<string | null>(null);
 
 // 搜索与筛选（状态在容器层，SearchFilterBar 为受控组件）
@@ -373,6 +415,7 @@ onMounted(async () => {
 
   void fetchDnrStats();
   void fetchSwStats();
+  void loadRecentTargets();
 
   // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出，
   // #profiles 打开环境配置，#url-test 打开 URL 匹配预演，
@@ -486,19 +529,26 @@ async function handleToggleProxy(val: boolean) {
 function handleAddRule() {
   editingRule.value = null;
   templateInitialData.value = null;
+  derivedDraft.value = false;
   showRuleDialog.value = true;
 }
 
-/** 使用模板：预填充表单数据并以新增模式打开弹窗 */
-function handleUseTemplate(data: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
+/**
+ * 使用模板：预填充表单数据并以新增模式打开弹窗
+ * @param from `'derived'` 表示这份草稿是从一条真实地址派生出来的（cURL / 日志 / 本页接口），
+ *   表单上那句「还不改写」的提示只在这种草稿上出现；七张模板卡都不带这个标记。
+ */
+function handleUseTemplate(data: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>, from?: 'derived') {
   editingRule.value = null;
   templateInitialData.value = data;
+  derivedDraft.value = from === 'derived';
   showRuleDialog.value = true;
 }
 
 function handleEditRule(rule: ProxyRule) {
   editingRule.value = { ...rule };
   templateInitialData.value = null;
+  derivedDraft.value = false;
   showRuleDialog.value = true;
 }
 
@@ -800,16 +850,47 @@ async function handleImported(stats: ImportResultStats) {
   showImportExport.value = false;
 }
 
-async function handleImportHarRules(harRules: import('@/utils/types').ProxyRule[]) {
+/**
+ * 「一键生成规则」那几条进口（HAR / OpenAPI）共用的落地路径
+ *
+ * 收成一处不是为了少几行，而是这三件事必须**一起成立**：批量一次写入（逐条发消息会触发 N 次
+ * DNR 重建）、成功后才关窗、失败时保留输入并可重试。第二条进口出现时最容易犯的坏事是
+ * 「新那条忘了 catch，失败也把窗关了」——用户看到弹窗消失，既不知道导了几条，也得重新选一遍文件。
+ *
+ * @param message 由调用方拼好的成功文案（`t()` 的字面量 key 留在调用点，动态 key 会躲过 i18n 那条存在性守卫）
+ */
+async function addGeneratedRules(rules: ProxyRule[], message: string) {
+  generatingRules.value = true;
   try {
-    // 批量一次写入，避免逐条 sendMessage 触发 N 次 DNR 重建
-    await batchAddRules(harRules);
-    ElMessage.success(t('importHarSuccess', [harRules.length]));
+    await batchAddRules(rules);
+    ElMessage.success(message);
     showImportExport.value = false;
   } catch (error) {
-    // 失败时不关窗：达上限时用户删几条即可重试，不必重新选文件
     showAddFailedMessage(error);
+  } finally {
+    generatingRules.value = false;
   }
+}
+
+async function handleImportHarRules(harRules: ProxyRule[], targetOrigin: string, relocated: number, keptRaw: number) {
+  // 换了环境就说清「指到哪去了」、搬了凭据就点名搬了几个、装不下而保留原值的也要点名：
+  // 三者都是用户刚做的显式选择或它的代价，只报条数等于让人事后自己猜这句话包含了什么
+  const base = targetOrigin
+    ? t('importHarSuccessWithTarget', [harRules.length, targetOrigin])
+    : t('importHarSuccess', [harRules.length]);
+  const suffix =
+    (relocated > 0 ? t('importHarSuccessRelocated', [relocated]) : '') +
+    (keptRaw > 0 ? t('importHarSuccessKeptRaw', [keptRaw]) : '');
+  await addGeneratedRules(harRules, base + suffix);
+}
+
+/** OpenAPI / Swagger 导入：按文档声明的接口来源批量落规则，跳过的来源要点名 */
+async function handleImportOpenApiRules(openApiRules: ProxyRule[], targetOrigin: string, skipped: number) {
+  const base = targetOrigin
+    ? t('importOpenApiSuccessWithTarget', [openApiRules.length, targetOrigin])
+    : t('importOpenApiSuccess', [openApiRules.length]);
+  // 跳过的条数不能不说：文档写了 5 个 server、界面却只出 3 条，用户会以为工具漏了
+  await addGeneratedRules(openApiRules, base + (skipped > 0 ? t('importOpenApiSkipped', [skipped]) : ''));
 }
 
 /** cURL 导入：按请求 origin 预填通配符规则，头/体进入对应覆盖项，交由表单确认保存 */
@@ -832,7 +913,7 @@ function handleImportCurl(parsed: import('@/utils/curlParser').ParsedCurl) {
   if (parsed.body !== undefined) {
     prefill.requestBodyOverride = parsed.body;
   }
-  handleUseTemplate(prefill);
+  handleUseTemplate(prefill, 'derived');
 }
 
 /** 环境配置加载成功后：后台已整体替换规则集，刷新本地列表保持一致 */
@@ -876,7 +957,7 @@ function handleCreateRuleFromUrl(rawUrl: string): boolean {
     ElMessage.error(t('createRuleFromLogFailed'));
     return false;
   }
-  handleUseTemplate(buildOriginWildcardDraft(url, `${t('createRuleFromLogPrefix')} ${url.hostname}`));
+  handleUseTemplate(buildOriginWildcardDraft(url, `${t('createRuleFromLogPrefix')} ${url.hostname}`), 'derived');
   return true;
 }
 
@@ -885,6 +966,18 @@ function handleCreateRuleFromLog(log: import('@/utils/types').RequestLogEntry) {
   if (handleCreateRuleFromUrl(log.originalUrl)) {
     showLogs.value = false;
   }
+}
+
+/**
+ * 日志详情里「存为 Mock」的落点：交规则表单确认，与 cURL / 日志转规则同一条派生路径
+ *
+ * 刻意不带 `'derived'` 标记——Mock 草稿的目标是空的（它交付响应，不换后端），那句
+ * 「还不改写」对它既不是现状也不是待办。抽屉这里已经在按钮上判过一次可成性，
+ * 能点就说明判据放行，所以直接收起抽屉。
+ */
+function handleCreateMockFromLog(draft: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>) {
+  handleUseTemplate(draft);
+  showLogs.value = false;
 }
 
 async function handleReorder(fromId: string, toId: string) {

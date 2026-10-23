@@ -18,7 +18,9 @@ import fs from 'fs';
 import vm from 'vm';
 import { isPatternUsable, isSimpleRule, matchRule, rewriteUrl } from '@/utils/urlMatcher';
 import { buildRegexFilter, buildRegexSubstitution, isSubstitutionValid } from '@/utils/dnrRules';
-import type { ProxyRule } from '@/utils/types';
+import { isValidRuleShape } from '@/utils/ruleValidation';
+import { SCHEMA_VERSION } from '@/utils/constants';
+import type { ExportData, ProxyRule } from '@/utils/types';
 
 /** 匹配类型在 `ProxyRule` 里是内联字面量联合，预演的用例表按同一形状取。 */
 type MatchType = ProxyRule['matchType'];
@@ -37,13 +39,22 @@ interface PreviewResult {
 }
 
 /** 在沙箱里跑那份零依赖脚本，取它挂到 `window` 上的唯一出口。 */
-const loadEngine = (): { preview: (input: Record<string, string>) => PreviewResult } => {
+const loadEngine = (): {
+  preview: (input: Record<string, string>) => PreviewResult;
+  patternFromUrl: (input: string) => string | null;
+  buildConfig: (input: Record<string, string>, options?: { now?: number }) => ExportData | null;
+} => {
   const code = fs.readFileSync(path.join(ROOT, 'docs/assets/preview-engine.js'), 'utf-8');
-  const context = vm.createContext({ window: {} as Record<string, unknown> });
+  // `URL` 不是 ECMAScript 内建，vm 的新上下文不会自带它；浏览器里它一直在。
+  const context = vm.createContext({ window: {} as Record<string, unknown>, URL });
   vm.runInContext(code, context);
   const exported = (context.window as { copRewritePreview?: unknown }).copRewritePreview;
   if (!exported) throw new Error('preview-engine.js 没有挂出 window.copRewritePreview');
-  return exported as { preview: (input: Record<string, string>) => PreviewResult };
+  return exported as {
+    preview: (input: Record<string, string>) => PreviewResult;
+    patternFromUrl: (input: string) => string | null;
+    buildConfig: (input: Record<string, string>, options?: { now?: number }) => ExportData | null;
+  };
 };
 
 const engine = loadEngine();
@@ -68,6 +79,13 @@ interface Case {
 }
 
 const CASES: Case[] = [
+  {
+    name: '超长 wildcard URL：真实现与预演都拒绝扫描',
+    matchType: 'wildcard',
+    pattern: 'https://fat.example.com/*',
+    target: 'https://uat.example.com',
+    url: `https://fat.example.com/${'a'.repeat(9000)}`,
+  },
   {
     name: '通配符末尾 *，带非空尾部',
     matchType: 'wildcard',
@@ -445,6 +463,79 @@ describe('落地页重写预演引擎', () => {
   });
 
   /**
+   * 「带走这条规则」在页面上的那一半：控件、初始态、三步导入指引。
+   *
+   * 判据与生成物由上一组守着，这里守的是读者真能用到它——按钮得在面板之内（面板本身
+   * 只在 `html.js.try-ready` 下出现，挪出去就变成一块没有判据支撑的按钮）、出口区初始
+   * 必须是收起的（预演还没通过却先亮一个「复制」按钮，等于承诺一条并不成立的重写）、
+   * 指引里必须点名「合并」模式（导入对话框默认是替换，照默认点会把读者现有规则整包换掉）。
+   */
+  describe('带走一条规则：页面控件与导入指引', () => {
+    const PAGES = [
+      { file: 'docs/index.html', mergeWord: '合并', steps: '怎么把这条规则装进扩展（3 步）' },
+      { file: 'docs/en.html', mergeWord: 'Merge', steps: 'How to import this rule (3 steps)' },
+    ];
+
+    /** 面板那一块：从 `<div class="try"` 到它后面第一个 callout 之前。 */
+    const tryBlock = (html: string): string => {
+      const start = html.indexOf('class="try"');
+      const end = html.indexOf('class="callout"', start);
+      expect(start, '找不到预演面板').toBeGreaterThan(-1);
+      expect(end, '找不到面板之后的那块正文').toBeGreaterThan(start);
+      return html.slice(start, end);
+    };
+
+    for (const { file, mergeWord, steps } of PAGES) {
+      const html = fs.readFileSync(path.join(ROOT, file), 'utf-8');
+      const block = tryBlock(html);
+
+      it(`${file}：填模式与带走规则的两组控件都在面板之内`, () => {
+        for (const attr of [
+          'data-try-fill',
+          'data-try-fill-status',
+          'data-try-take',
+          'data-try-copy',
+          'data-try-download',
+          'data-try-status',
+        ]) {
+          expect(block, `${file} 的面板里没有 ${attr}`).toContain(attr);
+        }
+        expect(block.match(/data-try-take/g), `${file} 的出口区出现多份`).toHaveLength(1);
+      });
+
+      it(`${file}：出口区初始收起，按钮文案与提示都来自本页语言`, () => {
+        // 预演通过之前不得出现——`hidden` 写死在 HTML 里，脚本只在算得出配置时摘掉它。
+        expect(block, '出口区没有初始 hidden，首屏会先亮出一枚没有判据支撑的按钮').toMatch(/data-try-take\s+hidden/);
+        for (const attr of ['data-copied', 'data-copy-failed', 'data-fill-failed', 'data-downloaded']) {
+          expect(block, `${file} 的按钮缺 ${attr}，失败或成功时会退回英文默认句`).toContain(attr);
+        }
+        expect(block, '下载文件名两页必须是同一个').toContain('data-filename="cross-origin-proxy-rule.json"');
+      });
+
+      it(`${file}：导入指引三步齐全并点名合并模式`, () => {
+        const guide = /<details class="try-guide">([\s\S]*?)<\/details>/.exec(block)?.[1] ?? '';
+        expect(guide, `${file} 找不到导入指引`).not.toBe('');
+        expect(guide, `${file} 的指引标题变了`).toContain(steps);
+        expect(guide.match(/<li>/g), `${file} 的指引不是三步`).toHaveLength(3);
+        expect(guide, `${file} 的指引没有点名合并模式，默认的替换会整包覆盖现有规则`).toContain(mergeWord);
+        expect(guide, `${file} 没有提醒替换会把总开关关掉`).toMatch(/替换|Replace/);
+      });
+    }
+
+    /**
+     * 装配脚本那一侧的承重句：出口区的可见性只由引擎的答案决定。
+     * 这两处一旦走样（比如改成只按 `matched` 判、或恒为可见），页面就会给出一条
+     * 装不进扩展、或会把网络层规则算错的配置，而浏览器里看不出任何异常。
+     */
+    it('装配脚本只在引擎给出配置时露出出口区，且复制仍留着 execCommand 兜底', () => {
+      const script = fs.readFileSync(path.join(ROOT, 'docs/assets/landing.js'), 'utf-8');
+      expect(script, '出口区的可见性不再跟着 buildConfig 的结果走').toMatch(/takeBox\.hidden\s*=\s*!currentConfig/);
+      expect(script, '复制丢了 execCommand 兜底，非安全上下文下一按就失败').toContain('execCommand');
+      expect(script, '填模式没有走引擎的派生判据').toContain('patternFromUrl');
+    });
+  });
+
+  /**
    * 首屏那格静态示例：三方可对上——面板自己的默认输入、首屏抄下来的答案、引擎算出的结果。
    *
    * 这一格的全部价值是「不点任何东西也能看到一个具体结果」，代价是它把答案抄成了正文：
@@ -521,6 +612,159 @@ describe('落地页重写预演引擎', () => {
       const zh = heroValues(fs.readFileSync(path.join(ROOT, 'docs/index.html'), 'utf-8'));
       const en = heroValues(fs.readFileSync(path.join(ROOT, 'docs/en.html'), 'utf-8'));
       expect(en, '示例地址是语言无关的数据，两页不许各写一套').toEqual(zh);
+    });
+  });
+
+  /**
+   * 「带走一条规则」有两个出口（复制 / 下载），它们共用的判据就在这里。
+   *
+   * 这一格最怕的是**导出成功、导入却装不上**：那份 JSON 会直接进入用户的扩展配置，
+   * 而落地页上没有任何运行时能发现它写错了。所以断言分三层——形态与真实导出文件同构、
+   * 规则能过导入侧的结构判据、以及真实现认它是一条会生效的规则。
+   */
+  describe('带走一条规则：模式派生与配置导出', () => {
+    const NOW = 1_700_000_000_000;
+
+    it('把测试地址折成「来源/*」，只认可代理的四种协议', () => {
+      const cases: Array<[string, string | null]> = [
+        ['https://fat.example.com/api/user?id=1#top', 'https://fat.example.com/*'],
+        ['https://fat.example.com:443/x', 'https://fat.example.com/*'],
+        ['http://localhost:5300/api', 'http://localhost:5300/*'],
+        ['wss://socket.example.com/ws', 'wss://socket.example.com/*'],
+        ['  https://fat.example.com/x  ', 'https://fat.example.com/*'],
+        ['https://user:secret@fat.example.com/x', 'https://fat.example.com/*'],
+        ['', null],
+        ['fat.example.com/api', null],
+        ['ftp://files.example.com/x', null],
+        ['data:text/plain,hello', null],
+      ];
+      for (const [input, expected] of cases) {
+        expect(engine.patternFromUrl(input), `输入 ${JSON.stringify(input)} 的派生结果变了`).toBe(expected);
+      }
+    });
+
+    /** 一条在面板里已经预演通过的输入。 */
+    const passing = {
+      matchType: 'wildcard',
+      pattern: 'https://fat-api.example.com/*',
+      target: 'https://uat-api.example.com',
+      url: 'https://fat-api.example.com/api/user/list',
+    };
+
+    it('导出的配置与真实导入格式同构，且规则能过导入的结构判据', () => {
+      const config = engine.buildConfig(passing, { now: NOW });
+      expect(config).not.toBeNull();
+      const roundTrip = JSON.parse(JSON.stringify(config)) as ExportData;
+      expect(roundTrip.schemaVersion).toBe(SCHEMA_VERSION);
+      expect(roundTrip.exportTime).toBe(NOW);
+      expect(roundTrip.config.enabled, '合并导入要沿用读者当前的总开关').toBe(false);
+      expect(roundTrip.config.rules).toHaveLength(1);
+
+      const [rule] = roundTrip.config.rules;
+      expect(isValidRuleShape(rule), '导出的规则过不了扩展的导入判据').toBe(true);
+      expect(rule.name).toBe('fat-api.example.com → uat-api.example.com');
+      expect(rule.enabled, '刚预演通过的规则，导入后不该是停用的').toBe(true);
+      expect(rule.matchType).toBe(passing.matchType);
+      expect(rule.matchPattern).toBe(passing.pattern);
+      expect(rule.targetUrl).toBe(passing.target);
+      expect(rule.priority).toBe(100);
+      expect(rule.createdAt).toBe(NOW);
+      expect(rule.updatedAt).toBe(NOW);
+
+      // 导出的是「一条改写规则」，不是一份带凭据的备份：预演面板没有这些输入，
+      // 生成物里也不该凭空出现任何一个。
+      for (const key of [
+        'headerOverrides',
+        'requestBodyOverride',
+        'responseOverrides',
+        'queryOverrides',
+        'mockResponse',
+        'sendCredentials',
+      ]) {
+        expect(rule, `生成物里出现了预演没有的 ${key}`).not.toHaveProperty(key);
+      }
+      expect(isSimpleRule(rule), '这条通配符规则应当仍然归网络层管').toBe(true);
+      expect(matchRule(passing.url, rule)).toBe(true);
+    });
+
+    it('空目标与 WebSocket 都是合法规则，照常导出', () => {
+      const empty = engine.buildConfig({ ...passing, target: '' }, { now: NOW });
+      expect(empty, '空目标是后台通道的纯代理规则，不该被当成导出失败').not.toBeNull();
+      expect(isValidRuleShape(empty!.config.rules[0])).toBe(true);
+      expect(isSimpleRule(empty!.config.rules[0]), '空目标必须走后台通道').toBe(false);
+
+      const ws = {
+        matchType: 'wildcard',
+        pattern: 'wss://socket.example.com/*',
+        target: 'wss://uat-socket.example.com',
+        url: 'wss://socket.example.com/live',
+      };
+      const wsConfig = engine.buildConfig(ws, { now: NOW });
+      expect(wsConfig, 'WebSocket 规则是长连接通道的唯一形态，不该被拒').not.toBeNull();
+      expect(isSimpleRule(wsConfig!.config.rules[0]), 'WebSocket 永远不走网络层').toBe(false);
+    });
+
+    it('导出目标地址会剥掉 userinfo、query 与 hash，不把粘贴进来的凭据带走', () => {
+      const config = engine.buildConfig(
+        { ...passing, target: 'https://user:pass@uat.example.com/api?token=abc#frag' },
+        { now: NOW },
+      );
+      expect(config).not.toBeNull();
+      expect(config!.config.rules[0].targetUrl).toBe('https://uat.example.com/api');
+    });
+
+    it('预演没通过就导不出任何东西', () => {
+      const cases: Array<[string, Record<string, string>]> = [
+        ['测试地址没有命中', { ...passing, url: 'https://other.example.com/api' }],
+        ['测试地址留空', { ...passing, url: '' }],
+        ['匹配模式是空白', { ...passing, pattern: '   ' }],
+        [
+          '正则被 ReDoS 判据拒绝',
+          {
+            matchType: 'regex',
+            pattern: '(a+)+',
+            target: 'https://uat.example.com',
+            url: 'https://fat.example.com/aa',
+          },
+        ],
+        [
+          '替换引用越界（网络层装不上）',
+          {
+            matchType: 'regex',
+            pattern: '^https://fat\\.example\\.com/(\\w+)$',
+            target: 'https://uat.example.com/$2',
+            url: 'https://fat.example.com/user',
+          },
+        ],
+        [
+          '换出来不是地址（网络层跳不动）',
+          {
+            matchType: 'prefix',
+            pattern: 'https://fat.example.com/',
+            target: 'uat.example.com',
+            url: 'https://fat.example.com/user',
+          },
+        ],
+      ];
+      for (const [name, input] of cases) {
+        expect(engine.buildConfig(input, { now: NOW }), `${name}时不该给出可导入的配置`).toBeNull();
+      }
+    });
+
+    it('正则模式导出的规则仍然按正则命中', () => {
+      const input = {
+        matchType: 'regex',
+        pattern: '^https://fat\\.example\\.com/(\\w+)$',
+        target: 'https://uat.example.com/$1',
+        url: 'https://fat.example.com/user',
+      };
+      const config = engine.buildConfig(input, { now: NOW });
+      expect(config).not.toBeNull();
+      const [rule] = config!.config.rules;
+      expect(isValidRuleShape(rule)).toBe(true);
+      expect(matchRule(input.url, rule)).toBe(true);
+      // 正则整条替换之后两通道答案本就不同——导出的是规则本身，不抹平这件事。
+      expect(engine.preview(input).netUrl).toBe('https://uat.example.com/user');
     });
   });
 });

@@ -330,6 +330,9 @@ const extraActions = computed(() => {
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color-light);
   border-radius: 8px;
+
+  /* 命中与未命中是两个分支，切换即重挂，所以这句只在「结论换了」时出现，逐字改输入不会一闪一闪 */
+  animation: cop-rise-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
 .result-miss .result-desc {

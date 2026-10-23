@@ -6,12 +6,27 @@
       name="panel-swap"
       mode="out-in"
     >
+      <!-- 首轮读取还在路上。这一格的存在只为一件事：**不再替用户下结论**。
+           在它之前，打开配置页那一瞬间画的是空态引导卡——那时 `rules` 还是空数组、
+           也没有读取失败，而用户手上完全可能有三十条规则，那张卡正邀请他「新增」或
+           「重新导入」本来就在的东西。骨架说的就是眼前这一件事实：还没读到。
+           它也不会一直挂着：`fetchConfig` 的 `finally` 让 `loading` 在失败时同样落回 false，
+           而 `configEverRead` 只在采纳成功时置真，于是「第一次读就失败」立刻换成下面那一格——
+           「读不到」不许画成「还在加载」，与本仓「读不到 ≠ 没有」同一条规矩的两个方向。 -->
+      <TableSkeleton
+        v-if="firstReadPending"
+        key="table-skeleton"
+        :label="t('rulesSkeletonA11y')"
+        :columns="SKELETON_COLUMNS"
+        :rows="SKELETON_ROW_COUNT"
+      />
+
       <!-- 读取失败：排在空态引导**之前**。首轮 `GET_PROXY_CONFIG` 失败时 `rules` 本来就是空的，
            若不先问这一句，用户看到的就是一张「新增规则 / 导入配置」的引导卡——可他可能本来有
            三十条，于是这张卡主动邀请他去重复创建或重新导入。口径与同页 DNR 那一格一致：
            「不确定」绝不画成「没有」。 -->
       <div
-        v-if="rules.length === 0 && readFailed"
+        v-else-if="rules.length === 0 && readFailed"
         key="read-failed"
         class="read-failed"
       >
@@ -92,7 +107,7 @@
         <el-table-column
           prop="name"
           :label="t('colName')"
-          min-width="120"
+          :min-width="narrowCols ? 100 : compactCols ? 140 : 120"
         >
           <template #default="{ row }">
             <span class="rule-name-cell">
@@ -199,7 +214,7 @@
         <el-table-column
           prop="matchPattern"
           :label="t('colMatchPattern')"
-          min-width="200"
+          :min-width="narrowCols ? 160 : compactCols ? 190 : 200"
         >
           <template #default="{ row }">
             <HighlightText
@@ -210,6 +225,7 @@
           </template>
         </el-table-column>
         <el-table-column
+          v-if="!compactCols"
           prop="matchType"
           :label="t('colMatchType')"
           width="100"
@@ -227,7 +243,7 @@
         <el-table-column
           prop="targetUrl"
           :label="t('colTargetUrl')"
-          min-width="200"
+          :min-width="narrowCols ? 160 : compactCols ? 190 : 200"
         >
           <template #default="{ row }">
             <HighlightText
@@ -238,12 +254,14 @@
           </template>
         </el-table-column>
         <el-table-column
+          v-if="!narrowCols"
           prop="priority"
           :label="t('colPriority')"
           width="80"
           align="center"
         />
         <el-table-column
+          v-if="!narrowCols"
           :label="t('hitCountLabel')"
           width="96"
           align="center"
@@ -307,10 +325,10 @@
         </el-table-column>
         <el-table-column
           :label="t('colActions')"
-          width="140"
+          :width="narrowCols ? 120 : 140"
           align="center"
           header-align="center"
-          fixed="right"
+          :fixed="narrowCols ? false : 'right'"
         >
           <template #default="{ row }">
             <div class="row-actions">
@@ -366,19 +384,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
 import type { TableInstance } from 'element-plus';
 import type { DnrSkipReason } from '@/utils/dnrSupport';
 import type { RuleHitStats } from '@/utils/ruleStats';
 import { isDnrCountReadable, type DnrSampleState } from '@/utils/dnrSample';
+import { ROW_STAGGER_MAX_DELAY_MS } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
 import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
+import type { FlipRect } from '@/utils/transitions';
 import { applyFlip, motionTokenToMs, prefersReducedMotion, readMotionToken, readRects } from '@/utils/transitions';
+import { flipFirstRect, freshRowIds, isSameRowSet, rowMotionAffordable, type RowPosition } from '@/utils/rowMotion';
 import EmptyGuide from './EmptyGuide.vue';
 import HighlightText from './HighlightText.vue';
+import TableSkeleton from './TableSkeleton.vue';
 
 /**
  * 规则表格（白色圆角卡片容器）
@@ -391,6 +413,14 @@ const props = defineProps<{
   rules: ProxyRule[];
   loading: boolean;
   hasAnyRules: boolean;
+  /**
+   * 这一次打开页面有没有成功采纳过至少一份配置读数（规则为空也算读到过）
+   *
+   * 骨架屏的一半判据。没有它，「刷新时 `loading` 又置真」会把一张有三十行的表格换成骨架——
+   * 而那一次用户是**看着**它变空的。与 `configReadFailed` 分着说两件事：这里管「还没读到」，
+   * 那边管「读了但没读到东西」。
+   */
+  everRead: boolean;
   /**
    * 上一次「读存储」失败（回包形状不对或消息抛错）
    *
@@ -428,6 +458,20 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const { skipReasonLines } = useDnrSkipText();
+
+/**
+ * 骨架屏画几行
+ *
+ * 与真实行数无关（此刻手上根本没有行数），取的是一个「不至于让人以为表是空的、
+ * 又不会在读完换成 3 行时往下跳一大截」的中间值。
+ */
+const SKELETON_ROW_COUNT = 5;
+
+/** 骨架的五格：勾选框 + 拖拽把手那一列的宽度、名字、匹配模式、目标、操作按钮 */
+const SKELETON_COLUMNS = [{ width: '60px' }, { width: '22%' }, { flex: 1 }, { flex: 1.4 }, { width: '76px' }];
+
+/** 首轮读取还在路上：只在这一段画骨架，读到一次之后就再也不画（见 props.everRead 的注释） */
+const firstReadPending = computed(() => props.loading && !props.everRead);
 
 /**
  * 命中列的两枚读数（分通道，**不相加**：网络层是近 5 分钟滚动窗口，扩展通道是自
@@ -494,6 +538,37 @@ function clearSelection(): void {
 defineExpose({ clearSelection });
 
 /**
+ * 窄屏列收口
+ *
+ * 十列合计 1100px，加上两侧 32px 外边距、卡片 8px 内边距与滚动条，视口窄于约 1200px 时
+ * 表格就开始横向滚动；而操作列 `fixed="right"` 会浮在内容上，正好盖住状态开关——看起来
+ * 像「开关点不动」。两档收：≤1200 收起匹配方式（模式文本本身已经说明了类型），省下的宽度
+ * 让给名称列（140px），长名称不在中途折行；≤1100 再收起优先级与命中数、收窄三列的最小宽度，
+ * 并把操作列改回普通列。拖拽把手始终保留：它是调整列表顺序唯一的直接入口，收起它等于在
+ * 窄窗口里拿走一个功能。
+ */
+const compactCols = ref(false);
+const narrowCols = ref(false);
+let compactMql: MediaQueryList | null = null;
+let narrowMql: MediaQueryList | null = null;
+
+/** 两档断点与列宽是同一组数，改一档要连 `syncResponsiveCols` 与列上的绑定一起看 */
+function syncResponsiveCols(): void {
+  compactCols.value = compactMql?.matches ?? false;
+  narrowCols.value = narrowMql?.matches ?? false;
+  // 列是 `v-if` 增删的，布局要等这一轮渲染落地再算，否则固定列还停在旧宽度上
+  void nextTick(() => tableRef.value?.doLayout());
+}
+
+onMounted(() => {
+  compactMql = window.matchMedia('(max-width: 1200px)');
+  narrowMql = window.matchMedia('(max-width: 1100px)');
+  compactMql.addEventListener('change', syncResponsiveCols);
+  narrowMql.addEventListener('change', syncResponsiveCols);
+  syncResponsiveCols();
+});
+
+/**
  * 「筛选无结果」时 `v-else` 会把整个表格卸载，存活在表格内部的保留勾选随之丢失，
  * 而父组件还拿着上一份选中项。表格分支只在 `rules.length > 0` 时存在，故直接监听
  * 这个渲染条件：翻转成「不渲染」后补发一次空选择，避免计数与真实勾选分叉。
@@ -509,6 +584,15 @@ watch(
 
 onBeforeUnmount(() => {
   emit('selectionChange', []);
+  // 错峰落位那一批的摘类名定时器：组件都要走了，没必要再让它响一次（回调里改的 ref 已经没人读）
+  if (settleTimer) {
+    clearTimeout(settleTimer);
+    settleTimer = null;
+  }
+  compactMql?.removeEventListener('change', syncResponsiveCols);
+  narrowMql?.removeEventListener('change', syncResponsiveCols);
+  compactMql = null;
+  narrowMql = null;
 });
 
 /** 该规则是否会被 DNR 同步跳过（返回原因，undefined 表示可正常应用） */
@@ -608,9 +692,7 @@ function onTableDrop(e: DragEvent) {
 
 /** 同一批行换了顺序＝刚才那次拖拽落位；行数或行集变了就作废那份位置 */
 function isPureReorder(nextIds: string[]): boolean {
-  if (!pendingFlipIds.length || nextIds.length !== pendingFlipIds.length) return false;
-  const sorted = [...nextIds].sort().join('\u0000');
-  return sorted === [...pendingFlipIds].sort().join('\u0000');
+  return isSameRowSet(pendingFlipIds, nextIds);
 }
 
 watch(
@@ -623,6 +705,96 @@ watch(
     void nextTick().then(() =>
       applyFlip(rects, motionTokenToMs('--cop-duration-slow', 320), readMotionToken('--cop-ease-spring', 'ease-out')),
     );
+  },
+);
+
+/**
+ * 筛选一改的行级过渡：留在屏幕上的行归位滑过去，新出现的行错峰落位
+ *
+ * 用户是在搜索框里边打字边看的（那一份防抖是 200ms），每一次落定都算一次「重排」。
+ * 此前它是硬切：三十条里筛出四条，那四条瞬间从原来的位次跳到新位次，用户分不清
+ * 「这几条还在，只是排前面了」和「列表被换成另一批了」——而行级过渡说的正是前者。
+ *
+ * 三条让路的规矩都写在 `utils/rowMotion.ts`，那边按「输入 → 答案」单测：
+ * 同一批行换了顺序（拖拽落位，上面那份 FLIP 已经在放，重复放会把起点算到中间态上）、
+ * 上一屏或这一屏空着（表格整块被骨架 / 空态 / 无匹配接替，`panel-swap` 那次交接已经说过话）、
+ * 任一侧行数越过 `MAX_ANIMATED_ROWS`（性能账，见常量的注释）。
+ *
+ * 时机是这块唯一承重的地方，而且它是真机量出来的（`.test-tmp/probe/skeleton-rows-live.cjs`）：
+ * `watch` 默认在重渲染**之前**跑，那一刻 `props.rules` 已经是新的、DOM 还是上一版——所以 First
+ * 就在这一刻现量，不跨帧存矩形。第一版实现是「每次渲染落地后把位置记下来」，看着更省，
+ * 实际会在**表格刚出现的那一次**丢掉整份快照：外层 `panel-swap` 用的是 `mode="out-in"`，
+ * 新表格要等旧的退完（90ms）才插进 DOM，那一次的 `nextTick` 里一行都量不到，
+ * 于是「表格出现后第一次筛选」永远不动——正是量出来那个红。
+ * 现在只剩 `renderedIds` 这一份轻量的「屏幕上现在是哪些行」，配上数量核对（对不上就不动，
+ * 宁可少一次动画也不画一次假移动）。换算细节见 `flipFirstRect`。
+ */
+/** 此刻渲染在屏幕上的那批行 id，与 `visibleRowElements()` 同序（`row-key="id"` 让同一个 id 一直是同一个 `<tr>`） */
+let renderedIds: string[] = [];
+
+/** 这一批行是刚出现的（错峰落位的类名），动画放完就摘 */
+const settlingIds = ref<Set<string>>(new Set());
+
+/** 摘类名那一拍的定时器：卸载时若还挂着必须掐掉 */
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.rules.map(rule => rule.id).join('\u0000'),
+  async key => {
+    const ids = key === '' ? [] : key.split('\u0000');
+    const prevIds = renderedIds;
+    renderedIds = ids;
+    const moved = rowMotionAffordable(prevIds.length, ids.length) && !isSameRowSet(prevIds, ids);
+    // 旧位置只能在这一刻量（DOM 还是上一版），而且只在「数量对得上」时才认：
+    // 面板交接那一帧 DOM 里一行都没有，或中途已经又变过一次，这份 id 就不代表这批元素
+    const beforeNodes = moved ? visibleRowElements() : [];
+    const first = new Map<string, RowPosition>();
+    if (moved && beforeNodes.length === prevIds.length) {
+      prevIds.forEach((id, index) => {
+        const el = beforeNodes[index];
+        first.set(id, { left: el.offsetLeft, top: el.offsetTop });
+      });
+    }
+    const fresh = moved ? freshRowIds(prevIds, ids) : [];
+    // 每一次集合变化都要重新发这份名单，**包括没有新行的那一次**：只在新行出现时写、靠定时器收，
+    // 就会在「筛到空 → 表格被无匹配面板接替 → 400ms 内又筛回原来那三条」这一串里把上一批的类名
+    // 盖到刚重建的元素上（`panel-swap` 那次交接之上再叠一次行级上浮，然后被那只旧定时器中途掐掉）。
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
+    settlingIds.value = new Set(fresh);
+    if (fresh.length > 0) {
+      // 摘早了就是动画中途把行抽回静止态，摘晚了就是上面那一串。时长与错峰阶梯的最高一档都在 CSS 里，
+      // 这里按同源的两个值等：base 档时长 + 阶梯顶档延迟。
+      settleTimer = setTimeout(
+        () => {
+          settlingIds.value = new Set();
+          settleTimer = null;
+        },
+        motionTokenToMs('--cop-duration-base', 220) + ROW_STAGGER_MAX_DELAY_MS,
+      );
+    }
+    if (first.size === 0) return;
+    await nextTick();
+    // 搜索框是边打字边触发的（那份防抖 200ms），两轮之间完全可能插进第三轮。
+    // DOM 已经不属于这一次 key 就整包作废——作废一次动画只是少一次动，拿错版的位置放一次 FLIP
+    // 是画出一次假移动（与 `useDnrSupport` 那条「过期轮次整包作废」同一条取舍）。
+    if (props.rules.map(rule => rule.id).join('\u0000') !== key) return;
+    const nodes = visibleRowElements();
+    if (nodes.length !== ids.length) return;
+    const rects = new Map<HTMLElement, FlipRect>();
+    ids.forEach((id, index) => {
+      const before = first.get(id);
+      const el = nodes[index];
+      // 新出现的行归 `row-fresh` 那一下管，两批绝不重叠——重叠就是同一行同时收到两种动画
+      if (!before) return;
+      const now = { left: el.offsetLeft, top: el.offsetTop };
+      if (before.top === now.top && before.left === now.left) return;
+      const viewport = el.getBoundingClientRect();
+      rects.set(el, flipFirstRect(before, now, { left: viewport.left, top: viewport.top }));
+    });
+    applyFlip(rects, motionTokenToMs('--cop-duration-slow', 320), readMotionToken('--cop-ease-spring', 'ease-out'));
   },
 );
 
@@ -681,6 +853,8 @@ function rowClassName({ row }: { row: ProxyRule }): string {
   if (leavingIds.value.has(row.id)) return 'row-leaving';
   if (props.highlightRuleId && row.id === props.highlightRuleId) return 'row-entering';
   if (dragOverId.value && row.id === dragOverId.value) return 'row-drag-over';
+  // 排在最后：这一行同时是「刚保存的那一条」时，那一下绿边加下落说的是更具体的一件事
+  if (settlingIds.value.has(row.id)) return 'row-fresh';
   return '';
 }
 
@@ -850,6 +1024,32 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   100% {
     box-shadow: inset 0 0 0 60px rgb(var(--cop-primary-rgb) / 0%);
   }
+}
+
+/* 筛选后新出现的行：错峰落位。留在屏幕上的那批由 JS 的 FLIP 归位，这一批是「刚被筛回来」，
+   两种经历不该画成同一种动。
+   每一级写成 `n + k`（「第 k 行起」）而不是逐个点名：逐个点名今天完全正确，将来这一屏多出一行
+   没有规则命中它，延迟就回落到 0、跟第一行同时进场，阶梯走到末尾倒着跳一次且无任何报错
+   （同 `EmptyGuide.vue` 那叠卡的口径）。最高一档刻意停在 180ms 并且后面不再加档：
+   `MAX_ANIMATED_ROWS` 允许 60 行，真按逐行 +60ms 排下去，最后一行要等 3.5 秒开外才动。
+   填充只写 `backwards`（延迟期间停在起始帧）——写 `both` 会把 `transform` 冻在末帧，
+   而动画在级联里排在 `:hover` 之前，那一行的悬浮抬升当场失效。
+   这里的 180ms 与 JS 侧摘类名的 `ROW_STAGGER_MAX_DELAY_MS` 必须是同一个数，
+   由 `tests/rowMotion.test.ts` 按 CSS 里实际出现的最大值对账。 */
+.rule-table :deep(.row-fresh) {
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter) backwards;
+}
+
+.rule-table :deep(.row-fresh:nth-child(n + 3)) {
+  animation-delay: 60ms;
+}
+
+.rule-table :deep(.row-fresh:nth-child(n + 5)) {
+  animation-delay: 120ms;
+}
+
+.rule-table :deep(.row-fresh:nth-child(n + 7)) {
+  animation-delay: 180ms;
 }
 
 /* 删除行：右滑出屏淡出。时长与 `leaveDurationMs()` 同源（令牌 slow 档），

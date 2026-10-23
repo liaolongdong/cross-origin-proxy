@@ -1,6 +1,7 @@
 import type { RequestLogEntry, HarEntry, ProxyRule } from '@/utils/types';
 import { sanitizeImportedHeaderMap } from '@/utils/headerValidation';
 import { isProxyableProtocol } from '@/utils/ruleValidation';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import { generateId } from '@/utils/generateId';
 import { MAX_HAR_IMPORT_ENTRIES } from '@/utils/constants';
 
@@ -21,6 +22,9 @@ import { MAX_HAR_IMPORT_ENTRIES } from '@/utils/constants';
 export function harEntriesOverLimit(entries: readonly unknown[]): { actual: number; limit: number } | null {
   return entries.length > MAX_HAR_IMPORT_ENTRIES ? { actual: entries.length, limit: MAX_HAR_IMPORT_ENTRIES } : null;
 }
+
+/** HAR 里会被当成凭据带上目标环境的三枚头名；搬家侧与生成侧必须共用这一份清单 */
+export const HAR_CREDENTIAL_HEADER_NAMES = new Set(['authorization', 'cookie', 'x-api-key']);
 
 /**
  * 将请求日志转换为 HAR 格式（HTTP Archive）
@@ -79,6 +83,23 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
 }
 
 /**
+ * 从 HAR 条目里收集去重后的 http(s) 来源，供导入前的多来源确认使用
+ *
+ * 只数 http(s)：`apiOriginOf` 就是「什么算一个环境」的那份判据，而目标环境按它定义——
+ * 长连接条目压根不会被它搬走（见 `harEntriesToRules` 里 `isWebSocket` 那一支），
+ * 把它算进确认文案等于问了一件不发生的事。
+ */
+export function distinctHarOrigins(entries: readonly HarEntry[]): string[] {
+  const origins = new Set<string>();
+  for (const entry of entries) {
+    const url = entry?.request?.url;
+    const origin = typeof url === 'string' ? apiOriginOf(url) : '';
+    if (origin) origins.add(origin);
+  }
+  return [...origins];
+}
+
+/**
  * 从 HAR 条目生成代理规则
  *
  * 提取请求 URL 的 origin 作为 matchPattern（wildcard），提取请求头里的凭据作为 `headerOverrides` 参考。
@@ -87,11 +108,23 @@ function logToHarEntry(log: RequestLogEntry): HarEntry {
  * - 协议：只收本扩展能代理的协议（{@link isProxyableProtocol}，口径与 `utils/curlParser.ts` 同源）。
  * - 条目形状：`headers` 不是数组、头项缺 `name`/`value` 都只跳过那一条头，不让它连带作废整条规则。
  * 去重登记因此必须挨着 `rules.push`——早一步登记就会让一条坏条目吃掉同 origin 后面那条好规则。
+ *
+ * @param entries HAR 条目（不可信输入）
+ * @param opts `targetOrigin` 把这一批 origin 规则**一并指过去**（抓包→可用配置的那一步）；
+ *   它为空或解析不出 http(s) origin 时当作没填，产出与本函数历史形状逐字节相同（`enabled: false`、
+ *   目标等于源站）。`enabled` 绑在合法目标之后，没有换环境就不凭空打开这批规则。
  */
-export function harEntriesToRules(entries: HarEntry[]): ProxyRule[] {
+export function harEntriesToRules(
+  entries: HarEntry[],
+  opts?: { targetOrigin?: string; enabled?: boolean },
+): ProxyRule[] {
   const now = Date.now();
   const seenOrigins = new Set<string>();
   const rules: ProxyRule[] = [];
+  // 目标环境只在**自己解析得出 http(s) origin** 时生效：空串或非法串一律当「没填」，
+  // 于是下面的产出与不传 opts 时逐字节相同。启用开关绑在它之后——没换环境就默认启用是凭空打开规则。
+  const targetOrigin = opts?.targetOrigin ? apiOriginOf(opts.targetOrigin) : '';
+  const enabled = !!targetOrigin && opts?.enabled === true;
 
   for (const entry of entries) {
     try {
@@ -105,6 +138,12 @@ export function harEntriesToRules(entries: HarEntry[]): ProxyRule[] {
       const origin = url.origin;
       if (!origin || origin === 'null') continue;
 
+      // 「目标环境」这一格按 `apiOriginOf` 定义，只能是 http(s) 的源；把 wss 握手改写到
+      // `https://…` 上不是换环境，是把这条规则变成永远连不上（`new WebSocket('https://…')`
+      // 当场被判成非法地址）。所以长连接条目一律留在自己的 origin 上，要跨 ws 环境去表单里改。
+      const isWebSocket = url.protocol === 'ws:' || url.protocol === 'wss:';
+      const target = isWebSocket ? origin : targetOrigin || origin;
+
       // 去重登记必须挨着 `rules.push`：此前它排在头清洗之前，一条头形状坏掉的条目
       // 自己没成为规则，却已经把这个 origin 占住，同 origin 后面那条完好的跟着一起丢。
       if (seenOrigins.has(origin)) continue;
@@ -114,7 +153,7 @@ export function harEntriesToRules(entries: HarEntry[]): ProxyRule[] {
         for (const h of entry.request.headers) {
           if (!h || typeof h.name !== 'string' || typeof h.value !== 'string') continue;
           const name = h.name.toLowerCase();
-          if (name === 'authorization' || name === 'x-api-key' || name === 'cookie') {
+          if (HAR_CREDENTIAL_HEADER_NAMES.has(name)) {
             headerOverrides[h.name] = h.value;
           }
         }
@@ -123,9 +162,10 @@ export function harEntriesToRules(entries: HarEntry[]): ProxyRule[] {
       const rule: ProxyRule = {
         id: generateId(),
         name: `Imported: ${url.hostname}`,
-        enabled: false,
+        // 换环境没换到它的那条（长连接）不跟着启用：一条自映射的活动规则不是任何人的意图
+        enabled: isWebSocket ? false : enabled,
         matchPattern: `${origin}/*`,
-        targetUrl: origin,
+        targetUrl: target,
         matchType: 'wildcard',
         priority: 100,
         createdAt: now,

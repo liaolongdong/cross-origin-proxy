@@ -1,4 +1,5 @@
 import { DEFAULT_RULE_PRIORITY } from '@/utils/constants';
+import { apiOriginOf } from '@/utils/pageApiOrigins';
 import type { ProxyRule } from '@/utils/types';
 
 // ─── WebSocket / Method / Query helpers ────────────────────────────────────────
@@ -387,4 +388,21 @@ export function isSimpleRule(rule: ProxyRule): boolean {
   // 改走 SW 通道（重写语义为不改写地址，仅代理转发）
   if (rule.matchType === 'wildcard' && !rule.matchPattern.endsWith('*')) return false;
   return true;
+}
+
+/**
+ * 这条规则的「目标」与「匹配来源」是不是同一个 origin——即这一条根本不改写地址
+ *
+ * 只服务界面提示（派生出来的草稿那句「还不改写」）与候选收集，**绝不参与生效判定、双通道分流或
+ * DNR 同步**。判据刻意保守：任一侧解析不出 http(s) origin 就返回 false，因为「看不出来」不能
+ * 画成「配错了」——这与弹窗那侧「读不到 ≠ 没有」是同一条纪律。
+ * `regex` 的 `matchPattern` 不是绝对地址，本来就判不出来，同样返回 false。
+ */
+export function sameOriginNoRewrite(rule: Pick<ProxyRule, 'matchType' | 'matchPattern' | 'targetUrl'>): boolean {
+  const target = apiOriginOf(rule.targetUrl);
+  if (!target) return false;
+  if (rule.matchType === 'regex') return false;
+  // 只有 wildcard / prefix 的模式本身是个可解析的绝对地址；末尾的 `*` 不属于 origin
+  const source = apiOriginOf(rule.matchPattern.replace(/\*+$/, ''));
+  return !!source && source === target;
 }

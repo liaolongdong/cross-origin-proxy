@@ -63,7 +63,7 @@ let pageListeners: PageListener[];
 let swListeners: SwListener[];
 
 const fakeWindow = {
-  location: { origin: ORIGIN },
+  location: { origin: ORIGIN, hostname: 'fat.example.com' },
   postMessage: (payload: unknown, targetOrigin: string): void => {
     posted.push({ payload: payload as Record<string, unknown>, targetOrigin });
   },
@@ -306,6 +306,23 @@ describe('后台广播：回执就是送达账唯一的信号', () => {
     expect(sendResponse).toHaveBeenCalledWith({ received: true });
     const [synced] = sentOf(SYNC_RULES) as ProxyConfig[];
     expect(synced.rules[0]).not.toHaveProperty('headerOverrides');
+  });
+
+  it('广播带站点范围时按本 frame 收窄，名单本身不进 MAIN world', async () => {
+    await mount();
+
+    const sendResponse = fromBackground({
+      type: MessageType.UPDATE_PROXY_CONFIG,
+      data: {
+        ...configOf([credentialedRule()]),
+        siteState: { mode: 'site-only', hosts: ['other.example.com'] },
+      },
+    });
+
+    expect(sendResponse).toHaveBeenCalledWith({ received: true });
+    const [synced] = sentOf(SYNC_RULES) as ProxyConfig[];
+    expect(synced.rules).toEqual([]);
+    expect(synced).not.toHaveProperty('siteState');
   });
 
   it('别的类型不作答、也不回内容：等着回执的只有广播那一次', async () => {

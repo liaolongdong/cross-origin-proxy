@@ -10,9 +10,10 @@
  * 注意：此模块不调用 chrome API（枚举值用字面量断言），可在 Node 环境直接测试。
  */
 
-import type { ProxyRule } from '@/utils/types';
+import type { ProxyRule, SiteState } from '@/utils/types';
 import { isSimpleRule, normalizePriority } from '@/utils/urlMatcher';
 import { DNR_RULE_ID_PREFIX, DNR_MAX_PRIORITY } from '@/utils/constants';
+import { dnrInitiatorCondition } from '@/utils/siteScope';
 
 /** DNR 命中的资源类型（页面主/子文档、XHR、静态资源等） */
 const DNR_RESOURCE_TYPES = [
@@ -204,9 +205,14 @@ export function toDnrPriority(priority: number): number {
  * 编译出空规则集，否则「关掉代理」后简单规则仍在重定向流量。
  * @returns rules 为 DNR 规则数组；idMap 为「DNR 规则 id → 代理规则」映射（命中统计用）
  */
+/**
+ * @param siteState 站点维度的生效范围（`utils/siteScope.ts`）。缺省或 `mode: 'all'` 时
+ *   产出的规则与这一层不存在时**逐字节相同**——不写空的 initiator 条件，也不改变 priority/id 分配。
+ */
 export function buildDnrRules(
   rules: ProxyRule[],
   proxyEnabled: boolean,
+  siteState?: SiteState,
 ): {
   rules: chrome.declarativeNetRequest.Rule[];
   idMap: Map<number, { ruleId: string; ruleName: string }>;
@@ -230,6 +236,8 @@ export function buildDnrRules(
       condition: {
         regexFilter: buildRegexFilter(rule),
         resourceTypes: DNR_RESOURCE_TYPES,
+        // 站点范围落在 initiator 条件上：网络层能认的就是「这笔请求由哪台主机发起」
+        ...(siteState ? dnrInitiatorCondition(siteState) : {}),
       },
     };
     return dnrRule;

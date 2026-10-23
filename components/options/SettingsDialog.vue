@@ -214,6 +214,86 @@
           </div>
         </div>
       </div>
+
+      <!-- 站点生效范围：弹窗那颗开关管「这一台」，这一节管整份名单（含删与换档） -->
+      <div class="setting-section">
+        <div class="setting-label">{{ t('siteScopeManageTitle') }}</div>
+        <p
+          v-if="siteScopeReading"
+          class="site-scope-empty"
+        >
+          {{ t('siteScopeReading') }}
+        </p>
+        <p
+          v-else-if="siteScopeUnreadable"
+          class="site-scope-warning"
+        >
+          {{ t('siteScopeUnreadable') }}
+        </p>
+        <template v-else>
+          <div class="site-scope-modes">
+            <el-radio-group
+              :model-value="siteState.mode"
+              :disabled="siteScopeBusy"
+              size="small"
+              @change="changeSiteMode($event as SiteScopeMode)"
+            >
+              <el-radio value="all">{{ t('siteScopeModeAll') }}</el-radio>
+              <el-radio value="site-off">{{ t('siteScopeModeOff') }}</el-radio>
+              <el-radio value="site-only">{{ t('siteScopeModeOnly') }}</el-radio>
+            </el-radio-group>
+          </div>
+          <ul
+            v-if="siteState.hosts.length"
+            class="site-scope-list"
+          >
+            <li
+              v-for="host in siteState.hosts"
+              :key="host"
+              class="site-scope-item"
+            >
+              <code :title="host">{{ host }}</code>
+              <el-button
+                type="danger"
+                link
+                size="small"
+                :disabled="siteScopeBusy"
+                :aria-label="t('siteScopeRemoveA11y', host)"
+                @click="removeSiteHost(host)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </li>
+          </ul>
+          <p
+            v-else
+            class="site-scope-empty"
+          >
+            {{ t('siteScopeEmpty') }}
+          </p>
+          <p class="site-scope-hint">{{ t('siteScopeListHint') }}</p>
+        </template>
+      </div>
+
+      <!-- 评分入口：一格常驻的设置项，只在从 Chrome 商店装的构建上出现（解包加载、Edge 那一族
+           的 `update_url` 都不算，那条链接在它们身上必然 404；判据见 utils/storePage.ts）。
+           形态是这里唯一承重的选择：Chrome Web Store 的政策禁的是
+           操纵评价（激励换评、刷量、自评），并不禁止征求评价，而 Google 自己的文档就写着
+           「条目 URL 末尾加 /reviews」；会撞线的是弹窗拦截、伪装成浏览器警告、反复骚扰那三类。
+           所以这一格不自动出现、不拦任何操作、不给奖励、不读数——点一下只是开一个标签页。 -->
+      <div
+        v-if="reviewUrl"
+        class="setting-section"
+      >
+        <div class="setting-label">{{ t('ratingTitle') }}</div>
+        <p class="rating-desc">{{ t('ratingDesc') }}</p>
+        <el-button
+          size="small"
+          @click="openReviewPage"
+        >
+          {{ t('ratingAction') }}
+        </el-button>
+      </div>
     </div>
   </el-dialog>
 </template>
@@ -233,7 +313,17 @@ import {
 } from '@/utils/constants';
 import { AUTO_OFF_PRESETS, readAutoOffMinutes, writeAutoOffMinutes } from '@/utils/autoOff';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
-import type { ConfigHistoryEntry, ConfigHistoryReason, ProxyRule, VariableStore } from '@/utils/types';
+import { DEFAULT_SITE_STATE, sanitizeSiteState, withoutHost } from '@/utils/siteScope';
+import { isStoreInstalled, storeReviewUrl } from '@/utils/storePage';
+import type {
+  ConfigHistoryEntry,
+  ConfigHistoryReason,
+  ProxyRule,
+  SiteScopeMode,
+  SiteState,
+  VariableStore,
+} from '@/utils/types';
+import { MessageType } from '@/utils/types';
 import { collectRuleVariableRefs, findUndefinedVariableRefs, isVariableName } from '@/utils/variables';
 import { formatLocaleDateTime } from '@/utils/formatters';
 import { useVariables } from '@/composables/useVariables';
@@ -457,6 +547,7 @@ watch(
     // 从这一次打开起变量节就不可写：它前面还排着自动关闭配置那一次往返，而那段窗口里
     // `variableRows` 同样是「还没读到」的空列表——闸门要盖住整段在途，不只是 `loadVariables()` 那一句
     variablesLoading.value = true;
+    void loadSiteScope();
     try {
       let minutes = 0;
       try {
@@ -540,6 +631,100 @@ async function commitVariables(): Promise<boolean> {
   return true;
 }
 
+// ─── 站点生效范围（名单与档位；判据在 `utils/siteScope.ts`） ────────────────────
+/**
+ * 与凭据变量表同一族纪律：这一节也是**整包覆盖写**，所以「还没读到」与「读失败」都要挡住写入。
+ * 空名单不等于「用户没有站点要排除」——它可能是这一次没读到；在没有读数的时候写回空名单，
+ * 就是替用户把他在弹窗里一台台关掉的设置抹掉。
+ */
+const siteState = ref<SiteState>({ ...DEFAULT_SITE_STATE });
+const siteScopeUnreadable = ref(true);
+/** 第一次读取还在路上：那一档既不是「读不到」也不是「没有站点」，界面不许先交结论 */
+const siteScopeReading = ref(true);
+const siteScopeBusy = ref(false);
+
+function isSiteStateResponse(value: unknown): value is SiteState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const state = value as Partial<SiteState>;
+  return (
+    (state.mode === 'all' || state.mode === 'site-off' || state.mode === 'site-only') && Array.isArray(state.hosts)
+  );
+}
+
+async function loadSiteScope() {
+  try {
+    const state: unknown = await chrome.runtime.sendMessage({ type: MessageType.GET_SITE_STATE });
+    siteScopeReading.value = false;
+    if (!isSiteStateResponse(state)) {
+      siteScopeUnreadable.value = true;
+      return;
+    }
+    siteState.value = sanitizeSiteState(state);
+    siteScopeUnreadable.value = false;
+  } catch {
+    siteScopeReading.value = false;
+    siteScopeUnreadable.value = true;
+  }
+}
+
+/** 写完一律回读：storage 里现在是什么，界面就画什么，不拿「我刚提交的那份」当真值 */
+async function writeSiteScope(next: SiteState) {
+  if (siteScopeUnreadable.value || siteScopeBusy.value) return;
+  siteScopeBusy.value = true;
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      type: MessageType.SET_SITE_STATE,
+      data: { mode: next.mode, hosts: next.hosts },
+    })) as { success?: boolean } | undefined;
+    if (!response?.success) ElMessage.error(t('siteScopeSaveFailed'));
+  } catch {
+    ElMessage.error(t('siteScopeSaveFailed'));
+  } finally {
+    siteScopeBusy.value = false;
+  }
+  await loadSiteScope();
+}
+
+function changeSiteMode(mode: SiteScopeMode) {
+  // 选「仅列出的站点」而名单是空的：那是一台都不代理，几乎不可能是用户的意思，界面不替他按下去
+  if (mode === 'site-only' && siteState.value.hosts.length === 0) {
+    ElMessage.warning(t('siteScopeEmpty'));
+    return;
+  }
+  void writeSiteScope({ mode, hosts: siteState.value.hosts });
+}
+
+async function removeSiteHost(host: string) {
+  const next = withoutHost(siteState.value, host);
+  if (siteState.value.mode === 'site-only' && next.mode === 'all') {
+    try {
+      await ElMessageBox.confirm(t('siteScopeLastWhitelistConfirm'), t('siteScopeLastWhitelistTitle'), {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning',
+      });
+    } catch {
+      return;
+    }
+  }
+  void writeSiteScope(next);
+}
+
+/**
+ * 商店评分页地址；不是从 Chrome 商店装的构建就是空串，那一格整个不出现
+ *
+ * 解包加载（开发者模式、把 zip 拖进扩展页）没有 `update_url`；Edge 加载项、自建 XML、企业策略
+ * 那种虽然也有，但 ID 属于别的商店。两种情况下那条链接都是 404——与其画一个点开了错误页的按钮，
+ * 不如什么都不画。判据与 URL 形状都在 `utils/storePage.ts`。
+ */
+const reviewUrl = isStoreInstalled(chrome.runtime.getManifest().update_url) ? storeReviewUrl(chrome.runtime.id) : '';
+
+/** 只开一个标签页：不写 storage、不发任何消息、也不知道用户点没点（本扩展没有任何遥测） */
+function openReviewPage() {
+  if (!reviewUrl) return;
+  void chrome.tabs.create({ url: reviewUrl });
+}
+
 function addVariable() {
   variableRows.value.push({ uid: ++rowUidSeed, name: '', value: '' });
 }
@@ -597,6 +782,53 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
 </script>
 
 <style scoped>
+/* 站点名单：与快捷键那一节同宽，条目按行排，主机名可选中复制 */
+.site-scope-modes {
+  margin-top: 4px;
+}
+
+.site-scope-list {
+  padding: 0;
+  margin: 8px 0 0;
+  list-style: none;
+}
+
+.site-scope-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.site-scope-item code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--cop-text-color-primary);
+  white-space: nowrap;
+}
+
+.site-scope-empty,
+.site-scope-hint,
+.site-scope-warning,
+.rating-desc {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-text-color-secondary);
+}
+
+.rating-desc {
+  margin-bottom: 10px;
+}
+
+.site-scope-warning {
+  color: var(--el-color-warning, #e6a23c);
+}
+
 .settings-body {
   display: flex;
   flex-direction: column;

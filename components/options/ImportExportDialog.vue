@@ -5,7 +5,7 @@
     width="600px"
     align-center
     @close="$emit('update:visible', false)"
-    @closed="resetHarPick"
+    @closed="resetDerivedPicks"
   >
     <div class="import-export-dialog dialog-body-scroll">
       <!-- 导出配置 -->
@@ -60,10 +60,8 @@
           />
         </div>
 
-        <div style="margin-top: 12px">
-          <label style="margin-right: 12px; font-size: 13px; color: var(--el-text-color-regular)">{{
-            t('importMode')
-          }}</label>
+        <div class="import-mode-row">
+          <label class="import-mode-label">{{ t('importMode') }}</label>
           <el-radio-group v-model="importMode">
             <el-radio value="replace">{{ t('importModeReplace') }}</el-radio>
             <el-radio value="merge">{{ t('importModeMerge') }}</el-radio>
@@ -121,8 +119,8 @@
         />
         <el-button
           type="success"
-          :disabled="!curlInput.trim()"
-          style="margin-top: 12px"
+          :disabled="!curlInput.trim() || busy"
+          class="section-action"
           @click="handleImportCurl"
         >
           {{ t('importCurlButton') }}
@@ -170,14 +168,121 @@
             <div class="el-upload__tip">.har / .json</div>
           </template>
         </el-upload>
+        <el-input
+          v-model="harTarget.raw"
+          :class="['target-env-input', { 'target-env-input--invalid': harTarget.invalid }]"
+          :placeholder="t('importHarTargetPlaceholder')"
+          :aria-invalid="harTarget.invalid ? 'true' : undefined"
+          :aria-describedby="harTarget.invalid ? 'har-target-error' : undefined"
+          clearable
+          autocomplete="off"
+          spellcheck="false"
+          @change="harTarget.normalize"
+        >
+          <template #prepend>{{ t('importHarTargetLabel') }}</template>
+        </el-input>
+        <p class="section-desc target-env-desc">{{ t('importHarTargetDesc') }}</p>
+        <p
+          v-if="harTarget.invalid"
+          id="har-target-error"
+          class="target-env-error"
+        >
+          {{ t('importHarTargetInvalid') }}
+        </p>
+        <!-- 只在读得出目标时出现：没换环境就默认启用这批规则，等于凭空把整站的流量指走 -->
+        <el-checkbox
+          v-if="harTarget.valid"
+          v-model="harTarget.enableOnImport"
+          class="target-env-enable"
+        >
+          {{ t('importHarEnableOnImport') }}
+        </el-checkbox>
+        <!-- 默认不勾：勾上才会把抓到的凭据头搬进变量表、规则里只留 `{{名称}}` 引用。
+             不勾时的产出与这个选项存在之前逐字节相同（原值进 `headerOverrides`）。 -->
+        <el-checkbox
+          v-model="harRelocateCredentials"
+          class="har-relocate"
+        >
+          {{ t('importHarRelocateCredentials') }}
+        </el-checkbox>
+        <p
+          v-if="harRelocateCredentials"
+          class="section-desc target-env-desc"
+        >
+          {{ t('importHarRelocateCredentialsDesc') }}
+        </p>
         <el-button
           v-if="harFileContent"
           type="success"
-          :loading="harImporting"
-          style="margin-top: 12px"
+          :loading="harImporting || busy"
+          :disabled="busy"
+          class="section-action"
           @click="handleImportHar"
         >
-          {{ t('importButton') }}
+          {{ t('importHarCreateRules') }}
+        </el-button>
+      </div>
+
+      <el-divider />
+
+      <!-- OpenAPI / Swagger 导入：按文档声明的接口来源逐条建规则 -->
+      <div class="section">
+        <h3>{{ t('importOpenApiTitle') }}</h3>
+        <p class="section-desc">{{ t('importOpenApiDesc') }}</p>
+        <el-upload
+          ref="openApiUploadRef"
+          :auto-upload="false"
+          :limit="1"
+          accept=".json"
+          :on-change="handleOpenApiFileChange"
+          :on-remove="handleOpenApiFileRemove"
+        >
+          <el-button type="warning">
+            <el-icon><Upload /></el-icon>
+            {{ t('importOpenApiPick') }}
+          </el-button>
+          <template #tip>
+            <div class="el-upload__tip">{{ t('importOpenApiTip') }}</div>
+          </template>
+        </el-upload>
+        <el-input
+          v-model="openApiTarget.raw"
+          :class="['target-env-input', { 'target-env-input--invalid': openApiTarget.invalid }]"
+          :placeholder="t('importOpenApiTargetPlaceholder')"
+          :aria-invalid="openApiTarget.invalid ? 'true' : undefined"
+          :aria-describedby="openApiTarget.invalid ? 'openapi-target-error' : undefined"
+          clearable
+          autocomplete="off"
+          spellcheck="false"
+          @change="openApiTarget.normalize"
+        >
+          <template #prepend>{{ t('importHarTargetLabel') }}</template>
+        </el-input>
+        <p class="section-desc target-env-desc">{{ t('importHarTargetDesc') }}</p>
+        <p
+          v-if="openApiTarget.invalid"
+          id="openapi-target-error"
+          class="target-env-error"
+        >
+          {{ t('importHarTargetInvalid') }}
+        </p>
+        <!-- 与 HAR 那格同一条不变量：复选框不出现就等于没勾，判据见 `composables/useTargetEnv.ts` -->
+        <el-checkbox
+          v-if="openApiTarget.valid"
+          v-model="openApiTarget.enableOnImport"
+          class="target-env-enable"
+        >
+          {{ t('importHarEnableOnImport') }}
+        </el-checkbox>
+        <el-button
+          v-if="openApiFileContent"
+          type="success"
+          :loading="openApiImporting || busy"
+          :disabled="busy"
+          class="section-action"
+          @click="handleImportOpenApi"
+        >
+          {{ t('importOpenApiCreateRules') }}
         </el-button>
       </div>
     </div>
@@ -189,10 +294,19 @@ import { ref, computed, watch } from 'vue';
 import { Download, Upload } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { UploadFile } from 'element-plus';
-import type { HarImportPayload, ImportMode, ImportPlan, ImportResultStats, ProxyRule } from '@/utils/types';
+import type {
+  HarImportPayload,
+  ImportHarResult,
+  ImportMode,
+  ImportPlan,
+  ImportResultStats,
+  ProxyRule,
+} from '@/utils/types';
 import { MessageType } from '@/utils/types';
 import { MAX_IMPORT_FILE_SIZE, MAX_RULES } from '@/utils/constants';
-import { harEntriesOverLimit } from '@/utils/har';
+import { distinctHarOrigins, harEntriesOverLimit } from '@/utils/har';
+import { useTargetEnv } from '@/composables/useTargetEnv';
+import { openApiSpecToRules, parseOpenApiSpec } from '@/utils/openapi';
 import { parseCurlCommand } from '@/utils/curlParser';
 import type { ParsedCurl } from '@/utils/curlParser';
 import { useI18n } from '@/composables/useI18n';
@@ -202,6 +316,8 @@ import { useImportExport } from '@/composables/useImportExport';
 
 defineProps<{
   visible: boolean;
+  /** 父组件正在把派生规则批量写入存储：期间锁住所有「一键生成规则」出口，避免连点写两份 */
+  busy?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -215,7 +331,15 @@ const emit = defineEmits<{
   imported: [stats: ImportResultStats];
   /** 请求导出：`sanitize` 为弹窗里的「分享模式」勾选值，由父组件执行下载与提示 */
   export: [sanitize: boolean];
-  importHarRules: [rules: ProxyRule[]];
+  /**
+   * HAR 导入产出的规则交给父组件写入（emit 是同步的，成功提示由父组件在它落盘后才发）
+   *
+   * `targetOrigin` 是这一批被指过去的那个环境，空串表示没填——父组件据此选一句成功提示，
+   * 免得「创建了 N 条规则」这句话在用户刚刚换了环境时听起来像什么都没发生。
+   */
+  importHarRules: [rules: ProxyRule[], targetOrigin: string, relocated: number, keptRaw: number];
+  /** OpenAPI / Swagger 文档产出的规则同样交给父组件写入；`skipped` 是读不出来源而被跳过的 server 条数 */
+  importOpenApiRules: [rules: ProxyRule[], targetOrigin: string, skipped: number];
   importCurl: [data: ParsedCurl];
 }>();
 
@@ -227,12 +351,22 @@ const { importing, importConfig, fetchImportPlan } = useImportExport();
 
 const uploadRef = ref();
 const harUploadRef = ref();
+const openApiUploadRef = ref();
+/** 选中但尚未导入的文档正文：与 `harFileContent` 同一族——读到了才出现那颗确认按钮 */
+const openApiFileContent = ref<string | null>(null);
+const openApiImporting = ref(false);
 const jsonInput = ref('');
 const curlInput = ref('');
 const fileContent = ref<string | null>(null);
 const harExporting = ref(false);
 const harImporting = ref(false);
 const harFileContent = ref<string | null>(null);
+/** HAR 导入的目标环境：留空 = 与本功能存在之前一样，产出自映射、默认停用的规则 */
+const harTarget = useTargetEnv();
+/** 抓包里的凭据头是否搬进变量表；默认关，关着时后台产出的形状与本选项存在之前逐字节相同 */
+const harRelocateCredentials = ref(false);
+/** OpenAPI / Swagger 文档的目标环境：判据与 HAR 那格同一份（见 `composables/useTargetEnv.ts`） */
+const openApiTarget = useTargetEnv();
 const importMode = ref<ImportMode>('replace');
 /** 分享模式：默认开启——导出的 JSON 常被直接贴进群里，凭据一旦外泄收不回，本机备份少勾一下即可 */
 const sanitizeExport = ref(true);
@@ -469,9 +603,61 @@ function handleHarFileRemove() {
  * 分片不会随关闭销毁，残留的 `harFileContent` 与上传列表会让「再点一次导入」把同一批请求
  * 原样导入两遍——HAR 通道没有去重，只有 JSON 导入会跳过重复规则。
  */
-function resetHarPick(): void {
+function resetDerivedPicks(): void {
   harFileContent.value = null;
+  harTarget.reset();
+  harRelocateCredentials.value = false;
   harUploadRef.value?.clearFiles();
+  openApiFileContent.value = null;
+  openApiTarget.reset();
+  openApiUploadRef.value?.clearFiles();
+}
+
+/** 选中文档：与配置/HAR 共用 `readFileAsText`（体积闸门与「读失败不许留着旧内容」都在那一处） */
+function handleOpenApiFileChange(file: UploadFile) {
+  if (!file.raw) return;
+  readFileAsText(file.raw, text => {
+    openApiFileContent.value = text;
+  });
+}
+
+function handleOpenApiFileRemove() {
+  openApiFileContent.value = null;
+}
+
+/**
+ * 把文档转成规则并交给父组件写入
+ *
+ * 全程在界面侧完成（不像 HAR 那样要过后台）：这里没有「逐条建规则」的重活，只有一次
+ * `JSON.parse` 与几次 URL 解析，而 parse 失败的点名本来也只能由读到文件的那一侧发。
+ * 三类失败各说一句——不是 JSON（多半是粘了 YAML）、不是接口文档、文档里没有可用地址，
+ * 用户下一步的动作完全不同，合成一句「导入失败」就等于让人去翻一个不存在的问题。
+ * 体积不在这道：`readFileAsText` 那侧的 2MB 闸门永远先响，这里再加一道更宽的只会成为死分支。
+ */
+function handleImportOpenApi() {
+  const text = openApiFileContent.value;
+  if (!text) return;
+  openApiImporting.value = true;
+  try {
+    const parsed = parseOpenApiSpec(text);
+    if (!parsed.ok) {
+      ElMessage.error(
+        parsed.reason === 'notJson'
+          ? t('importOpenApiNotJson')
+          : parsed.reason === 'noServers'
+            ? t('importOpenApiNoServers')
+            : t('importOpenApiUnsupported'),
+      );
+      return;
+    }
+    const rules = openApiSpecToRules(parsed.spec, {
+      targetOrigin: openApiTarget.parsed || undefined,
+      enabled: openApiTarget.enableOnImportFlag,
+    });
+    emit('importOpenApiRules', rules, openApiTarget.parsed, parsed.spec.skipped);
+  } finally {
+    openApiImporting.value = false;
+  }
 }
 
 async function handleImportHar() {
@@ -489,17 +675,36 @@ async function handleImportHar() {
       ElMessage.error(t('importHarTooManyEntries', [String(overflow.actual), String(overflow.limit)]));
       return;
     }
+    const origins = distinctHarOrigins(harData.log.entries);
+    if (harTarget.parsed && origins.length > 1) {
+      const preview = origins.slice(0, 5).join('\n');
+      try {
+        await ElMessageBox.confirm(
+          t('importHarMultiOriginConfirm', [String(origins.length), preview]),
+          t('importHarMultiOriginTitle'),
+          { confirmButtonText: t('confirm'), cancelButtonText: t('cancel'), type: 'warning' },
+        );
+      } catch {
+        return;
+      }
+    }
     const result = (await chrome.runtime.sendMessage({
       type: MessageType.IMPORT_HAR,
-      data: harData,
-    })) as { success?: boolean; rules?: ProxyRule[]; error?: string } | undefined;
+      // 目标环境随消息进后台，由后台按同一份 origin 判据再核一遍（载荷属不可信输入）
+      data: {
+        ...harData,
+        targetOrigin: harTarget.parsed || undefined,
+        enableOnImport: harTarget.enableOnImportFlag,
+        relocateCredentials: harRelocateCredentials.value,
+      },
+    })) as ImportHarResult | undefined;
     // `?.` 是必需的：SW 刚被回收时 `sendMessage` 会 resolve `undefined`（与 `importConfig`
     // 同一件事）。少了它，这一行抛的 TypeError 会被下面的 catch 收成「文件不合法」——
     // 用户的 HAR 明明没问题，却被指着格式说事，重试多少次都是同一句话。
     if (result?.success && result.rules) {
       // 只负责把规则交给父组件写入：emit 是同步的，此处弹「成功」会在达上限时
       // 与父组件的失败提示同时出现，输入也会被提前清掉、无法重试
-      emit('importHarRules', result.rules);
+      emit('importHarRules', result.rules, harTarget.parsed, result.relocated ?? 0, result.keptRaw ?? 0);
     } else {
       ElMessage.error(t('importHarFailed'));
     }
@@ -528,10 +733,51 @@ async function handleImportHar() {
   color: var(--cop-text-color-primary);
 }
 
+.section-action {
+  margin-top: 12px;
+}
+
 .section-desc {
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--cop-text-color-secondary);
+}
+
+.import-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.import-mode-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+/* HAR 的目标环境那一格：输入框、说明、报错行与「立即启用」复选框各占一段 */
+.target-env-input {
+  margin-bottom: 6px;
+}
+
+.target-env-input--invalid :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
+}
+
+.target-env-desc {
+  margin: 0 0 8px;
+}
+
+.target-env-error {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: var(--el-color-danger);
+}
+
+.target-env-enable,
+.har-relocate {
+  margin-top: 2px;
 }
 
 .export-sanitize-tip {
@@ -590,9 +836,14 @@ async function handleImportHar() {
 
 .preview-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-top: 12px;
+}
+
+.preview-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .curl-input :deep(textarea) {

@@ -55,6 +55,7 @@ const MUTATING_TYPES: MessageType[] = [
   MessageType.LOAD_PROFILE,
   MessageType.DELETE_PROFILE,
   MessageType.SET_VARIABLES,
+  MessageType.SET_SITE_STATE,
 ];
 
 /**
@@ -64,10 +65,18 @@ const MUTATING_TYPES: MessageType[] = [
  * 而这两条桥接层从不转发。少了这道 gate，任意页面一次 sendMessage 就能读走
  * 用户所有环境的密钥（或历次成套替换前的真实请求头），「真值只在 SW 展开」的整套设计当场作废。
  *
- * 判据是「页面从不读取 + 回的是凭据类数据」，两者缺一都不该加进来：给内容脚本要用的消息
+ * 判据是「页面从不读取 + 回的是凭据或本地数据」，两者缺一都不该加进来：给内容脚本要用的消息
  * 加 gate 等于当场废掉代理。
+ *
+ * `GET_RECENT_TARGETS` 的理由不是「它属于读取」：那份候选是用户配过的**目标环境 origin 清单**，
+ * 对内网拓扑的说明力比界面看上去需要的多，而它的读者只有配置页。
  */
-const CREDENTIAL_READING_TYPES: MessageType[] = [MessageType.GET_VARIABLES, MessageType.GET_CONFIG_HISTORY];
+const CREDENTIAL_READING_TYPES: MessageType[] = [
+  MessageType.GET_VARIABLES,
+  MessageType.GET_CONFIG_HISTORY,
+  MessageType.GET_RECENT_TARGETS,
+  MessageType.GET_SITE_STATE,
+];
 
 /** 刻意不经 gate 的消息：内容脚本要靠它们拉配置与代理，被 gate 住代理当场失效 */
 const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
@@ -964,5 +973,228 @@ describe('GET_PROXY_CONFIG — 拉取即视为已同步，只清自己那个标�
     await flush();
 
     expect(sync.isConfigUnsynced(26)).toBe(true);
+  });
+
+  it('site-only 只收窄内容脚本，扩展页始终拿到完整配置', async () => {
+    store[STORAGE_KEYS.PROXY_CONFIG] = { enabled: true, rules: [importableRule('site')] };
+    store[STORAGE_KEYS.SITE_STATE] = { mode: 'site-only', hosts: ['fat.example.com'] };
+
+    const optionsResponse = vi.fn();
+    listener!({ type: MessageType.GET_PROXY_CONFIG }, { url: TRUSTED_PAGE_URL }, optionsResponse);
+    await flush();
+    expect((optionsResponse.mock.calls.at(-1)?.[0] as { rules: unknown[] }).rules).toHaveLength(1);
+
+    const allowedResponse = vi.fn();
+    listener!(
+      { type: MessageType.GET_PROXY_CONFIG },
+      { url: 'https://fat.example.com/app', tab: { id: 31 } },
+      allowedResponse,
+    );
+    await flush();
+    expect((allowedResponse.mock.calls.at(-1)?.[0] as { rules: unknown[] }).rules).toHaveLength(1);
+
+    const excludedResponse = vi.fn();
+    listener!(
+      { type: MessageType.GET_PROXY_CONFIG },
+      { url: 'https://other.example.com/app', tab: { id: 32 } },
+      excludedResponse,
+    );
+    await flush();
+    expect((excludedResponse.mock.calls.at(-1)?.[0] as { rules: unknown[] }).rules).toEqual([]);
+  });
+});
+
+describe('GET_SITE_STATE — 读取失败不能伪装成默认值', () => {
+  it('存储读取抛错时回 null，让界面落进「没读到」那一档', async () => {
+    const original = chrome.storage.local.get;
+    chrome.storage.local.get = vi.fn(async () => {
+      throw new Error('storage unavailable');
+    });
+    try {
+      const { sendResponse } = dispatch(MessageType.GET_SITE_STATE, TRUSTED_PAGE_URL);
+      await flush();
+      expect(sendResponse).toHaveBeenCalledWith(null);
+    } finally {
+      chrome.storage.local.get = original;
+    }
+  });
+});
+
+/**
+ * `IMPORT_HAR` 的目标环境：载荷里那两个字段属不可信输入，后台必须自己重判一遍。
+ *
+ * 界面上确实也判过一次（`ImportExportDialog` 的输入框），但那一次只是省流量：绕过界面不代表
+ * 后台该照单全收——这与既有的「条数闸门界面与后台各跑一次、共用 `harEntriesOverLimit`」同一条理由。
+ * 判不出 origin 就当没填，此时回包必须与**不带这两个字段**时逐字节相同（默认停用那条承诺不能被动过）。
+ */
+describe('IMPORT_HAR 的目标环境与 GET_RECENT_TARGETS', () => {
+  const harPayload = (extra: Record<string, unknown> = {}) => ({
+    log: {
+      entries: [{ request: { method: 'GET', url: 'https://fat.example.com/api/x' }, response: { status: 200 } }],
+    },
+    ...extra,
+  });
+  /** 回包里的规则只留承重字段，`id` 与两个时间戳每次运行都不同 */
+  const shapeOf = (sendResponse: ReturnType<typeof vi.fn>) => {
+    const rules = (lastResponse(sendResponse) as { rules?: Record<string, unknown>[] }).rules;
+    return rules?.map(({ id: _id, createdAt: _c, updatedAt: _u, ...rest }) => rest);
+  };
+
+  it('合法目标 + 严格 true 的启用开关：目标换过去、这一批启用', async () => {
+    const { sendResponse } = dispatch(
+      MessageType.IMPORT_HAR,
+      TRUSTED_PAGE_URL,
+      harPayload({ targetOrigin: 'https://uat.example.com', enableOnImport: true }),
+    );
+    await flush();
+    expect(shapeOf(sendResponse)).toEqual([
+      {
+        name: 'Imported: fat.example.com',
+        enabled: true,
+        matchPattern: 'https://fat.example.com/*',
+        targetUrl: 'https://uat.example.com',
+        matchType: 'wildcard',
+        priority: 100,
+      },
+    ]);
+  });
+
+  it.each([
+    ['空串', ''],
+    ['读不出 URL 的串', 'javascript:alert(1)'],
+    ['非 http(s) 协议', 'file:///tmp/uat'],
+    ['不是字符串', { nested: true }],
+  ])('目标是%s时后台当没填：与不带这两个字段的回包逐字节相同', (_label, raw) => {
+    const plain = dispatch(MessageType.IMPORT_HAR, TRUSTED_PAGE_URL, harPayload());
+    const spoofed = dispatch(
+      MessageType.IMPORT_HAR,
+      TRUSTED_PAGE_URL,
+      harPayload({ targetOrigin: raw, enableOnImport: true }),
+    );
+    expect(shapeOf(spoofed.sendResponse)).toEqual(shapeOf(plain.sendResponse));
+    expect(shapeOf(spoofed.sendResponse)?.[0]).toMatchObject({ enabled: false, targetUrl: 'https://fat.example.com' });
+  });
+
+  it('启用开关只认严格 true：truthy 的字符串与数字都不打开这批规则', () => {
+    for (const raw of ['true', 1, {}]) {
+      const { sendResponse } = dispatch(
+        MessageType.IMPORT_HAR,
+        TRUSTED_PAGE_URL,
+        harPayload({ targetOrigin: 'https://uat.example.com', enableOnImport: raw }),
+      );
+      expect(shapeOf(sendResponse)?.[0], `enableOnImport=${JSON.stringify(raw)} 不该被当成 true`).toMatchObject({
+        enabled: false,
+        targetUrl: 'https://uat.example.com',
+      });
+    }
+  });
+
+  it('GET_RECENT_TARGETS 由可信 sender 读出收口后的数组', async () => {
+    const { sendResponse, keepChannelOpen } = dispatch(MessageType.GET_RECENT_TARGETS, TRUSTED_PAGE_URL, undefined);
+    expect(keepChannelOpen).toBe(true);
+    await flush();
+    expect(sendResponse).toHaveBeenCalledWith([]);
+  });
+
+  it('存储里那个键被改坏时回空数组，而不是回一个非数组或报错', async () => {
+    store[STORAGE_KEYS.RECENT_TARGETS] = 'https://uat.example.com';
+    const { sendResponse } = dispatch(MessageType.GET_RECENT_TARGETS, TRUSTED_PAGE_URL, undefined);
+    await flush();
+    expect(sendResponse).toHaveBeenCalledWith([]);
+  });
+});
+
+/**
+ * `IMPORT_HAR` 的 `relocateCredentials`：把抓到的凭据从「写进规则」改成「写进变量表」。
+ *
+ * 三条各自承重：
+ * - **不传 / 传非严格 true 时形状与今天逐字节相同**（原值进 `headerOverrides`，变量表一个字节都不写）；
+ *   少了这条，任何一次「消息体里混进一个 truthy 的字符串」都会偷偷改变导入结果；
+ * - 真值落进 `STORAGE_KEYS.VARIABLES`，规则里只剩 `{{名称}}`——这一步在 SW 里做，因为只有那边
+ *   能读能写变量表；
+ * - 写变量表失败时**整笔导入失败**（回的是失败信封），而不是静默回退成原值：那等于把用户刚
+ *   勾选的那一步取消掉，而界面上只看得见「导入成功」。
+ */
+describe('IMPORT_HAR 的 relocateCredentials — 默认与今天相同，勾了才搬', () => {
+  const harWithAuth = (extra: Record<string, unknown> = {}) => ({
+    log: {
+      entries: [
+        {
+          request: {
+            method: 'GET',
+            url: 'https://fat.example.com/api/x',
+            headers: [{ name: 'Authorization', value: 'Bearer captured-token' }],
+          },
+          response: { status: 200 },
+        },
+      ],
+    },
+    ...extra,
+  });
+  const headersOf = (sendResponse: ReturnType<typeof vi.fn>) => {
+    const rules = (
+      lastResponse(sendResponse) as { rules?: Record<string, { headerOverrides?: Record<string, string> }>[] }
+    ).rules;
+    return rules?.[0]?.headerOverrides;
+  };
+
+  it.each([
+    ['不传这个字段', {}],
+    ['传字符串 "true"', { relocateCredentials: 'true' }],
+    ['传 1', { relocateCredentials: 1 }],
+  ])('%s：原值照旧进规则，变量表一个字节都不写', async (_label, extra) => {
+    const { sendResponse } = dispatch(MessageType.IMPORT_HAR, TRUSTED_PAGE_URL, harWithAuth(extra));
+    await flush();
+    expect(headersOf(sendResponse)).toEqual({ Authorization: 'Bearer captured-token' });
+    expect(store[STORAGE_KEYS.VARIABLES]).toBeUndefined();
+  });
+
+  it('勾上：真值落进变量表，规则里只剩引用，并把搬了几个报回界面', async () => {
+    const { sendResponse, keepChannelOpen } = dispatch(
+      MessageType.IMPORT_HAR,
+      TRUSTED_PAGE_URL,
+      harWithAuth({ relocateCredentials: true }),
+    );
+    // 这一支现在是异步的（要读写变量表），忘了 `return true` 就是通道当场关掉、界面只拿到 undefined
+    expect(keepChannelOpen).toBe(true);
+    await flush();
+    const response = lastResponse(sendResponse) as {
+      rules?: { headerOverrides?: Record<string, string> }[];
+      relocated?: number;
+      keptRaw?: number;
+    };
+    expect(response.relocated).toBe(1);
+    expect(response.keptRaw).toBe(0);
+    const reference = response.rules?.[0].headerOverrides?.Authorization ?? '';
+    expect(reference).toMatch(/^\{\{.+\}\}$/);
+    const stored = store[STORAGE_KEYS.VARIABLES] as Record<string, string>;
+    expect(Object.values(stored)).toEqual(['Bearer captured-token']);
+  });
+
+  it('抓包里没凭据时不碰变量表，计数报 0', async () => {
+    const plain = {
+      log: { entries: [{ request: { method: 'GET', url: 'https://fat.example.com/x' }, response: { status: 200 } }] },
+    };
+    const { sendResponse } = dispatch(MessageType.IMPORT_HAR, TRUSTED_PAGE_URL, {
+      ...plain,
+      relocateCredentials: true,
+    });
+    await flush();
+    expect(lastResponse(sendResponse)).toMatchObject({ success: true, relocated: 0, keptRaw: 0 });
+    expect(store[STORAGE_KEYS.VARIABLES]).toBeUndefined();
+  });
+
+  it('变量表写入失败时整笔导入失败，而不是静默退回原值', async () => {
+    // `setSpy` 每个用例都在 `beforeEach` 里重建，所以按调用次数打桩不会漏给下一个用例
+    setSpy.mockRejectedValueOnce(new Error('QuotaBytes exceeded'));
+    const { sendResponse } = dispatch(
+      MessageType.IMPORT_HAR,
+      TRUSTED_PAGE_URL,
+      harWithAuth({ relocateCredentials: true }),
+    );
+    await flush();
+    const response = lastResponse(sendResponse) as { success?: boolean; rules?: unknown };
+    expect(response.success).toBe(false);
+    expect(response.rules, '写变量表失败却把规则交回界面 = 一批引用不存在的规则等着落盘').toBeUndefined();
   });
 });

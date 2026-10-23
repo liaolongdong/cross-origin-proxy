@@ -1,5 +1,6 @@
 import type {
   ProxyConfig,
+  SiteState,
   ProxyRule,
   RequestLogEntry,
   EnvironmentProfile,
@@ -25,6 +26,8 @@ import { truncateForLog } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
 import { isValidRuleShape, normalizeRuleTimings } from '@/utils/ruleValidation';
+import { distinctTargetOrigins, mergeRecentTargets, sanitizeRecentTargets } from '@/utils/recentTargets';
+import { DEFAULT_SITE_STATE, sanitizeSiteState } from '@/utils/siteScope';
 import { inspectProfileRules, isStoredProfileEntry } from '@/utils/profileValidation';
 import { sanitizeVariables } from '@/utils/variables';
 import { generateId } from '@/utils/generateId';
@@ -160,6 +163,87 @@ export function configRules(config: ProxyConfig | undefined): ProxyRule[] {
 }
 
 /**
+ * 读最近用过的目标环境候选（配置页 `目标URL` 那一格的下拉）
+ *
+ * 任何异常都回空数组：这是便利列表，坏了的正确表现是「没有候选」，不是让表单报错。
+ */
+export async function getRecentTargets(): Promise<string[]> {
+  try {
+    const data = await chrome.storage.local.get(STORAGE_KEYS.RECENT_TARGETS);
+    return sanitizeRecentTargets(data[STORAGE_KEYS.RECENT_TARGETS]);
+  } catch (error) {
+    logger.warn('Recent targets read failed:', error);
+    return [];
+  }
+}
+
+/**
+ * 规则落盘之后，把它换过去的目标环境记进候选
+ *
+ * 三条约束都抄自「配置恢复点」那一条纪律：排在主写入**之后**（这一笔不该去抢主写入要的
+ * 配额）、自己吞掉失败（少一条候选绝不能翻成「保存失败」）、单独取锁而不复用调用方那把
+ * （外层锁还在时套第二把会自锁，见 `replaceProxyConfig` 的注释）。
+ * 判据不在这里，在 `utils/recentTargets.ts`：空目标、同源目标与解析不出的 `{{变量}}` 都不算「环境」。
+ */
+export async function rememberTargetOf(saved: ProxyRule[]): Promise<void> {
+  // 一批里没有换过环境的规则（自映射的注头规则、只带 Mock 的空目标、`{{变量}}` 读不出 origin）
+  // 先把这一笔整体跳过：否则每一次普通保存都多占一次锁与一次读盘，而它注定写回同样的内容
+  if (saved.length === 0 || distinctTargetOrigins(saved).length === 0) return;
+  try {
+    await withStorageLock(async () => {
+      const current = await getRecentTargets();
+      const next = mergeRecentTargets(current, saved);
+      const unchanged = next.length === current.length && next.every((origin, index) => origin === current[index]);
+      if (unchanged) return;
+      await chrome.storage.local.set({ [STORAGE_KEYS.RECENT_TARGETS]: next });
+    });
+  } catch (error) {
+    logger.warn('Remember target failed:', error);
+  }
+}
+
+/**
+ * 读出站点生效范围（`utils/siteScope.ts` 的判据，存储层只管取与收口）
+ *
+ * 读不出就回落默认值（`mode: 'all'`，等于这一层不参与），与 `configRules()` / `getRecentTargets()`
+ * 同一族口径：坏数据不许把代理整个弄坏。但这条回落方向要说清——它是「不排除任何站点」，
+ * 不是「一切停用」；界面要区分「读到的是 all」与「没读到」，因此只读这一份，读取侧走 `readSiteState()`。
+ */
+export async function getSiteState(): Promise<SiteState> {
+  return (await readSiteState()) ?? { ...DEFAULT_SITE_STATE };
+}
+
+/**
+ * 读出站点生效范围，并把「存储读取失败」如实交回 `null`
+ *
+ * 执行侧仍按 fail-open 处理（见 `getSiteState()`），但界面不能拿默认值冒充一次成功读取：
+ * 「没读到」既不该画成「全部站点都在生效」，也不该允许用户在此基础上整表覆盖。
+ */
+export async function readSiteState(): Promise<SiteState | null> {
+  try {
+    const data = await chrome.storage.local.get(STORAGE_KEYS.SITE_STATE);
+    return sanitizeSiteState(data[STORAGE_KEYS.SITE_STATE]);
+  } catch (error) {
+    logger.warn('Site state read failed:', error);
+    return null;
+  }
+}
+
+/**
+ * 整体写入站点生效范围（先收口再落盘）
+ *
+ * 与「最近目标」那一条刻意相反：这一条**要**把失败交给调用方——它是用户点下去的那次状态变更，
+ * 悄悄吞掉就等于界面说「已停用这台站点」而 storage 里根本没记。收口在写之前做，
+ * 因此落盘的永远是要么默认值、要么合法状态，读侧的 sanitize 只是兜住手改 storage 的那一路。
+ */
+export async function saveSiteState(state: SiteState): Promise<void> {
+  const next = sanitizeSiteState(state);
+  await withStorageLock(async () => {
+    await chrome.storage.local.set({ [STORAGE_KEYS.SITE_STATE]: next });
+  });
+}
+
+/**
  * 保存完整代理配置
  */
 export async function saveProxyConfig(config: ProxyConfig): Promise<void> {
@@ -222,7 +306,7 @@ export async function toggleRule(ruleId: string, enabled?: boolean): Promise<{ s
  * 添加一条规则（超过 MAX_RULES 上限时拒绝，避免规则集无限膨胀）
  */
 export async function addRule(rule: ProxyRule): Promise<void> {
-  return withStorageLock(async () => {
+  await withStorageLock(async () => {
     const config = await getProxyConfig();
     if (config.rules.length >= MAX_RULES) {
       throw new Error('MAX_RULES_EXCEEDED');
@@ -230,6 +314,7 @@ export async function addRule(rule: ProxyRule): Promise<void> {
     config.rules.push(rule);
     await saveProxyConfig(config);
   });
+  await rememberTargetOf([rule]);
 }
 
 /**
@@ -237,7 +322,7 @@ export async function addRule(rule: ProxyRule): Promise<void> {
  */
 export async function batchAddRules(rules: ProxyRule[]): Promise<void> {
   if (rules.length === 0) return;
-  return withStorageLock(async () => {
+  await withStorageLock(async () => {
     const config = await getProxyConfig();
     if (config.rules.length + rules.length > MAX_RULES) {
       throw new Error('MAX_RULES_EXCEEDED');
@@ -245,6 +330,7 @@ export async function batchAddRules(rules: ProxyRule[]): Promise<void> {
     config.rules.push(...rules);
     await saveProxyConfig(config);
   });
+  await rememberTargetOf(rules);
 }
 
 /**
@@ -258,16 +344,20 @@ export async function updateRule(
   ruleId: string,
   updates: Omit<ProxyRule, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<void> {
-  return withStorageLock(async () => {
+  const saved: ProxyRule[] = [];
+  await withStorageLock(async () => {
     const config = await getProxyConfig();
     const index = config.rules.findIndex(r => r.id === ruleId);
     if (index === -1) {
       throw new Error(`Rule not found: ${ruleId}`);
     }
     const { createdAt } = config.rules[index];
-    config.rules[index] = { ...updates, id: ruleId, createdAt, updatedAt: Date.now() };
+    const merged = { ...updates, id: ruleId, createdAt, updatedAt: Date.now() };
+    config.rules[index] = merged;
+    saved.push(merged);
     await saveProxyConfig(config);
   });
+  await rememberTargetOf(saved);
 }
 
 /**
@@ -327,7 +417,8 @@ export async function batchToggleRules(ruleIds: string[], enabled: boolean): Pro
  */
 export async function batchUpdateTargets(updates: { id: string; targetUrl: string }[]): Promise<void> {
   if (updates.length === 0) return;
-  return withStorageLock(async () => {
+  const touched: ProxyRule[] = [];
+  await withStorageLock(async () => {
     const config = await getProxyConfig();
     const byId = new Map(config.rules.map(r => [r.id, r]));
     const now = Date.now();
@@ -336,10 +427,13 @@ export async function batchUpdateTargets(updates: { id: string; targetUrl: strin
       if (rule && rule.targetUrl !== update.targetUrl) {
         rule.targetUrl = update.targetUrl;
         rule.updatedAt = now;
+        touched.push(rule);
       }
     }
     await saveProxyConfig(config);
   });
+  // 迁移弹窗正是「一键换目标域名」那个动作，它换过去的地址同样是用户以后想要的候选
+  await rememberTargetOf(touched);
 }
 
 /**

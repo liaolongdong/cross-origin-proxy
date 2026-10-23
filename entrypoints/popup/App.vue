@@ -206,6 +206,48 @@
       </p>
     </div>
 
+    <!-- 这一台站点的生效范围：判据在 utils/siteScope.ts，这里只说结果 -->
+    <div
+      v-if="pageHost"
+      class="site-scope-card"
+    >
+      <div class="site-scope-row">
+        <div class="site-scope-text">
+          <span class="site-scope-label">{{ t('siteScopeTitle') }}</span>
+          <code
+            class="site-scope-host"
+            :title="pageHost"
+            >{{ pageHost }}</code
+          >
+        </div>
+        <el-switch
+          size="small"
+          :model-value="hostProxied === true"
+          :aria-label="t('siteScopeTitle')"
+          :disabled="hostProxied === null || siteScopeBusy"
+          @update:model-value="applyHostProxied($event as boolean)"
+        />
+      </div>
+      <p
+        v-if="siteScopeReading"
+        class="site-scope-note"
+      >
+        {{ t('siteScopeReading') }}
+      </p>
+      <p
+        v-else-if="hostProxied === null"
+        class="site-scope-note"
+      >
+        {{ t('siteScopeUnreadable') }}
+      </p>
+      <p
+        v-else
+        class="site-scope-note"
+      >
+        {{ t('siteScopeBoundary') }}
+      </p>
+    </div>
+
     <!-- 本页地址命中预览（只回答页面地址本身，边界写在卡内） -->
     <div
       v-if="pageUrl"
@@ -250,11 +292,17 @@
           >
         </div>
         <div
-          v-if="pageHitRewritten && pageHitRewritten !== pageUrl"
+          v-if="pageHitRewritten && pageHitRewritten !== pageUrl && !pageHitSiteBlocked"
           class="page-hit-row"
         >
           <span class="page-hit-label">{{ t('pageHitRewritten') }}</span>
           <code class="page-hit-rewritten">{{ truncateUrl(pageHitRewritten, 44) }}</code>
+        </div>
+        <div
+          v-if="pageHitSiteBlocked"
+          class="page-hit-off"
+        >
+          {{ t('pageHitSiteBlocked') }}
         </div>
         <div
           v-if="!enabled && statusEverRead"
@@ -290,6 +338,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionOpenConfigDesc')"
         @click="openOptionsPage('#add-rule')"
         @keydown.enter.space.prevent="openOptionsPage('#add-rule')"
       >
@@ -298,7 +347,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionOpenConfig') }}</div>
-          <div class="action-card__desc">{{ t('actionOpenConfigDesc') }}</div>
         </div>
       </div>
 
@@ -306,6 +354,8 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="createRuleFromTabDesc"
+        :class="{ 'is-expanded': apiPicker }"
         :aria-expanded="apiPicker ? 'true' : 'false'"
         @click="handleCreateRuleFromTab"
         @keydown.enter.space.prevent="handleCreateRuleFromTab"
@@ -315,7 +365,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionCreateRuleFromTab') }}</div>
-          <div class="action-card__desc">{{ createRuleFromTabDesc }}</div>
         </div>
       </div>
 
@@ -386,6 +435,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionViewLogsDesc')"
         @click="openOptionsPage('#logs')"
         @keydown.enter.space.prevent="openOptionsPage('#logs')"
       >
@@ -394,7 +444,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionViewLogs') }}</div>
-          <div class="action-card__desc">{{ t('actionViewLogsDesc') }}</div>
         </div>
       </div>
 
@@ -402,6 +451,7 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionImportExportDesc')"
         @click="openOptionsPage('#import-export')"
         @keydown.enter.space.prevent="openOptionsPage('#import-export')"
       >
@@ -410,7 +460,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionImportExport') }}</div>
-          <div class="action-card__desc">{{ t('actionImportExportDesc') }}</div>
         </div>
       </div>
 
@@ -418,6 +467,8 @@
         class="action-card"
         role="button"
         tabindex="0"
+        :title="t('actionProfilesDesc')"
+        :class="{ 'is-expanded': profilePicker }"
         :aria-expanded="profilePicker ? 'true' : 'false'"
         @click="handleProfilesCard"
         @keydown.enter.space.prevent="handleProfilesCard"
@@ -427,7 +478,6 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionProfiles') }}</div>
-          <div class="action-card__desc">{{ t('actionProfilesDesc') }}</div>
         </div>
       </div>
 
@@ -610,6 +660,9 @@ import { probeCorsSuspects, probePageApiOrigins } from '@/utils/pageApiProbe';
 import { buildPickerRows, type ApiPickerRow, type CorsSuspect } from '@/utils/corsSuspects';
 import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from '@/utils/urlMatcher';
 import { diagnoseRequest, type Diagnosis, type DiagnosisCode } from '@/utils/diagnosis';
+import { sanitizeSiteState, siteAllows, siteScopeToggle, hostnameOf } from '@/utils/siteScope';
+import { MAX_SITE_STATE_HOSTS } from '@/utils/constants';
+import type { SiteState } from '@/utils/types';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
 import { describeInterceptorStats, isInterceptorStatsEntry } from '@/utils/interceptorStats';
@@ -766,10 +819,16 @@ const pageHitCauseText = computed(() => (pageHitCause.value ? diagnosisText(page
  * 而是给下面那张「为本页创建规则」卡片提供一句话与面板里的标记，所以问不到只是少一句卖点。
  */
 async function computePageHit() {
+  pageHitRuleId.value = '';
+  pageHitRuleName.value = '';
+  pageHitRewritten.value = '';
+  pageHitChannelDnr.value = false;
+  pageHitCause.value = null;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url ?? '';
     pageUrl.value = url;
+    pageHost.value = hostnameOf(url);
     const proxiable = /^https?:/i.test(url);
     pageHitProxiable.value = proxiable;
 
@@ -779,6 +838,7 @@ async function computePageHit() {
       void fetchTabDnrStats(tab?.id);
       void fetchTabInterceptorStats(tab?.id);
       void fetchTabConfigSync(tab?.id);
+      void fetchSiteState();
       void fetchCorsSuspects(tab?.id);
     }
 
@@ -885,6 +945,107 @@ async function fetchTabInterceptorStats(tabId: number | undefined) {
     if (isInterceptorStatsEntry(entry)) interceptorRaw.value = entry;
   } catch (error) {
     logger.debug('Fetch tab interceptor stats failed:', error);
+  }
+}
+
+// ─── 站点维度的生效范围（这一台站点要不要走代理） ─────────────────────────────
+/**
+ * 判据不在这一侧：`utils/siteScope.ts` 的 `siteScopeToggle` 才决定「打开开关」在两种模式下
+ * 各写成什么状态。界面只说结果——「这一台站点走不走代理」——因为名单在 `site-off` 与
+ * `site-only` 里含义相反，把「往名单里加一台」直接画成开关就会在换档时说反话。
+ *
+ * `siteState` 为 null 表示「这次没读到」。那一档不许画成「全部站点都在生效」的确认语气，
+ * 也不许把开关当成「已关闭」——开关读不到就是读不到（与 `statusEverRead` 同一族规矩）。
+ * 而「这一次还在路上」是第三档，与「读不到」也与「没有」都不同：首帧就交出一句「没读到」
+ * 等于在往返完成之前先下结论（与规则表骨架同一件事）。
+ */
+const siteState = ref<SiteState | null>(null);
+/** 第一次往返有没有落定（成功或失败都算）：它只回答「那一格还没问过」，不参与其余判定 */
+const siteScopeFirstReadSettled = ref(false);
+const siteScopeBusy = ref(false);
+const pageHost = ref('');
+
+/** 这台主机当前是否走代理（读不到状态时为 null，界面据此禁用开关） */
+const hostProxied = computed<boolean | null>(() =>
+  siteState.value === null ? null : siteAllows(siteState.value, pageHost.value),
+);
+
+/**
+ * 「这一次还在路上」——只在第一次落定之前出现。
+ * 判据必须是「落定过没有」而不是「读到过没有」：只写后者的话，第一次就失败的那一局会永远挂着
+ * 「正在读取」把失败吞掉（与规则表骨架排在读失败之后是同一个错）。
+ */
+const siteScopeReading = computed(() => !siteScopeFirstReadSettled.value);
+
+/**
+ * 这一台站点被名单排除在外 → 命中预览不许承诺改写
+ *
+ * 弹窗是扩展页，拿到的刻意是**完整**配置（收窄只发生在下发给内容脚本之前），所以这里按
+ * `siteAllows` 自己判一次：不加这一格，卡片会指着一条规则说「命中 · 网络层 · 改写为 X」，
+ * 而两条通道在这一台站点上都不动它——那是本仓最不该出现的那类假承诺。
+ * 读不到名单时保持原样（`null` 不是「已停用」），上面那一格自会说「没读到」。
+ */
+const pageHitSiteBlocked = computed(
+  () => !!pageHost.value && siteState.value !== null && !siteAllows(siteState.value, pageHost.value),
+);
+
+function isSiteStateResponse(value: unknown): value is SiteState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const state = value as Partial<SiteState>;
+  return (
+    (state.mode === 'all' || state.mode === 'site-off' || state.mode === 'site-only') && Array.isArray(state.hosts)
+  );
+}
+
+async function fetchSiteState() {
+  try {
+    const state: unknown = await chrome.runtime.sendMessage({ type: MessageType.GET_SITE_STATE });
+    siteState.value = isSiteStateResponse(state) ? sanitizeSiteState(state) : null;
+  } catch (error) {
+    logger.debug('Fetch site state failed:', error);
+    siteState.value = null;
+  } finally {
+    siteScopeFirstReadSettled.value = true;
+  }
+}
+
+async function applyHostProxied(value: boolean) {
+  if (!pageHost.value || !siteState.value || siteScopeBusy.value) return;
+  const current = siteState.value;
+  const { state: next, blocked } = siteScopeToggle(current, pageHost.value, value);
+  if (blocked) {
+    ElMessage.warning(
+      blocked === 'capReached' ? t('siteScopeCapReached', String(MAX_SITE_STATE_HOSTS)) : t('siteScopeParentCovered'),
+    );
+    return;
+  }
+  if (
+    next.mode === current.mode &&
+    next.hosts.length === current.hosts.length &&
+    next.hosts.every((host, index) => host === current.hosts[index])
+  ) {
+    siteState.value = next;
+    return;
+  }
+  siteScopeBusy.value = true;
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      type: MessageType.SET_SITE_STATE,
+      data: { mode: next.mode, hosts: next.hosts },
+    })) as { success?: boolean } | undefined;
+    if (response?.success) {
+      siteState.value = next;
+      ElMessage.success(value ? t('siteScopeEnabledHere') : t('siteScopeDisabledHere'));
+      // 名单变了 → DNR 与这一页的配置都要重来一次，读数不能停在按旧范围算出来的那份
+      void computePageHit();
+    } else {
+      ElMessage.error(t('siteScopeSaveFailed'));
+    }
+  } catch (error) {
+    logger.debug('Set site state failed:', error);
+    ElMessage.error(t('siteScopeSaveFailed'));
+  } finally {
+    siteScopeBusy.value = false;
   }
 }
 
@@ -1260,12 +1421,16 @@ async function openOptionsPage(hash = '') {
 }
 
 /* 头部 */
+
+/* 这一段的总高要压进 Chrome 弹窗的 600px 上限（内容自然高 ≈ 598px，中文是最坏一档）：
+   每处只收一两像素看不出差别，叠起来才装得下「最近请求」的空态与它那句提示。
+   再往下调之前先量一次——量法见 `.test-tmp/probe/ui-verify-1022.cjs` 的 container.bottom + body 8px。 */
 .header {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--cop-border-color-light);
 }
 
@@ -1294,9 +1459,9 @@ async function openOptionsPage(hash = '') {
 .toggle-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;
@@ -1458,8 +1623,8 @@ async function openOptionsPage(hash = '') {
 
 /* 数据点 + 拦截器活动（两者共用同一条分隔线，间距与拆分前一致） */
 .metrics-block {
-  padding-bottom: 12px;
-  margin-bottom: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
   border-bottom: 1px solid var(--cop-border-color-light);
 }
 
@@ -1469,7 +1634,7 @@ async function openOptionsPage(hash = '') {
   /* 三格顶部对齐：只有第三格带注释行，居中会让前两格的数字下沉半行 */
   align-items: flex-start;
   justify-content: space-around;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .metric {
@@ -1598,6 +1763,48 @@ async function openOptionsPage(hash = '') {
   animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter);
 }
 
+/* 站点生效范围那一格：与本页命中卡同一套底色，靠边说明「按主机判定」 */
+.site-scope-card {
+  padding: 8px 10px;
+  margin-top: 10px;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color);
+  border-radius: 8px;
+}
+
+.site-scope-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-scope-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.site-scope-label {
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+}
+
+.site-scope-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--cop-text-color-primary);
+  white-space: nowrap;
+}
+
+.site-scope-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cop-text-color-secondary);
+}
+
 /* 当前页命中预览 */
 .page-hit-card {
   display: flex;
@@ -1717,19 +1924,22 @@ async function openOptionsPage(hash = '') {
   color: var(--el-color-warning);
 }
 
-/* 动作卡片列表 */
+/* 动作卡排成两列宫格：单列五张卡要占 300 多像素，把「最近请求」整个挤出首屏。
+   两列之后五个入口仍全部可见，首屏高度回到 600px 以内；卡片里的描述文字改作
+   `title` 悬停提示（宫格宽度放不下第二行，截断读起来比不显示更糟）。 */
 .action-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .action-card {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
+  min-width: 0;
+  padding: 8px 10px;
   cursor: pointer;
   user-select: none;
   outline: none;
@@ -1747,6 +1957,7 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-primary-bg-hover);
   border-color: var(--cop-primary-border);
   box-shadow: 0 2px 8px rgb(var(--cop-primary-rgb) / 10%);
+  transform: translateY(-1px);
 }
 
 .action-card:active {
@@ -1765,9 +1976,9 @@ async function openOptionsPage(hash = '') {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
   border-radius: 50%;
 }
 
@@ -1794,26 +2005,29 @@ async function openOptionsPage(hash = '') {
 }
 
 .action-card__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--cop-text-color-primary);
 }
 
-.action-card__desc {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--cop-text-color-secondary);
+/* 展开中的那张卡用主色边框点一句「面板从这里出来」，收起即复原 */
+.action-card.is-expanded {
+  background: var(--cop-primary-bg-hover);
+  border-color: var(--cop-primary-border);
 }
 
 /* 候选面板（「为当前页创建规则」点开后）：与动作卡同一套圆角与底色，
    靠主色边框表示「这是刚才那次点击展开的东西」，而不是第四张卡 */
 .api-picker {
+  grid-column: 1 / -1;
   padding: 10px 12px 12px;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-primary-border);
   border-radius: 10px;
+
+  /* 面板是 `v-if`，只在出现那一刻挂上；不写 fill，避免把 `transform` 冻在末帧吃掉行内的悬浮抬升 */
+  animation: cop-rise-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
 .api-picker-title {
@@ -1924,6 +2138,9 @@ async function openOptionsPage(hash = '') {
   background: var(--cop-primary-bg);
   border: 1px solid var(--cop-primary-border);
   border-radius: 6px;
+
+  /* 这一格是按下某一行之后才出现的后果说明：离用户的手最近，所以走 `fast` 而不是面板的 `slow` */
+  animation: cop-rise-in var(--cop-duration-fast) var(--cop-ease-enter);
 }
 
 .profile-confirm-text {
@@ -1981,26 +2198,22 @@ async function openOptionsPage(hash = '') {
 }
 
 /* 最近请求 */
-.recent-section {
-  padding-top: 4px;
-}
-
 .recent-title {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--cop-text-color-primary);
 }
 
 .recent-empty {
-  padding: 12px 0;
+  padding: 6px 0;
   font-size: 12px;
   color: var(--cop-text-color-placeholder);
   text-align: center;
 }
 
 .recent-empty-hint {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font-size: 11px;
   color: var(--cop-text-color-secondary);
   text-align: center;
@@ -2068,7 +2281,7 @@ async function openOptionsPage(hash = '') {
 
 /* 可折叠规则列表 */
 .rules-section {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   overflow: hidden;
   border: 1px solid var(--cop-border-color);
   border-radius: 10px;

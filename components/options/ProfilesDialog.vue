@@ -396,6 +396,11 @@ async function handleDeleteProfile(profile: ProfileView) {
 .profile-actions {
   display: flex;
   flex-shrink: 0;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 </style>
