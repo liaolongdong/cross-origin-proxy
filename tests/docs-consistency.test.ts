@@ -1123,6 +1123,46 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  /**
+   * 两张整宽的卡各占满一行，剩下 10 张三列卡正好排出 3+3+3+1，最后一行只落一张、
+   * 靠左悬着，右边空出三分之二。把它摆进中间那一格（`grid-column: 3 / span 2`）
+   * 这一行才读成收尾。中英两页在 1000px 与 1280px 处量过：左右两侧留白逐像素相等
+   * （326 / 326 与 379 / 379），行数仍是 5。
+   *
+   * 这条声明只在「余 1」时说得通，所以这里钉的是前提而不是像素：真机布局在 node
+   * 环境里没有对应物，而卡数一变，居中就会从「收尾」变成「空两格」。同一条声明还
+   * 有一个更隐蔽的破坏面——`:last-child` 的权重（0,2,0）压得过 `.feature-card-lg`
+   * （0,1,0），最后一张若换成整宽卡，那半行就会被拽进中间两列。
+   */
+  describe('三列下最后一行那张孤卡摆在中间', () => {
+    it('前提成立（余 1、末张不是整宽）且声明就在三列那一档里', () => {
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      const threeUp = [...css.matchAll(/@media \(width >= (\d+)px\)\s*\{([\s\S]*?)\n\}/g)].find(m =>
+        m[2].includes('repeat(6, 1fr)'),
+      );
+      expect(threeUp, '找不到把 .feature-grid 切成三列那一档媒体查询').toBeTruthy();
+      expect(
+        threeUp![2],
+        '三列那一档里找不到 `.feature-card:last-child { grid-column: 3 / span 2 }`——孤卡又挂回左边了',
+      ).toMatch(/\.feature-card:last-child\s*\{[^}]*grid-column:\s*3\s*\/\s*span\s*2/);
+
+      for (const page of ['docs/index.html', 'docs/en.html']) {
+        const classes = [...read(page).matchAll(/<article class="(feature-card[^"]*)"/g)].map(m => m[1]);
+        expect(classes.length, `${page} 一张特性卡都没读到，下面的余数就成了空话`).toBeGreaterThan(0);
+        const regular = classes.filter(c => !c.includes('feature-card-lg')).length;
+        expect(
+          regular % 3,
+          `${page} 的三分之一宽卡片有 ${regular} 张（${classes.length} 张里 ${classes.length - regular} 张整宽），` +
+            '除以 3 的余数已不是 1——最后一行要么排满、要么落两张，居中这一格不再说得通，请重新决定排版',
+        ).toBe(1);
+        expect(
+          classes[classes.length - 1],
+          `${page} 的最后一张是整宽卡：\`:last-child\` 的权重压得过 \`.feature-card-lg\`，会把它从 1 / -1 拽进中间两列`,
+        ).not.toContain('feature-card-lg');
+      }
+    });
+  });
+
   describe('落地页菜单顺序跟随正文', () => {
     /**
      * 菜单是滚动的目录，不是「动作项收尾」的排版偏好：读者照着菜单往下走，

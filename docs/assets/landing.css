@@ -1205,6 +1205,12 @@ section[aria-labelledby] {
   .feature-card-lg {
     grid-column: span 3;
   }
+
+  /* 12 张卡里两张整宽，其余 10 张每行三张，最后一行只落下 1 张。把它摆进中间
+     那一格，这一行读起来才是收尾，而不是「没排满」。 */
+  .feature-card:last-child {
+    grid-column: 3 / span 2;
+  }
 }
 
 .feature-card h3 {
