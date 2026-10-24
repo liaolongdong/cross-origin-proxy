@@ -1460,6 +1460,54 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  describe('llms 文件承诺的问答锚点真的对得上页面', () => {
+    /* 面向 AI 的那两份文件现在写了一句可核对的话：「每一条问题都有锚点，中英同一序号
+       指同一问」。这句话一旦与页面脱钩，被引用的锚点就是 404 级别的东西——所以它必须
+       是被查过的，而不是写下去就永远成立。 */
+    const ANCHOR_RE = /#(faq-[a-z]+-\d+|faq-\d+)\b/g;
+
+    const idsOn = (file: string): string[] => [...read(file).matchAll(/<details id="([^"]+)"/g)].map(m => m[1]);
+
+    const categoryIdsOn = (file: string): string[] =>
+      [...read(file).matchAll(/class="faq-category"[\s\S]{0,80}?id="(faq-[a-z-]+)"/g)].map(m => m[1]);
+
+    it('两份 llms 文件都还在说锚点这件事', () => {
+      const full = read('docs/llms-full.txt');
+      const index = read('docs/llms.txt');
+      expect(full, 'llms-full 少了那一节：AI 系统就不知道该引用某一问而不是整页').toMatch(
+        /Citable anchors for every FAQ question/,
+      );
+      expect(full).toMatch(/cites?|cite the fragment|引用锚点|请引用锚点/);
+      expect(index, 'llms.txt 那份简明索引没跟上').toMatch(/锚点/);
+      expect(index, 'llms.txt 只留了中文那半句：这份索引是双语一行的，英文半边也要在').toMatch(/citable fragment/i);
+    });
+
+    it('文中举例的每一个锚点，在中英两页都查得到对应的条目', () => {
+      const cited = new Set<string>();
+      for (const file of ['docs/llms-full.txt', 'docs/llms.txt']) {
+        for (const m of read(file).matchAll(ANCHOR_RE)) cited.add(m[1]);
+      }
+      expect(cited.size, '两份 llms 文件里一个锚点例子都没读到，这条断言就成了空话').toBeGreaterThan(0);
+      const zh = idsOn('docs/index.html');
+      const en = idsOn('docs/en.html');
+      for (const anchor of cited) {
+        expect(zh, `llms 文件举例用了 #${anchor}，中文页查不到这一问`).toContain(anchor);
+        expect(en, `llms 文件举例用了 #${anchor}，英文页查不到这一问`).toContain(anchor);
+      }
+    });
+
+    it('列出的分类清单与页面实际的分类标题一一对应', () => {
+      const listed = [...read('docs/llms-full.txt').matchAll(/`(faq-[a-z]+)`/g)].map(m => m[1]);
+      const unique = [...new Set(listed)];
+      expect(unique.length, 'llms-full 里一个分类 id 都没列出来，下面的比较就是空话').toBeGreaterThan(0);
+      for (const file of ['docs/index.html', 'docs/en.html']) {
+        const actual = categoryIdsOn(file);
+        expect(actual.length, `${file} 读不到分类标题的 id`).toBeGreaterThan(0);
+        expect(unique.sort(), `llms 文件列的分类与 ${file} 实际的分类标题不一致`).toEqual([...actual].sort());
+      }
+    });
+  });
+
   describe('落地页菜单顺序跟随正文', () => {
     /**
      * 菜单是滚动的目录，不是「动作项收尾」的排版偏好：读者照着菜单往下走，
