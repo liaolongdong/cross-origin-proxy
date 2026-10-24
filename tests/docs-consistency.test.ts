@@ -1776,6 +1776,75 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
    * ② 滚到最右要**自己退场**——CSS 里不许出现 `.table-scroll[data-edge='end']` 的渐隐，
    *    否则读者永远觉得还有更多。
    */
+  /**
+   * 站内跳转的完整性。README 的目录与 CTA 行、产品站的页头导航与 52 枚 FAQ 直达链接，
+   * 全都靠「目标 id/标题恰好还在」这一件事成立——而改标题、挪小节、重排 FAQ 都是日常操作，
+   * 断了的代价是读者点一下什么都没发生（README 上还包括 Google 会抓的 jump link）。
+   * 没有任何东西守着它：Markdown 的锚点连浏览器都不报错，只是不跳。
+   *
+   * Markdown 侧的 slug 规则照 `github-slugger`：小写 → 去掉「非 字母/数字/空格/下划线/连字符」
+   * → 空格全部换成 `-`，**不 trim**。最后那一步是这条判据的牙口所在：
+   * `## 📥 安装` 去掉 emoji 之后留下一个前导空格，于是 GitHub 实际生成的锚点是 `-安装`
+   * 而不是 `安装`——按直觉 trim 一下，README 里 15 条链接会全部假报断链。
+   */
+  describe('仓库里的站内跳转都落到真实锚点', () => {
+    const mdSlug = (t: string): string =>
+      t
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N} _-]/gu, '')
+        .replace(/ /g, '-');
+
+    const headingSlugs = (src: string): Set<string> => {
+      const out = new Set<string>();
+      for (const m of src.matchAll(/^#{1,6}\s+(.+)$/gm)) out.add(mdSlug(m[1]));
+      return out;
+    };
+
+    it.each(['README.md', 'README.en.md'])('%s 的每条 ](#…) 都指得到一个真实标题', file => {
+      const src = read(file);
+      const heads = headingSlugs(src);
+      const links = [...src.matchAll(/\]\(#([^)]+)\)/g)].map(m => m[1]);
+      // 分母：一条锚点都没有的话，「零断链」只是没东西可断
+      expect(links.length, `${file} 的站内锚点少于 10 条——目录与 CTA 行被动过了？回来重判这条`).toBeGreaterThanOrEqual(
+        10,
+      );
+      const bad = [...new Set(links.filter(l => !heads.has(decodeURIComponent(l))))];
+      expect(bad, `${file} 这些锚点落不到任何标题：${bad.join(' | ')}`).toEqual([]);
+    });
+
+    const ANCHOR_PAGES = [
+      'docs/index.html',
+      'docs/en.html',
+      'docs/alternatives.html',
+      'docs/en-alternatives.html',
+      'docs/privacy.html',
+    ];
+
+    /** 每页的页内跳转数量下限（2026-10-24 实测：两份落地页各 48、两份对比页各 18、隐私页 1）。
+        这不是审美阈值，而是**防空转**：`bad === []` 在「一条锚点都没有」时也成立，
+        那正是最需要报警的形状——导航与 FAQ 直达链接被整片删掉。留一档余量给日常增删。 */
+    const ANCHOR_FLOOR: Record<string, number> = {
+      'docs/index.html': 40,
+      'docs/en.html': 40,
+      'docs/alternatives.html': 15,
+      'docs/en-alternatives.html': 15,
+      'docs/privacy.html': 1,
+    };
+
+    it.each(ANCHOR_PAGES)('%s 的每个 href="#…" 都指得到一个同页的 id', file => {
+      const src = read(file);
+      const ids = new Set([...src.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
+      const links = [...src.matchAll(/href="#([^"]+)"/g)].map(m => m[1]);
+      const floor = ANCHOR_FLOOR[file];
+      expect(
+        links.length,
+        `${file} 的页内跳转只剩 ${links.length} 处（基线 ${floor}）——导航或 FAQ 锚点被整片删过？`,
+      ).toBeGreaterThanOrEqual(floor);
+      const bad = [...new Set(links.filter(l => !ids.has(l)))];
+      expect(bad, `${file} 这些页内跳转点下去什么都没发生：${bad.join(' | ')}`).toEqual([]);
+    });
+  });
+
   describe('窄屏对比表的横滑提示', () => {
     const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
     const js = () => read('docs/assets/landing.js');
