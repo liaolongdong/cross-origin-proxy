@@ -11,18 +11,51 @@
  */
 
 :root {
+  /* `-strong` 这一组是给**承载文字的颜色**用的，不是「更深的品牌色」：
+     一条规则——凡是 `color:` 出去的字，必须在**同主题的每一种底**（页面底、卡片面、
+     soft 色块、tint 列底色）上量到 ≥ 4.5:1。2026-10-24 用一次性量具把五页 × 明暗两档、
+     所有 `<details>` 展开、外加「已复制」与筛选读数这两枚只有交互后才存在的节点全扫了一遍，
+     浅色档里 `--lp-accent`（2.32–2.55:1）、`--lp-warn`（2.98–3.28:1）、`--lp-danger`（3.68:1）、
+     `--lp-primary` 作文字（2.78:1）与 `--lp-ink-faint`（2.70–2.98:1）都不达标，
+     而它们在暗色档本来是达标的——所以这不是换个色，是给「要读的字」与「只做装饰的面」各一份值。
+     `-strong` 在暗色档回落成浅色档那份亮色，因为两边的相对亮度方向正好相反。
+     注意范围只圈 `color:`：把同一份替换顺手做到 `border-*-color` 上，
+     等于把装饰的描边也拖深，暗色档里 `--lp-primary-strong` 还是枚更亮的蓝（#8ac4ff），
+     那不是修对比度而是改观感。 */
   --lp-primary: #409eff;
   --lp-primary-strong: #1a5fb4;
+
+  /* 实心 CTA 的那层蓝：白字压在 `--lp-primary`（#409eff）上只有 2.78:1，
+     而这一颗是全站唯一一句「现在就去装」，读不出就是转化漏斗上最贵的一格。
+     深浅两档共用这一个值——底要装得下白字就必须是这一档深度；
+     品牌的那层亮蓝仍然留在页头下划条、圆点、进度条、悬停描边这些不承载文字的面上。 */
+  --lp-cta: #1a5fb4;
   --lp-primary-soft: #ecf5ff;
   --lp-primary-faint: #f4f9ff;
   --lp-accent: #12b886;
+  --lp-accent-strong: #0b7a5b;
   --lp-accent-soft: #e6f9f1;
   --lp-warn: #d9730d;
+  --lp-warn-strong: #a85305;
   --lp-warn-soft: #fff4e0;
   --lp-danger: #e0455e;
+  --lp-danger-strong: #c2274a;
+
+  /* 实底 + 白字专用，两档同值（理由见 `.code-copy.is-failed` 那条注释） */
+  --lp-danger-fill: #c2274a;
+
+  /* 紫与青这两枚只出现在特性图标上，原本是把色值直接写在规则里的，
+     于是它们在浅底上只有 2.67:1 与 3.64:1——图标里那个字母是要读的字，不是装饰块，
+     所以按同一条规矩各给一份 `-strong`。 */
+  --lp-cyan-strong: #0a6f86;
+  --lp-purple-strong: #6d3fd1;
   --lp-ink: #1f2d3d;
   --lp-ink-soft: #5b6b7c;
-  --lp-ink-faint: #8a97a5;
+
+  /* 三级灰从 #8a97a5 收到 #5f6d80：2.98 → 4.78（最坏的 `--lp-primary-soft` 列底色上 4.78，
+     白底 4.76、tint 面 4.78 档内最低）。这一档动的是 13 类小标签、表注与 `dt`，
+     是本轮观感位移最大的一处，也是唯一一处「层级仍在、只是三层挨得更近」 */
+  --lp-ink-faint: #5f6d80;
   --lp-bg: #fff;
   --lp-bg-alt: #f6f9fe;
   --lp-surface: #fff;
@@ -44,13 +77,25 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --lp-primary-strong: #8ac4ff;
+
+    /* 暗色档里「要读的字」方向反过来：浅色档那批深色在这边会沉进底里，
+       所以 strong 回落成浅色档原本的值。`--lp-cta` 是唯一一个两档同值的——
+       白字压在它上面 6.29:1，换成更亮的蓝就掉回 4 以下。
+       `--lp-ink-faint` 从 #7f8b99 抬到 #93a1b0：前者压在 `--lp-accent-soft`（#10312a）上
+       只有 4.05:1，是这一档唯一一处不达标。 */
+    --lp-cta: #1a5fb4;
+    --lp-accent-strong: #12b886;
+    --lp-warn-strong: #e78a2e;
+    --lp-danger-strong: #ef7d8c;
+    --lp-cyan-strong: #67c7de;
+    --lp-purple-strong: #b39cf5;
     --lp-primary-soft: #16283d;
     --lp-primary-faint: #12203259;
     --lp-accent-soft: #10312a;
     --lp-warn-soft: #33230f;
     --lp-ink: #e8eef5;
     --lp-ink-soft: #a9b7c6;
-    --lp-ink-faint: #7f8b99;
+    --lp-ink-faint: #93a1b0;
     --lp-bg: #0e1621;
     --lp-bg-alt: #121c29;
     --lp-surface: #16212f;
@@ -99,6 +144,19 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+/* 正文里的链接不能只靠颜色区分：下划线原本只在 `:hover` 出现，等于静止状态下
+   读者必须凭「这串字是蓝的」判断它可点——那正是 WCAG 1.4.1 不许的做法，
+   也是 2026-10-24 那轮 Lighthouse `link-in-text-block` 点名 8 处的原因。
+   范围刻意只圈**成段的正文**（p / li / dd / caption）：页头导航有下划条、
+   卡片标题有容器、按钮有形状与实底，那些本来就是可点线索，给它们补下划线
+   只会把界面画毛，所以按钮类链接用 `:not(.btn)` 排除在外。
+   `text-underline-offset` 是让线不咬住中文下沿的最小补偿。 */
+:is(p, li, dd, caption) a:not(.btn) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 :focus-visible {
@@ -153,7 +211,7 @@ pre {
   z-index: 20;
   padding: 8px 14px;
   color: #fff;
-  background: var(--lp-primary);
+  background: var(--lp-cta);
   border-radius: var(--lp-radius-sm);
 
   /* 用 transform 移出视口：之前用 top: -40px 时链接自身高约 43px，顶部会露出几px蓝条。 */
@@ -218,7 +276,7 @@ pre {
   /* 裁剪的是「动效增强」一节那道扫过的高光：伪元素位移出边界时不该露出边角。 */
   overflow: hidden;
   color: #fff;
-  background: var(--lp-primary);
+  background: var(--lp-cta);
   box-shadow: 0 8px 22px rgb(64 158 255 / 28%);
 }
 
@@ -490,7 +548,7 @@ html.js .site-nav > a[aria-current]::after {
 .nav-actions .nav-install {
   padding: 0 14px;
   color: #fff;
-  background: var(--lp-primary);
+  background: var(--lp-cta);
   border-color: transparent;
 }
 
@@ -707,7 +765,7 @@ html.js .nav-menu-panel a[aria-current] {
 }
 
 .hero h1 .accent {
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
 }
 
 .hero .lede {
@@ -888,7 +946,7 @@ html.js.try-ready .hero-example-cta {
   display: inline-block;
   font-size: 13px;
   font-weight: 600;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
 }
 
 html.js.try-ready .hero-example-cta:hover {
@@ -929,7 +987,7 @@ html.js.try-ready .hero-example-cta:hover {
 .hero-outcome-why {
   font-size: 12px;
   font-weight: 600;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
 }
 
 .hero-outcome-why:hover {
@@ -1128,7 +1186,7 @@ section[aria-labelledby] {
   justify-content: center;
   width: 40px;
   height: 40px;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
   background: var(--lp-primary-soft);
   border-radius: 11px;
 }
@@ -1278,7 +1336,7 @@ section[aria-labelledby] {
   justify-content: center;
   width: 46px;
   height: 46px;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
   background: var(--lp-primary-soft);
   border-radius: 13px;
   transition:
@@ -1287,27 +1345,27 @@ section[aria-labelledby] {
 }
 
 .feature-icon--green {
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
   background: var(--lp-accent-soft);
 }
 
 .feature-icon--orange {
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
   background: var(--lp-warn-soft);
 }
 
 .feature-icon--purple {
-  color: #8b5cf6;
+  color: var(--lp-purple-strong);
   background: rgb(139 92 246 / 12%);
 }
 
 .feature-icon--cyan {
-  color: #0aa2c0;
+  color: var(--lp-cyan-strong);
   background: rgb(10 162 192 / 12%);
 }
 
 .feature-icon--pink {
-  color: var(--lp-danger);
+  color: var(--lp-danger-strong);
   background: rgb(224 69 94 / 12%);
 }
 
@@ -1452,7 +1510,7 @@ html.js .compare tbody tr.reveal {
 
 .mark-yes {
   font-weight: 700;
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
 }
 
 .mark-no {
@@ -1461,7 +1519,7 @@ html.js .compare tbody tr.reveal {
 
 .mark-part {
   font-weight: 600;
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
 }
 
 /* ---------- 报错原文对照（#problem 表格之后）----------
@@ -1745,7 +1803,7 @@ html.js .gallery-bar {
   font-size: 34px;
   font-weight: 800;
   line-height: 1;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
   letter-spacing: -1px;
 }
 
@@ -1866,7 +1924,7 @@ html.js.try-ready .try {
 
 .try-fill-status.is-failed,
 .try-status.is-failed {
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
 }
 
 /* 匹配模式是被脚本改写的，没有这一下闪亮，读者会以为自己刚才就填过。
@@ -2022,7 +2080,7 @@ html.js.try-ready .try {
 /* 五种结论各配一档底色：这一笔到底有没有被接管、走哪条通道，读一眼就分得开。
    「模式不被接受」与「归网络层管但不会被应用」是同一档颜色——两格说的都是这条规则落不了地。 */
 html[data-try-state='net'] .try-verdict {
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
   background: var(--lp-accent-soft);
 }
 
@@ -2037,7 +2095,7 @@ html[data-try-state='miss'] .try-verdict {
 
 html[data-try-state='rejected'] .try-verdict,
 html[data-try-state='notapplied'] .try-verdict {
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
   background: var(--lp-warn-soft);
 }
 
@@ -2080,7 +2138,7 @@ html[data-try-state='notapplied'] .try-verdict {
   display: block;
   margin-top: 4px;
   font-size: 13px;
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
 }
 
 /* 这一格是「有话才出现」：脚本挑不到对应那句理由时会挂上 `hidden`，
@@ -2579,7 +2637,7 @@ html.js .faq-permalink:hover {
 
 /* 复制成功那一下：弹一格并换成成功色，读者不必先读文字也知道刚才点到了什么。 */
 html.js .faq-permalink.is-copied {
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
   opacity: 1;
   animation: faq-link-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -2606,7 +2664,7 @@ html.js .faq-permalink.is-copied {
   margin-left: 8px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
   white-space: nowrap;
 }
 
@@ -2615,7 +2673,7 @@ html.js .faq-permalink.is-copied {
 }
 
 .faq-copy-status.is-failed {
-  color: var(--lp-danger);
+  color: var(--lp-danger-strong);
 }
 
 details p {
@@ -2871,7 +2929,7 @@ html.js .copy-btn {
 
 .copy-status {
   font-size: 13.5px;
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
 }
 
 .copy-status:empty {
@@ -2879,7 +2937,7 @@ html.js .copy-btn {
 }
 
 .copy-status.is-failed {
-  color: var(--lp-danger);
+  color: var(--lp-danger-strong);
 }
 
 /* ---------- 代码块的一键复制 ---------- */
@@ -2950,8 +3008,9 @@ html.js .code-copy {
 }
 
 .code-copy.is-failed {
+  /* 实底 + 白字这一档两主题共用一个值，不能跟着 -strong 翻：暗色档的 danger-strong 是浅粉，拿它当底会把白字压到 1.6:1 */
   color: #fff;
-  background: var(--lp-danger);
+  background: var(--lp-danger-fill);
   border-color: transparent;
 }
 

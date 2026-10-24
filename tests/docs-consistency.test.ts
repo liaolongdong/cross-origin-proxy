@@ -1581,6 +1581,192 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  /**
+   * 产品站浅色/暗色两档的**文字对比度**。这条守的是令牌值，不是渲染结果——
+   * 真机全量扫描（五页 × 两档、所有 `<details>` 展开、外加「已复制」与筛选读数那两枚
+   * 只在交互后才存在的节点，共 3,000 多个文本节点）在本环境无法进 CI，
+   * 所以这里把「承载文字的色必须在自己那一主题的每一种底上都 ≥ 4.5:1」这条算式钉住：
+   * 谁把 `--lp-ink-faint` 调回 `#8a97a5`、或把 `--lp-cta` 在暗色档改成浅蓝，这里当场红。
+   * 2026-10-24 那轮的起点正是 Lighthouse 报的 29 处：浅色档 `--lp-accent` 2.32、
+   * `--lp-warn` 3.28、`--lp-ink-faint` 2.98、白字压 `--lp-primary` 2.78，全都在暗色档是达标的，
+   * 所以修法是「要读的字」与「只做装饰的面」各一份值，而不是统一调色。
+   */
+  describe('产品站的文字对比度与 llms.txt 的机器可读链接', () => {
+    const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    /** 取某一段声明块里的自定义属性（`:root` 与暗色覆盖块共用） */
+    const customProps = (blockSource: string): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const m of blockSource.matchAll(/(--lp-[\w-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+      return out;
+    };
+
+    const rootBlock = () => {
+      const s = css();
+      const at = s.indexOf(':root {');
+      const open = s.indexOf('{', at);
+      let depth = 0;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) return s.slice(open + 1, i);
+        }
+      }
+      return '';
+    };
+
+    const darkBlock = () => {
+      const s = css();
+      const at = s.indexOf('@media (prefers-color-scheme: dark)');
+      if (at === -1) return '';
+      const open = s.indexOf('{', s.indexOf('{', at) + 1); // 外层 @media 的 { 之后，:root 的 {
+      let depth = 0;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) return s.slice(open + 1, i);
+        }
+      }
+      return '';
+    };
+
+    const hex = (v: string): [number, number, number] | null => {
+      const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v);
+      if (!m) return null;
+      const h = m[1];
+      const full =
+        h.length === 3
+          ? h
+              .split('')
+              .map(c => c + c)
+              .join('')
+          : h;
+      return [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16)) as [number, number, number];
+    };
+
+    const lum = (c: [number, number, number]) => {
+      const f = (v: number) => {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+    };
+
+    const ratio = (a: [number, number, number], b: [number, number, number]) => {
+      const l1 = lum(a);
+      const l2 = lum(b);
+      const hi = Math.max(l1, l2);
+      const lo = Math.min(l1, l2);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+
+    /** 每一主题里会被当作「文字压在上面」的那些面。带 alpha 的（暗色 `--lp-primary-faint`）跳过：
+        它是叠色，静态算不出真实合成值，而那一格由真机扫描覆盖。 */
+    const SURFACES = [
+      '--lp-bg',
+      '--lp-bg-alt',
+      '--lp-surface',
+      '--lp-primary-soft',
+      '--lp-primary-faint',
+      '--lp-accent-soft',
+      '--lp-warn-soft',
+    ];
+    const TEXT_TOKENS = [
+      '--lp-ink',
+      '--lp-ink-soft',
+      '--lp-ink-faint',
+      '--lp-primary-strong',
+      '--lp-accent-strong',
+      '--lp-warn-strong',
+      '--lp-danger-strong',
+      '--lp-cyan-strong',
+      '--lp-purple-strong',
+    ];
+
+    const themeTable = (dark: boolean) => {
+      const base = customProps(rootBlock());
+      return dark ? { ...base, ...customProps(darkBlock()) } : base;
+    };
+
+    it.each([
+      ['浅色', false],
+      ['暗色', true],
+    ] as const)('%s档：每一个文字令牌在这档的每一种面上都 ≥ 4.5:1', (label, dark) => {
+      const map = themeTable(dark);
+      for (const token of TEXT_TOKENS) {
+        const fg = hex(map[token] ?? '');
+        expect(fg, `${label}档 ${token} 读不出十六进制值（${map[token]}）`).not.toBeNull();
+        for (const surface of SURFACES) {
+          const raw = map[surface] ?? '';
+          const bg = hex(raw);
+          if (!bg) continue;
+          const r = ratio(fg as [number, number, number], bg);
+          expect(
+            r,
+            `${label}档 ${token}（${map[token]}）压在 ${surface}（${raw}）上只有 ${r.toFixed(2)}:1，低于 AA 的 4.5:1`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    });
+
+    it('实底 CTA 的底色两档同值，且白字压在它上面达标', () => {
+      const light = customProps(rootBlock())['--lp-cta'];
+      const dark = customProps(darkBlock())['--lp-cta'];
+      expect(light, '浅色档读不到 --lp-cta').toBeTruthy();
+      expect(
+        dark,
+        '暗色档不该覆盖 --lp-cta：白字要读得出，底就必须是这一档深度，跟 `-strong` 一起翻会把白字压到 1.6:1',
+      ).toBe(light);
+      const bg = hex(light);
+      expect(bg, `--lp-cta 不是可解析的十六进制（${light}）`).not.toBeNull();
+      const r = ratio([255, 255, 255], bg as [number, number, number]);
+      expect(r, `白字压在 --lp-cta（${light}）上只有 ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('文字不许再直接吃那几个装饰用的亮色令牌', () => {
+      const s = css();
+      /** 判据必须锚在**属性起点**：`border-color: var(--lp-primary)` 这类装饰描边本就该用亮色
+          （本轮一次不锚行首的替换顺手把 9 处边框也拖深了，正是这条的分寸）。 */
+      const banned = ['--lp-accent', '--lp-warn', '--lp-danger', '--lp-primary'].map(
+        t => new RegExp(`(?:^|\\n)\\s*color:\\s*var\\(${t}\\)`),
+      );
+      for (const re of banned) {
+        expect(re.test(s), `${re.source} —— 这四个是「面/装饰」用的亮色，承载文字必须用对应的 -strong`).toBe(false);
+      }
+      // 反面那一半：装饰那一档确实还在用亮色，否则上面四条就成了「谁都没在用」的假绿
+      const decorative = /(?:^|\n)\s*(?:border-[a-z-]*color|background):\s*var\(--lp-(?:primary|accent)\);/.test(s);
+      expect(decorative, '装饰侧一个亮色令牌都不用了？那这四条判据就没在管任何东西，回来重判口径').toBe(true);
+    });
+
+    /** llms.txt 的规格要求条目是 markdown 链接；只写裸 URL 时 Lighthouse 的 `llms-txt`
+        会报「File does not appear to contain any links」（2026-10-24 在 127.0.0.1 上第一次查到的——
+        线上那次没报，因为 Pages 的 `/llms.txt` 落在项目基路径下，审计器根本没取到这份文件）。
+        这份承诺同样是被查过的，不是写完就成立。 */
+    it('llms.txt 真的用 markdown 链接交出关键地址，而不是只写裸 URL', () => {
+      const text = read('docs/llms.txt');
+      const links = [...text.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g)];
+      expect(links.length, 'llms.txt 一条 markdown 链接都没有：大模型侧按规格读不到出口').toBeGreaterThanOrEqual(10);
+      const labels = links.map(m => m[1]);
+      const urls = links.map(m => m[2]);
+      for (const need of ['Source code', 'Privacy Policy', 'Full reference for AI systems']) {
+        // 标签是中英一行的（`源码仓库 / Source code`），所以按「包含」判而不是全等
+        expect(
+          labels.some(l => l.includes(need)),
+          `llms.txt 的链接清单里少了「${need}」这条出口`,
+        ).toBe(true);
+      }
+      // 举的那个锚点样例必须真的存在于两页（与上面 llms 锚点那条守卫同一口径，这里数分母）
+      const withFragment = urls.filter(u => /#faq-/.test(u));
+      expect(withFragment.length, 'llms.txt 的锚点样例不见了——那条承诺就退化成一句空话').toBeGreaterThanOrEqual(1);
+      for (const u of withFragment) {
+        const id = u.split('#')[1];
+        expect(read('docs/index.html'), `#faq 样例 ${id} 在中文页查不到`).toContain(`id="${id}"`);
+      }
+    });
+  });
+
   describe('llms 文件承诺的问答锚点真的对得上页面', () => {
     /* 面向 AI 的那两份文件现在写了一句可核对的话：「每一条问题都有锚点，中英同一序号
        指同一问」。这句话一旦与页面脱钩，被引用的锚点就是 404 级别的东西——所以它必须
