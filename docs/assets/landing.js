@@ -1064,6 +1064,12 @@
         }
         heading.hidden = !anyVisible;
       });
+      /* 零命中是这一节最容易走人的那一刻：出口就摆在失败发生的地方，
+         而不是让读者自己往下滚去找「没找到答案？」那张卡。
+         这里只切一个类——措辞与去处全在 HTML（落地页有页内 #community，
+         对比页只有仓库 issue，两页本来就不一样）。 */
+      const none = list.querySelector('.faq-filter-none');
+      if (none) none.classList.toggle('is-shown', shown === 0);
       if (!status) return;
       if (!query) {
         status.textContent = '';

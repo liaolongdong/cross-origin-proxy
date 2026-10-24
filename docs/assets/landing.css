@@ -2595,6 +2595,23 @@ html.js .faq-filter {
   display: none;
 }
 
+/* 零命中那一刻的出口。默认不画：没有 JS 就没有筛选，也就没有这个死路，
+   留一句「没找到就去问」在静态页上只是多一行没人要的话。
+   由脚本在数到 0 时挂 `is-shown`——**只有这一句是 JS 的决定**，
+   措辞与去处全在 HTML 里（落地页有页内 #community，对比页只有仓库 issue，
+   两页本来就不一样，写进脚本就是替页面编话）。
+   字号与那句读数同一档，链接靠 `p a` 那条正文规则自动带下划线，不再单独装饰。 */
+.faq-filter-none {
+  display: none;
+}
+
+html.js .faq-filter-none.is-shown {
+  display: block;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--lp-ink-faint);
+}
+
 /* 被筛掉的问题与空掉的分类标题：`hidden` 属性由 `landing.js` 挂与摘。这里显式写一条，
    是因为 `details` 自带 `display: list-item`，只靠 UA 那条 `[hidden]` 在个别引擎上压不住它。 */
 html.js .faq-list details[hidden],

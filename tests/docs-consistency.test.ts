@@ -1477,6 +1477,47 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         /html\.js \.faq-list details\[hidden\][^{]*\{\s*display: none;/,
       );
     });
+
+    /**
+     * 零命中那一刻的出口。这一格守的是「失败发生的地方要有下一步」，
+     * 以及它与筛选框同一条降级契约：没有 JS 就没有筛选，也就没有死路，
+     * 所以这句话默认不画，只由脚本挂 `is-shown` 显影。
+     * 措辞与链接一律住在 HTML——两页的去处本来就不同（落地页有页内 #community，
+     * 对比页只有仓库 issue），脚本里出现任何一句就是替页面编话。
+     */
+    it('一句都筛不到时，出口就摆在失败发生的地方', () => {
+      for (const file of FILTER_PAGES) {
+        const section = faqSectionOf(file);
+        const none = /<p\b[^>]*class="faq-filter-none"[\s\S]*?<\/p>/.exec(section)?.[0] ?? '';
+        expect(none, `${file} 读不到那句「还是没找到」的出口`).not.toBe('');
+        const hrefs = [...none.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
+        expect(hrefs.length, `${file} 的出口一句连一个去处都没有`).toBeGreaterThanOrEqual(1);
+        const text = none
+          .replace(/<[^>]+>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        expect(text.length, `${file} 的出口只有链接没有话`).toBeGreaterThan(4);
+        // 页内去处必须真的存在（外部 https 去处交给链接卫生检查）
+        for (const h of hrefs.filter(x => x.startsWith('#'))) {
+          expect(
+            new RegExp(`id="${h.slice(1)}"`).test(section) || read(file).includes(`id="${h.slice(1)}"`),
+            `${file} 的出口指向 ${h}，可这一页没有那个锚点`,
+          ).toBe(true);
+        }
+      }
+
+      const js = read('docs/assets/landing.js');
+      expect(js, '脚本要按「命中数为 0」切这个类，不是按别的').toMatch(
+        /none\.classList\.toggle\('is-shown', shown === 0\)/,
+      );
+      expect(js, '出口那句措辞只能住在 HTML：脚本里不许出现任何一句语言').not.toMatch(/还是没找到|Still no match/);
+
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css, '没有 JS 时这句话会一直挂在筛选框下面，而那时根本没有筛选').toMatch(
+        /(?:^|\n)\.faq-filter-none\s*\{\s*display: none;/,
+      );
+      expect(css, 'JS 数到 0 时要真的画出来').toMatch(/html\.js \.faq-filter-none\.is-shown\s*\{\s*display: block;/);
+    });
   });
 
   /**
