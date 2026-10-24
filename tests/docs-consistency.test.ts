@@ -1164,57 +1164,126 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
   });
 
   describe('页头锚点条溢出时只滚动自己，不压住出口簇', () => {
-    /* 2026-10-24 用真 Chrome（DPR 2）量到的原形：英文页 1280 视口下 8 个锚点要 539px，
+    /* 2026-10-24 用真 Chrome 量到的原形：英文页 1280 视口下 8 个锚点要 541px，
        而 1160 的容器只给得出 444px，链接直接画到 `.nav-actions` 上面——截图里读得出
        「CompareAlternativesFAQ」「Alternatives 压在 Use cases 上」这种叠字。
-       四件事缺一件就退回原形：① 锚点条自己是横向滚动容器；② 它按 padding box 裁切，
-       所以必须有 padding 给下划条落脚；③ 被截断的是哪一侧由 `data-edge` 分档（固定的
-       右侧渐隐滚到底之后还在，看起来像永远还有更多）；④ 页头宽屏比正文宽——英文
-       那一行要 1188px，`--lp-max` 的 1160 给不出。 */
+       五件事缺一件就退回原形（或退成一个新原形）：① 锚点条自己是横向滚动容器；
+       ② 它按 padding box 裁切，所以落在盒外的东西都需要内边距垫底——`.site-nav > a::after`
+       那根下划条是其一；②' 键盘焦点环是其二，而且这一条是改版之后**新长出来的**回归：
+       `outline` 画在元素盒外，滚动容器一样照裁，真机读到「ring 7 / 上下各余 6 / 左余 0」，
+       Tab 到第一个锚点时环的左半边整个不存在；③ 被截断的是哪一侧由 `data-edge` 分档
+       （固定的右侧渐隐滚到底之后还在，看起来像永远还有更多）；④ 页头宽屏比正文宽——
+       英文那一行要 1188px，`--lp-max` 的 1160 给不出。 */
     const css = (): string => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
 
-    /** 取一个顶格选择器的声明块（够这四条判据用）。 */
+    /** 取一个顶格选择器的声明块（够这几条判据用）。 */
     const block = (source: string, selector: string): string =>
       new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(source)?.[1] ??
       '';
 
-    /** 判据本体：一份样式表是否把锚点条做成了「自己滚动 + 三档渐隐 + 下划条留在 padding 内」。 */
+    const px = (value: string | undefined): number => Number(value?.replace(/px$/, ''));
+
+    /** 锚点条上那圈键盘焦点环的半径：全局 `outline` 线宽 + 本条自己的 `outline-offset`。 */
+    const focusRingPx = (source: string): number => {
+      const width = px(/(?:^|\n):focus-visible\s*\{[^}]*outline:\s*(\d+(?:\.\d+)?)px/.exec(source)?.[1]);
+      const offset = px(
+        /outline-offset:\s*(-?\d+(?:\.\d+)?)px/.exec(block(source, '.site-nav > a:focus-visible'))?.[1],
+      );
+      return width + offset;
+    };
+
+    /** 把 `.site-nav` 上的 padding 声明折成两个轴的可用余量（`padding` 简写 + 两轴长写）。
+     *  两条长写都按声明边界锚定：不锚定时 `padding-inline` 会命中 `scroll-padding-inline`，
+     *  于是「摘掉 padding 只留 scroll-padding」这种变异照样读出一个好看的余量。 */
+    const padAxes = (navBlock: string): { block: number; inline: number } => {
+      let blockPad = 0;
+      let inlinePad = 0;
+      const shorthand = /(?:^|;)\s*padding:\s*([^;]+)/.exec(navBlock)?.[1];
+      if (shorthand) {
+        const parts = shorthand.trim().split(/\s+/).map(px);
+        if (parts.length === 1) [blockPad, inlinePad] = [parts[0], parts[0]];
+        else if (parts.length === 2) [blockPad, inlinePad] = [parts[0], parts[1]];
+        else [blockPad, inlinePad] = [Math.min(parts[0], parts[2]), Math.min(parts[1], parts[3])];
+      }
+      const pb = /(?:^|;)\s*padding-block:\s*(\d+(?:\.\d+)?)px/.exec(navBlock)?.[1];
+      if (pb) blockPad = px(pb);
+      const pi = /(?:^|;)\s*padding-inline:\s*(\d+(?:\.\d+)?)px/.exec(navBlock)?.[1];
+      if (pi) inlinePad = px(pi);
+      return { block: blockPad, inline: inlinePad };
+    };
+
+    /** 判据本体：一份样式表是否把锚点条做成了「自己滚动 + 三档渐隐 + 下划条与焦点环都在 padding 内」。 */
     const navIsOverflowSafe = (source: string): boolean => {
       const nav = block(source, '.site-nav');
       const after = block(source, '.site-nav > a::after');
       const bottom = Number(/bottom:\s*(-?\d+(?:\.\d+)?)px/.exec(after)?.[1]);
-      const pad = Number(/padding-block:\s*(-?\d+(?:\.\d+)?)px/.exec(nav)?.[1]);
+      const ring = focusRingPx(source);
+      const pad = padAxes(nav);
       return (
         /overflow-x:\s*auto/.test(nav) &&
         /scrollbar-width:\s*none/.test(nav) &&
         Number.isFinite(bottom) &&
-        Number.isFinite(pad) &&
-        bottom + pad > 0 &&
+        Number.isFinite(ring) &&
+        pad.block >= Math.max(ring, -bottom) &&
+        pad.inline >= ring &&
         ['start', 'end', 'both'].every(edge =>
           new RegExp(`\\.site-nav\\[data-edge='${edge}'\\][^{]*\\{[^}]*mask-image:\\s*linear-gradient`).test(source),
         )
       );
     };
 
-    it('阳性对照：判据对改版前的写法不点头', () => {
+    /** 焦点环这一格单独长牙的写法：除了 `padding-inline`，其余判据全都在。
+     *  两份对照都必须顶格写——`block()` 与焦点环那条按行首锚定，缩进会让它们读成空。 */
+    const WITHOUT_INLINE_ROOM = `
+:focus-visible { outline: 3px solid var(--lp-primary); outline-offset: 2px; }
+.site-nav { display: flex; flex: 1; gap: 12px; min-width: 0; padding-block: 8px;
+  overflow-x: auto; scrollbar-width: none; }
+.site-nav > a::after { position: absolute; bottom: -5px; height: 2px; }
+.site-nav > a:focus-visible { outline-offset: 4px; border-radius: 6px; }
+.site-nav[data-edge='start'] { mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); }
+.site-nav[data-edge='end'] { mask-image: linear-gradient(90deg, transparent, #000 32px); }
+.site-nav[data-edge='both'] { mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+`;
+
+    it('阳性对照：判据对改版前的写法、以及对「只留上下不留左右」都不点头', () => {
       const legacy = `
-        .site-nav { display: flex; flex: 1; gap: 18px; align-items: center; min-width: 0; font-size: 15px; }
-        .site-nav > a::after { position: absolute; bottom: -6px; height: 2px; }
-        @media (width <= 900px) {
-          .site-nav { padding-right: 28px; padding-bottom: 4px; overflow-x: auto;
-            mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent); }
-        }
-      `;
+.site-nav { display: flex; flex: 1; gap: 18px; align-items: center; min-width: 0; font-size: 15px; }
+.site-nav > a::after { position: absolute; bottom: -6px; height: 2px; }
+@media (width <= 900px) {
+  .site-nav { padding-right: 28px; padding-bottom: 4px; overflow-x: auto; scrollbar-width: none;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent); }
+}
+`;
       expect(navIsOverflowSafe(legacy), '判据对「链接画到出口簇上」的老写法也点头，等于什么都没守着').toBe(false);
+      expect(
+        focusRingPx(WITHOUT_INLINE_ROOM),
+        '焦点环半径没从样式表里读出来（读成 0 或 NaN 时，下面那条对照就是空话）',
+      ).toBe(7);
+      expect(
+        padAxes(block(WITHOUT_INLINE_ROOM, '.site-nav')),
+        '对照样本里的 `padding-block` 没被读出来，那下面这条红就是假红',
+      ).toEqual({ block: 8, inline: 0 });
+      expect(
+        navIsOverflowSafe(WITHOUT_INLINE_ROOM),
+        '判据对「上下留了 8px、左右一分没留」点头——那正是 79dccc3 那一版的形状，Tab 到第一个锚点时环的左半边被裁掉',
+      ).toBe(false);
     });
 
-    it('锚点条自己滚动、下划条落在 padding 内、渐隐按 data-edge 三档', () => {
+    it('锚点条自己滚动、下划条与键盘焦点环都落在 padding 内、渐隐按 data-edge 三档', () => {
       const source = css();
       expect(navIsOverflowSafe(source)).toBe(true);
+
+      const ring = focusRingPx(source);
+      const pad = padAxes(block(source, '.site-nav'));
+      expect(ring, '焦点环半径读不出来').toBeGreaterThan(0);
       expect(
-        block(source, '.site-nav'),
-        '锚点条上又出现了 `padding-right`：它只延长滚动范围、在 scrollLeft 0 处不留任何可见留白，',
-      ).not.toMatch(/padding-right/);
+        pad.inline,
+        `\`padding-inline\` 收掉了：滚动容器按 padding box 裁切，第一个锚点的焦点环左半边当场不存在（真机读到 ring ${ring} / 左余 0）`,
+      ).toBeGreaterThanOrEqual(ring);
+      expect(
+        pad.block,
+        `\`padding-block\` 收掉了：环的上下各 ${ring}px 会被裁，下划条也一起没了`,
+      ).toBeGreaterThanOrEqual(ring);
 
       const wide = /@media \(width >= 1200px\)\s*\{\s*\.site-header \.wrap\s*\{([^}]*)\}/.exec(source)?.[1] ?? '';
       expect(wide, '页头在宽屏没有放宽 `.wrap`：英文那排 8 个锚点加三个出口要 1188px，1160 的容器放不下').toMatch(

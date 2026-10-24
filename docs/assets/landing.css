@@ -299,8 +299,10 @@ html.js .scroll-progress {
 }
 
 /* 正文一律 1160，页头在这一档放到 1360：中英两页都要把 8 个锚点和三个出口挤进
-   一行，英文那排光锚点就 539px，连同品牌与出口簇需要 1188px，1160 的容器给不出。
-   只在 ≥1200 生效——更窄的窗口里 `.wrap` 本来就是整屏宽，这条规则帮不上忙。 */
+   一行，英文那排光锚点就 541px，连同品牌与出口簇需要 1188px，1160 的容器给不出。
+   2026-10-24 真 Chrome 逐档扫过：中文从 1100、英文从 1240 起整排放得下，再往上的
+   每一档都更宽——这条放宽要视口 ≥1400 才真的用得上那 200px（更窄时 `.wrap` 本来就
+   等于整屏宽减两侧内边距），但它的门槛留在 1200：与正文那档一致，读起来不用二次推断。 */
 @media (width >= 1200px) {
   .site-header .wrap {
     max-width: 1360px;
@@ -326,16 +328,19 @@ html.js .scroll-progress {
    自己横向滚动：出口簇永远在原位、不被覆盖，被截断的那一侧由 `landing.js` 打上的
    `data-edge` 渐隐，读者看得出「这边还有」。
 
-   `padding-block` 是必需的：横向滚动容器会把 `overflow-y` 一并算成 auto、按 padding
-   box 裁切，而 `.site-nav > a::after` 那根下划条落在链接下方——没有这段内边距就会被
-   整根切掉，选中态只剩颜色（≤900px 那一档此前正是这样）。 */
+   两向 `padding` 都是必需的，而且是同一件事：滚动容器把 `overflow-y` 一并算成 auto、
+   并按 padding box 裁切，于是落在盒外的两样东西会一起被切掉——`.site-nav > a::after`
+   那根下划条（落在下方 5px）与键盘焦点环（`outline` 3px + `outline-offset` 4px，即盒外
+   7px，四个方向都要）。少这一段内边距，Tab 到第一个锚点时左半边环就不存在了；
+   2026-10-24 真 Chrome 量到改版后「ring 7 / 上下各余 6 / 左余 0」，正是这一格。
+   `gap` 从 14 收到 12 抵掉左右各 8px 的横向占位，让「放得下」的那一档宽度不变。 */
 .site-nav {
   display: flex;
   flex: 1;
-  gap: 14px;
+  gap: 12px;
   align-items: center;
   min-width: 0;
-  padding-block: 6px;
+  padding: 8px;
   overflow-x: auto;
   font-size: 14px;
   scroll-padding-inline: 14px;
