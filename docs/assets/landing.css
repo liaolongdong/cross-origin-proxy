@@ -2612,6 +2612,44 @@ html.js .faq-filter-none.is-shown {
   color: var(--lp-ink-faint);
 }
 
+/* 零命中那一句后面的「直接看某一类」小片。
+   这里是全页唯一一处由脚本现造的可点击控件，所以它得走同一条降级契约：
+   HTML 里那个容器默认 `hidden`，脚本真的从本页的分类标题造出了至少一片才取消隐藏——
+   对比页压根没有分类，那一格在它就永远不该出现（不是样式没生效，是本来就没有东西可放）。
+   措辞（那句引导）与 `hidden` 都在 HTML，脚本只往容器里塞 `<a>`，片的文字来自分类标题本身。 */
+
+/* 这一条是承重的，不是重复：`.faq-jump { display: inline-flex }` 的特异度与 UA 那条
+   `[hidden]{display:none}` 相同，而作者样式表在级联里排在 UA 之前——只写上面那条，
+   「没有 JS」或「这一页没有分类」时容器会带着那句引导一起露出来。与
+   `.faq-list details[hidden]` 是同一个坑（那里也写过一条显式的）。 */
+.faq-jump[hidden] {
+  display: none;
+}
+
+.faq-jump {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.faq-jump a {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--lp-accent-strong);
+  white-space: nowrap;
+  text-decoration: none;
+  border: 1px solid var(--lp-line-strong);
+  border-radius: 999px;
+}
+
+.faq-jump a:hover {
+  text-decoration: underline;
+  border-color: var(--lp-accent-strong);
+}
+
 /* 被筛掉的问题与空掉的分类标题：`hidden` 属性由 `landing.js` 挂与摘。这里显式写一条，
    是因为 `details` 自带 `display: list-item`，只靠 UA 那条 `[hidden]` 在个别引擎上压不住它。 */
 html.js .faq-list details[hidden],

@@ -26,7 +26,9 @@
  * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）；
  * 12. FAQ 的直达链接：hash 指向某一问时替它展开，悬停/聚焦到那一行则给一枚复制链接的
  *     链形按钮（无 JS 时按钮不出现，深链退化成「滚到那一问，自己点开」）；
- * 13. FAQ 的关键词筛选：按「问题 + 答案」收起不相关的条目与空掉的分类标题，Esc 清空
+ * 13. FAQ 的关键词筛选：按「问题 + 答案」收起不相关的条目与空掉的分类标题，Esc 清空；
+ *     一句都筛不到那一刻给两条下一步——页内/仓库的出口，加上从本页分类标题现取的几枚直达小片
+ *     （没有 JS 就没有筛选，也就没有这一刻：两者都默认不画，只由脚本按「命中数为 0」显影）
  *     （无 JS 时整块不出现，问答照旧全部可读、可点、可滚）。
  * 14. 窄屏下对比表的横滑提示：与第 3 项共用同一份「截断在哪一侧」的判据，
  *     只给右缘渐隐——左那一列是钉住的，淡掉它反而读不出比的是哪一家。
@@ -1070,6 +1072,31 @@
          对比页只有仓库 issue，两页本来就不一样）。 */
       const none = list.querySelector('.faq-filter-none');
       if (none) none.classList.toggle('is-shown', shown === 0);
+      /* 零命中还有第二条路：把这一页自己的分类摆成可直接点的几枚小片，读者不必先想起
+         「换个词」，也能换个角度看同一节。
+         文字**从分类标题现取**（剥掉前面那枚图标），脚本里不另写一份目录——两处一旦分家，
+         界面就会指着一个页面上不存在的分类名。落点由既有的「分类直达压过筛选」接住
+         （hashchange 那一支先清空输入框），所以这里不多写一句清理逻辑，第二份判据就此免掉。
+         建一次就够：这一页没有分类（两份对比页）时容器一片都填不满，`hidden` 原样留着，
+         那句引导也就不会孤零零挂在页面上。 */
+      if (none) {
+        const jump = none.querySelector('.faq-jump');
+        if (jump && !jump.dataset.built) {
+          jump.dataset.built = '1';
+          document.querySelectorAll('.faq-category[id]').forEach(heading => {
+            const copy = heading.cloneNode(true);
+            const icon = copy.querySelector('.feature-icon');
+            if (icon) icon.remove();
+            const label = (copy.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!label) return;
+            const chip = document.createElement('a');
+            chip.href = `#${heading.id}`;
+            chip.textContent = label;
+            jump.appendChild(chip);
+          });
+          jump.hidden = jump.children.length === 0;
+        }
+      }
       if (!status) return;
       if (!query) {
         status.textContent = '';

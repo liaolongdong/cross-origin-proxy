@@ -1518,6 +1518,74 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       );
       expect(css, 'JS 数到 0 时要真的画出来').toMatch(/html\.js \.faq-filter-none\.is-shown\s*\{\s*display: block;/);
     });
+
+    /**
+     * 零命中那一刻的第二条路：把这一页自己的分类摆成可直接点的几枚直达片。
+     * 守三件会静默坏掉的事：
+     * ① 它必须与筛选框同一条降级契约——容器默认 `hidden`，脚本真的填得出东西才放开。
+     *    而 `.faq-jump { display: inline-flex }` 与 UA 的 `[hidden]{display:none}` 特异度相同、
+     *    作者表又排在前面，所以那条显式的 `.faq-jump[hidden]` 是**承重**的，不是重复；
+     * ② 片的文字来自 `.faq-category` 标题本身。脚本里出现任何一句分类名就是第二份目录，
+     *    将来改标题时界面会指着页面上根本不存在的分类；
+     * ③ 这一页压根没有分类（两份对比页），那块容器在那里就不该存在——填不满的控件不是出口。
+     */
+    it('筛不出东西时，还摆着这一页自己的那几类', () => {
+      const LANDING = ['docs/index.html', 'docs/en.html'];
+      const js = read('docs/assets/landing.js');
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      for (const file of LANDING) {
+        const section = faqSectionOf(file);
+        // prettier 会把这一个标签的属性和文字折成多行，判据必须按**标签边界**读，
+        // 不能按「写在同一行」的写法锚定（本仓被这一坑绊过三次）。
+        const jumpTag = /<span\b[^>]*class="faq-jump"[^>]*>/s.exec(section);
+        expect(jumpTag, `${file} 少了那块「直接看某一类」的容器`).not.toBeNull();
+        expect(jumpTag![0], `${file} 的容器没写默认 hidden：没有 JS 时那句引导就光秃秃挂着`).toMatch(/\shidden\b/);
+        const lead = section
+          .slice(jumpTag!.index + jumpTag![0].length)
+          .split('</span>')[0]
+          .replace(/\s+/g, ' ')
+          .trim();
+        expect(lead.length, `${file} 的那块容器连一句引导都没有`).toBeGreaterThan(1);
+
+        const heads = [...section.matchAll(/<h3\b[^>]*class="faq-category"[^>]*>/g)]
+          .map(m => /id="([^"]+)"/.exec(m[0])?.[1])
+          .filter((x): x is string => !!x);
+        expect(heads.length, `${file} 的分类少于三类，摆直达片就没意义了`).toBeGreaterThanOrEqual(3);
+        for (const id of heads) {
+          expect(section, `${file} 的片指向 #${id}，可这一页没有那个锚点`).toContain(`id="${id}"`);
+        }
+
+        // 分类名只许有一份：脚本里出现任何一句就是第二份目录
+        const labels = [...section.matchAll(/<h3\b[^>]*class="faq-category"[\s\S]*?<\/h3>/g)]
+          .map(m =>
+            m[0]
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim(),
+          )
+          .filter(x => x.length > 1);
+        expect(labels.length, `${file} 的分类标题一句都没读到（那上面的解析口径坏了）`).toBeGreaterThanOrEqual(3);
+        for (const label of labels) {
+          expect(js, `脚本里出现了「${label}」——分类名只能住在 HTML，两处必然分叉`).not.toContain(label);
+        }
+      }
+
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html']) {
+        expect(faqSectionOf(file), `${file} 没有分类，却摆了一块永远填不满的直达容器`).not.toContain(
+          'class="faq-jump"',
+        );
+      }
+
+      expect(js).toContain(`document.querySelectorAll('.faq-category[id]')`);
+      expect(js, '不剥掉前面那枚图标，片的文字会带着一个图形占位').toContain("copy.querySelector('.feature-icon')");
+      expect(js, '一片都造不出来时必须把容器按回 hidden').toContain('jump.hidden = jump.children.length === 0');
+
+      expect(css, '只写 .faq-jump{display:inline-flex} 会盖掉 UA 的 [hidden]：没有 JS 时这块就露出来了').toMatch(
+        /(?:^|\n)\.faq-jump\[hidden\]\s*\{\s*display: none;/,
+      );
+      expect(css).toMatch(/(?:^|\n)\.faq-jump\s*\{\s*display: inline-flex;/);
+    });
   });
 
   /**
