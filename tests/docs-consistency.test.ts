@@ -1163,6 +1163,89 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  describe('页头锚点条溢出时只滚动自己，不压住出口簇', () => {
+    /* 2026-10-24 用真 Chrome（DPR 2）量到的原形：英文页 1280 视口下 8 个锚点要 539px，
+       而 1160 的容器只给得出 444px，链接直接画到 `.nav-actions` 上面——截图里读得出
+       「CompareAlternativesFAQ」「Alternatives 压在 Use cases 上」这种叠字。
+       四件事缺一件就退回原形：① 锚点条自己是横向滚动容器；② 它按 padding box 裁切，
+       所以必须有 padding 给下划条落脚；③ 被截断的是哪一侧由 `data-edge` 分档（固定的
+       右侧渐隐滚到底之后还在，看起来像永远还有更多）；④ 页头宽屏比正文宽——英文
+       那一行要 1188px，`--lp-max` 的 1160 给不出。 */
+    const css = (): string => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    /** 取一个顶格选择器的声明块（够这四条判据用）。 */
+    const block = (source: string, selector: string): string =>
+      new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(source)?.[1] ??
+      '';
+
+    /** 判据本体：一份样式表是否把锚点条做成了「自己滚动 + 三档渐隐 + 下划条留在 padding 内」。 */
+    const navIsOverflowSafe = (source: string): boolean => {
+      const nav = block(source, '.site-nav');
+      const after = block(source, '.site-nav > a::after');
+      const bottom = Number(/bottom:\s*(-?\d+(?:\.\d+)?)px/.exec(after)?.[1]);
+      const pad = Number(/padding-block:\s*(-?\d+(?:\.\d+)?)px/.exec(nav)?.[1]);
+      return (
+        /overflow-x:\s*auto/.test(nav) &&
+        /scrollbar-width:\s*none/.test(nav) &&
+        Number.isFinite(bottom) &&
+        Number.isFinite(pad) &&
+        bottom + pad > 0 &&
+        ['start', 'end', 'both'].every(edge =>
+          new RegExp(`\\.site-nav\\[data-edge='${edge}'\\][^{]*\\{[^}]*mask-image:\\s*linear-gradient`).test(source),
+        )
+      );
+    };
+
+    it('阳性对照：判据对改版前的写法不点头', () => {
+      const legacy = `
+        .site-nav { display: flex; flex: 1; gap: 18px; align-items: center; min-width: 0; font-size: 15px; }
+        .site-nav > a::after { position: absolute; bottom: -6px; height: 2px; }
+        @media (width <= 900px) {
+          .site-nav { padding-right: 28px; padding-bottom: 4px; overflow-x: auto;
+            mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent); }
+        }
+      `;
+      expect(navIsOverflowSafe(legacy), '判据对「链接画到出口簇上」的老写法也点头，等于什么都没守着').toBe(false);
+    });
+
+    it('锚点条自己滚动、下划条落在 padding 内、渐隐按 data-edge 三档', () => {
+      const source = css();
+      expect(navIsOverflowSafe(source)).toBe(true);
+      expect(
+        block(source, '.site-nav'),
+        '锚点条上又出现了 `padding-right`：它只延长滚动范围、在 scrollLeft 0 处不留任何可见留白，',
+      ).not.toMatch(/padding-right/);
+
+      const wide = /@media \(width >= 1200px\)\s*\{\s*\.site-header \.wrap\s*\{([^}]*)\}/.exec(source)?.[1] ?? '';
+      expect(wide, '页头在宽屏没有放宽 `.wrap`：英文那排 8 个锚点加三个出口要 1188px，1160 的容器放不下').toMatch(
+        /max-width:\s*1360px/,
+      );
+
+      const bodyWidth = Number(/--lp-max:\s*(\d+)px/.exec(source)?.[1]);
+      expect(bodyWidth, '正文宽度 `--lp-max` 读不出来，下面的比较就成了空话').toBe(1160);
+      expect(Number(/max-width:\s*(\d+)px/.exec(wide)?.[1])).toBeGreaterThan(bodyWidth);
+    });
+
+    it('landing.js：三档按滚动位置算，滚轮到头就交还页面，高亮项沿用减弱动效的设置', () => {
+      const js = read('docs/assets/landing.js');
+      expect(js, '锚点条的溢出/截断判据不见了：`data-edge` 三档是把「还有更多」和「到头了」分开的唯一出口').toMatch(
+        /const edge = atStart \? 'start' : atEnd \? 'end' : 'both';/,
+      );
+      expect(js, '只在值变了时才写属性，否则滚一下就让整条样式反复失效').toMatch(
+        /getAttribute\('data-edge'\) !== edge/,
+      );
+      expect(js, '滚轮到头仍然 preventDefault 的话，指针停在页头上就再也滚不动页面').toMatch(
+        /if \(next === navStrip\.scrollLeft\) return;\s*event\.preventDefault\(\);/,
+      );
+      expect(js, '高亮项没有被滚进视野：英文 1000 下读到最后几节时选中态落在条外').toMatch(
+        /revealNavLink\(current\.find/,
+      );
+      expect(js, '高亮项自动跟进必须沿用 `scrollBehavior()`，减弱动效时不能硬滑').toMatch(
+        /navStrip\.scrollTo\(\{\s*left:[^}]*behavior: scrollBehavior\(\)/,
+      );
+    });
+  });
+
   describe('落地页菜单顺序跟随正文', () => {
     /**
      * 菜单是滚动的目录，不是「动作项收尾」的排版偏好：读者照着菜单往下走，

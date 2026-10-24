@@ -302,7 +302,79 @@
     reveals.forEach(el => revealObserver.observe(el));
   }
 
-  /* ─────────────── 3. 导航当前区块高亮 ─────────────── */
+  /* ─────────────── 3. 锚点条：横向滚动与当前区块高亮 ─────────────── */
+
+  /* 锚点条放不下时是一条横向滚动条（见 landing.css 的 `.site-nav`）。三件事都在这里：
+     溢出/截断在哪一侧的判据、把高亮项滚进视野、竖滚轮转横滚。三者都只读写
+     `data-edge` 与 `scrollLeft`，不碰正文的滚动位置。 */
+  const navStrip = document.querySelector('.site-nav');
+
+  /**
+   * 重判锚点条是否溢出、被截断的是哪一侧，并把它写进 `data-edge`。
+   * 只在值真的变了时才写属性：这个函数挂在滚动与 resize 上，无谓的写入会让样式反复失效。
+   */
+  const syncNavEdge = () => {
+    if (!navStrip) return;
+    const max = navStrip.scrollWidth - navStrip.clientWidth;
+    if (max <= 1) {
+      navStrip.removeAttribute('data-edge');
+      return;
+    }
+    const atStart = navStrip.scrollLeft <= 1;
+    const atEnd = navStrip.scrollLeft >= max - 1;
+    const edge = atStart ? 'start' : atEnd ? 'end' : 'both';
+    if (navStrip.getAttribute('data-edge') !== edge) navStrip.setAttribute('data-edge', edge);
+  };
+
+  if (navStrip) {
+    syncNavEdge();
+    navStrip.addEventListener('scroll', syncNavEdge, { passive: true });
+    window.addEventListener('resize', syncNavEdge);
+    /* 字体落地前量到的是后备字体的宽度，换上去之后才可能溢出（或反过来）。
+       没有 `document.fonts` 的老引擎就只靠 load 那一程。 */
+    if (document.fonts && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(syncNavEdge, () => {});
+    }
+
+    /* 竖滚轮在锚点条上转成横滚，但只在它真的还能往那一头走时接管：
+       到头之后仍然 `preventDefault` 的话，读者把指针停在页头上就再也滚不动页面。 */
+    navStrip.addEventListener(
+      'wheel',
+      event => {
+        const max = navStrip.scrollWidth - navStrip.clientWidth;
+        if (max <= 1 || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? navStrip.clientWidth : 1;
+        const next = Math.min(max, Math.max(0, navStrip.scrollLeft + event.deltaY * unit));
+        if (next === navStrip.scrollLeft) return;
+        event.preventDefault();
+        navStrip.scrollLeft = next;
+      },
+      { passive: false },
+    );
+  }
+
+  /**
+   * 把高亮的那一项滚进锚点条的视野；已经在里面就一动不动。
+   * 滚动方式沿用 `scrollBehavior()`，减弱动效时同样是瞬时。
+   * @param {Element | undefined} link 刚拿到 `aria-current` 的那一项
+   */
+  const revealNavLink = link => {
+    if (!navStrip || !link || !link.closest('.site-nav')) return;
+    const box = navStrip.getBoundingClientRect();
+    const rect = link.getBoundingClientRect();
+    const margin = 14;
+    if (rect.left < box.left + margin) {
+      navStrip.scrollTo({
+        left: navStrip.scrollLeft + rect.left - box.left - margin,
+        behavior: scrollBehavior(),
+      });
+    } else if (rect.right > box.right - margin) {
+      navStrip.scrollTo({
+        left: navStrip.scrollLeft + rect.right - box.right + margin,
+        behavior: scrollBehavior(),
+      });
+    }
+  };
 
   /* 同一批锚点在页面上存在两簇：桌面横条 `.site-nav` 与 ≤760px 的汉堡面板
      `.nav-menu-panel`。只查前者的话，窄屏下可见的那一簇永远拿不到 `aria-current`，
@@ -327,7 +399,9 @@
         entries.forEach(entry => {
           if (!entry.isIntersecting) return;
           navLinks.forEach(a => a.removeAttribute('aria-current'));
-          (linksById.get(entry.target.id) || []).forEach(a => a.setAttribute('aria-current', 'true'));
+          const current = linksById.get(entry.target.id) || [];
+          current.forEach(a => a.setAttribute('aria-current', 'true'));
+          revealNavLink(current.find(a => a.closest('.site-nav')));
         });
       },
       { rootMargin: '-72px 0px -62% 0px', threshold: 0 },

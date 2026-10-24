@@ -298,6 +298,15 @@ html.js .scroll-progress {
   min-height: 62px;
 }
 
+/* 正文一律 1160，页头在这一档放到 1360：中英两页都要把 8 个锚点和三个出口挤进
+   一行，英文那排光锚点就 539px，连同品牌与出口簇需要 1188px，1160 的容器给不出。
+   只在 ≥1200 生效——更窄的窗口里 `.wrap` 本来就是整屏宽，这条规则帮不上忙。 */
+@media (width >= 1200px) {
+  .site-header .wrap {
+    max-width: 1360px;
+  }
+}
+
 .brand {
   display: flex;
   gap: 10px;
@@ -312,13 +321,29 @@ html.js .scroll-progress {
   border-radius: 6px;
 }
 
+/* 8 个锚点与三个出口簇共用一行，而中英两种文案的宽度差得很远（英文那排比中文宽
+   约 50px）。与其在某个宽度上折成两行把吸顶页头顶高、或者压小字号，不如让锚点条
+   自己横向滚动：出口簇永远在原位、不被覆盖，被截断的那一侧由 `landing.js` 打上的
+   `data-edge` 渐隐，读者看得出「这边还有」。
+
+   `padding-block` 是必需的：横向滚动容器会把 `overflow-y` 一并算成 auto、按 padding
+   box 裁切，而 `.site-nav > a::after` 那根下划条落在链接下方——没有这段内边距就会被
+   整根切掉，选中态只剩颜色（≤900px 那一档此前正是这样）。 */
 .site-nav {
   display: flex;
   flex: 1;
-  gap: 18px;
+  gap: 14px;
   align-items: center;
   min-width: 0;
-  font-size: 15px;
+  padding-block: 6px;
+  overflow-x: auto;
+  font-size: 14px;
+  scroll-padding-inline: 14px;
+  scrollbar-width: none;
+}
+
+.site-nav::-webkit-scrollbar {
+  display: none;
 }
 
 /* `text-decoration: none` 是必需的：全局 `a:hover` 会加下划线，而下面那条自绘的
@@ -355,7 +380,7 @@ html.js .site-nav > a[aria-current] {
    两者叠在同一行时读者看到的是一根线，而不是两根看起来等价的线。 */
 .site-nav > a::after {
   position: absolute;
-  bottom: -6px;
+  bottom: -5px;
   left: 0;
   width: 100%;
   height: 2px;
@@ -385,15 +410,32 @@ html.js .site-nav > a[aria-current]::after {
   border-radius: 6px;
 }
 
+/* 被截断的那一侧渐隐。截断位置只有滚动容器自己知道，所以 `data-edge` 由
+   `landing.js` 按 `scrollLeft` 现判（start / end / both）：贴到某一端就收掉那一侧，
+   否则滚到底之后右边还挂着渐隐，看起来像永远还有更多。渐隐画在 padding box 上，
+   因此它盖住的是真内容，而不是一段尾部留白。禁用 JS 时没有这一层——锚点条照样
+   可以滚动、可以 Tab，只是少一个「还有更多」的视觉提示。 */
+.site-nav[data-edge='start'] {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+}
+
+.site-nav[data-edge='end'] {
+  mask-image: linear-gradient(90deg, transparent, #000 32px);
+}
+
+.site-nav[data-edge='both'] {
+  mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+
 /* 页内锚点之外的三个入口：另一个页面、站外仓库、语言切换。
    与区块导航分开，窄屏时它不跟着锚点一起横向滚走。 */
 .nav-actions {
   display: flex;
   flex: none;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding-left: 16px;
-  font-size: 15px;
+  padding-left: 12px;
+  font-size: 14px;
   border-left: 1px solid var(--lp-line);
 }
 
@@ -3265,29 +3307,6 @@ html.js .tool-card:hover::before {
 
   .hero-visual {
     max-width: 560px;
-  }
-}
-
-/* 8 个锚点窄于此宽度就排不进一行。与其折成两行把 sticky 头部顶高，
-   不如只让锚点条自身横向滚动 —— 完整对比 / GitHub / EN 三个入口留在原位，
-   永远不需要滚动就能点。尾部留白 + 右侧渐隐遮罩让被截断的那一项看起来是
-   「右边还有」，而不是被切掉。 */
-@media (width <= 900px) {
-  .site-nav {
-    flex-wrap: nowrap;
-    gap: 14px;
-    max-width: 100%;
-    padding-right: 28px;
-    padding-bottom: 4px;
-    overflow-x: auto;
-    font-size: 14px;
-    white-space: nowrap;
-    scrollbar-width: none;
-    mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
-  }
-
-  .site-nav::-webkit-scrollbar {
-    display: none;
   }
 }
 
