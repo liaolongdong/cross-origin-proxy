@@ -1992,6 +1992,47 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  /**
+   * 命中区下限（24×24）的回归守卫。
+   * 数出来的是真机普查（一次性量具扫了五页 × 两个宽度里每一个可点元素的实际盒子）：
+   * 页头锚点条 23.8、页脚导航行 23.8、工具卡链接 22.9、页脚语言切换 18——都是「独立控件行」，
+   * 不是句子里的内联链接（后者按规范豁免）。三条判据各管一面，缺一条这句话就画不圆：
+   * ① 四组一个不能少（少一组就是那一排悄悄掉回去）；② 只准加 min-height（改 padding 会挪字，
+   *    改 display 会牵动锚点条的横向滚动与焦点环那道按 padding 算的守卫）；
+   * ③ 不许扩成裸 `a`（把内联链接撑大是排版事故，不是可访问性收益）。
+   */
+  describe('可点元素的命中区下限（源码契约）', () => {
+    const cssText = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    // 锚在唯一那条 `min-height: 24px` 上、往前读它自己的选择器清单：
+    // 不能反过来锚在 `.site-nav a,` 那一行——那个串在样式表里出现 3 次（窄屏段里还有两处），
+    // 锚错就会把别的规则当成这一条来判（本轮第一版就是这样，干净树上直接假红）。
+    const rule = /([^{}]+)\{\s*min-height: 24px;\s*\}/.exec(cssText);
+
+    it('四组独立控件行都在那份清单里', () => {
+      expect(rule, '找不到那条 min-height: 24px 的命中区规则（被删了，还是换了写法？）').not.toBeNull();
+      const group = rule![1];
+      for (const sel of ['.site-nav a', '.site-footer nav a', '.tool-links a', '.footer-meta a']) {
+        expect(group, `命中区清单少了 ${sel}`).toContain(sel);
+      }
+    });
+
+    it('只抬 min-height，不碰 padding 与 display', () => {
+      expect(rule![0], '这一格只该加 min-height：改 padding 会把字挪位').not.toMatch(/padding/);
+      expect(rule![0], '改 display 会牵动锚点条的横向滚动与焦点环那道算式').not.toMatch(/display/);
+    });
+
+    it('不许扩成整页所有链接（句子里的内联链接按规范是豁免的）', () => {
+      const oneOf = rule![1]
+        .split(',')
+        .map(x => x.trim())
+        .filter(Boolean);
+      expect(
+        oneOf.every(s => s.length > 1 && s !== 'a' && !/\s a$/.test(s)),
+        `把裸 a 拉进清单会连内联链接一起撑大，那是排版事故：${JSON.stringify(oneOf)}`,
+      ).toBe(true);
+    });
+  });
+
   describe('窄屏对比表的横滑提示', () => {
     const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
     const js = () => read('docs/assets/landing.js');
