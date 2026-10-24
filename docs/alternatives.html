@@ -923,38 +923,148 @@
             </p>
           </div>
           <div class="faq-list">
-            <details>
-              <summary>浏览器扩展能替代 Dev Server 代理吗？</summary>
+            <details id="faq-1">
+              <summary>
+                浏览器扩展能替代 Dev Server 代理吗？<a
+                  class="faq-permalink"
+                  href="#faq-1"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 对浏览器里的页面通常可以，而且在一个方向上更宽：一套规则覆盖浏览器里的所有项目，不必每个项目维护一张代理表；它还能改写响应，而不只是转发。但它替代不了非浏览器客户端、CI，以及任何不走
                 Chrome 的请求，那些场景仍需要 Dev Server 代理。
               </p>
             </details>
-            <details>
-              <summary>什么时候系统级抓包代理才是更合适的工具？</summary>
+            <details id="faq-2">
+              <summary>
+                什么时候系统级抓包代理才是更合适的工具？<a
+                  class="faq-permalink"
+                  href="#faq-2"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 当流量不是来自浏览器页面的时候。服务间调用、经开发机代理的手机
                 App、桌面程序，以及需要沉淀成共享会话文件的场景，都属于系统级代理。它读取 HTTPS
                 的前提是充当客户端信任的证书颁发机构，而这正是浏览器内扩展省掉的那笔安装成本。
               </p>
             </details>
-            <details>
-              <summary>直接在 API 客户端里重放请求不行吗？</summary>
+            <details id="faq-3">
+              <summary>
+                直接在 API 客户端里重放请求不行吗？<a
+                  class="faq-permalink"
+                  href="#faq-3"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 API 客户端能证明接口行为正确，证明不了你的页面能正确处理它。响应到达的是客户端而不是应用代码，于是 UI
                 分支、拦截器、错误处理全都未被验证。合适的用法是在客户端里设计好
                 Mock，再把同一份响应体放进浏览器规则，让真实页面去消费它。
               </p>
             </details>
-            <details>
-              <summary>改请求头的扩展也能改请求，差别在哪里？</summary>
+            <details id="faq-4">
+              <summary>
+                改请求头的扩展也能改请求，差别在哪里？<a
+                  class="faq-permalink"
+                  href="#faq-4"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 改头类扩展在浏览器内重写请求头或响应头，这是整个问题里最小的一片。它们一般不把请求重定向到另一个域名、不替换请求体、无法返回一份自定义的完整
                 Mock 响应，也不处理 WebSocket——而恰恰是「重定向到另一个域名」这一步，让你不需要后端改 CORS。
               </p>
             </details>
-            <details>
-              <summary>这几种做法可以同时用吗？</summary>
+            <details id="faq-5">
+              <summary>
+                这几种做法可以同时用吗？<a
+                  class="faq-permalink"
+                  href="#faq-5"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 可以，而且通常就应该这样。本地构建工具需要的项目继续保留 Dev Server
                 代理，非浏览器流量继续交给抓包代理，日常那种“这个页面应该连那个环境”交给浏览器规则。唯一要避开的是两条规则同时改写同一个请求，那会让结果难以推理。

@@ -7,7 +7,8 @@
  * 1. 截图廊的翻页按钮 / 圆点 / 进度条驱动的自动轮播，悬停或聚焦时暂停
  *    （无 JS 时仍是可横向滑动的 scroll-snap 轨道）；
  * 2. 区块滚动淡入，并给同一容器里的 `.reveal` 编号（`--lp-rank`），让它们依次进场；
- * 3. 导航当前区块高亮；
+ * 3. 导航当前区块高亮，外加锚点条自己的横向滚动（放不下时它才滚：截断在哪一侧写进
+ *    `data-edge`，高亮那一项自动滚进视野，竖滚轮在条上转成横滚、到头就交还页面）；
  * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`；三种收起方式——再点一次按钮（原生）、
  *    点面板之外、Esc（并把焦点交还按钮），点选链接后同样收起（`<details>` 本身无 JS 也能开合）；
  * 5. 回顶 / 到底导轨（与第 7 项共用一份按帧合流的滚动读数通道，整页只挂一次监听）；
@@ -22,7 +23,9 @@
  *     判据与措辞各归其位——引擎只回理由码，句子全部住在 HTML 里，脚本只负责挑出对应的那句；
  *     预演通过时再把这一笔折成可导入的配置（复制 / 下载），导出按钮只在 `buildConfig` 给出结果时出现；
  *     另有一个「用测试地址填匹配模式」的派生按钮，取来源补 `/*` 并切回通配符；
- * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）。
+ * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）；
+ * 12. FAQ 的直达链接：hash 指向某一问时替它展开，悬停/聚焦到那一行则给一枚复制链接的
+ *     链形按钮（无 JS 时按钮不出现，深链退化成「滚到那一问，自己点开」）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
@@ -934,4 +937,74 @@
       flag.observe(table);
     }
   });
+
+  /* ─────────────── 12. FAQ 直达链接：按 hash 展开、复制链接 ─────────────── */
+
+  /* 每一问都有自己的 id（`#faq-basics-3`，样式见 landing.css 的 `.faq-permalink`），
+     于是两件事成立：
+     ① 从搜索结果、AI 回答或同事的消息里点进来，那一问是**展开的**——不这么做，深链落在
+        一条折叠着的问题上，读者还得再点一次才知道链接给对了没有；
+     ② 悬停或键盘走到那一行时出现一枚链形按钮，点它把这一问的直达地址写进剪贴板。
+     禁用 JS 时这一枚由 CSS 藏起来，深链退化成「滚到那一问，自己点开」，内容一个字不少。 */
+  const faqLinks = all('.faq-permalink');
+
+  if (faqLinks.length) {
+    /** 展开 hash 指向的那条 `<details>`；指向别处（小节标题、分类）就什么都不做。 */
+    const openFromHash = () => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      if (!id) return;
+      const target = document.getElementById(id);
+      if (!target || target.tagName !== 'DETAILS' || target.open) return;
+      /* 只展开，不跟着滚：落点交给浏览器自己那一次「滚到锚点」，样式里的
+         `scroll-margin-top: 88px` 负责躲开 62px 的吸顶页头（真机 A/B：带着那条停在
+         距顶 88px，摘掉停在 0px，正好压在页头底下）。
+         这边再补一次 `scrollIntoView` 实测是多余的接手——摘掉它，26 项真机读数逐位不变，
+         而两份「谁说了算」的判据留着，将来改一处忘一处就是下一次的位置错乱。
+         顺带记一笔：`behavior` 写 `'auto'` 不是「瞬时」，它会去跟随
+         `html { scroll-behavior: smooth }`，那种写法接手到的也是一段动画。 */
+      target.open = true;
+    };
+
+    window.addEventListener('hashchange', openFromHash);
+    openFromHash();
+
+    faqLinks.forEach(link => {
+      const item = link.closest('details');
+      if (!item || !item.id) return;
+      /* 播报区只建一次、之后清空复用：现插一个带字的 `role="status"` 节点，
+         辅助技术未必来得及把它当活的区域；留着它，第二次起就是明确的文字变更。 */
+      let status = null;
+      let timer = null;
+
+      link.addEventListener('click', async event => {
+        /* 这颗按钮长在 `<summary>` 里：不拦 default，点它顺手就把这一条开合了，
+           读者只会以为链接没生效。跳转也一并接管——下面自己改地址栏，不靠原生那一次。 */
+        event.preventDefault();
+        const url = `${location.href.split('#')[0]}#${item.id}`;
+        item.open = true;
+        /* 地址栏跟着走，读者看得见自己刚复制出去的是什么。用 replaceState 而不是
+           直接改 `location.hash`：后者会触发 hashchange，那一轮又要滚一次。 */
+        if (location.hash !== `#${item.id}`) history.replaceState(null, '', `#${item.id}`);
+        const copied = await copyText(url);
+
+        if (!status) {
+          status = document.createElement('span');
+          status.className = 'faq-copy-status';
+          status.setAttribute('role', 'status');
+          link.insertAdjacentElement('afterend', status);
+        }
+        status.textContent = copied
+          ? link.getAttribute('data-copy-ok') || 'Copied'
+          : link.getAttribute('data-copy-fail') || 'Copy failed';
+        status.classList.toggle('is-failed', !copied);
+        link.classList.toggle('is-copied', copied);
+        if (timer !== null) clearTimeout(timer);
+        timer = setTimeout(() => {
+          status.textContent = '';
+          link.classList.remove('is-copied');
+          timer = null;
+        }, 2600);
+      });
+    });
+  }
 })();

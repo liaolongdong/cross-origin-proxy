@@ -1315,6 +1315,87 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  describe('FAQ 每一问都可直达、可分享', () => {
+    /* 2026-10-24 之前，52 条问题没有一条带 `id`：搜索结果与 AI 回答只能链到整节，
+       同事之间也没法说「看第三问」。更深的一层是——就算有人手写了 `#faq-mock-2`，
+       浏览器滚过去看到的仍是一条**折叠着**的问题，得再点一次才知道链接给对了没有。
+       所以这一格要同时钉住四件事：id 存在、中英同序同集合、锚点指向自己、
+       以及深链进来那一问是展开的。 */
+    const FAQ_PAGES: Array<[string, string]> = [
+      ['docs/en.html', 'docs/index.html'],
+      ['docs/en-alternatives.html', 'docs/alternatives.html'],
+    ];
+
+    const faqSection = (file: string): string =>
+      read(file).match(/<section\b[^>]*\bid="faq"[\s\S]*?<\/section>/)?.[0] ?? '';
+
+    /** 按文档顺序读出每条问题的 `id` 与它那条 permalink 的 `href`。
+     *  属性之间允许换行：prettier 会把这一长串折开，按「同一行」匹配就成了假红。 */
+    const faqItems = (file: string): Array<{ id: string; href: string; anchors: number }> =>
+      [...faqSection(file).matchAll(/<details id="([^"]+)">([\s\S]*?)<\/summary>/g)].map(m => {
+        const tags = [...m[2].matchAll(/<a\b[^>]*class="faq-permalink"[^>]*>/g)];
+        return {
+          id: m[1],
+          href: tags.length ? (/href="#([^"]+)"/.exec(tags[0][0])?.[1] ?? '') : '',
+          anchors: tags.length,
+        };
+      });
+
+    it('四条 FAQ 页每条都带 id，且锚点恰好一条、指向自己', () => {
+      for (const [en, zh] of FAQ_PAGES) {
+        for (const file of [en, zh]) {
+          const items = faqItems(file);
+          const bare = [...faqSection(file).matchAll(/<details>/g)].length;
+          expect(items.length, `${file} 的 FAQ 小节一条问题都没读到，下面的断言就成了空话`).toBeGreaterThan(0);
+          expect(bare, `${file} 里有 ${bare} 条没带 id 的 <details>：那一问谁也链不到`).toBe(0);
+          for (const item of items) {
+            expect(item.anchors, `${file} 的 #${item.id} 应当恰好一枚 permalink`).toBe(1);
+            expect(item.href, `${file} 的 #${item.id} 那枚锚点指向了别处`).toBe(item.id);
+          }
+          expect(new Set(items.map(i => i.id)).size, `${file} 出现重复 id`).toBe(items.length);
+        }
+      }
+    });
+
+    it('中英两页同一序号的问题拿到同一个 id，深链不会在两语之间指错', () => {
+      for (const [en, zh] of FAQ_PAGES) {
+        const enIds = faqItems(en).map(i => i.id);
+        const zhIds = faqItems(zh).map(i => i.id);
+        expect(zhIds.length, `${en} / ${zh} 的条目数不等，id 的对应关系无从谈起`).toBe(enIds.length);
+        expect(zhIds, '同一序号在中英两页指向了不同的问题（id 是按分类与顺序算出来的）').toEqual(enIds);
+      }
+    });
+
+    it('landing.js 按 hash 展开那一问，样式在没有 JS 时把锚点整枚藏掉', () => {
+      const js = read('docs/assets/landing.js');
+      const openFn = /const openFromHash = \(\) => \{[\s\S]*?\n {4}\};/.exec(js)?.[0] ?? '';
+      expect(openFn, 'openFromHash 读不出来（函数被改走了？），下面三条就成了空话').not.toBe('');
+      expect(openFn, '深链进来不再展开那一问：折叠着的问题等于把答案藏回原来的位置').toMatch(
+        /target\.tagName !== 'DETAILS' \|\| target\.open/,
+      );
+      expect(openFn, '只认 `<details>`：hash 指向小节标题或分类时不该有任何动作').toMatch(/getElementById/);
+      expect(
+        openFn,
+        '落点归样式那条 scroll-margin-top 管，脚本这边只展开：实测补一次 scrollIntoView 是多余的接手（摘掉后真机 26 项读数逐位不变），而 behavior 写成 auto 还会跟随 html { scroll-behavior: smooth } 变成第二段动画',
+      ).not.toMatch(/\.scrollIntoView\(/);
+      expect(js, '只在 hashchange 时判一次的话，第一次点进来那一问仍是折叠的').toMatch(
+        /window\.addEventListener\('hashchange', openFromHash\);\s*openFromHash\(\);/,
+      );
+      expect(js, '复制链接不该顺手把这一条开合掉').toMatch(/event\.preventDefault\(\);/);
+
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css, '没有 JS 时这枚锚点会露出来：它点下去只会顺手开合这一条，复制那件事根本做不到').toMatch(
+        /(?:^|\n)\.faq-permalink\s*\{\s*display: none;/,
+      );
+      expect(css, '深链落点没躲开吸顶页头：把这一问纠正到视口顶之后，问题正好压在页头底下，等于白滚').toMatch(
+        /(?:^|\n)\.faq-list details\s*\{\s*scroll-margin-top:\s*88px;/,
+      );
+      expect(css, '复制成功那一下的弹跳在减弱动效档必须停，且 `html.js` 那一层要照抄（少写就压不住正文那条）').toMatch(
+        /@media \(prefers-reduced-motion: reduce\)[\s\S]*?html\.js \.faq-permalink\.is-copied\s*\{\s*animation: none;/,
+      );
+    });
+  });
+
   describe('落地页菜单顺序跟随正文', () => {
     /**
      * 菜单是滚动的目录，不是「动作项收尾」的排版偏好：读者照着菜单往下走，

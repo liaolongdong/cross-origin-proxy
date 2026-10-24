@@ -971,8 +971,30 @@
             </p>
           </div>
           <div class="faq-list">
-            <details>
-              <summary>Is a browser extension a replacement for a dev-server proxy?</summary>
+            <details id="faq-1">
+              <summary>
+                Is a browser extension a replacement for a dev-server proxy?<a
+                  class="faq-permalink"
+                  href="#faq-1"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 For browser pages, usually yes, and it is broader in one direction: one rule set covers every project in
                 the browser instead of a proxy table per project, and it can rewrite responses instead of only
@@ -980,8 +1002,30 @@
                 that talks to the dev server outside Chrome.
               </p>
             </details>
-            <details>
-              <summary>When is a system capture proxy the better tool?</summary>
+            <details id="faq-2">
+              <summary>
+                When is a system capture proxy the better tool?<a
+                  class="faq-permalink"
+                  href="#faq-2"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 When the traffic is not from a browser page. Server-to-server calls, mobile apps routed through a
                 workstation, desktop applications, and anything you want recorded in a shared session file all belong to
@@ -989,16 +1033,60 @@
                 the setup cost an in-browser extension avoids.
               </p>
             </details>
-            <details>
-              <summary>Why not just replay the request in an API client?</summary>
+            <details id="faq-3">
+              <summary>
+                Why not just replay the request in an API client?<a
+                  class="faq-permalink"
+                  href="#faq-3"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 An API client proves the endpoint behaves; it does not prove your page handles it. The response reaches
                 the client, not the application code, so UI paths, interceptors and error handling stay untested. Use it
                 to design the mock, then load the same body into a browser rule so the real page consumes it.
               </p>
             </details>
-            <details>
-              <summary>A header-modifier extension already changes requests. What is the difference?</summary>
+            <details id="faq-4">
+              <summary>
+                A header-modifier extension already changes requests. What is the difference?<a
+                  class="faq-permalink"
+                  href="#faq-4"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Header editors rewrite request and response headers inside the browser, which is the smallest slice of
                 this problem. They generally do not redirect the request URL to another host, do not replace the request
@@ -1006,8 +1094,30 @@
                 the redirect is the part that removes the need for a backend CORS change.
               </p>
             </details>
-            <details>
-              <summary>Can I use two of these approaches together?</summary>
+            <details id="faq-5">
+              <summary>
+                Can I use two of these approaches together?<a
+                  class="faq-permalink"
+                  href="#faq-5"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Yes, and that is normally the right answer. A dev-server proxy stays where it is needed for local build
                 tooling, a capture proxy stays for non-browser traffic, and browser rules take over the day-to-day case

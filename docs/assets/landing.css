@@ -2478,6 +2478,91 @@ summary:focus-visible {
   border-radius: var(--lp-radius-sm);
 }
 
+/* 深链落点要躲开吸顶页头：与分类标题同一档（88px）。这一格是**样式**负责的，脚本那边只展开——
+   2026-10-24 真机对着同一份深链做过 A/B：带着这条，那一问停在距视口顶 88px（页头 62px，
+   问题整行露得出来）；摘掉这条，它停在 0px，也就是正好压在吸顶页头底下。 */
+.faq-list details {
+  scroll-margin-top: 88px;
+}
+
+/* 每一问都可以被直接链接过去（`#faq-basics-3`），这一枚链形按钮就是它的入口。
+   没有 JS 就整枚不出现：它点下去做的是「把这一问的地址复制走」，那件事只有脚本做得到，
+   留一个只会顺手开合这一条的裸锚点让读者猜，不如不给——问题本身照旧可读可点，
+   深链在禁用 JS 时退化成「滚到那一问，自己点开」。
+   平时不占注意力：悬停这一行、键盘走到这一行、或这一条已经展开，才淡入。 */
+.faq-permalink {
+  display: none;
+}
+
+html.js .faq-permalink {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 26px;
+  margin-left: auto;
+  color: var(--lp-ink-faint);
+  border-radius: 7px;
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+html.js summary:hover .faq-permalink,
+html.js summary:focus-within .faq-permalink,
+html.js details[open] > summary .faq-permalink {
+  opacity: 1;
+}
+
+html.js .faq-permalink:hover {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
+}
+
+/* 复制成功那一下：弹一格并换成成功色，读者不必先读文字也知道刚才点到了什么。 */
+html.js .faq-permalink.is-copied {
+  color: var(--lp-accent);
+  opacity: 1;
+  animation: faq-link-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes faq-link-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.24);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 「链接已复制」是这一行里的第二条信息：跟着按钮走，不换行、也不挤问题文本。
+   它是 `role="status"`，所以同时是辅助技术的播报区；空的时候不占位（沿用 `.copy-status`
+   那条口径），由 `landing.js` 现插现用，静态 HTML 里一个字都没有。 */
+.faq-copy-status {
+  flex: none;
+  margin-left: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lp-accent);
+  white-space: nowrap;
+}
+
+.faq-copy-status:empty {
+  display: none;
+}
+
+.faq-copy-status.is-failed {
+  color: var(--lp-danger);
+}
+
 details p {
   padding: 0 18px;
   margin: 0 0 14px;
@@ -3461,6 +3546,12 @@ html.js .tool-card:hover::before {
   .hero-visual .stat b,
   .feature-card:hover .feature-icon::after,
   .hero-outcome-row::before {
+    animation: none;
+  }
+
+  /* 复制这一问的链接那一下的弹跳同样停：成功色与那句「链接已复制」照常给，少的是形变。
+     `html.js` 这一层必须照抄正文那条（0-3-1），少写一层就只剩 0-2-1，压不住而是照弹。 */
+  html.js .faq-permalink.is-copied {
     animation: none;
   }
 

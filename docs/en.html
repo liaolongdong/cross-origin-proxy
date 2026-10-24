@@ -2776,16 +2776,60 @@ pnpm assets       # regenerate store and landing images</code></pre>
               ></span>
               Basics and matching
             </h3>
-            <details>
-              <summary>What does a cross-origin proxy for a browser do?</summary>
+            <details id="faq-basics-1">
+              <summary>
+                What does a cross-origin proxy for a browser do?<a
+                  class="faq-permalink"
+                  href="#faq-basics-1"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 It intercepts the API requests a page makes and sends them somewhere else. In development that usually
                 means pointing a frontend running against one backend at a different environment, so you can test UAT
                 code from a FAT page without editing the app or redeploying.
               </p>
             </details>
-            <details>
-              <summary>Which requests can it intercept?</summary>
+            <details id="faq-basics-2">
+              <summary>
+                Which requests can it intercept?<a
+                  class="faq-permalink"
+                  href="#faq-basics-2"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 The page interceptor patches <code>fetch</code>, <code>XMLHttpRequest</code> and
                 <code>WebSocket</code> in the page's main world, and relative URLs are resolved to absolute ones before
@@ -2794,8 +2838,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 resource type: main and sub frames, XHR, scripts, stylesheets, images, fonts, media and other.
               </p>
             </details>
-            <details>
-              <summary>How do wildcard, prefix and regex matching differ?</summary>
+            <details id="faq-basics-3">
+              <summary>
+                How do wildcard, prefix and regex matching differ?<a
+                  class="faq-permalink"
+                  href="#faq-basics-3"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Wildcard treats <code>*</code> as any text and appends whatever the trailing <code>*</code> captured to
                 the target URL. Prefix matches the beginning of the URL and appends the remaining part. Regex must cover
@@ -2805,8 +2871,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 number wins; ties keep the order shown in the rule table, so give each rule its own number.
               </p>
             </details>
-            <details>
-              <summary>Does it work on any website?</summary>
+            <details id="faq-basics-4">
+              <summary>
+                Does it work on any website?<a
+                  class="faq-permalink"
+                  href="#faq-basics-4"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 It is injected on all <code>http</code> and <code>https</code> pages, and rules match on request URL, so
                 it works on internal tools, <code>localhost</code> dev servers and staging domains alike. It does not
@@ -2814,8 +2902,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 restricts for every extension.
               </p>
             </details>
-            <details>
-              <summary>Is it free? Do I need to sign up?</summary>
+            <details id="faq-basics-5">
+              <summary>
+                Is it free? Do I need to sign up?<a
+                  class="faq-permalink"
+                  href="#faq-basics-5"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 It's free — no in-app purchases, no subscription, and no account to register or sign into. There is no
                 cloud service of its own: rules, credential variables and logs live only in
@@ -2843,8 +2953,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
               ></span>
               Channels, CORS and performance
             </h3>
-            <details>
-              <summary>Does this bypass CORS restrictions?</summary>
+            <details id="faq-channels-1">
+              <summary>
+                Does this bypass CORS restrictions?<a
+                  class="faq-permalink"
+                  href="#faq-channels-1"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Rules that use any advanced capability (header override, body override, response override, mock, delay,
                 block, retry, method filter, query injection, sending cookies or WebSocket) are executed by the
@@ -2856,8 +2988,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 switches to the background channel.
               </p>
             </details>
-            <details>
-              <summary>Why does the backend reject my request after a rewrite (Origin null)?</summary>
+            <details id="faq-channels-2">
+              <summary>
+                Why does the backend reject my request after a rewrite (Origin null)?<a
+                  class="faq-permalink"
+                  href="#faq-channels-2"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 A hard boundary of the network layer, measured on Chrome 155: a pure URL rewrite that sends the request
                 to a <strong>different origin</strong> arrives with <code>Origin: null</code> instead of your page's own
@@ -2869,8 +3023,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 page CORS never enters the picture.
               </p>
             </details>
-            <details>
-              <summary>Why do some rules use a different forwarding channel than I expected?</summary>
+            <details id="faq-channels-3">
+              <summary>
+                Why do some rules use a different forwarding channel than I expected?<a
+                  class="faq-permalink"
+                  href="#faq-channels-3"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Because the network layer cannot express what you asked for. A wildcard that does not end in
                 <code>*</code>, an empty target URL, or any advanced capability is routed to the background channel on
@@ -2878,8 +3054,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 the channel for any URL before you rely on it.
               </p>
             </details>
-            <details>
-              <summary>Will it slow my page down?</summary>
+            <details id="faq-channels-4">
+              <summary>
+                Will it slow my page down?<a
+                  class="faq-permalink"
+                  href="#faq-channels-4"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Rules that only rewrite the URL cost no JavaScript per request — the browser resolves them in its
                 network stack. Background-channel requests add one extension hop plus whatever delay you configure, and
@@ -2889,8 +3087,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 install.
               </p>
             </details>
-            <details>
-              <summary>Why is there no per-request log entry for my simple rules?</summary>
+            <details id="faq-channels-5">
+              <summary>
+                Why is there no per-request log entry for my simple rules?<a
+                  class="faq-permalink"
+                  href="#faq-channels-5"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Network-layer redirects never reach the extension, so there is nothing to log per request. Their
                 rule-level hit counts appear under DNR hits for the last five minutes; the quota Chrome allows for that
@@ -2898,8 +3118,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 exhausted and says the stats may lag. Background-channel hits are counted separately.
               </p>
             </details>
-            <details>
-              <summary>My rule looks right but the page doesn't change — what should I check, in order?</summary>
+            <details id="faq-channels-6">
+              <summary>
+                My rule looks right but the page doesn't change — what should I check, in order?<a
+                  class="faq-permalink"
+                  href="#faq-channels-6"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 In this order: whether the popup's master switch is on (turning it off also uninstalls the network-layer
                 rules) → whether that rule itself is enabled → whether the page has been reloaded, because requests
@@ -2957,8 +3199,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
               ></span>
               Mock and failure injection
             </h3>
-            <details>
-              <summary>What can mock mode do beyond returning a static body?</summary>
+            <details id="faq-mock-1">
+              <summary>
+                What can mock mode do beyond returning a static body?<a
+                  class="faq-permalink"
+                  href="#faq-mock-1"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 One rule can carry a list of conditions — a URL pattern, an HTTP method and query parameters — and the
                 first matching condition decides the body, status code and content type, falling back to the rule's
@@ -2967,8 +3231,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 to 200–599.
               </p>
             </details>
-            <details>
-              <summary>What is the difference between blocking a request and forcing a 500?</summary>
+            <details id="faq-mock-2">
+              <summary>
+                What is the difference between blocking a request and forcing a 500?<a
+                  class="faq-permalink"
+                  href="#faq-mock-2"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 A block rule makes the request fail the way a network failure does, which is what exercises offline and
                 retry handling. Overriding the response status instead gives you a real HTTP error code, status text and
@@ -2977,8 +3263,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 suppress.
               </p>
             </details>
-            <details>
-              <summary>How does the retry capability work?</summary>
+            <details id="faq-mock-3">
+              <summary>
+                How does the retry capability work?<a
+                  class="faq-permalink"
+                  href="#faq-mock-3"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Retrying sits behind a per-rule switch and runs on the background channel. Switched on, a rule makes 1
                 to 5 extra attempts after the first, spaced by an interval you set between 100 and 30000 ms (default
@@ -3010,8 +3318,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
               ></span>
               Sharing, limits and safety
             </h3>
-            <details>
-              <summary>Can I share rules with my team?</summary>
+            <details id="faq-sharing-1">
+              <summary>
+                Can I share rules with my team?<a
+                  class="faq-permalink"
+                  href="#faq-sharing-1"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Yes. Export the full configuration as JSON — share mode is on by default, stripping Authorization,
                 Cookie and similar request/response headers plus token-like query parameters, untick it for a verbatim
@@ -3024,8 +3354,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 carries nothing out either.
               </p>
             </details>
-            <details>
-              <summary>What are the limits?</summary>
+            <details id="faq-sharing-2">
+              <summary>
+                What are the limits?<a
+                  class="faq-permalink"
+                  href="#faq-sharing-2"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Up to 200 rules, the last 500 request log entries, a 10 MB request body ceiling, the same 10 MB ceiling
                 on the response body (over it the proxied request fails without truncation: <code>fetch</code> falls
@@ -3035,8 +3387,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 construct a valid <code>Response</code> object.
               </p>
             </details>
-            <details>
-              <summary>What happens if the extension fails to handle a request?</summary>
+            <details id="faq-sharing-3">
+              <summary>
+                What happens if the extension fails to handle a request?<a
+                  class="faq-permalink"
+                  href="#faq-sharing-3"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Fallback differs by channel. <code>fetch</code> falls back to the native request whenever interception
                 or proxying fails (timeout, over-cap, a background error); <code>XHR</code> falls back only where
@@ -3049,8 +3423,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 rule: a blocked request is never replayed natively.
               </p>
             </details>
-            <details>
-              <summary>How do I install a rule I tried on this page?</summary>
+            <details id="faq-sharing-4">
+              <summary>
+                How do I install a rule I tried on this page?<a
+                  class="faq-permalink"
+                  href="#faq-sharing-4"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 Click “Copy rule JSON” or “Download .json” in the preview panel, then open “Import / Export” in the
                 extension's settings page and pick that file. Choose “Merge (keep existing, add new rules)” as the
@@ -3059,8 +3455,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 match pattern and target URL — with no headers, query parameters or credentials.
               </p>
             </details>
-            <details>
-              <summary>Can I import a Vite or webpack devServer proxy config?</summary>
+            <details id="faq-sharing-5">
+              <summary>
+                Can I import a Vite or webpack devServer proxy config?<a
+                  class="faq-permalink"
+                  href="#faq-sharing-5"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 No. A devServer proxy forwards site-relative paths such as <code>/api</code>, and the browser's request
                 stays same-origin; the backend environment it points at lives in the devServer config and never appears
@@ -3092,8 +3510,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
               ></span>
               Privacy and compatibility
             </h3>
-            <details>
-              <summary>Is my data sent to a server?</summary>
+            <details id="faq-privacy-1">
+              <summary>
+                Is my data sent to a server?<a
+                  class="faq-permalink"
+                  href="#faq-privacy-1"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 No. Rules, logs, profiles and preferences live in <code>chrome.storage.local</code> on your machine. The
                 extension contains no analytics, no telemetry and no remote service of its own; the only network traffic
@@ -3102,8 +3542,30 @@ pnpm assets       # regenerate store and landing images</code></pre>
                 a copied cURL command.
               </p>
             </details>
-            <details>
-              <summary>Does it work in Firefox or Edge?</summary>
+            <details id="faq-privacy-2">
+              <summary>
+                Does it work in Firefox or Edge?<a
+                  class="faq-permalink"
+                  href="#faq-privacy-2"
+                  aria-label="Permalink to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Copy failed — grab it from the address bar"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
               <p>
                 It is built and tested against Chrome (Manifest V3). Edge runs Chromium extensions, so the same build
                 normally works there; Firefox's Manifest V3 support differs around <code>declarativeNetRequest</code>,
