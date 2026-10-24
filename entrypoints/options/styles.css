@@ -296,6 +296,15 @@ body .el-drawer-fade-leave-active {
   transition: background-color var(--cop-duration-fast) var(--cop-ease-exit);
 }
 
+/* 窄窗口兜底：Element Plus 把弹窗与抽屉的宽度直接写成固定 px（`--el-dialog-width`
+   与抽屉的 `--el-drawer-size`），自己不带 max-width，窗口比它窄时整块横向溢出；
+   抽屉那层覆盖层还带 `overflow: hidden`，溢到左缘的内容够不着。
+   桌面宽度下这条不改变任何尺寸，只在视口真的不够时才收。 */
+body .el-dialog,
+body .el-drawer {
+  max-width: calc(100vw - 32px);
+}
+
 /* 表单提示 */
 .form-tip {
   margin-top: 4px;

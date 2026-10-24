@@ -175,6 +175,18 @@ watch(localSearchText, val => {
   }, 200);
 });
 
+// 父组件说什么，这一格就得画什么。此前它只在挂载那一刻读一次 `props.searchText`，
+// 于是「筛选被外部清掉了、输入框还留着刚才那几个字」是必然结果——新加的「清除筛选」
+// 那颗按钮正是这条外部通路（以后任何一处替用户重置筛选的写法都走同一条）。
+// 判据只有一条：两边说的不是同一件事才动它。自己 emit 出去那一次的回声两边相等，
+// 所以打字中的光标与输入法的合成态都不会被拽走。
+watch(
+  () => props.searchText,
+  val => {
+    if (val !== localSearchText.value) localSearchText.value = val;
+  },
+);
+
 onUnmounted(() => {
   if (debounceTimer) clearTimeout(debounceTimer);
 });

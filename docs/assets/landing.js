@@ -7,9 +7,10 @@
  * 1. 截图廊的翻页按钮 / 圆点 / 进度条驱动的自动轮播，悬停或聚焦时暂停
  *    （无 JS 时仍是可横向滑动的 scroll-snap 轨道）；
  * 2. 区块滚动淡入，并给同一容器里的 `.reveal` 编号（`--lp-rank`），让它们依次进场；
- * 3. 导航当前区块高亮；
- * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`，点选链接后收起下拉
- *    （`<details>` 本身无 JS 也能开合）；
+ * 3. 导航当前区块高亮，外加锚点条自己的横向滚动（放不下时它才滚：截断在哪一侧写进
+ *    `data-edge`，高亮那一项自动滚进视野，竖滚轮在条上转成横滚、到头就交还页面）；
+ * 4. 小屏汉堡菜单：把开合状态镜像到 `aria-expanded`；三种收起方式——再点一次按钮（原生）、
+ *    点面板之外、Esc（并把焦点交还按钮），点选链接后同样收起（`<details>` 本身无 JS 也能开合）；
  * 5. 回顶 / 到底导轨（与第 7 项共用一份按帧合流的滚动读数通道，整页只挂一次监听）；
  * 6. 一键复制：微信号与预演面板共用同一条剪贴板路径（按钮文字不保证被播报，结果另写进
  *    `role="status"` 区域，4 秒后收回）；无 JS 时按钮不出现，号码本身是可选中的文本；
@@ -22,7 +23,15 @@
  *     判据与措辞各归其位——引擎只回理由码，句子全部住在 HTML 里，脚本只负责挑出对应的那句；
  *     预演通过时再把这一笔折成可导入的配置（复制 / 下载），导出按钮只在 `buildConfig` 给出结果时出现；
  *     另有一个「用测试地址填匹配模式」的派生按钮，取来源补 `/*` 并切回通配符；
- * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）。
+ * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）；
+ * 12. FAQ 的直达链接：hash 指向某一问时替它展开，悬停/聚焦到那一行则给一枚复制链接的
+ *     链形按钮（无 JS 时按钮不出现，深链退化成「滚到那一问，自己点开」）；
+ * 13. FAQ 的关键词筛选：按「问题 + 答案」收起不相关的条目与空掉的分类标题，Esc 清空；
+ *     一句都筛不到那一刻给两条下一步——页内/仓库的出口，加上从本页分类标题现取的几枚直达小片
+ *     （没有 JS 就没有筛选，也就没有这一刻：两者都默认不画，只由脚本按「命中数为 0」显影）
+ *     （无 JS 时整块不出现，问答照旧全部可读、可点、可滚）。
+ * 14. 窄屏下对比表的横滑提示：与第 3 项共用同一份「截断在哪一侧」的判据，
+ *     只给右缘渐隐——左那一列是钉住的，淡掉它反而读不出比的是哪一家。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
@@ -302,7 +311,89 @@
     reveals.forEach(el => revealObserver.observe(el));
   }
 
-  /* ─────────────── 3. 导航当前区块高亮 ─────────────── */
+  /* ─────────────── 3. 锚点条：横向滚动与当前区块高亮 ─────────────── */
+
+  /**
+   * 横向溢出容器的「这边还有」判据：把截断发生在哪一侧写进 `data-edge`，
+   * 样式那一侧负责渐隐。页头锚点条与窄屏下的对比表共用这一份——
+   * 两处说的是同一件事，写成两份就总有一天只有一处会淡。
+   * 只在值真的变了时才写属性：这个函数挂在滚动与 resize 上，无谓的写入会让样式反复失效。
+   */
+  const syncEdge = el => {
+    const max = el.scrollWidth - el.clientWidth;
+    if (max <= 1) {
+      if (el.hasAttribute('data-edge')) el.removeAttribute('data-edge');
+      return;
+    }
+    const atStart = el.scrollLeft <= 1;
+    const atEnd = el.scrollLeft >= max - 1;
+    const edge = atStart ? 'start' : atEnd ? 'end' : 'both';
+    if (el.getAttribute('data-edge') !== edge) el.setAttribute('data-edge', edge);
+  };
+
+  /**
+   * 挂上滚动、窗口缩放与字体落地三程重判，返回手动重判的那一句。
+   * 字体落地前量到的是后备字体的宽度，换上去之后才可能溢出（或反过来）。
+   * 没有 `document.fonts` 的老引擎就只靠前两程。
+   */
+  const watchOverflow = el => {
+    if (!el) return () => {};
+    const run = () => syncEdge(el);
+    run();
+    el.addEventListener('scroll', run, { passive: true });
+    window.addEventListener('resize', run);
+    if (document.fonts && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(run, () => {});
+    }
+    return run;
+  };
+
+  /* 锚点条放不下时是一条横向滚动条（见 landing.css 的 `.site-nav`）。三件事都在这里：
+     溢出/截断在哪一侧的判据、把高亮项滚进视野、竖滚轮转横滚。三者都只读写
+     `data-edge` 与 `scrollLeft`，不碰正文的滚动位置。 */
+  const navStrip = document.querySelector('.site-nav');
+  watchOverflow(navStrip);
+
+  if (navStrip) {
+    /* 竖滚轮在锚点条上转成横滚，但只在它真的还能往那一头走时接管：
+       到头之后仍然 `preventDefault` 的话，读者把指针停在页头上就再也滚不动页面。 */
+    navStrip.addEventListener(
+      'wheel',
+      event => {
+        const max = navStrip.scrollWidth - navStrip.clientWidth;
+        if (max <= 1 || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? navStrip.clientWidth : 1;
+        const next = Math.min(max, Math.max(0, navStrip.scrollLeft + event.deltaY * unit));
+        if (next === navStrip.scrollLeft) return;
+        event.preventDefault();
+        navStrip.scrollLeft = next;
+      },
+      { passive: false },
+    );
+  }
+
+  /**
+   * 把高亮的那一项滚进锚点条的视野；已经在里面就一动不动。
+   * 滚动方式沿用 `scrollBehavior()`，减弱动效时同样是瞬时。
+   * @param {Element | undefined} link 刚拿到 `aria-current` 的那一项
+   */
+  const revealNavLink = link => {
+    if (!navStrip || !link || !link.closest('.site-nav')) return;
+    const box = navStrip.getBoundingClientRect();
+    const rect = link.getBoundingClientRect();
+    const margin = 14;
+    if (rect.left < box.left + margin) {
+      navStrip.scrollTo({
+        left: navStrip.scrollLeft + rect.left - box.left - margin,
+        behavior: scrollBehavior(),
+      });
+    } else if (rect.right > box.right - margin) {
+      navStrip.scrollTo({
+        left: navStrip.scrollLeft + rect.right - box.right + margin,
+        behavior: scrollBehavior(),
+      });
+    }
+  };
 
   /* 同一批锚点在页面上存在两簇：桌面横条 `.site-nav` 与 ≤760px 的汉堡面板
      `.nav-menu-panel`。只查前者的话，窄屏下可见的那一簇永远拿不到 `aria-current`，
@@ -327,7 +418,9 @@
         entries.forEach(entry => {
           if (!entry.isIntersecting) return;
           navLinks.forEach(a => a.removeAttribute('aria-current'));
-          (linksById.get(entry.target.id) || []).forEach(a => a.setAttribute('aria-current', 'true'));
+          const current = linksById.get(entry.target.id) || [];
+          current.forEach(a => a.setAttribute('aria-current', 'true'));
+          revealNavLink(current.find(a => a.closest('.site-nav')));
         });
       },
       { rootMargin: '-72px 0px -62% 0px', threshold: 0 },
@@ -335,7 +428,7 @@
     sections.forEach(section => navObserver.observe(section));
   }
 
-  /* ─────────────── 4. 小屏汉堡菜单：展开状态与点选后收起 ─────────────── */
+  /* ─────────────── 4. 小屏汉堡菜单：展开状态与三种收起方式 ─────────────── */
 
   const navMenu = document.querySelector('.nav-menu');
 
@@ -348,10 +441,36 @@
       if (summary) summary.setAttribute('aria-expanded', String(navMenu.open));
     };
 
+    /* 收起后焦点要有个去处：面板一 `display: none`，停在面板里的焦点就落回 body，
+       键盘用户得从头 Tab 一遍才回到菜单按钮。Esc 这一路把焦点交还给 summary。 */
+    const closeMenu = ({ restoreFocus = false } = {}) => {
+      if (!navMenu.open) return;
+      navMenu.removeAttribute('open');
+      if (restoreFocus && summary) summary.focus();
+    };
+
     navMenu.addEventListener('toggle', syncExpanded);
     navMenu.addEventListener('click', event => {
-      if (event.target.closest('a')) navMenu.removeAttribute('open');
+      if (event.target.closest('a')) closeMenu();
     });
+
+    /* 点面板之外即收起。触屏上「点空白处」是比「再点一次那颗按钮」更常见的期待，
+       而 `<details>` 原生只认 summary。判据是 `contains(event.target)`：
+       面板内边距上那几像素仍算面板，点到那里不收——把那一层也当「外面」，
+       贴着边缘的点击就会被读成误触。 */
+    document.addEventListener('pointerdown', event => {
+      if (!navMenu.open) return;
+      if (navMenu.contains(event.target)) return;
+      closeMenu();
+    });
+
+    /* Esc 收起并把焦点送回按钮。只认这棵树自己的 keydown，
+       FAQ 那些 `<details>` 不归这里管，别顺手替它们关。 */
+    navMenu.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      closeMenu({ restoreFocus: true });
+    });
+
     syncExpanded();
   }
 
@@ -440,17 +559,36 @@
     };
   };
 
-  all('[data-copy]').forEach(btn => {
-    const text = btn.getAttribute('data-copy');
+  all('[data-copy], [data-copy-from]').forEach(btn => {
     const okMsg = btn.getAttribute('data-copied') || 'Copied';
     const errMsg = btn.getAttribute('data-copy-failed') || 'Copy failed';
     const status = btn.parentElement ? btn.parentElement.querySelector('.copy-status') : null;
     const report = statusReporter(status);
+    const label = btn.querySelector('.code-copy-text');
+    const idleLabel = label ? label.textContent : '';
+    let resetTimer = null;
 
     btn.addEventListener('click', async () => {
+      const literal = btn.getAttribute('data-copy');
+      // `data-copy-from` 让按钮从同一个 .code-shell 里的 <code> 现读文本：
+      // 命令只在 HTML 写一份，按钮不再存第二份，改命令时不会漏改一处。
+      const shell = literal ? null : btn.closest('.code-shell');
+      const code = shell ? shell.querySelector('code') : null;
+      const text = literal || (code ? code.textContent.replace(/\s+$/, '') : '');
       if (!text) return;
       const copied = await copyText(text);
       report(copied ? okMsg : errMsg, copied);
+      if (!label) return;
+      // 提示区是给辅助技术的，按钮才是视线里的那个：两处都换，成功时再补一下形。
+      label.textContent = copied ? okMsg : errMsg;
+      btn.classList.toggle('is-copied', copied);
+      btn.classList.toggle('is-failed', !copied);
+      if (resetTimer !== null) clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        label.textContent = idleLabel;
+        btn.classList.remove('is-copied', 'is-failed');
+        resetTimer = null;
+      }, 2000);
     });
   });
 
@@ -814,5 +952,197 @@
 
       flag.observe(table);
     }
+  });
+
+  /* ─────────────── 12. FAQ 直达链接：按 hash 展开、复制链接 ─────────────── */
+
+  /* 每一问都有自己的 id（`#faq-basics-3`，样式见 landing.css 的 `.faq-permalink`），
+     于是两件事成立：
+     ① 从搜索结果、AI 回答或同事的消息里点进来，那一问是**展开的**——不这么做，深链落在
+        一条折叠着的问题上，读者还得再点一次才知道链接给对了没有；
+     ② 悬停或键盘走到那一行时出现一枚链形按钮，点它把这一问的直达地址写进剪贴板。
+     禁用 JS 时这一枚由 CSS 藏起来，深链退化成「滚到那一问，自己点开」，内容一个字不少。 */
+  const faqLinks = all('.faq-permalink');
+
+  if (faqLinks.length) {
+    /** 展开 hash 指向的那条 `<details>`；指向别处（小节标题、分类）就什么都不做。 */
+    const openFromHash = () => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      if (!id) return;
+      const target = document.getElementById(id);
+      if (!target || target.tagName !== 'DETAILS' || target.open) return;
+      /* 只展开，不跟着滚：落点交给浏览器自己那一次「滚到锚点」，样式里的
+         `scroll-margin-top: 88px` 负责躲开 62px 的吸顶页头（真机 A/B：带着那条停在
+         距顶 88px，摘掉停在 0px，正好压在页头底下）。
+         这边再补一次 `scrollIntoView` 实测是多余的接手——摘掉它，26 项真机读数逐位不变，
+         而两份「谁说了算」的判据留着，将来改一处忘一处就是下一次的位置错乱。
+         顺带记一笔：`behavior` 写 `'auto'` 不是「瞬时」，它会去跟随
+         `html { scroll-behavior: smooth }`，那种写法接手到的也是一段动画。 */
+      target.open = true;
+    };
+
+    window.addEventListener('hashchange', openFromHash);
+    openFromHash();
+
+    faqLinks.forEach(link => {
+      const item = link.closest('details');
+      if (!item || !item.id) return;
+      /* 播报区只建一次、之后清空复用：现插一个带字的 `role="status"` 节点，
+         辅助技术未必来得及把它当活的区域；留着它，第二次起就是明确的文字变更。 */
+      let status = null;
+      let timer = null;
+
+      link.addEventListener('click', async event => {
+        /* 这颗按钮长在 `<summary>` 里：不拦 default，点它顺手就把这一条开合了，
+           读者只会以为链接没生效。跳转也一并接管——下面自己改地址栏，不靠原生那一次。 */
+        event.preventDefault();
+        const url = `${location.href.split('#')[0]}#${item.id}`;
+        item.open = true;
+        /* 地址栏跟着走，读者看得见自己刚复制出去的是什么。用 replaceState 而不是
+           直接改 `location.hash`：后者会触发 hashchange，那一轮又要滚一次。 */
+        if (location.hash !== `#${item.id}`) history.replaceState(null, '', `#${item.id}`);
+        const copied = await copyText(url);
+
+        if (!status) {
+          status = document.createElement('span');
+          status.className = 'faq-copy-status';
+          status.setAttribute('role', 'status');
+          link.insertAdjacentElement('afterend', status);
+        }
+        status.textContent = copied
+          ? link.getAttribute('data-copy-ok') || 'Copied'
+          : link.getAttribute('data-copy-fail') || 'Copy failed';
+        status.classList.toggle('is-failed', !copied);
+        link.classList.toggle('is-copied', copied);
+        if (timer !== null) clearTimeout(timer);
+        timer = setTimeout(() => {
+          status.textContent = '';
+          link.classList.remove('is-copied');
+          timer = null;
+        }, 2600);
+      });
+    });
+  }
+
+  /* ─────────────── 13. FAQ 关键词筛选 ─────────────── */
+
+  /* 21 问分五类，滚着找不如打字找。可搜的是「问题 + 答案」整段——很多词只出现在答案里
+     （`declarativeNetRequest`、`credentials: 'include'`），只搜标题的话读者会以为没答案。
+     隐藏走 `hidden` 属性而不是删节点：文档顺序、条目数与 `FAQPage` 的一致性守卫读的都是
+     源码里的这一份，运行时怎么筛不该动到它们，也不该动到「第 3 问是 #faq-basics-3」这件事。 */
+  const faqFilter = document.querySelector('.faq-filter-input');
+
+  if (faqFilter) {
+    const list = faqFilter.closest('.faq-list');
+    const status = document.getElementById('faq-filter-status');
+    const items = list ? Array.from(list.querySelectorAll('details[id]')) : [];
+    const headings = list ? Array.from(list.querySelectorAll('.faq-category')) : [];
+    /* 一次算好每条的可搜文本：每次击键都重读 21 条 `textContent` 是没必要的重复劳动。
+       那枚 permalink 没有文字节点（只有一张 SVG），所以它不会往这里掺进「复制」之类的字。 */
+    const haystacks = items.map(item => (item.textContent || '').toLowerCase().replace(/\s+/g, ' '));
+    const template = (status && status.getAttribute('data-count')) || '{n}/{total}';
+    const emptyMessage = (status && status.getAttribute('data-empty')) || '';
+    const total = items.length;
+
+    const apply = () => {
+      const query = faqFilter.value.trim().toLowerCase();
+      let shown = 0;
+      items.forEach((item, index) => {
+        const hit = !query || haystacks[index].indexOf(query) >= 0;
+        item.hidden = !hit;
+        if (hit) shown += 1;
+      });
+      /* 整类都被筛掉时把分类标题也收起来：留着一个底下空空的标题，
+         读起来像「这一节一条都没有」，而它只是被筛掉了。 */
+      headings.forEach(heading => {
+        let node = heading.nextElementSibling;
+        let anyVisible = false;
+        while (node && !node.classList.contains('faq-category')) {
+          if (node.tagName === 'DETAILS' && !node.hidden) {
+            anyVisible = true;
+            break;
+          }
+          node = node.nextElementSibling;
+        }
+        heading.hidden = !anyVisible;
+      });
+      /* 零命中是这一节最容易走人的那一刻：出口就摆在失败发生的地方，
+         而不是让读者自己往下滚去找「没找到答案？」那张卡。
+         这里只切一个类——措辞与去处全在 HTML（落地页有页内 #community，
+         对比页只有仓库 issue，两页本来就不一样）。 */
+      const none = list.querySelector('.faq-filter-none');
+      if (none) none.classList.toggle('is-shown', shown === 0);
+      /* 零命中还有第二条路：把这一页自己的分类摆成可直接点的几枚小片，读者不必先想起
+         「换个词」，也能换个角度看同一节。
+         文字**从分类标题现取**（剥掉前面那枚图标），脚本里不另写一份目录——两处一旦分家，
+         界面就会指着一个页面上不存在的分类名。落点由既有的「分类直达压过筛选」接住
+         （hashchange 那一支先清空输入框），所以这里不多写一句清理逻辑，第二份判据就此免掉。
+         建一次就够：这一页没有分类（两份对比页）时容器一片都填不满，`hidden` 原样留着，
+         那句引导也就不会孤零零挂在页面上。 */
+      if (none) {
+        const jump = none.querySelector('.faq-jump');
+        if (jump && !jump.dataset.built) {
+          jump.dataset.built = '1';
+          document.querySelectorAll('.faq-category[id]').forEach(heading => {
+            const copy = heading.cloneNode(true);
+            const icon = copy.querySelector('.feature-icon');
+            if (icon) icon.remove();
+            const label = (copy.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!label) return;
+            const chip = document.createElement('a');
+            chip.href = `#${heading.id}`;
+            chip.textContent = label;
+            jump.appendChild(chip);
+          });
+          jump.hidden = jump.children.length === 0;
+        }
+      }
+      if (!status) return;
+      if (!query) {
+        status.textContent = '';
+        return;
+      }
+      status.textContent = shown
+        ? template.replace('{n}', String(shown)).replace('{total}', String(total))
+        : emptyMessage;
+    };
+
+    faqFilter.addEventListener('input', apply);
+    /* Esc 清空并交还焦点归位（浏览器对 `type=search` 的默认行为就是 Esc 清空，
+       但只有它有值时我们才接管，免得把「关掉某个还没做的东西」也一起吞掉）。 */
+    faqFilter.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || !faqFilter.value) return;
+      event.preventDefault();
+      faqFilter.value = '';
+      apply();
+    });
+
+    /* 筛掉的那一条正好是被链的那一问时，筛选让位于深链：点了链接就是要看它，不该被自己
+       三秒前打的字挡住。而且这一格脚本**必须**负责滚——那一问在被筛掉的状态下没有盒子，
+       浏览器那一次「滚到锚点」滚了个空（真机量到：筛掉、展开都对，位置停在原地，
+       那一问距顶 1691px）。与第 12 段不冲突：那条针对「元素本来就在页面上」的初次导航，
+       这里针对「元素刚刚才从 display:none 里出来」。
+       右侧那栏「分类直达」同一条规则：整类被筛空时它的标题也收着，点它就是要点它。 */
+    window.addEventListener('hashchange', () => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      if (!id) return;
+      const target = document.getElementById(id);
+      if (!target || !target.hidden) return;
+      if (target.tagName !== 'DETAILS' && !target.classList.contains('faq-category')) return;
+      faqFilter.value = '';
+      apply();
+      target.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+    });
+  }
+
+  /* ─────────────── 14. 窄屏下的对比表：横滑的那一侧给个信号 ─────────────── */
+
+  /* 390px 视口实测：这张 7 列的表要横滑 228px（中文页）到 413px（英文页）才看得完，
+     而它此前没有任何「这边还有」的信号——页头锚点条上一轮补了方向感知的渐隐，
+     这张表是同一件事漏掉的那一格。判据与锚点条共用 `watchOverflow`，
+     样式只给**右缘**渐隐：左缘那一列是钉住的（`.compare thead th:first-child`），
+     把钉住的那列淡掉反而读不出比的是哪一家。滚到最右时 `data-edge` 变成 `end`，渐隐自己退场。 */
+  document.querySelectorAll('.table-scroll').forEach(shell => {
+    if (shell.querySelector('table')) watchOverflow(shell);
   });
 })();

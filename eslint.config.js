@@ -69,6 +69,9 @@ export default [
         clearTimeout: 'readonly',
         Blob: 'readonly',
         URL: 'readonly',
+        // FAQ 直达链接那一段要读当前地址、并把 hash 写回去（不新增权限，纯页面内导航）
+        location: 'readonly',
+        history: 'readonly',
       },
     },
   },

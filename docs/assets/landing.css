@@ -11,18 +11,51 @@
  */
 
 :root {
+  /* `-strong` 这一组是给**承载文字的颜色**用的，不是「更深的品牌色」：
+     一条规则——凡是 `color:` 出去的字，必须在**同主题的每一种底**（页面底、卡片面、
+     soft 色块、tint 列底色）上量到 ≥ 4.5:1。2026-10-24 用一次性量具把五页 × 明暗两档、
+     所有 `<details>` 展开、外加「已复制」与筛选读数这两枚只有交互后才存在的节点全扫了一遍，
+     浅色档里 `--lp-accent`（2.32–2.55:1）、`--lp-warn`（2.98–3.28:1）、`--lp-danger`（3.68:1）、
+     `--lp-primary` 作文字（2.78:1）与 `--lp-ink-faint`（2.70–2.98:1）都不达标，
+     而它们在暗色档本来是达标的——所以这不是换个色，是给「要读的字」与「只做装饰的面」各一份值。
+     `-strong` 在暗色档回落成浅色档那份亮色，因为两边的相对亮度方向正好相反。
+     注意范围只圈 `color:`：把同一份替换顺手做到 `border-*-color` 上，
+     等于把装饰的描边也拖深，暗色档里 `--lp-primary-strong` 还是枚更亮的蓝（#8ac4ff），
+     那不是修对比度而是改观感。 */
   --lp-primary: #409eff;
   --lp-primary-strong: #1a5fb4;
+
+  /* 实心 CTA 的那层蓝：白字压在 `--lp-primary`（#409eff）上只有 2.78:1，
+     而这一颗是全站唯一一句「现在就去装」，读不出就是转化漏斗上最贵的一格。
+     深浅两档共用这一个值——底要装得下白字就必须是这一档深度；
+     品牌的那层亮蓝仍然留在页头下划条、圆点、进度条、悬停描边这些不承载文字的面上。 */
+  --lp-cta: #1a5fb4;
   --lp-primary-soft: #ecf5ff;
   --lp-primary-faint: #f4f9ff;
   --lp-accent: #12b886;
+  --lp-accent-strong: #0b7a5b;
   --lp-accent-soft: #e6f9f1;
   --lp-warn: #d9730d;
+  --lp-warn-strong: #a85305;
   --lp-warn-soft: #fff4e0;
   --lp-danger: #e0455e;
+  --lp-danger-strong: #c2274a;
+
+  /* 实底 + 白字专用，两档同值（理由见 `.code-copy.is-failed` 那条注释） */
+  --lp-danger-fill: #c2274a;
+
+  /* 紫与青这两枚只出现在特性图标上，原本是把色值直接写在规则里的，
+     于是它们在浅底上只有 2.67:1 与 3.64:1——图标里那个字母是要读的字，不是装饰块，
+     所以按同一条规矩各给一份 `-strong`。 */
+  --lp-cyan-strong: #0a6f86;
+  --lp-purple-strong: #6d3fd1;
   --lp-ink: #1f2d3d;
   --lp-ink-soft: #5b6b7c;
-  --lp-ink-faint: #8a97a5;
+
+  /* 三级灰从 #8a97a5 收到 #5f6d80：2.98 → 4.78（最坏的 `--lp-primary-soft` 列底色上 4.78，
+     白底 4.76、tint 面 4.78 档内最低）。这一档动的是 13 类小标签、表注与 `dt`，
+     是本轮观感位移最大的一处，也是唯一一处「层级仍在、只是三层挨得更近」 */
+  --lp-ink-faint: #5f6d80;
   --lp-bg: #fff;
   --lp-bg-alt: #f6f9fe;
   --lp-surface: #fff;
@@ -44,13 +77,25 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --lp-primary-strong: #8ac4ff;
+
+    /* 暗色档里「要读的字」方向反过来：浅色档那批深色在这边会沉进底里，
+       所以 strong 回落成浅色档原本的值。`--lp-cta` 是唯一一个两档同值的——
+       白字压在它上面 6.29:1，换成更亮的蓝就掉回 4 以下。
+       `--lp-ink-faint` 从 #7f8b99 抬到 #93a1b0：前者压在 `--lp-accent-soft`（#10312a）上
+       只有 4.05:1，是这一档唯一一处不达标。 */
+    --lp-cta: #1a5fb4;
+    --lp-accent-strong: #12b886;
+    --lp-warn-strong: #e78a2e;
+    --lp-danger-strong: #ef7d8c;
+    --lp-cyan-strong: #67c7de;
+    --lp-purple-strong: #b39cf5;
     --lp-primary-soft: #16283d;
     --lp-primary-faint: #12203259;
     --lp-accent-soft: #10312a;
     --lp-warn-soft: #33230f;
     --lp-ink: #e8eef5;
     --lp-ink-soft: #a9b7c6;
-    --lp-ink-faint: #7f8b99;
+    --lp-ink-faint: #93a1b0;
     --lp-bg: #0e1621;
     --lp-bg-alt: #121c29;
     --lp-surface: #16212f;
@@ -99,6 +144,19 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+/* 正文里的链接不能只靠颜色区分：下划线原本只在 `:hover` 出现，等于静止状态下
+   读者必须凭「这串字是蓝的」判断它可点——那正是 WCAG 1.4.1 不许的做法，
+   也是 2026-10-24 那轮 Lighthouse `link-in-text-block` 点名 8 处的原因。
+   范围刻意只圈**成段的正文**（p / li / dd / caption）：页头导航有下划条、
+   卡片标题有容器、按钮有形状与实底，那些本来就是可点线索，给它们补下划线
+   只会把界面画毛，所以按钮类链接用 `:not(.btn)` 排除在外。
+   `text-underline-offset` 是让线不咬住中文下沿的最小补偿。 */
+:is(p, li, dd, caption) a:not(.btn) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 :focus-visible {
@@ -153,7 +211,7 @@ pre {
   z-index: 20;
   padding: 8px 14px;
   color: #fff;
-  background: var(--lp-primary);
+  background: var(--lp-cta);
   border-radius: var(--lp-radius-sm);
 
   /* 用 transform 移出视口：之前用 top: -40px 时链接自身高约 43px，顶部会露出几px蓝条。 */
@@ -218,7 +276,7 @@ pre {
   /* 裁剪的是「动效增强」一节那道扫过的高光：伪元素位移出边界时不该露出边角。 */
   overflow: hidden;
   color: #fff;
-  background: var(--lp-primary);
+  background: var(--lp-cta);
   box-shadow: 0 8px 22px rgb(64 158 255 / 28%);
 }
 
@@ -298,6 +356,17 @@ html.js .scroll-progress {
   min-height: 62px;
 }
 
+/* 正文一律 1160，页头在这一档放到 1360：中英两页都要把 8 个锚点和三个出口挤进
+   一行，英文那排光锚点就 541px，连同品牌与出口簇需要 1188px，1160 的容器给不出。
+   2026-10-24 真 Chrome 逐档扫过：中文从 1100、英文从 1240 起整排放得下，再往上的
+   每一档都更宽——这条放宽要视口 ≥1400 才真的用得上那 200px（更窄时 `.wrap` 本来就
+   等于整屏宽减两侧内边距），但它的门槛留在 1200：与正文那档一致，读起来不用二次推断。 */
+@media (width >= 1200px) {
+  .site-header .wrap {
+    max-width: 1360px;
+  }
+}
+
 .brand {
   display: flex;
   gap: 10px;
@@ -312,13 +381,32 @@ html.js .scroll-progress {
   border-radius: 6px;
 }
 
+/* 8 个锚点与三个出口簇共用一行，而中英两种文案的宽度差得很远（英文那排比中文宽
+   约 50px）。与其在某个宽度上折成两行把吸顶页头顶高、或者压小字号，不如让锚点条
+   自己横向滚动：出口簇永远在原位、不被覆盖，被截断的那一侧由 `landing.js` 打上的
+   `data-edge` 渐隐，读者看得出「这边还有」。
+
+   两向 `padding` 都是必需的，而且是同一件事：滚动容器把 `overflow-y` 一并算成 auto、
+   并按 padding box 裁切，于是落在盒外的两样东西会一起被切掉——`.site-nav > a::after`
+   那根下划条（落在下方 5px）与键盘焦点环（`outline` 3px + `outline-offset` 4px，即盒外
+   7px，四个方向都要）。少这一段内边距，Tab 到第一个锚点时左半边环就不存在了；
+   2026-10-24 真 Chrome 量到改版后「ring 7 / 上下各余 6 / 左余 0」，正是这一格。
+   `gap` 从 14 收到 12 抵掉左右各 8px 的横向占位，让「放得下」的那一档宽度不变。 */
 .site-nav {
   display: flex;
   flex: 1;
-  gap: 18px;
+  gap: 12px;
   align-items: center;
   min-width: 0;
-  font-size: 15px;
+  padding: 8px;
+  overflow-x: auto;
+  font-size: 14px;
+  scroll-padding-inline: 14px;
+  scrollbar-width: none;
+}
+
+.site-nav::-webkit-scrollbar {
+  display: none;
 }
 
 /* `text-decoration: none` 是必需的：全局 `a:hover` 会加下划线，而下面那条自绘的
@@ -355,7 +443,7 @@ html.js .site-nav > a[aria-current] {
    两者叠在同一行时读者看到的是一根线，而不是两根看起来等价的线。 */
 .site-nav > a::after {
   position: absolute;
-  bottom: -6px;
+  bottom: -5px;
   left: 0;
   width: 100%;
   height: 2px;
@@ -385,15 +473,32 @@ html.js .site-nav > a[aria-current]::after {
   border-radius: 6px;
 }
 
+/* 被截断的那一侧渐隐。截断位置只有滚动容器自己知道，所以 `data-edge` 由
+   `landing.js` 按 `scrollLeft` 现判（start / end / both）：贴到某一端就收掉那一侧，
+   否则滚到底之后右边还挂着渐隐，看起来像永远还有更多。渐隐画在 padding box 上，
+   因此它盖住的是真内容，而不是一段尾部留白。禁用 JS 时没有这一层——锚点条照样
+   可以滚动、可以 Tab，只是少一个「还有更多」的视觉提示。 */
+.site-nav[data-edge='start'] {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+}
+
+.site-nav[data-edge='end'] {
+  mask-image: linear-gradient(90deg, transparent, #000 32px);
+}
+
+.site-nav[data-edge='both'] {
+  mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+
 /* 页内锚点之外的三个入口：另一个页面、站外仓库、语言切换。
    与区块导航分开，窄屏时它不跟着锚点一起横向滚走。 */
 .nav-actions {
   display: flex;
   flex: none;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding-left: 16px;
-  font-size: 15px;
+  padding-left: 12px;
+  font-size: 14px;
   border-left: 1px solid var(--lp-line);
 }
 
@@ -435,6 +540,33 @@ html.js .site-nav > a[aria-current]::after {
 .lang-switch {
   font-weight: 600;
   border-color: var(--lp-line-strong);
+}
+
+/* 页头那颗常驻的商店入口。前面几颗是「换个地方」，这一颗是「现在就装」，
+   所以只有它用实底主色——长页面上它是唯一一个随时够得着的转化入口。
+   `.nav-actions` 那层前缀是必需的：不带它只有 0-1-0，输给了 `.nav-actions a` 的 0-1-1。 */
+.nav-actions .nav-install {
+  padding: 0 14px;
+  color: #fff;
+  background: var(--lp-cta);
+  border-color: transparent;
+}
+
+.nav-actions .nav-install:hover {
+  color: #fff;
+  background: #2c86e8;
+  border-color: transparent;
+}
+
+.nav-actions .nav-install svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* 移动端下拉里的同一颗：面板每条都是浅底文字，这里只保留主色与字重。 */
+.nav-menu-exits .nav-install {
+  font-weight: 600;
+  color: var(--lp-primary-strong);
 }
 
 /* 小屏汉堡菜单：`<details>` 实现，禁用 JS 也能展开——窄屏下它接替
@@ -487,7 +619,15 @@ html.js .site-nav > a[aria-current]::after {
   top: 100%;
   right: 0;
   left: 0;
+
+  /* 面板是绝对定位、包含块是吸顶的 .site-header，因此它比视口高时既不会
+     被页面滚动带走、也没有任何东西替它滚——底部几个入口就永远够不到。
+     上限按「视口高 − 页头高」算：这里的 100% 解析的是包含块（页头）的高度，
+     正好等于 top: 100% 那段偏移。内容超出时由面板自己滚。 */
+  max-height: calc(100dvh - 100%);
   padding: 6px 0 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--lp-bg);
   border-bottom: 1px solid var(--lp-line);
   box-shadow: var(--lp-shadow-lg);
@@ -505,6 +645,12 @@ html.js .site-nav > a[aria-current]::after {
   min-height: 44px;
   padding: 0 22px;
   color: var(--lp-ink-soft);
+}
+
+/* 面板成了滚动容器（overflow-y: auto 会把另一轴也算成 auto），满宽链接的焦点环
+   画在盒外就会被左右两边各切掉一截。改成向内画，四边都还在。 */
+.nav-menu-panel a:focus-visible {
+  outline-offset: -3px;
 }
 
 .nav-menu-panel a:hover {
@@ -552,14 +698,21 @@ html.js .nav-menu-panel a[aria-current] {
     height: 44px;
   }
 
-  .gallery-dots button {
-    width: 12px;
-    height: 12px;
-  }
+  /* 窄屏曾经靠「把圆点本身放大」补偿手指（12px 粒 / 选中 28px）。
+     现在命中区在每个宽度下都是 24px 见方，补偿折进了盒子本身，可见粒子不再跟着长——
+     留着那两条会把 24px 的命中盒重新压回 12px，前功尽弃。 */
+}
 
-  .gallery-dots button[aria-current='true'] {
-    width: 28px;
-  }
+/* 命中区下限（24×24）：这四排都是**独立的控件行**，不是句子里的内联链接——
+   规范对内联链接是豁免的，对它们不是。实测它们分别只有 23.8 / 23.8 / 22.9 / 18px 高，
+   差的那 0.2~6px 不是设计意图，只是行高恰好落在那儿。所以只抬 min-height：
+   display 早已是 inline-flex / flex item（居中由既有的 align-items 负责），padding 一个数没动，
+   因此字的位置与页头焦点环那道判据都不受影响——焦点环守卫量的是 padding，不是 min-height。 */
+.site-nav a,
+.site-footer nav a,
+.tool-links a,
+.footer-meta a {
+  min-height: 24px;
 }
 
 /* ---------- Hero ---------- */
@@ -619,7 +772,7 @@ html.js .nav-menu-panel a[aria-current] {
 }
 
 .hero h1 .accent {
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
 }
 
 .hero .lede {
@@ -800,7 +953,7 @@ html.js.try-ready .hero-example-cta {
   display: inline-block;
   font-size: 13px;
   font-weight: 600;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
 }
 
 html.js.try-ready .hero-example-cta:hover {
@@ -841,7 +994,7 @@ html.js.try-ready .hero-example-cta:hover {
 .hero-outcome-why {
   font-size: 12px;
   font-weight: 600;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
 }
 
 .hero-outcome-why:hover {
@@ -1040,7 +1193,7 @@ section[aria-labelledby] {
   justify-content: center;
   width: 40px;
   height: 40px;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
   background: var(--lp-primary-soft);
   border-radius: 11px;
 }
@@ -1148,7 +1301,11 @@ section[aria-labelledby] {
   border-color: color-mix(in srgb, var(--lp-primary) 26%, var(--lp-line));
 }
 
-@media (width >= 900px) {
+/* 三列的门槛按「每张卡都还不窄于下面那条 300px 下限」反算：三列 900px 加两条
+   18px 间距是 936，再补上 .wrap 左右各 20px 的内边距，得 976。旧值 900 让每张卡
+   只剩 274.7px——比 auto-fit 的 300px 下限还窄，英文页一张卡能被压到 2240px 高，
+   同一个宽度下特性区（3678.8 / 5245.5px）反而比两列（3584.7 / 4841.8px）更长。 */
+@media (width >= 1000px) {
   .feature-grid {
     grid-template-columns: repeat(6, 1fr);
   }
@@ -1159,6 +1316,12 @@ section[aria-labelledby] {
 
   .feature-card-lg {
     grid-column: span 3;
+  }
+
+  /* 12 张卡里两张整宽，其余 10 张每行三张，最后一行只落下 1 张。把它摆进中间
+     那一格，这一行读起来才是收尾，而不是「没排满」。 */
+  .feature-card:last-child {
+    grid-column: 3 / span 2;
   }
 }
 
@@ -1180,7 +1343,7 @@ section[aria-labelledby] {
   justify-content: center;
   width: 46px;
   height: 46px;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
   background: var(--lp-primary-soft);
   border-radius: 13px;
   transition:
@@ -1189,27 +1352,27 @@ section[aria-labelledby] {
 }
 
 .feature-icon--green {
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
   background: var(--lp-accent-soft);
 }
 
 .feature-icon--orange {
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
   background: var(--lp-warn-soft);
 }
 
 .feature-icon--purple {
-  color: #8b5cf6;
+  color: var(--lp-purple-strong);
   background: rgb(139 92 246 / 12%);
 }
 
 .feature-icon--cyan {
-  color: #0aa2c0;
+  color: var(--lp-cyan-strong);
   background: rgb(10 162 192 / 12%);
 }
 
 .feature-icon--pink {
-  color: var(--lp-danger);
+  color: var(--lp-danger-strong);
   background: rgb(224 69 94 / 12%);
 }
 
@@ -1234,6 +1397,17 @@ section[aria-labelledby] {
   background: var(--lp-surface);
   border: 1px solid var(--lp-line);
   border-radius: var(--lp-radius);
+}
+
+/* 窄屏下这张 7 列表要横滑一整个屏幕才看得完（390px 实测：中文页 228px、英文页 413px
+   藏在右边），而触屏的滚动条是覆盖式的——不碰一下就不存在。判据由 `landing.js`
+   第 14 段按 `scrollLeft` 现判并写进 `data-edge`，与页头锚点条同一件事、同一份实现。
+   刻意只淡**右缘**：左那一列是 `position: sticky` 钉住的读者锚点，把它一起淡掉就等于
+   把「现在比的是哪一家」也抹掉；滚到最右时 `data-edge` 变成 `end`，渐隐自己退场，
+   不会留下「永远还有更多」的假信号。禁用 JS 时没有这一层，表格照旧可横滑、可读。 */
+.table-scroll[data-edge='start'],
+.table-scroll[data-edge='both'] {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
 }
 
 table {
@@ -1354,7 +1528,7 @@ html.js .compare tbody tr.reveal {
 
 .mark-yes {
   font-weight: 700;
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
 }
 
 .mark-no {
@@ -1363,7 +1537,7 @@ html.js .compare tbody tr.reveal {
 
 .mark-part {
   font-weight: 600;
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
 }
 
 /* ---------- 报错原文对照（#problem 表格之后）----------
@@ -1593,33 +1767,52 @@ html.js .gallery-bar {
 
 .gallery-dots {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   align-items: center;
 }
 
+/* 命中区从 8px 见方提到 24px 见方（Lighthouse 的 target-size 量的是元素自己的盒子，
+   伪元素撑不大它，所以只能把按钮本身放大、把可见的那一小粒交给 `::before` 画回原位）。
+   间距也从 7px 抬到 8px：相邻目标之间至少要留 8px，否则等于没有间距。
+   代价是这一排圆点的节拍摄变宽（8 粒：113px → 248px）——为的是摸鱼的人点得中，
+   可见粒子的直径、当前项那条横杠的宽度与全部动效都按原样搬进伪元素，没有改观感的量。 */
 .gallery-dots button {
   position: relative;
-  width: 8px;
-  height: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
   cursor: pointer;
-  background: var(--lp-line-strong);
+  background: none;
   border: 0;
+}
+
+.gallery-dots button::before {
+  width: 8px;
+  height: 8px;
+  content: '';
+  background: var(--lp-line-strong);
   border-radius: 999px;
   transform-origin: center;
   transition:
     transform 0.2s ease,
     border-radius 0.2s ease,
-    background 0.2s ease;
+    background-color 0.2s ease;
 }
 
 /* 选中态是「圆点长成胶囊」，量的是横向缩放而不是 width：翻页时不再为一个小圆点
    重排整条圆点栏（原先 active 那一格一宽，左右邻居各被推开 8px，看着就是在抖）。
    缩放会连圆角一起放大，所以这一档把横半径预先收成 4/3 px——×3 之后正好落回 4px，
    即高度的一半，画出来仍是两端半圆的胶囊，而不是一枚 24×8 的椭圆。
-   不占位就意味着两侧各压出 8px（间隙 7px），故抬高一层，免得胶囊两头被邻居啃掉 1px。 */
+   现在这层缩放落在伪元素上：命中的 24px 方盒子始终不动，只有那颗粒子在长。
+   不占位就意味着两侧各压出 8px，故抬高一层，免得胶囊两头被邻居啃掉 1px。 */
 .gallery-dots button[aria-current='true'] {
   z-index: 1;
+}
+
+.gallery-dots button[aria-current='true']::before {
   background: var(--lp-primary);
   border-radius: 1.34px / 4px;
   transform: scaleX(3);
@@ -1647,7 +1840,7 @@ html.js .gallery-bar {
   font-size: 34px;
   font-weight: 800;
   line-height: 1;
-  color: var(--lp-primary);
+  color: var(--lp-primary-strong);
   letter-spacing: -1px;
 }
 
@@ -1768,7 +1961,7 @@ html.js.try-ready .try {
 
 .try-fill-status.is-failed,
 .try-status.is-failed {
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
 }
 
 /* 匹配模式是被脚本改写的，没有这一下闪亮，读者会以为自己刚才就填过。
@@ -1924,7 +2117,7 @@ html.js.try-ready .try {
 /* 五种结论各配一档底色：这一笔到底有没有被接管、走哪条通道，读一眼就分得开。
    「模式不被接受」与「归网络层管但不会被应用」是同一档颜色——两格说的都是这条规则落不了地。 */
 html[data-try-state='net'] .try-verdict {
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
   background: var(--lp-accent-soft);
 }
 
@@ -1939,7 +2132,7 @@ html[data-try-state='miss'] .try-verdict {
 
 html[data-try-state='rejected'] .try-verdict,
 html[data-try-state='notapplied'] .try-verdict {
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
   background: var(--lp-warn-soft);
 }
 
@@ -1982,7 +2175,7 @@ html[data-try-state='notapplied'] .try-verdict {
   display: block;
   margin-top: 4px;
   font-size: 13px;
-  color: var(--lp-warn);
+  color: var(--lp-warn-strong);
 }
 
 /* 这一格是「有话才出现」：脚本挑不到对应那句理由时会挂上 `hidden`，
@@ -2227,7 +2420,10 @@ ul.ticks li::before {
   box-shadow: none;
 }
 
-.faq-rail-card h4 {
+/* 层级是 h3（原先写的是 h4）：筛到 0 时分类标题那些 h3 整个隐藏，这两枚就成了
+   「小节 h2 之后直接跳 h4」。选择器这里写成两级都吃，是为了让「换层级」与「换样式」
+   是两件事——特异度 (0,1,1) 仍然压得住全局那条 h3 规则，字号、间距、颜色一个数都没动。 */
+.faq-rail-card :is(h3, h4) {
   margin: 0 0 8px;
   font-size: 13.5px;
   font-weight: 700;
@@ -2378,6 +2574,201 @@ details[open] > summary::after {
 summary:focus-visible {
   outline-offset: 4px;
   border-radius: var(--lp-radius-sm);
+}
+
+/* 21 问从头扫到尾是个体力活，这一条把「找答案」变成打字。整块只在 JS 在场时出现：
+   没有脚本它就是一个不会生效的输入框，留着一个骗人的控件不如不给——禁用 JS 时
+   问答照旧全部可读、可点、可滚，一条不少。 */
+.faq-filter {
+  display: none;
+}
+
+html.js .faq-filter {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.faq-filter-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lp-ink-soft);
+}
+
+.faq-filter-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 14.5px;
+  color: var(--lp-ink);
+  background: var(--lp-bg);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-sm);
+  transition: border-color 0.18s ease;
+}
+
+.faq-filter-input:hover {
+  border-color: var(--lp-primary);
+}
+
+/* 那句「12 / 21 问匹配」是筛选的结果读数：空的时候整行不占位，
+   读者第一次看到这一节时不该先挨一行系统话。 */
+.faq-filter-status {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--lp-ink-faint);
+}
+
+.faq-filter-status:empty {
+  display: none;
+}
+
+/* 零命中那一刻的出口。默认不画：没有 JS 就没有筛选，也就没有这个死路，
+   留一句「没找到就去问」在静态页上只是多一行没人要的话。
+   由脚本在数到 0 时挂 `is-shown`——**只有这一句是 JS 的决定**，
+   措辞与去处全在 HTML 里（落地页有页内 #community，对比页只有仓库 issue，
+   两页本来就不一样，写进脚本就是替页面编话）。
+   字号与那句读数同一档，链接靠 `p a` 那条正文规则自动带下划线，不再单独装饰。 */
+.faq-filter-none {
+  display: none;
+}
+
+html.js .faq-filter-none.is-shown {
+  display: block;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--lp-ink-faint);
+}
+
+/* 零命中那一句后面的「直接看某一类」小片。
+   这里是全页唯一一处由脚本现造的可点击控件，所以它得走同一条降级契约：
+   HTML 里那个容器默认 `hidden`，脚本真的从本页的分类标题造出了至少一片才取消隐藏——
+   对比页压根没有分类，那一格在它就永远不该出现（不是样式没生效，是本来就没有东西可放）。
+   措辞（那句引导）与 `hidden` 都在 HTML，脚本只往容器里塞 `<a>`，片的文字来自分类标题本身。 */
+
+/* 这一条是承重的，不是重复：`.faq-jump { display: inline-flex }` 的特异度与 UA 那条
+   `[hidden]{display:none}` 相同，而作者样式表在级联里排在 UA 之前——只写上面那条，
+   「没有 JS」或「这一页没有分类」时容器会带着那句引导一起露出来。与
+   `.faq-list details[hidden]` 是同一个坑（那里也写过一条显式的）。 */
+.faq-jump[hidden] {
+  display: none;
+}
+
+.faq-jump {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.faq-jump a {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--lp-accent-strong);
+  white-space: nowrap;
+  text-decoration: none;
+  border: 1px solid var(--lp-line-strong);
+  border-radius: 999px;
+}
+
+.faq-jump a:hover {
+  text-decoration: underline;
+  border-color: var(--lp-accent-strong);
+}
+
+/* 被筛掉的问题与空掉的分类标题：`hidden` 属性由 `landing.js` 挂与摘。这里显式写一条，
+   是因为 `details` 自带 `display: list-item`，只靠 UA 那条 `[hidden]` 在个别引擎上压不住它。 */
+html.js .faq-list details[hidden],
+html.js .faq-category[hidden] {
+  display: none;
+}
+
+/* 深链落点要躲开吸顶页头：与分类标题同一档（88px）。这一格是**样式**负责的，脚本那边只展开——
+   2026-10-24 真机对着同一份深链做过 A/B：带着这条，那一问停在距视口顶 88px（页头 62px，
+   问题整行露得出来）；摘掉这条，它停在 0px，也就是正好压在吸顶页头底下。 */
+.faq-list details {
+  scroll-margin-top: 88px;
+}
+
+/* 每一问都可以被直接链接过去（`#faq-basics-3`），这一枚链形按钮就是它的入口。
+   没有 JS 就整枚不出现：它点下去做的是「把这一问的地址复制走」，那件事只有脚本做得到，
+   留一个只会顺手开合这一条的裸锚点让读者猜，不如不给——问题本身照旧可读可点，
+   深链在禁用 JS 时退化成「滚到那一问，自己点开」。
+   平时不占注意力：悬停这一行、键盘走到这一行、或这一条已经展开，才淡入。 */
+.faq-permalink {
+  display: none;
+}
+
+html.js .faq-permalink {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 26px;
+  margin-left: auto;
+  color: var(--lp-ink-faint);
+  border-radius: 7px;
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+html.js summary:hover .faq-permalink,
+html.js summary:focus-within .faq-permalink,
+html.js details[open] > summary .faq-permalink {
+  opacity: 1;
+}
+
+html.js .faq-permalink:hover {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
+}
+
+/* 复制成功那一下：弹一格并换成成功色，读者不必先读文字也知道刚才点到了什么。 */
+html.js .faq-permalink.is-copied {
+  color: var(--lp-accent-strong);
+  opacity: 1;
+  animation: faq-link-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes faq-link-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.24);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 「链接已复制」是这一行里的第二条信息：跟着按钮走，不换行、也不挤问题文本。
+   它是 `role="status"`，所以同时是辅助技术的播报区；空的时候不占位（沿用 `.copy-status`
+   那条口径），由 `landing.js` 现插现用，静态 HTML 里一个字都没有。 */
+.faq-copy-status {
+  flex: none;
+  margin-left: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lp-accent-strong);
+  white-space: nowrap;
+}
+
+.faq-copy-status:empty {
+  display: none;
+}
+
+.faq-copy-status.is-failed {
+  color: var(--lp-danger-strong);
 }
 
 details p {
@@ -2633,7 +3024,7 @@ html.js .copy-btn {
 
 .copy-status {
   font-size: 13.5px;
-  color: var(--lp-accent);
+  color: var(--lp-accent-strong);
 }
 
 .copy-status:empty {
@@ -2641,7 +3032,106 @@ html.js .copy-btn {
 }
 
 .copy-status.is-failed {
-  color: var(--lp-danger);
+  color: var(--lp-danger-strong);
+}
+
+/* ---------- 代码块的一键复制 ---------- */
+
+/* 按钮钉在右上角，文本从兄弟 <code> 现读（`data-copy-from`），
+   于是每条命令在 HTML 里只写一份，改命令不会漏改按钮上那一份。 */
+.code-shell {
+  position: relative;
+}
+
+/* 包一层之后 `p + pre` 那条相邻选择器不再命中，这里补回同样的间距。 */
+p + .code-shell {
+  margin-top: 14px;
+}
+
+/* 给右侧那颗胶囊让位：长命令行本来就能横向滚动，不会被它挡住。 */
+.code-shell pre {
+  padding-right: 74px;
+}
+
+.code-copy {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: none;
+  gap: 5px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--lp-code-ink);
+  cursor: pointer;
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 999px;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+/* 与页脚那颗同一档：无 JS 时按钮不出现，命令本身是可选中的文本。 */
+html.js .code-copy {
+  display: inline-flex;
+}
+
+.code-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.code-copy:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 18%);
+  border-color: rgb(255 255 255 / 42%);
+}
+
+.code-copy:active {
+  transform: scale(0.96);
+}
+
+.code-copy.is-copied {
+  color: #06231a;
+  background: var(--lp-accent);
+  border-color: transparent;
+  animation: lp-copy-pop 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.code-copy.is-failed {
+  /* 实底 + 白字这一档两主题共用一个值，不能跟着 -strong 翻：暗色档的 danger-strong 是浅粉，拿它当底会把白字压到 1.6:1 */
+  color: #fff;
+  background: var(--lp-danger-fill);
+  border-color: transparent;
+}
+
+/* 复制结果对屏幕阅读器继续播报，但按钮自己已经换了字，视线里不该再多一行。 */
+.code-shell .copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* 成功那一下只弹一次：0.42s 走完就停在终态底色上，2s 后脚本再换回「复制」。 */
+@keyframes lp-copy-pop {
+  0% {
+    transform: scale(0.9);
+  }
+
+  55% {
+    transform: scale(1.06);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* ---------- 页脚 ---------- */
@@ -2832,6 +3322,38 @@ details[open] > p {
   from {
     opacity: 0;
     transform: translateY(-5px);
+  }
+}
+
+/* 上面那段注释说的是「同一个动作的三面」，而卡片**高度**那一面此前是瞬移的：符号转过去、
+   卡边亮起来、答案淡入都占 240ms，只有盒子在那一刻直接长到终值——读者看到的是一次跳动，
+   而不是一个展开。这里补的正是第四面，同一档时长、同一条签名曲线，所以三面与盒子仍然同步。
+   `::details-content` 与 `interpolate-size` 是同一批落进 Chrome 的（131+），
+   因此整块包在 `@supports selector(...)` 里：不支持的引擎一条都不沾，行为与今天逐字节相同
+   （这不是「渐进增强坏了要兜底」，而是那一档根本没有这层可写）。
+   `interpolate-size` 只挂在 `.faq-list details` 上而不是 `:root`：它是可继承属性，
+   写在根上会把站内**所有** `height: auto` 的过渡一并改成可插值——包括移动端菜单那块面板
+   与两处 `height: auto` 的既有声明，那是超出这一格范围的改动。
+   `overflow: clip` 而不是 `hidden`：过渡途中内容正从一个还矮的盒子里露出来，
+   `hidden` 会给它一张可滚动的框架（读者能拖出一截答案），`clip` 只裁不滚。
+   `transition-behavior: allow-discrete` 是给 `content-visibility` 的——UA 在收起时把它切成
+   `hidden`，不允许离散插值的话，那一刀会在动画一开始就落下，读者看到的是「先空、后长」。 */
+@supports selector(::details-content) {
+  .faq-list details {
+    interpolate-size: allow-keywords;
+  }
+
+  .faq-list details::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+      content-visibility 0.24s;
+    transition-behavior: allow-discrete;
+  }
+
+  .faq-list details[open]::details-content {
+    block-size: auto;
   }
 }
 
@@ -3119,29 +3641,6 @@ html.js .tool-card:hover::before {
   }
 }
 
-/* 8 个锚点窄于此宽度就排不进一行。与其折成两行把 sticky 头部顶高，
-   不如只让锚点条自身横向滚动 —— 完整对比 / GitHub / EN 三个入口留在原位，
-   永远不需要滚动就能点。尾部留白 + 右侧渐隐遮罩让被截断的那一项看起来是
-   「右边还有」，而不是被切掉。 */
-@media (width <= 900px) {
-  .site-nav {
-    flex-wrap: nowrap;
-    gap: 14px;
-    max-width: 100%;
-    padding-right: 28px;
-    padding-bottom: 4px;
-    overflow-x: auto;
-    font-size: 14px;
-    white-space: nowrap;
-    scrollbar-width: none;
-    mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent);
-  }
-
-  .site-nav::-webkit-scrollbar {
-    display: none;
-  }
-}
-
 @media (width <= 760px) {
   section {
     padding: 44px 0;
@@ -3281,6 +3780,16 @@ html.js .tool-card:hover::before {
     animation: none;
   }
 
+  /* 展开时那一次盒子长高属于「同一个动作的第四面」，reduce 档必须一起摘——
+     只停淡入、留高度过渡，读起来仍是「跳一下」，等于这一档白设。
+     `transition: none` 之后 `block-size` 直接从 0 落到 auto，与这一层不存在时逐字节相同；
+     尺寸声明原样保留（收起时它本来就该是 0）。 */
+  @supports selector(::details-content) {
+    .faq-list details::details-content {
+      transition: none;
+    }
+  }
+
   /* 新增的五条同样逐项停：巡航的亮环与圆点、按下的亮边、数字落定、图标光晕、两态亮环。 */
   .hero-visual .flow-node::before,
   .hero-visual .flow-arrow::after,
@@ -3288,6 +3797,12 @@ html.js .tool-card:hover::before {
   .hero-visual .stat b,
   .feature-card:hover .feature-icon::after,
   .hero-outcome-row::before {
+    animation: none;
+  }
+
+  /* 复制这一问的链接那一下的弹跳同样停：成功色与那句「链接已复制」照常给，少的是形变。
+     `html.js` 这一层必须照抄正文那条（0-3-1），少写一层就只剩 0-2-1，压不住而是照弹。 */
+  html.js .faq-permalink.is-copied {
     animation: none;
   }
 
@@ -3319,6 +3834,7 @@ html.js .tool-card:hover::before {
   .feature-icon,
   .gallery-btn,
   .gallery-dots button,
+  .gallery-dots button::before,
   .scroll-rail button,
   .site-nav a,
   .nav-actions a,
@@ -3327,6 +3843,7 @@ html.js .tool-card:hover::before {
   details,
   summary,
   .copy-btn,
+  .code-copy,
   .try-verdict,
   .try-action,
   .btn-primary::after,
@@ -3341,6 +3858,11 @@ html.js .tool-card:hover::before {
   /* 按下的 1px 下沉也是位移：减弱档连它一起收，按钮只换底色。 */
   .try-action:active {
     transform: none;
+  }
+
+  /* 复制成功那一下弹一下同样是位移：减弱档只让它换底色。 */
+  .code-copy.is-copied {
+    animation: none;
   }
 
   html.js .reveal,
