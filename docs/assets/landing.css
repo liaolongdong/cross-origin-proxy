@@ -698,14 +698,9 @@ html.js .nav-menu-panel a[aria-current] {
     height: 44px;
   }
 
-  .gallery-dots button {
-    width: 12px;
-    height: 12px;
-  }
-
-  .gallery-dots button[aria-current='true'] {
-    width: 28px;
-  }
+  /* 窄屏曾经靠「把圆点本身放大」补偿手指（12px 粒 / 选中 28px）。
+     现在命中区在每个宽度下都是 24px 见方，补偿折进了盒子本身，可见粒子不再跟着长——
+     留着那两条会把 24px 的命中盒重新压回 12px，前功尽弃。 */
 }
 
 /* ---------- Hero ---------- */
@@ -1760,33 +1755,52 @@ html.js .gallery-bar {
 
 .gallery-dots {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   align-items: center;
 }
 
+/* 命中区从 8px 见方提到 24px 见方（Lighthouse 的 target-size 量的是元素自己的盒子，
+   伪元素撑不大它，所以只能把按钮本身放大、把可见的那一小粒交给 `::before` 画回原位）。
+   间距也从 7px 抬到 8px：相邻目标之间至少要留 8px，否则等于没有间距。
+   代价是这一排圆点的节拍摄变宽（8 粒：113px → 248px）——为的是摸鱼的人点得中，
+   可见粒子的直径、当前项那条横杠的宽度与全部动效都按原样搬进伪元素，没有改观感的量。 */
 .gallery-dots button {
   position: relative;
-  width: 8px;
-  height: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
   cursor: pointer;
-  background: var(--lp-line-strong);
+  background: none;
   border: 0;
+}
+
+.gallery-dots button::before {
+  width: 8px;
+  height: 8px;
+  content: '';
+  background: var(--lp-line-strong);
   border-radius: 999px;
   transform-origin: center;
   transition:
     transform 0.2s ease,
     border-radius 0.2s ease,
-    background 0.2s ease;
+    background-color 0.2s ease;
 }
 
 /* 选中态是「圆点长成胶囊」，量的是横向缩放而不是 width：翻页时不再为一个小圆点
    重排整条圆点栏（原先 active 那一格一宽，左右邻居各被推开 8px，看着就是在抖）。
    缩放会连圆角一起放大，所以这一档把横半径预先收成 4/3 px——×3 之后正好落回 4px，
    即高度的一半，画出来仍是两端半圆的胶囊，而不是一枚 24×8 的椭圆。
-   不占位就意味着两侧各压出 8px（间隙 7px），故抬高一层，免得胶囊两头被邻居啃掉 1px。 */
+   现在这层缩放落在伪元素上：命中的 24px 方盒子始终不动，只有那颗粒子在长。
+   不占位就意味着两侧各压出 8px，故抬高一层，免得胶囊两头被邻居啃掉 1px。 */
 .gallery-dots button[aria-current='true'] {
   z-index: 1;
+}
+
+.gallery-dots button[aria-current='true']::before {
   background: var(--lp-primary);
   border-radius: 1.34px / 4px;
   transform: scaleX(3);
@@ -3805,6 +3819,7 @@ html.js .tool-card:hover::before {
   .feature-icon,
   .gallery-btn,
   .gallery-dots button,
+  .gallery-dots button::before,
   .scroll-rail button,
   .site-nav a,
   .nav-actions a,
