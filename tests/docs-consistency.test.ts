@@ -1428,6 +1428,25 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       }
     });
 
+    /**
+     * 上面那条只验「标签指得到输入框」，没管标签**里那个数**。它写的是「筛选这 21 问」，
+     * 而 21 是这条小节里 `<details id="faq-` 的条数——加一条问答却不改这句话，界面就当着读者
+     * 说错自己有几条，且没有任何一处会红（本仓「散文里写一次版本号就假一次」同一族）。
+     */
+    it('标签里写给读者看的那个条数，等于这一页真的有的问答条数', () => {
+      for (const file of FILTER_PAGES) {
+        const section = faqSectionOf(file);
+        const label = /class="faq-filter-label"[\s\S]*?>([\s\S]*?)</.exec(section)?.[1] ?? '';
+        const claimed = Number((label.replace(/\s+/g, ' ').match(/\d+/) ?? [])[0]);
+        const actual = [...section.matchAll(/<details id="faq-/g)].length;
+        expect(
+          Number.isInteger(claimed),
+          `${file} 的筛选标签没写给读者看的条数（这一句是「这 N 问」的口径，缺了它读者不知道筛的是多大一堆）`,
+        ).toBe(true);
+        expect(claimed, `${file} 的筛选标签写着「${claimed} 问」，可这一页的小节里实际有 ${actual} 条`).toBe(actual);
+      }
+    });
+
     it('筛选靠 hidden 属性，不靠删节点；措辞全在 HTML 的 data-* 里', () => {
       const js = read('docs/assets/landing.js');
       expect(js, '筛掉一条改用移除节点的话，源码里的条目数与 id 顺序就与屏幕上不一致了').toMatch(/item\.hidden = !hit/);
