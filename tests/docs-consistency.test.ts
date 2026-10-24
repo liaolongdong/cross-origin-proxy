@@ -1993,42 +1993,55 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
   });
 
   /**
-   * 命中区下限（24×24）的回归守卫。
-   * 数出来的是真机普查（一次性量具扫了五页 × 两个宽度里每一个可点元素的实际盒子）：
-   * 页头锚点条 23.8、页脚导航行 23.8、工具卡链接 22.9、页脚语言切换 18——都是「独立控件行」，
-   * 不是句子里的内联链接（后者按规范豁免）。三条判据各管一面，缺一条这句话就画不圆：
-   * ① 四组一个不能少（少一组就是那一排悄悄掉回去）；② 只准加 min-height（改 padding 会挪字，
-   *    改 display 会牵动锚点条的横向滚动与焦点环那道按 padding 算的守卫）；
-   * ③ 不许扩成裸 `a`（把内联链接撑大是排版事故，不是可访问性收益）。
+   * 命中区下限（24×24）的回归守卫。数出来的是真机普查：五页 × 两个宽度里每一个可点元素的实际盒子。
+   * 守的四排都是独立控件行（页头锚点条 23.8、页脚导航 23.8、工具卡链接 22.9、页脚语言切换 18px）；
+   * 句子里的内联链接按规范豁免、不在射程内。
+   *
+   * 两条读法都是踩出来的坑，写在这儿是因为都反直觉：
+   * ① 锚在**声明**上、往前取它自己的选择器清单——反过来锚 `.site-nav a,` 会撞上别的规则
+   *    （那串在样式表里出现 3 次），第一版就是这样在干净树上假红；
+   * ② 整块声明一起吃——于是「有人往块里加了一条 padding」红在属性那条判据上，而不是三条一起红
+   *    （上一版要求块里只有 min-height 一条声明，一针下去三条全红，等于没隔离）。
+   * 「规则在不在」由第一条单独判；拿不到唯一规则时其余三条直接返回，不重复红第二遍。
    */
   describe('可点元素的命中区下限（源码契约）', () => {
     const cssText = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
-    // 锚在唯一那条 `min-height: 24px` 上、往前读它自己的选择器清单：
-    // 不能反过来锚在 `.site-nav a,` 那一行——那个串在样式表里出现 3 次（窄屏段里还有两处），
-    // 锚错就会把别的规则当成这一条来判（本轮第一版就是这样，干净树上直接假红）。
-    const rule = /([^{}]+)\{\s*min-height: 24px;\s*\}/.exec(cssText);
+    const rules = [...cssText.matchAll(/([^{}]+)\{([^{}]*min-height:[^{}]*24px[^{}]*)\}/g)];
+    const one = rules.length === 1 ? rules[0] : null;
+
+    it('那条命中区规则存在，且只有一条', () => {
+      expect(rules.length, `命中区规则读到 ${rules.length} 条（0 = 被删或数值改了；>1 = 判据指不定该管谁）`).toBe(1);
+    });
 
     it('四组独立控件行都在那份清单里', () => {
-      expect(rule, '找不到那条 min-height: 24px 的命中区规则（被删了，还是换了写法？）').not.toBeNull();
-      const group = rule![1];
+      if (!one) return;
       for (const sel of ['.site-nav a', '.site-footer nav a', '.tool-links a', '.footer-meta a']) {
-        expect(group, `命中区清单少了 ${sel}`).toContain(sel);
+        expect(one[1], `命中区清单少了 ${sel}`).toContain(sel);
       }
     });
 
-    it('只抬 min-height，不碰 padding 与 display', () => {
-      expect(rule![0], '这一格只该加 min-height：改 padding 会把字挪位').not.toMatch(/padding/);
-      expect(rule![0], '改 display 会牵动锚点条的横向滚动与焦点环那道算式').not.toMatch(/display/);
+    it('块里只准有 min-height 这一条声明', () => {
+      if (!one) return;
+      const props = one[2]
+        .split(';')
+        .map(d => (d.split(':')[0] || '').trim())
+        .filter(Boolean);
+      expect(
+        props,
+        `只该加 min-height：多出来的每一条要么挪字的位置、要么牵动页头那道按 padding 算的焦点环判据 ${JSON.stringify(props)}`,
+      ).toEqual(['min-height']);
     });
 
-    it('不许扩成整页所有链接（句子里的内联链接按规范是豁免的）', () => {
-      const oneOf = rule![1]
+    it('不许扩成整页所有链接（内联链接按规范是豁免的）', () => {
+      if (!one) return;
+      // 判的是「有一条选择器就是裸 a」，不是「某条以 a 结尾」——后者会把 .site-nav a 也误杀
+      const oneOf = one[1]
         .split(',')
         .map(x => x.trim())
         .filter(Boolean);
       expect(
-        oneOf.every(s => s.length > 1 && s !== 'a' && !/\s a$/.test(s)),
-        `把裸 a 拉进清单会连内联链接一起撑大，那是排版事故：${JSON.stringify(oneOf)}`,
+        oneOf.every(x => x !== 'a'),
+        `把裸 a 拉进清单会连句子里的内联链接一起撑大，那是排版事故：${JSON.stringify(oneOf)}`,
       ).toBe(true);
     });
   });
