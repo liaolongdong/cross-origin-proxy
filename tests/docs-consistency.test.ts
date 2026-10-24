@@ -1479,6 +1479,108 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  /**
+   * FAQ 卡片展开时的「长高」过渡。这里守的不是审美而是四件会静默坏掉的事：
+   * ① 整层包在 `@supports selector(::details-content)` 里——不支持的引擎一条都不沾，
+   *    行为与这层不存在时相同（真机 A/B 量过：摘掉两处 @supports 后，`block-size` 的
+   *    中间像素读数为 0 个，盒高第一帧就是终值）；
+   * ② 时长与曲线**必须**跟加减号、卡边、答案淡入是同一档（240ms + 签名曲线）——
+   *    这四样说的是同一个动作，其中任何一件改了数，动作就裂成前后错位；
+   * ③ `interpolate-size` 只许挂在 `.faq-list details` 上。它是可继承属性，
+   *    写到 `:root` 会把站内**所有** `height: auto` 的过渡一并改成可插值，
+   *    包括移动端菜单面板那两处与这一格无关的声明；
+   * ④ reduce 档要把这层一起摘掉——只停答案淡入、留高度过渡，读起来仍是「跳一下」。
+   * 动画对象本身在 Chrome 155 的 `getAnimations()` 里读不到（实测整表 85 条，挂在 DETAILS
+   * 上的只有 border-*-color 与 box-shadow），所以这一格只能按源码契约钉，运行时那一面
+   * 由逐帧盒高与 `::details-content` 的 used value 作证。
+   */
+  describe('FAQ 卡片展开时的高度过渡', () => {
+    const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const CURVE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+
+    const block = (needle: string): string => {
+      const s = css();
+      const at = s.indexOf(needle);
+      if (at === -1) return '';
+      const open = s.indexOf('{', at);
+      let depth = 0;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) return s.slice(open + 1, i);
+        }
+      }
+      return '';
+    };
+
+    it('整层包在能力判定里，且四个面用的是同一条时长与曲线', () => {
+      const s = css();
+      expect(s, '这层没有包在 @supports 能力判定里：不支持的引擎会拿到一份说不清行为的 CSS').toMatch(
+        /@supports selector\(::details-content\)/,
+      );
+      const guard = block('@supports selector(::details-content)');
+      expect(guard, '能力判定那块是空的').not.toBe('');
+      expect(guard).toMatch(/\.faq-list details\s*\{\s*interpolate-size:\s*allow-keywords;/);
+      expect(guard).toMatch(/\.faq-list details::details-content\s*\{/);
+      expect(guard).toMatch(/\.faq-list details\[open\]::details-content\s*\{\s*block-size:\s*auto;/);
+      expect(guard, '收起时 content-visibility 那一刀要在动画末尾落下，不然读者看到「先空后长」').toMatch(
+        /transition-behavior:\s*allow-discrete;/,
+      );
+      expect(guard, '过渡必须同时管着 block-size 与 content-visibility，只写一个就是半截动画').toMatch(
+        /transition:\s*block-size\s+0\.24s\s+cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\),\s*content-visibility\s+0\.24s;/,
+      );
+      expect(guard, '长高途中要裁掉溢出，否则答案会从还矮的盒子里漏出去').toMatch(/overflow:\s*clip;/);
+      expect(guard).not.toMatch(/transition:\s*all/);
+
+      /* 同一个动作的另外三面：答案淡入、卡边、加减号，读数必须与上面那一档逐字相同。 */
+      expect(s, '答案淡入与卡片长高不同档了——它们说的是同一个动作').toMatch(
+        new RegExp(`details\\[open\\] > p \\{\\s*animation: lp-answer 0\\.24s ${CURVE.replace(/[.()]/g, '\\$&')}`),
+      );
+      expect(s, '卡片描边/阴影的过渡与长高不同档了').toContain(
+        `transition:\n    border-color 0.24s ${CURVE},\n    box-shadow 0.24s ${CURVE};`,
+      );
+    });
+
+    it('interpolate-size 只挂在 FAQ 的 details 上，不挂到根元素', () => {
+      const s = css();
+      const hits = [...s.matchAll(/interpolate-size:/g)].length;
+      expect(hits, 'interpolate-size 出现的次数与守卫预期不符——回来把这一条的口径一起重判').toBe(1);
+      const rootish =
+        /(?:^|\n)\s*:root\s*\{[^}]*interpolate-size/.test(s) || /(?:^|\n)\s*html\s*\{[^}]*interpolate-size/.test(s);
+      expect(
+        rootish,
+        '写到 :root/html 上会把站内所有 height:auto 的过渡改成可插值（含移动端菜单面板那两处），这一格的范围是 FAQ 卡片',
+      ).toBe(false);
+    });
+
+    it('reduce 档把这层一起摘掉', () => {
+      const s = css();
+      const at = s.indexOf('@media (prefers-reduced-motion: reduce)');
+      expect(at, '读不到 reduce 那一段').toBeGreaterThan(-1);
+      const open = s.indexOf('{', at);
+      let depth = 0;
+      let end = -1;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
+      }
+      const reduce = s.slice(open, end);
+      expect(reduce, 'reduce 段里没有 ::details-content 这一条：只停淡入、留高度过渡，读起来仍是「跳一下」').toMatch(
+        /\.faq-list details::details-content\s*\{\s*transition:\s*none;/,
+      );
+      expect(reduce, 'reduce 段里的这一条也得包在能力判定里，否则不支持的引擎拿到一条永远不匹配的声明').toContain(
+        '@supports selector(::details-content)',
+      );
+    });
+  });
+
   describe('llms 文件承诺的问答锚点真的对得上页面', () => {
     /* 面向 AI 的那两份文件现在写了一句可核对的话：「每一条问题都有锚点，中英同一序号
        指同一问」。这句话一旦与页面脱钩，被引用的锚点就是 404 级别的东西——所以它必须

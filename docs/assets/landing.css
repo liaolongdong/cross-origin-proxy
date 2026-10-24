@@ -3171,6 +3171,38 @@ details[open] > p {
   }
 }
 
+/* 上面那段注释说的是「同一个动作的三面」，而卡片**高度**那一面此前是瞬移的：符号转过去、
+   卡边亮起来、答案淡入都占 240ms，只有盒子在那一刻直接长到终值——读者看到的是一次跳动，
+   而不是一个展开。这里补的正是第四面，同一档时长、同一条签名曲线，所以三面与盒子仍然同步。
+   `::details-content` 与 `interpolate-size` 是同一批落进 Chrome 的（131+），
+   因此整块包在 `@supports selector(...)` 里：不支持的引擎一条都不沾，行为与今天逐字节相同
+   （这不是「渐进增强坏了要兜底」，而是那一档根本没有这层可写）。
+   `interpolate-size` 只挂在 `.faq-list details` 上而不是 `:root`：它是可继承属性，
+   写在根上会把站内**所有** `height: auto` 的过渡一并改成可插值——包括移动端菜单那块面板
+   与两处 `height: auto` 的既有声明，那是超出这一格范围的改动。
+   `overflow: clip` 而不是 `hidden`：过渡途中内容正从一个还矮的盒子里露出来，
+   `hidden` 会给它一张可滚动的框架（读者能拖出一截答案），`clip` 只裁不滚。
+   `transition-behavior: allow-discrete` 是给 `content-visibility` 的——UA 在收起时把它切成
+   `hidden`，不允许离散插值的话，那一刀会在动画一开始就落下，读者看到的是「先空、后长」。 */
+@supports selector(::details-content) {
+  .faq-list details {
+    interpolate-size: allow-keywords;
+  }
+
+  .faq-list details::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+      content-visibility 0.24s;
+    transition-behavior: allow-discrete;
+  }
+
+  .faq-list details[open]::details-content {
+    block-size: auto;
+  }
+}
+
 /* 页头离顶后加投影：只有滚起来之后才需要「页头浮在内容之上」这层信息。
    阴影走 `html.js`——没有脚本就没有 `.is-scrolled`，不必为它留样式。 */
 html.js .site-header {
@@ -3592,6 +3624,16 @@ html.js .tool-card:hover::before {
   .nav-menu[open] .nav-menu-panel,
   details[open] > p {
     animation: none;
+  }
+
+  /* 展开时那一次盒子长高属于「同一个动作的第四面」，reduce 档必须一起摘——
+     只停淡入、留高度过渡，读起来仍是「跳一下」，等于这一档白设。
+     `transition: none` 之后 `block-size` 直接从 0 落到 auto，与这一层不存在时逐字节相同；
+     尺寸声明原样保留（收起时它本来就该是 0）。 */
+  @supports selector(::details-content) {
+    .faq-list details::details-content {
+      transition: none;
+    }
   }
 
   /* 新增的五条同样逐项停：巡航的亮环与圆点、按下的亮边、数字落定、图标光晕、两态亮环。 */
