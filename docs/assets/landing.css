@@ -703,6 +703,19 @@ html.js .nav-menu-panel a[aria-current] {
      留着那两条会把 24px 的命中盒重新压回 12px，前功尽弃。 */
 }
 
+
+/* 命中区下限（24×24）：这四排都是**独立的控件行**，不是句子里的内联链接——
+   规范对内联链接是豁免的，对它们不是。实测它们分别只有 23.8 / 23.8 / 22.9 / 18px 高，
+   差的那 0.2~6px 不是设计意图，只是行高恰好落在那儿。所以只抬 min-height：
+   display 早已是 inline-flex / flex item（居中由既有的 align-items 负责），padding 一个数没动，
+   因此字的位置与页头焦点环那道判据都不受影响——焦点环守卫量的是 padding，不是 min-height。 */
+.site-nav a,
+.site-footer nav a,
+.tool-links a,
+.footer-meta a {
+  min-height: 24px;
+}
+
 /* ---------- Hero ---------- */
 
 .hero {
