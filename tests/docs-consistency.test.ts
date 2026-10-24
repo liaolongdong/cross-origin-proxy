@@ -1396,6 +1396,70 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  describe('FAQ 关键词筛选', () => {
+    /* 「找答案」不该靠滚 21 条折叠项。这一格要钉住的是它的降级口径与实现边界：
+       ① 没有 JS 时整块不出现（一个不会生效的输入框比没有更糟），问答照旧全部可读；
+       ② 筛选用 `hidden` 属性而不是删节点——上面那三条 FAQ 守卫数的是源码里的条目数与顺序，
+          而「第 3 问是 #faq-basics-3」这件事不能因为读者打了两个字就变；
+       ③ 那句结果读数的**措辞住在 HTML**，脚本只挑 `data-*`（与预演面板同一条规矩），
+          否则中英两页的话就有一份是脚本里写死的。 */
+    const FILTER_PAGES = ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html'];
+
+    const faqSectionOf = (file: string): string =>
+      read(file).match(/<section\b[^>]*\bid="faq"[\s\S]*?<\/section>/)?.[0] ?? '';
+
+    it('四页各有一个带标签的筛选框与一处结果读数', () => {
+      for (const file of FILTER_PAGES) {
+        const section = faqSectionOf(file);
+        expect(section, `${file} 读不到 FAQ 小节`).not.toBe('');
+        expect([...section.matchAll(/class="faq-filter"/g)].length, `${file} 的筛选项应当恰好一处`).toBe(1);
+        const forId = /for="([^"]+)"/.exec(section)?.[1];
+        expect(forId, `${file} 的筛选框标签没有 for，读屏念不出这格是干什么的`).toBeTruthy();
+        expect(new RegExp(`id="${forId}"`).test(section), `${file} 的标签 for="${forId}" 指不到任何元素`).toBe(true);
+        expect(/type="search"/.test(section), `${file} 的筛选框不是 type=search`).toBe(true);
+        const status = /<p\b[^>]*class="faq-filter-status"[\s\S]*?>/.exec(section)?.[0] ?? '';
+        expect(status, `${file} 读不到那句结果读数`).not.toBe('');
+        expect(/role="status"/.test(status), `${file} 的结果读数不是 role=status`).toBe(true);
+        expect(/aria-describedby="[^"]*"/.test(section), `${file} 的输入框没有 aria-describedby 指向读数`).toBe(true);
+        const template = /data-count="([^"]*)"/.exec(status)?.[1] ?? '';
+        expect(template, `${file} 的读数模板读不出来`).toContain('{n}');
+        expect(template).toContain('{total}');
+        expect(/data-empty="[^"]{4,}"/.test(status), `${file} 少了「没有匹配」那一句`).toBe(true);
+      }
+    });
+
+    it('筛选靠 hidden 属性，不靠删节点；措辞全在 HTML 的 data-* 里', () => {
+      const js = read('docs/assets/landing.js');
+      expect(js, '筛掉一条改用移除节点的话，源码里的条目数与 id 顺序就与屏幕上不一致了').toMatch(/item\.hidden = !hit/);
+      expect(js, '空掉的分类标题也要跟着收，否则底下空空的标题读起来像「这一节没有问答」').toMatch(
+        /heading\.hidden = !anyVisible/,
+      );
+      expect(js, 'Esc 清空是这格的退路，读者打完字得能一把回到全部').toMatch(
+        /event\.key !== 'Escape' \|\| !faqFilter\.value/,
+      );
+      expect(
+        js,
+        '筛选挡在深链前面时深链赢——而且让位之后要把它滚进视野：那一问刚从 display:none 出来，浏览器那一次滚的是空（真机量到停在原地 1691px）',
+      ).toMatch(
+        /faqFilter\.value = '';\s*apply\(\);\s*target\.scrollIntoView\(\{ behavior: scrollBehavior\(\), block: 'start' \}\)/,
+      );
+      expect(js, '读数模板从 HTML 挑，脚本里不该出现任何一句语言').not.toMatch(/问匹配|questions match/);
+      expect(js, '「没有匹配」那句也只能住在 HTML：脚本的兜底必须留空，否则中英两页共享同一句写死的语言').toMatch(
+        /data-empty'\)\) \|\| '';/,
+      );
+      expect(js, '总条数从条目自己数，别在脚本里写死 21').not.toMatch(/haystacks\.length \+ 21|total = 21/);
+
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css, '没有 JS 时筛选框会露出来，可它什么都不会做').toMatch(/(?:^|\n)\.faq-filter\s*\{\s*display: none;/);
+      expect(css, 'JS 在场时得真的画出来，光有上面那条负判据就是整块消失').toMatch(
+        /html\.js \.faq-filter\s*\{\s*display: grid;/,
+      );
+      expect(css, '`details` 自带 display:list-item，只靠 UA 的 [hidden] 在个别引擎上压不住').toMatch(
+        /html\.js \.faq-list details\[hidden\][^{]*\{\s*display: none;/,
+      );
+    });
+  });
+
   describe('落地页菜单顺序跟随正文', () => {
     /**
      * 菜单是滚动的目录，不是「动作项收尾」的排版偏好：读者照着菜单往下走，

@@ -25,7 +25,9 @@
  *     另有一个「用测试地址填匹配模式」的派生按钮，取来源补 `/*` 并切回通配符；
  * 11. 对比表的整列高亮（CSS 选不出「鼠标所在那一列」）；
  * 12. FAQ 的直达链接：hash 指向某一问时替它展开，悬停/聚焦到那一行则给一枚复制链接的
- *     链形按钮（无 JS 时按钮不出现，深链退化成「滚到那一问，自己点开」）。
+ *     链形按钮（无 JS 时按钮不出现，深链退化成「滚到那一问，自己点开」）；
+ * 13. FAQ 的关键词筛选：按「问题 + 答案」收起不相关的条目与空掉的分类标题，Esc 清空
+ *     （无 JS 时整块不出现，问答照旧全部可读、可点、可滚）。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
@@ -1005,6 +1007,86 @@
           timer = null;
         }, 2600);
       });
+    });
+  }
+
+  /* ─────────────── 13. FAQ 关键词筛选 ─────────────── */
+
+  /* 21 问分五类，滚着找不如打字找。可搜的是「问题 + 答案」整段——很多词只出现在答案里
+     （`declarativeNetRequest`、`credentials: 'include'`），只搜标题的话读者会以为没答案。
+     隐藏走 `hidden` 属性而不是删节点：文档顺序、条目数与 `FAQPage` 的一致性守卫读的都是
+     源码里的这一份，运行时怎么筛不该动到它们，也不该动到「第 3 问是 #faq-basics-3」这件事。 */
+  const faqFilter = document.querySelector('.faq-filter-input');
+
+  if (faqFilter) {
+    const list = faqFilter.closest('.faq-list');
+    const status = document.getElementById('faq-filter-status');
+    const items = list ? Array.from(list.querySelectorAll('details[id]')) : [];
+    const headings = list ? Array.from(list.querySelectorAll('.faq-category')) : [];
+    /* 一次算好每条的可搜文本：每次击键都重读 21 条 `textContent` 是没必要的重复劳动。
+       那枚 permalink 没有文字节点（只有一张 SVG），所以它不会往这里掺进「复制」之类的字。 */
+    const haystacks = items.map(item => (item.textContent || '').toLowerCase().replace(/\s+/g, ' '));
+    const template = (status && status.getAttribute('data-count')) || '{n}/{total}';
+    const emptyMessage = (status && status.getAttribute('data-empty')) || '';
+    const total = items.length;
+
+    const apply = () => {
+      const query = faqFilter.value.trim().toLowerCase();
+      let shown = 0;
+      items.forEach((item, index) => {
+        const hit = !query || haystacks[index].indexOf(query) >= 0;
+        item.hidden = !hit;
+        if (hit) shown += 1;
+      });
+      /* 整类都被筛掉时把分类标题也收起来：留着一个底下空空的标题，
+         读起来像「这一节一条都没有」，而它只是被筛掉了。 */
+      headings.forEach(heading => {
+        let node = heading.nextElementSibling;
+        let anyVisible = false;
+        while (node && !node.classList.contains('faq-category')) {
+          if (node.tagName === 'DETAILS' && !node.hidden) {
+            anyVisible = true;
+            break;
+          }
+          node = node.nextElementSibling;
+        }
+        heading.hidden = !anyVisible;
+      });
+      if (!status) return;
+      if (!query) {
+        status.textContent = '';
+        return;
+      }
+      status.textContent = shown
+        ? template.replace('{n}', String(shown)).replace('{total}', String(total))
+        : emptyMessage;
+    };
+
+    faqFilter.addEventListener('input', apply);
+    /* Esc 清空并交还焦点归位（浏览器对 `type=search` 的默认行为就是 Esc 清空，
+       但只有它有值时我们才接管，免得把「关掉某个还没做的东西」也一起吞掉）。 */
+    faqFilter.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || !faqFilter.value) return;
+      event.preventDefault();
+      faqFilter.value = '';
+      apply();
+    });
+
+    /* 筛掉的那一条正好是被链的那一问时，筛选让位于深链：点了链接就是要看它，不该被自己
+       三秒前打的字挡住。而且这一格脚本**必须**负责滚——那一问在被筛掉的状态下没有盒子，
+       浏览器那一次「滚到锚点」滚了个空（真机量到：筛掉、展开都对，位置停在原地，
+       那一问距顶 1691px）。与第 12 段不冲突：那条针对「元素本来就在页面上」的初次导航，
+       这里针对「元素刚刚才从 display:none 里出来」。
+       右侧那栏「分类直达」同一条规则：整类被筛空时它的标题也收着，点它就是要点它。 */
+    window.addEventListener('hashchange', () => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      if (!id) return;
+      const target = document.getElementById(id);
+      if (!target || !target.hidden) return;
+      if (target.tagName !== 'DETAILS' && !target.classList.contains('faq-category')) return;
+      faqFilter.value = '';
+      apply();
+      target.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
     });
   }
 })();

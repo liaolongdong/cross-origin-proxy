@@ -2478,6 +2478,61 @@ summary:focus-visible {
   border-radius: var(--lp-radius-sm);
 }
 
+/* 21 问从头扫到尾是个体力活，这一条把「找答案」变成打字。整块只在 JS 在场时出现：
+   没有脚本它就是一个不会生效的输入框，留着一个骗人的控件不如不给——禁用 JS 时
+   问答照旧全部可读、可点、可滚，一条不少。 */
+.faq-filter {
+  display: none;
+}
+
+html.js .faq-filter {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.faq-filter-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lp-ink-soft);
+}
+
+.faq-filter-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 14.5px;
+  color: var(--lp-ink);
+  background: var(--lp-bg);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-sm);
+  transition: border-color 0.18s ease;
+}
+
+.faq-filter-input:hover {
+  border-color: var(--lp-primary);
+}
+
+/* 那句「12 / 21 问匹配」是筛选的结果读数：空的时候整行不占位，
+   读者第一次看到这一节时不该先挨一行系统话。 */
+.faq-filter-status {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--lp-ink-faint);
+}
+
+.faq-filter-status:empty {
+  display: none;
+}
+
+/* 被筛掉的问题与空掉的分类标题：`hidden` 属性由 `landing.js` 挂与摘。这里显式写一条，
+   是因为 `details` 自带 `display: list-item`，只靠 UA 那条 `[hidden]` 在个别引擎上压不住它。 */
+html.js .faq-list details[hidden],
+html.js .faq-category[hidden] {
+  display: none;
+}
+
 /* 深链落点要躲开吸顶页头：与分类标题同一档（88px）。这一格是**样式**负责的，脚本那边只展开——
    2026-10-24 真机对着同一份深链做过 A/B：带着这条，那一问停在距视口顶 88px（页头 62px，
    问题整行露得出来）；摘掉这条，它停在 0px，也就是正好压在吸顶页头底下。 */

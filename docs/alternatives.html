@@ -923,6 +923,30 @@
             </p>
           </div>
           <div class="faq-list">
+            <div class="faq-filter">
+              <label
+                class="faq-filter-label"
+                for="faq-filter"
+              >
+                按关键词筛选这 5 问
+              </label>
+              <input
+                class="faq-filter-input"
+                id="faq-filter"
+                type="search"
+                autocomplete="off"
+                spellcheck="false"
+                aria-describedby="faq-filter-status"
+                placeholder="输入关键词，问答会跟着收窄"
+              />
+              <p
+                class="faq-filter-status"
+                id="faq-filter-status"
+                role="status"
+                data-count="{n} / {total} 问匹配"
+                data-empty="没有匹配的问题——换个词，或清空看全部"
+              ></p>
+            </div>
             <details id="faq-1">
               <summary>
                 浏览器扩展能替代 Dev Server 代理吗？<a
