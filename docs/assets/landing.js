@@ -28,6 +28,8 @@
  *     链形按钮（无 JS 时按钮不出现，深链退化成「滚到那一问，自己点开」）；
  * 13. FAQ 的关键词筛选：按「问题 + 答案」收起不相关的条目与空掉的分类标题，Esc 清空
  *     （无 JS 时整块不出现，问答照旧全部可读、可点、可滚）。
+ * 14. 窄屏下对比表的横滑提示：与第 3 项共用同一份「截断在哪一侧」的判据，
+ *     只给右缘渐隐——左那一列是钉住的，淡掉它反而读不出比的是哪一家。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
@@ -309,38 +311,48 @@
 
   /* ─────────────── 3. 锚点条：横向滚动与当前区块高亮 ─────────────── */
 
+  /**
+   * 横向溢出容器的「这边还有」判据：把截断发生在哪一侧写进 `data-edge`，
+   * 样式那一侧负责渐隐。页头锚点条与窄屏下的对比表共用这一份——
+   * 两处说的是同一件事，写成两份就总有一天只有一处会淡。
+   * 只在值真的变了时才写属性：这个函数挂在滚动与 resize 上，无谓的写入会让样式反复失效。
+   */
+  const syncEdge = el => {
+    const max = el.scrollWidth - el.clientWidth;
+    if (max <= 1) {
+      if (el.hasAttribute('data-edge')) el.removeAttribute('data-edge');
+      return;
+    }
+    const atStart = el.scrollLeft <= 1;
+    const atEnd = el.scrollLeft >= max - 1;
+    const edge = atStart ? 'start' : atEnd ? 'end' : 'both';
+    if (el.getAttribute('data-edge') !== edge) el.setAttribute('data-edge', edge);
+  };
+
+  /**
+   * 挂上滚动、窗口缩放与字体落地三程重判，返回手动重判的那一句。
+   * 字体落地前量到的是后备字体的宽度，换上去之后才可能溢出（或反过来）。
+   * 没有 `document.fonts` 的老引擎就只靠前两程。
+   */
+  const watchOverflow = el => {
+    if (!el) return () => {};
+    const run = () => syncEdge(el);
+    run();
+    el.addEventListener('scroll', run, { passive: true });
+    window.addEventListener('resize', run);
+    if (document.fonts && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(run, () => {});
+    }
+    return run;
+  };
+
   /* 锚点条放不下时是一条横向滚动条（见 landing.css 的 `.site-nav`）。三件事都在这里：
      溢出/截断在哪一侧的判据、把高亮项滚进视野、竖滚轮转横滚。三者都只读写
      `data-edge` 与 `scrollLeft`，不碰正文的滚动位置。 */
   const navStrip = document.querySelector('.site-nav');
-
-  /**
-   * 重判锚点条是否溢出、被截断的是哪一侧，并把它写进 `data-edge`。
-   * 只在值真的变了时才写属性：这个函数挂在滚动与 resize 上，无谓的写入会让样式反复失效。
-   */
-  const syncNavEdge = () => {
-    if (!navStrip) return;
-    const max = navStrip.scrollWidth - navStrip.clientWidth;
-    if (max <= 1) {
-      navStrip.removeAttribute('data-edge');
-      return;
-    }
-    const atStart = navStrip.scrollLeft <= 1;
-    const atEnd = navStrip.scrollLeft >= max - 1;
-    const edge = atStart ? 'start' : atEnd ? 'end' : 'both';
-    if (navStrip.getAttribute('data-edge') !== edge) navStrip.setAttribute('data-edge', edge);
-  };
+  watchOverflow(navStrip);
 
   if (navStrip) {
-    syncNavEdge();
-    navStrip.addEventListener('scroll', syncNavEdge, { passive: true });
-    window.addEventListener('resize', syncNavEdge);
-    /* 字体落地前量到的是后备字体的宽度，换上去之后才可能溢出（或反过来）。
-       没有 `document.fonts` 的老引擎就只靠 load 那一程。 */
-    if (document.fonts && typeof document.fonts.ready.then === 'function') {
-      document.fonts.ready.then(syncNavEdge, () => {});
-    }
-
     /* 竖滚轮在锚点条上转成横滚，但只在它真的还能往那一头走时接管：
        到头之后仍然 `preventDefault` 的话，读者把指针停在页头上就再也滚不动页面。 */
     navStrip.addEventListener(
@@ -1089,4 +1101,15 @@
       target.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
     });
   }
+
+  /* ─────────────── 14. 窄屏下的对比表：横滑的那一侧给个信号 ─────────────── */
+
+  /* 390px 视口实测：这张 7 列的表要横滑 228px（中文页）到 413px（英文页）才看得完，
+     而它此前没有任何「这边还有」的信号——页头锚点条上一轮补了方向感知的渐隐，
+     这张表是同一件事漏掉的那一格。判据与锚点条共用 `watchOverflow`，
+     样式只给**右缘**渐隐：左缘那一列是钉住的（`.compare thead th:first-child`），
+     把钉住的那列淡掉反而读不出比的是哪一家。滚到最右时 `data-edge` 变成 `end`，渐隐自己退场。 */
+  document.querySelectorAll('.table-scroll').forEach(shell => {
+    if (shell.querySelector('table')) watchOverflow(shell);
+  });
 })();

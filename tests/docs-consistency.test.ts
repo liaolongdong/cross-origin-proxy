@@ -1767,6 +1767,48 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  /**
+   * 窄屏下对比表的横滑提示。390px 实测这张 7 列表要滑 228px（中文）/413px（英文）才看得完，
+   * 而触屏滚动条是覆盖式的——不碰就不存在，所以「这边还有」必须画出来。
+   * 两条契约：
+   * ① **判据只有一份**——页头锚点条与表格共用 `syncEdge`/`watchOverflow`。写成两份，
+   *    将来就只有一处会淡（本仓反复踩过的「第二个模型」形状）；
+   * ② 滚到最右要**自己退场**——CSS 里不许出现 `.table-scroll[data-edge='end']` 的渐隐，
+   *    否则读者永远觉得还有更多。
+   */
+  describe('窄屏对比表的横滑提示', () => {
+    const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const js = () => read('docs/assets/landing.js');
+
+    it('表格的右缘渐隐按 data-edge 画，且滚到最右那一档不存在', () => {
+      const s = css();
+      expect(s, '表格没有按 data-edge 的渐隐：窄屏读不出还有多少列').toMatch(
+        /\.table-scroll\[data-edge='start'\],\s*\.table-scroll\[data-edge='both'\]\s*\{\s*mask-image:\s*linear-gradient/,
+      );
+      expect(s, "出现了 .table-scroll[data-edge='end'] 的渐隐——滚到头之后还挂着「还有更多」是假信号").not.toMatch(
+        /\.table-scroll\[data-edge='end'\]/,
+      );
+      // 只淡右缘：左那一列是 sticky 的读者锚点
+      expect(s, '渐隐不该同时吃左缘：钉住那一列被淡掉就读不出比的是哪一家').not.toMatch(
+        /\.table-scroll\[data-edge[^]]*\][^{]*\{\s*mask-image:\s*linear-gradient\(90deg,\s*transparent/,
+      );
+    });
+
+    it('溢出判据只有一份，锚点条与表格都走它', () => {
+      const src = js();
+      const writes = [...src.matchAll(/setAttribute\('data-edge'/g)].length;
+      expect(writes, `data-edge 的写入有 ${writes} 处——两处各判一次，将来只会有一处会淡`).toBe(1);
+      expect(src, '锚点条没有走共用判据').toMatch(/\n {2}watchOverflow\(navStrip\);/);
+      expect(src, '锚点条自己那份判据还留着（syncNavEdge）——两处各判一次就是两份事实源').not.toMatch(/syncNavEdge/);
+      expect(src, '表格没有走共用判据').toMatch(
+        /document\.querySelectorAll\('\.table-scroll'\)\.forEach\(shell => \{\s*if \(shell\.querySelector\('table'\)\) watchOverflow\(shell\);/,
+      );
+      expect(src, '判据里三个状态缺一不可（贴右端要能撤掉渐隐）').toMatch(
+        /const edge = atStart \? 'start' : atEnd \? 'end' : 'both';/,
+      );
+    });
+  });
+
   describe('llms 文件承诺的问答锚点真的对得上页面', () => {
     /* 面向 AI 的那两份文件现在写了一句可核对的话：「每一条问题都有锚点，中英同一序号
        指同一问」。这句话一旦与页面脱钩，被引用的锚点就是 404 级别的东西——所以它必须

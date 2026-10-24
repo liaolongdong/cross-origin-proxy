@@ -1392,6 +1392,17 @@ section[aria-labelledby] {
   border-radius: var(--lp-radius);
 }
 
+/* 窄屏下这张 7 列表要横滑一整个屏幕才看得完（390px 实测：中文页 228px、英文页 413px
+   藏在右边），而触屏的滚动条是覆盖式的——不碰一下就不存在。判据由 `landing.js`
+   第 14 段按 `scrollLeft` 现判并写进 `data-edge`，与页头锚点条同一件事、同一份实现。
+   刻意只淡**右缘**：左那一列是 `position: sticky` 钉住的读者锚点，把它一起淡掉就等于
+   把「现在比的是哪一家」也抹掉；滚到最右时 `data-edge` 变成 `end`，渐隐自己退场，
+   不会留下「永远还有更多」的假信号。禁用 JS 时没有这一层，表格照旧可横滑、可读。 */
+.table-scroll[data-edge='start'],
+.table-scroll[data-edge='both'] {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+}
+
 table {
   width: 100%;
   font-size: 15px;
