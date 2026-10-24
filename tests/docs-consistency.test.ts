@@ -316,8 +316,8 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         // 而不是「分类恰好写成 h3」。侧栏卡的标题与分类是不同的一种东西，
         // 按层级数会把它们数进来（2026-10-24 把那一枚标题从 h4 抬到 h3 时就是这样撞红的）。
         const marks = [...html.matchAll(/<h[2-6]\b[^>]*>/g)]
-          .filter((m) => /class="[^"]*\bfaq-category\b/.test(m[0]))
-          .map((m) => [/id="([^"]+)"/.exec(m[0])?.[1] ?? '', m.index] as [string, number]);
+          .filter(m => /class="[^"]*\bfaq-category\b/.test(m[0]))
+          .map(m => [/id="([^"]+)"/.exec(m[0])?.[1] ?? '', m.index] as [string, number]);
         for (const [id] of marks) {
           expect(id, '有一枚 .faq-category 标题没有 id —— 目录指不过去，这一格先红在这里').not.toBe('');
         }
