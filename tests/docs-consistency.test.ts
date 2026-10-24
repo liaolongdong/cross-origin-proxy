@@ -312,7 +312,15 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       /** 分类：`[锚点 id, 该分类下的折叠条数]`，保持文档顺序。 */
       const categoriesOf = (file: string): Array<[string, number]> => {
         const html = faqHtml(file);
-        const marks = [...html.matchAll(/<h3\b[^>]*\bid="([^"]+)"/g)].map(m => [m[1], m.index] as [string, number]);
+        // 认**类名**，不认标签层级：这一格的意思是「每个分类都有目录可达的锚点」，
+        // 而不是「分类恰好写成 h3」。侧栏卡的标题与分类是不同的一种东西，
+        // 按层级数会把它们数进来（2026-10-24 把那一枚标题从 h4 抬到 h3 时就是这样撞红的）。
+        const marks = [...html.matchAll(/<h[2-6]\b[^>]*>/g)]
+          .filter((m) => /class="[^"]*\bfaq-category\b/.test(m[0]))
+          .map((m) => [/id="([^"]+)"/.exec(m[0])?.[1] ?? '', m.index] as [string, number]);
+        for (const [id] of marks) {
+          expect(id, '有一枚 .faq-category 标题没有 id —— 目录指不过去，这一格先红在这里').not.toBe('');
+        }
         return marks.map(([id, start], i) => {
           const end = marks[i + 1]?.[1] ?? html.length;
           return [id, [...html.slice(start, end).matchAll(/<details\b/g)].length] as [string, number];
@@ -1585,6 +1593,36 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         /(?:^|\n)\.faq-jump\[hidden\]\s*\{\s*display: none;/,
       );
       expect(css).toMatch(/(?:^|\n)\.faq-jump\s*\{\s*display: inline-flex;/);
+    });
+
+    /**
+     * 零命中那一档的标题层级。Lighthouse 的 heading-order 只在「筛到 0」那一档红：
+     * 分类标题（h3）连同它们的内容一起隐藏，侧栏那两张卡的标题若写成一枚比 h3 还低一档的
+     * 层级，序列就变成「小节 h2 → 卡片 h4」的跳级。
+     * 静态能算的代理就是这里用的这条：把 `.faq-category` 从序列里整个摘掉（模拟全部隐藏），
+     * 剩下的层级序列仍不许跳级——五页全过才算，因为对比页与隐私页没有侧栏卡，
+     * 它们要证明的是「这一页本来就没有这一格」，不是「恰好没算出来」。
+     *
+     * 顺带钉住样式侧的那半：`.faq-rail-card :is(h3, h4)` 必须两级都吃。换标签层级与换观感
+     * 是两件事，若选择器还只认 h4，这次修层级就顺手把侧栏卡的字号与间距改掉了。
+     */
+    it('筛掉所有分类标题之后，剩下的层级序列仍然不跳级', () => {
+      for (const file of [...FILTER_PAGES, 'docs/privacy.html']) {
+        const html = read(file);
+        const seq: number[] = [];
+        for (const m of html.matchAll(/<h([2-6])\b([^>]*)>/g)) {
+          const cls = /class="([^"]*)"/.exec(m[2])?.[1] ?? '';
+          if (cls.includes('faq-category')) continue;
+          seq.push(Number(m[1]));
+        }
+        const skips: string[] = [];
+        for (let i = 1; i < seq.length; i++) {
+          if (seq[i] - seq[i - 1] > 1) skips.push(`h${seq[i - 1]}→h${seq[i]}`);
+        }
+        expect(seq.length, `${file} 一个标题都没读到（那正则坏了）`).toBeGreaterThan(3);
+        expect(skips, `${file} 在零命中那一档跳级：${skips.join(', ')}`).toEqual([]);
+      }
+      expect(read('docs/assets/landing.css')).toMatch(/\.faq-rail-card\s+:is\(h3,\s*h4\)\s*\{/);
     });
   });
 

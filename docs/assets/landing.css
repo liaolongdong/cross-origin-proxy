@@ -2408,7 +2408,10 @@ ul.ticks li::before {
   box-shadow: none;
 }
 
-.faq-rail-card h4 {
+/* 层级是 h3（原先写的是 h4）：筛到 0 时分类标题那些 h3 整个隐藏，这两枚就成了
+   「小节 h2 之后直接跳 h4」。选择器这里写成两级都吃，是为了让「换层级」与「换样式」
+   是两件事——特异度 (0,1,1) 仍然压得住全局那条 h3 规则，字号、间距、颜色一个数都没动。 */
+.faq-rail-card :is(h3, h4) {
   margin: 0 0 8px;
   font-size: 13.5px;
   font-weight: 700;
