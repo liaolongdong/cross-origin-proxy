@@ -3902,5 +3902,29 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         expect(read(file), `${file}：不该出现「带走」的用法句，那一格只在两份落地页`).not.toContain('try-take-howto');
       }
     });
+
+    it('提示行引出的每一枚键帽，脚本都真的接得住（四页一致，不多不少这两枚）', () => {
+      const js = read('docs/assets/landing.js');
+      /* 键帽上印的是键盘图例（Esc），不是 KeyboardEvent 的键名（Escape），所以判据问的是「筛选框自己那个
+         监听有没有比较 Escape」——全仓还有第二处 Esc 监听（汉堡菜单），按「脚本里某处在比较 Escape」判
+         就是一枚假牙：变异实测把筛选框那处改掉、判据照样绿，因为菜单那处替它答了话。 */
+      const filterAt = js.indexOf("faqFilter.addEventListener('keydown'");
+      expect(filterAt, '筛选框自己的 keydown 监听不见了，提示行却还写着 Esc 清空').toBeGreaterThan(-1);
+      expect(
+        js.slice(filterAt, filterAt + 200),
+        '提示行写着 Esc 清空，可筛选框的监听不再比较 Escape 了（菜单那处不算，它管的是别的门）',
+      ).toContain("event.key !== 'Escape'");
+      expect(js, '提示行写着 / 直达，可文档级那个监听不再比较 "/" 了').toMatch(
+        /event\.repeat \|\| event\.key !== '\/'/,
+      );
+      for (const file of FILTER_PAGES) {
+        const hint = /<span class="faq-filter-hint"[^>]*>([\s\S]*?)<\/span\s*>/.exec(flat(read(file)));
+        expect(hint, `${file}：筛选框的提示行不见了`).not.toBeNull();
+        const chips = [...(hint ? hint[1] : '').matchAll(/<kbd class="kbd"[^>]*>([^<]+)<\/kbd\s*>/g)]
+          .map(m => m[1].trim())
+          .sort();
+        expect(chips, `${file}：提示行的键帽应当恰好是 / 与 Esc 这两枚`).toEqual(['/', 'Esc']);
+      }
+    });
   });
 });
