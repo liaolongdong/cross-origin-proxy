@@ -3402,6 +3402,37 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       expect(body, '底色必须是这一站已有的软色块令牌').toMatch(/background-color:\s*var\(--lp-[\w-]+\)/);
       expect(body, '不许写死十六进制或 rgb 颜色').not.toMatch(/#[0-9a-fA-F]{3,8}\b|\brgba?\(/);
     });
+
+    /**
+     * 「答案里命中」那枚徽标的措辞必须住在 HTML：中英各一句、脚本零字面量，与计数句同一条规矩。
+     * 这一格守的是三件事——两页都给了文案（缺一个语言就是给另一群人画个空白pill）、
+     * 脚本只挑属性不写文案、样式侧**没有声明 display**（声明了就会顶掉 UA 的 `[hidden]`，
+     * 徽标在没有筛选时也挂着，正是 `.faq-jump` 那条要靠显式规则赢回来的处境）。
+     */
+    it('答案命中的徽标：文案在 HTML、脚本只挑属性、样式不写 display', () => {
+      for (const file of ['docs/index.html', 'docs/en.html']) {
+        const html = read(file);
+        const copy = /data-answer-hit="([^"]+)"/.exec(html)?.[1];
+        expect(copy, `${file} 的筛选状态元素少了 data-answer-hit 那句文案`).toBeTruthy();
+        expect((copy ?? '').length, `${file} 的徽标文案短得不像一句话`).toBeGreaterThanOrEqual(4);
+      }
+      const zh = /data-answer-hit="([^"]+)"/.exec(read('docs/index.html'))?.[1] ?? '';
+      const en = /data-answer-hit="([^"]+)"/.exec(read('docs/en.html'))?.[1] ?? '';
+      expect(zh, '中英两句必须真是两种语言（抄成一样的就是其中一页没翻译）').not.toBe(en);
+      expect(js, '脚本里不许出现徽标文案的字面量').not.toContain(zh);
+      expect(js, '脚本里不许出现徽标文案的字面量').not.toContain(en);
+      expect(js).toContain("getAttribute('data-answer-hit')");
+      const at = css.indexOf('.faq-hit-where {');
+      expect(at, '徽标的样式不见了（脚本还在造节点，页面上却是无样式的一串字）').toBeGreaterThan(-1);
+      // 正文必须从 `{` 之后截：整条规则连着选择器一起查时，`display` 前面是 `{` 而不是 `;`，
+      // 那条 `(^|;)` 的判据就永远不命中——第一版正是这样，变异 F2（补上 display）当场假绿。
+      const open = css.indexOf('{', at);
+      const body = css.slice(open + 1, css.indexOf('}', open));
+      expect(body, '这一格一旦声明 display 就会顶掉 UA 的 [hidden]{display:none}，徽标会在没有筛选时挂着').not.toMatch(
+        /(^|;)\s*display\s*:/,
+      );
+      expect(body).toContain('var(--lp-accent-strong)');
+    });
   });
 
   describe('同构网格的末行不许只剩半格（源码契约）', () => {

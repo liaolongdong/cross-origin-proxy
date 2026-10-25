@@ -1056,6 +1056,16 @@
        只给可见的那几条包：藏起来的条目没有读者，替它们包一遍只是白干活。
        一个字的词不高亮（MIN_MARK_QUERY）：单字（「改」「a」）会把满页涂黄，那是噪声而不是提示。 */
     const MIN_MARK_QUERY = 2;
+    /* 命中只在答案里时，那一问是折叠的——高亮落在看不见的地方，读者盯着一条没有问题答案的行
+       会以为筛选坏了。所以这种行挂一枚小徽标，把「为什么这里没有高亮」当场说出来。
+       措辞住在 HTML 的 data-answer-hit（中英各一句、脚本里零字面量，与计数句同一条规矩），
+       徽标按 hidden 开关而不是删节点：留着节点，下一轮只是切一下 hidden。
+       `questions` 在**建徽标之前**就算好，所以徽标自己的文字不会掺进「问题里有没有命中」的判断。 */
+    const answerHitCopy = (status && status.getAttribute('data-answer-hit')) || '';
+    const questions = items.map(item => {
+      const summary = item.querySelector('summary');
+      return (summary ? summary.textContent : '').toLowerCase().replace(/\s+/g, ' ');
+    });
     const clearMarks = root => {
       root.querySelectorAll('mark.faq-hit').forEach(mark => {
         const parent = mark.parentNode;
@@ -1074,6 +1084,9 @@
         if (!node.data || !node.data.trim()) continue;
         const tag = node.parentElement ? node.parentElement.tagName : '';
         if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') continue;
+        // 徽标那一句是界面自己的话（文案住在 HTML 的 data-*，脚本里没有第二份），不是问答原文：
+        // 打了「答案」这类词时，不该把徽标自己涂黄
+        if (node.parentElement && node.parentElement.closest('.faq-hit-where')) continue;
         nodes.push(node);
       }
       nodes.forEach(node => {
@@ -1106,6 +1119,21 @@
         const hit = !query || haystacks[index].indexOf(query) >= 0;
         item.hidden = !hit;
         if (hit) shown += 1;
+        if (answerHitCopy) {
+          const summary = item.querySelector('summary');
+          if (summary) {
+            const answerOnly = hit && !!query && questions[index].indexOf(query) < 0;
+            let badge = summary.querySelector('.faq-hit-where');
+            if (!badge && answerOnly) {
+              badge = document.createElement('span');
+              badge.className = 'faq-hit-where';
+              badge.textContent = answerHitCopy;
+              // 钉在直达按钮**之前**：那一枚靠 margin-left:auto 顶到行尾，徽标要贴着问题文字读
+              summary.insertBefore(badge, summary.querySelector('.faq-permalink') || null);
+            }
+            if (badge) badge.hidden = !answerOnly;
+          }
+        }
       });
       /* 高亮跟着这一轮的命中走：先整体摘掉，再只给留下来的那些重包。
          顺序是承重的——反过来就等于在上一轮的 mark 里找下一轮的词。 */

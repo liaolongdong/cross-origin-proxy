@@ -2761,6 +2761,24 @@ html.js .faq-category[hidden] {
   border-radius: 2px;
 }
 
+/* 「答案里命中」那一枚说明。刻意**不写 display**：summary 在样式里是 flex 行，这一格作为弹性子项
+   自然被块化；一旦声明了 display，它就与 UA 的 `[hidden]{display:none}` 同特异度而作者表排在后面，
+   `hidden` 会被顶掉——那正是 `.faq-jump` 那条要显式写回来才成立的事，这里从源头免掉。
+   字色走承载文字的那一档令牌（`--lp-accent-strong`，浅 4.83:1 / 暗 6.2:1），边框只做装饰；
+   字号 12px 与这一站最小的那档一致，不加高度、不动问题文字。 */
+.faq-hit-where {
+  flex: none;
+  align-self: center;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--lp-accent-strong);
+  white-space: nowrap;
+  border: 1px solid var(--lp-line-strong);
+  border-radius: 999px;
+}
+
 /* ---------- 深链落点要说得出话 ----------
  * 搜索引擎、分享的 `#faq-basics-3`、目录里的 `#faq-install-1`……跳进来之后浏览器只负责「滚到那里」，
  * 页面上没有任何东西说「就是这儿」。读者要么重新往上扫，要么以为自己点错了。
