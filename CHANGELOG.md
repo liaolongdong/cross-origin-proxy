@@ -94,6 +94,45 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
   **The filter's hint now names both keys it actually honors.** It used to advertise only `/` — the "press Esc to clear and get all 21 back" path was knowledge you had to already have. All four filter pages now read "press `/` to jump to it, `Esc` to clear" (zh: 「按 `/` 直达、`Esc` 清空」), reusing the existing key-cap style. A new guard requires every key cap in that hint to be a key the script really compares, and pins the four pages to exactly these two. **The first draft of that guard was toothless**: it asked whether _anywhere in the script_ something compared `Escape`, and the hamburger menu has its own Esc listener — deleting the filter's comparison stayed green. It now locates `faqFilter.addEventListener('keydown'` first and only asks inside that stretch; the mutation reddens, together with the pre-existing "filter works by hiding" case, the two pointing at each other. Live in Chrome for Testing 155 with real `Input.dispatchKeyEvent`, all four pages: before `/` the active element is BODY, after it the filter input with an empty value; inserting `CORS` makes the status line read "3 / 21 问匹配" (comparison pages: "1 / 5"); after Esc the value is empty again and 21 questions (5 there) are visible again. At 390 and 1280 across four pages: zero clipped key caps, zero page-level horizontal overflow, measured cap widths 23.8 and 39.5 px. The existing guard that reconciles "these 21 questions" in the label with the page's actual `<details>` count was untouched — that number didn't move.
 
+## [1.7.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.6.0...v1.7.0) (2026-10-25)
+
+
+### Added
+
+* **docs:** FAQ 加一格关键词筛选，深链与分类直达压过它 ([0d54081](https://github.com/liaolongdong/cross-origin-proxy/commit/0d54081b412cfec38eae438acf062762ffe2d41d))
+* **docs:** FAQ 卡片展开的高度过渡之外，再补窄屏对比表的横滑信号 ([9f094b3](https://github.com/liaolongdong/cross-origin-proxy/commit/9f094b31ab5bde4533e16956e11f776897835f10))
+* **docs:** FAQ 每一问拿到自己的 id 与直达链接，深链进来是展开的 ([254af53](https://github.com/liaolongdong/cross-origin-proxy/commit/254af53d4f564e33635e766a04262f43e23cb658))
+* **docs:** FAQ 筛选把命中的那几个字涂出来——只造节点、不改文字 ([831dc1f](https://github.com/liaolongdong/cross-origin-proxy/commit/831dc1f700ccba14b9a16285c2411782f21af85d))
+* **docs:** FAQ 筛选框用 / 一键直达——最有用的控件不该只靠滚过去发现 ([03d2317](https://github.com/liaolongdong/cross-origin-proxy/commit/03d2317df252dc04e53ba11a8f5fed3417ce73f3))
+* **docs:** 一句都筛不到那一刻，出口就摆在那句话下面 ([e277ddc](https://github.com/liaolongdong/cross-origin-proxy/commit/e277ddc08144a9b0c4ce475b885ad9faee08cbe7))
+* **docs:** 只命中在答案里的那一问会说「点开看」——折叠时高亮看不见，这一格得说句话 ([513fb61](https://github.com/liaolongdong/cross-origin-proxy/commit/513fb617cb27a5169151cb4f2ad4f6758c8fa1a9))
+* **docs:** 筛选框的提示行把两枚键都说全——加了 Esc 清空，顺手把自己写的那枚假牙拔了 ([b991472](https://github.com/liaolongdong/cross-origin-proxy/commit/b99147280b97505a8a4f433992c716ae51ae1678))
+* **docs:** 补上 FAQ 卡片展开时的第四面——盒子现在跟着长高，不再瞬移 ([ddc909c](https://github.com/liaolongdong/cross-origin-proxy/commit/ddc909c65d79373a3508bfef63f27c7f0e04a553))
+* **docs:** 零命中那一刻再补半条路——除了「去问」，还能直接点进某一类 ([afff9ca](https://github.com/liaolongdong/cross-origin-proxy/commit/afff9ca1516092abaf24e6f835128294831ff4a3))
+* **landing:** 四份落地页常驻安装入口与命令块一键复制 ([3d0f4ad](https://github.com/liaolongdong/cross-origin-proxy/commit/3d0f4ad89e4016f7da64c464da0fd0364e7e17aa))
+* **landing:** 小屏菜单可按 Esc 或点空白处收起 ([178f677](https://github.com/liaolongdong/cross-origin-proxy/commit/178f677cdb676e7ee39f735dc5075c1d81a37b0a))
+* **landing:** 落地页常驻安装入口与命令块一键复制 ([8de8c54](https://github.com/liaolongdong/cross-origin-proxy/commit/8de8c54bd2896085456b027611014ba675139c8c))
+
+
+### Fixed
+
+* **docs:** 三列下最后一行那张孤卡摆进中间那一格 ([33c0451](https://github.com/liaolongdong/cross-origin-proxy/commit/33c0451c451a2bd52dde63b5d06b1364b4eaa4d9))
+* **docs:** 两处「做了却没说全」的格子补上——快捷键交给辅助技术、带走那格说清粘回哪里 ([e0be382](https://github.com/liaolongdong/cross-origin-proxy/commit/e0be382a595b4d16cef1ad76bb1a4ebfa5eb08e8))
+* **docs:** 五张同构网格的末行不再只剩一格——五段窄区间各补一条 ([8df443c](https://github.com/liaolongdong/cross-origin-proxy/commit/8df443c3a8b499de2f7111adcc8139e23f92f54d))
+* **docs:** 五页可点元素全数扫一遍，四排真控件的命中区抬到 24px 下限 ([c459108](https://github.com/liaolongdong/cross-origin-proxy/commit/c459108eb10b835d66e27b3f569bc56d51557c89))
+* **docs:** 产品站浅色档的文字对比度补齐——29 处不达标归零，无障碍 94→100 ([85363cb](https://github.com/liaolongdong/cross-origin-proxy/commit/85363cbeeb5f4624e32d2c7d11f514f1a8fa6c8c))
+* **docs:** 截图廊那排圆点的命中区从 8px 撑到 24px——可见的那一粒没变 ([56d142c](https://github.com/liaolongdong/cross-origin-proxy/commit/56d142caf3068d226115dc04eb7c5d40303de49e))
+* **docs:** 深链落点自己说得出「就是这儿」——:target 画一圈 1.4s 淡出的描边 ([c00b69b](https://github.com/liaolongdong/cross-origin-proxy/commit/c00b69b25b2145d303ec0ed858fcd892adc046f1))
+* **docs:** 特性区三列门槛抬到 1000px，窄屏不再把卡片压进细条 ([5dac35f](https://github.com/liaolongdong/cross-origin-proxy/commit/5dac35f7d543b71ba2f55c0ca728bd2d56f65642))
+* **docs:** 筛到一行不剩时标题不再跳级——侧栏那两张卡从 h4 抬到 h3 ([2aa5b52](https://github.com/liaolongdong/cross-origin-proxy/commit/2aa5b52e65f6225fec9c91899a6ca9a1d570f54e))
+* **docs:** 评审揪出的四条真缺陷逐条修掉——mark 不再切碎问题、徽标不再顶爆窄屏 ([98f5bff](https://github.com/liaolongdong/cross-origin-proxy/commit/98f5bff01be39e6c56627b6b96df3b60f3ec6eef))
+* **landing:** 小屏汉堡面板按视口封顶并自己滚，底部入口不再够不到 ([aade238](https://github.com/liaolongdong/cross-origin-proxy/commit/aade23827d6ad29629ba4f67275a11a5002fe201))
+* **landing:** 汉堡按钮的无障碍名称不再写死「打开」 ([823372a](https://github.com/liaolongdong/cross-origin-proxy/commit/823372a30e97667f99e620d4fa2290c29d9b34bb))
+* **landing:** 锚点条四周留出焦点环的余量，守卫跟着长牙 ([7487bcf](https://github.com/liaolongdong/cross-origin-proxy/commit/7487bcfa08652a9af0a6b82661420da9d4add6b2))
+* **landing:** 面板成为滚动容器后，焦点环改为向内画 ([dd86dfe](https://github.com/liaolongdong/cross-origin-proxy/commit/dd86dfe8fccc67112ab253bd5132722835d1ed9c))
+* **landing:** 页头锚点条放不下时自己横向滚动，不再压住出口簇 ([79dccc3](https://github.com/liaolongdong/cross-origin-proxy/commit/79dccc3946bfa4ccad18425ae9e08767c3f89557))
+* **options:** 规则表筛到一行不剩时，那一格终于说的是筛选，还给了出口 ([a1af041](https://github.com/liaolongdong/cross-origin-proxy/commit/a1af0414874a6fd3d67b02208d5f5fc47279b851))
+
 ## [1.6.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.5.1...v1.6.0) (2026-10-23)
 
 ### Added
