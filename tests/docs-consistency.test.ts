@@ -940,6 +940,15 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      */
     const jsGated = new Map([['lp-gallery-auto', 'autoPossible']]);
 
+    /**
+     * 「这条动画关掉没有」按**逗号清单的每一项**判：`a, b { animation: X }` 要 a 与 b 都在
+     * 减弱动效段落里被关掉。旧写法拿整串清单去查那份按逗号拆开存的 `switchedOff`，于是任何
+     * 多选择器的动画规则都会假红——2026-10-25 加 `lp-target-cue` 时正是这样撞红的，
+     * 那次是量具的口径缺了一格，不是漏了关闭项（关闭项本来就写在 CSS 里）。
+     */
+    const switchedOffList = (selector: string): boolean =>
+      selector.split(',').every(part => switchedOff.has(flat(part)));
+
     it('每条使用关键帧的规则都在减弱动效段落里关掉', () => {
       expect(reducedStart, 'landing.css 里没有 prefers-reduced-motion 段落').toBeGreaterThan(0);
       expect(declared.size, 'landing.css 里没有 @keyframes').toBeGreaterThan(0);
@@ -951,7 +960,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
             .map(name => [name, flat(selector).replace(/^html\.js /, '')] as const),
         )
         .filter(([name]) => !jsGated.has(name))
-        .filter(([, selector]) => !switchedOff.has(selector))
+        .filter(([, selector]) => !switchedOffList(selector))
         .map(([name, selector]) => `${selector} 播了 ${name}()，减弱动效段落没关它`);
 
       expect(missing, '新增动画漏了减弱动效关闭项').toEqual([]);
@@ -3468,6 +3477,113 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       // 六张卡的 .grid 落在 1/2/3/4 轨都不剩孤卡（4 轨是 4/2），所以它**不该**被任何跨列规则碰到——
       // 上一那条锚点表只登记 3/5/12，正是这个意思；哪天这条断言把 6 报出来，就得重扫区间再补规则。
       expect(GRIDS.filter(([, , , count]) => count === 6).length, '六张卡的 .grid 消失了——区间表要重算').toBe(2);
+    });
+  });
+
+  /**
+   * 深链落点那一圈淡出描边（`lp-target-cue`）的守卫。
+   *
+   * 这一格整条写在 CSS 里、禁 JS 也照常生效，所以本环境只能按源码契约钉；行为另由一次性量具
+   * 在真 Chrome 里逐帧验过（`.test-tmp/probe/target-cue-live.cjs`，不入库：两页 × 「整节 / 某一问」
+   * × 常规与 reduce 共 8 档、44 项全绿——描边出现过、2.2s 收回透明、offsetWidth 一位没动、
+   * 非目标元素 outline-style 恒为 none、整页横向溢出 0px）。
+   */
+  describe('深链落点的淡出描边只动 outline（源码契约）', () => {
+    const cssFlat = read('docs/assets/landing.css').replace(/\s+/g, ' ');
+    const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+    const TARGETS = 'section:target, .faq-category:target, .faq-list details:target';
+
+    /** 从 `from`（指向 `{`）起按大括号配对取出一整块。 */
+    const braceBlock = (from: number): string => {
+      let depth = 0;
+      for (let i = from; i < cssFlat.length; i += 1) {
+        if (cssFlat[i] === '{') depth += 1;
+        else if (cssFlat[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return cssFlat.slice(from, i + 1);
+        }
+      }
+      throw new Error('大括号没配上');
+    };
+
+    const ruleIn = (scope: string, selector: string): string => {
+      const needle = norm(selector) + ' {';
+      const at = scope.indexOf(needle);
+      expect(at, `找不到规则 ${selector}`).toBeGreaterThan(-1);
+      // 括号配对只在**这一块正文**里走（早先写成把相对下标交给按全文取数的 braceBlock，
+      // 于是从文件头的 :root 令牌块里端出来一长串声明当「规则正文」，红得莫名其妙）。
+      const open = at + needle.length - 1;
+      let depth = 0;
+      for (let i = open; i < scope.length; i += 1) {
+        if (scope[i] === '{') depth += 1;
+        else if (scope[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return norm(scope.slice(open + 1, i)).replace(/;$/, '');
+        }
+      }
+      throw new Error(`规则 ${selector} 的大括号没配上`);
+    };
+
+    it('那一圈只声明 outline 与 animation，且 animation 不带 fill-mode', () => {
+      const body = ruleIn(cssFlat, TARGETS);
+      expect(body).toContain('outline: 3px solid transparent');
+      expect(body).toContain('outline-offset: 3px');
+      expect(body).toContain('animation: lp-target-cue 1.4s ease-out');
+      expect(
+        body,
+        '不许用 background / box-shadow / transform 做这一圈（会与卡片自己的底色与阴影抢同一件事）',
+      ).not.toMatch(/background|box-shadow|transform/);
+      // 承重：动画在级联里排在作者声明**之前**，带 forwards/both 会把末帧那个 transparent 冻在元素上，
+      // 之后任何给它画 outline 的规则（键盘焦点环那一类）都被压掉——而 :target 一路成立到地址变化为止。
+      const anim = /animation:([^;]*)/.exec(body)?.[1] ?? '';
+      expect(anim, '这条动画不能有 fill-mode，末帧冻结会压掉后续 outline').not.toMatch(/forwards|both|backwards/);
+    });
+
+    it('关键帧存在，且 from / to 两侧只改 outline-color', () => {
+      const at = cssFlat.indexOf('@keyframes lp-target-cue {');
+      expect(at, '关键帧 lp-target-cue 不见了').toBeGreaterThan(-1);
+      const block = braceBlock(at + '@keyframes lp-target-cue'.length);
+      const sides = [...block.matchAll(/(from|to)\s*\{([^{}]*)\}/g)].map(m => norm(m[2]));
+      expect(sides.length, 'from / to 两侧都要在').toBe(2);
+      for (const side of sides) {
+        // 按**声明条数**判，不是按「以 outline-color 开头」判：`^outline-color: .+;$` 那条贪婪式
+        // 会把 `outline-color: …; opacity: 0.4;` 整串收进去，变异实测——多塞一条声明照样绿。
+        const decls = side
+          .split(';')
+          .map(s => norm(s))
+          .filter(Boolean);
+        expect(decls.length, `每一侧只准一条声明，实际是 ${JSON.stringify(decls)}`).toBe(1);
+        expect(/^outline-color: .+$/.test(decls[0] ?? ''), `那一侧只准动 outline-color，实际是 ${decls[0]}`).toBe(true);
+      }
+    });
+
+    it('reduce 档把这一圈整条摘掉，而不是只放慢', () => {
+      const at = cssFlat.indexOf('@media (prefers-reduced-motion: reduce) {');
+      expect(at).toBeGreaterThan(-1);
+      expect(ruleIn(braceBlock(at + '@media (prefers-reduced-motion: reduce)'.length), TARGETS)).toBe(
+        'animation: none',
+      );
+    });
+
+    it('三个落点形状在页面上真的存在（不许守一个不存在的锚）', () => {
+      for (const file of ['docs/index.html', 'docs/en.html']) {
+        const html = read(file);
+        expect(
+          (html.match(/<section[^>]*\bid="/g) ?? []).length,
+          `${file} 的可落地 section 变少了`,
+        ).toBeGreaterThanOrEqual(6);
+        expect((html.match(/<details[^>]*\bid="/g) ?? []).length, `${file} 的可落地问答变少了`).toBeGreaterThanOrEqual(
+          5,
+        );
+        expect(html, `${file} 的分类标题锚点不见了`).toContain('class="faq-category"');
+      }
+      // 对比页没有 FAQ 列表与分类标题，只有整节——那也够用（另两个选择器在那儿恒不命中，不是缺陷）
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html']) {
+        expect(
+          (read(file).match(/<section[^>]*\bid="/g) ?? []).length,
+          `${file} 的可落地 section 变少了`,
+        ).toBeGreaterThanOrEqual(3);
+      }
     });
   });
 });

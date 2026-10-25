@@ -2749,6 +2749,26 @@ html.js .faq-category[hidden] {
   scroll-margin-top: 88px;
 }
 
+/* ---------- 深链落点要说得出话 ----------
+ * 搜索引擎、分享的 `#faq-basics-3`、目录里的 `#faq-install-1`……跳进来之后浏览器只负责「滚到那里」，
+ * 页面上没有任何东西说「就是这儿」。读者要么重新往上扫，要么以为自己点错了。
+ * 这里用一圈**向外画的 outline** 淡出 1.4 秒补上这一句：outline 不参与布局，所以落点位置、
+ * 卡片宽高、滚动位置一个数都不动；它也不碰 background / box-shadow，所以结束后各元素回落到
+ * 自己的声明值（`.faq-list details` 有底色和边框，卡片还有阴影——用那些属性做动画会把它们
+ * 在播完之后冻成关键帧里的值，那才是这一格最贵的错）。
+ * 所以这条**不能带 fill-mode**：`forwards` / `both` 会把 `outline-color: transparent` 冻在末帧，
+ * 而 `:target` 一直成立到地址变化为止——下一次这一节被聚焦时，焦点环会被那条冻结的声明压掉。
+ * 只对能被分享的两个形状说话：整节（`section`）与某一问（`.faq-list details`）；
+ * 分类标题那一格有 `.faq-category` 自己的 id，也一并收进来。
+ * `main` / `h1` 刻意排除：那是 skip-link 的落点，给整页描一圈等于全屏闪一下。 */
+section:target,
+.faq-category:target,
+.faq-list details:target {
+  outline: 3px solid transparent;
+  outline-offset: 3px;
+  animation: lp-target-cue 1.4s ease-out;
+}
+
 /* 每一问都可以被直接链接过去（`#faq-basics-3`），这一枚链形按钮就是它的入口。
    没有 JS 就整枚不出现：它点下去做的是「把这一问的地址复制走」，那件事只有脚本做得到，
    留一个只会顺手开合这一条的裸锚点让读者猜，不如不给——问题本身照旧可读可点，
@@ -3673,6 +3693,18 @@ html.js .tool-card:hover::before {
   animation: lp-halo 0.62s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* 深链落点那一圈淡出的描边。只动 `outline-color`：它不参与布局，
+   所以落点位置与卡片尺寸一个数都不动（换成 `box-shadow` 就得和卡片自带的阴影抢同一件事）。 */
+@keyframes lp-target-cue {
+  from {
+    outline-color: color-mix(in srgb, var(--lp-accent) 62%, transparent);
+  }
+
+  to {
+    outline-color: transparent;
+  }
+}
+
 @keyframes lp-halo {
   from {
     opacity: 0.5;
@@ -3833,6 +3865,15 @@ html.js .tool-card:hover::before {
   .hero-visual,
   .nav-menu[open] .nav-menu-panel,
   details[open] > p {
+    animation: none;
+  }
+
+  /* 深链那一圈淡出的描边也整条停掉：这一档没有「动」的提示，就干脆不画——
+     `:target` 会一直成立到地址变化为止，留一条静态描边等于给那一节盖上一个去不掉的圈，
+     比不提示更吵。落点本身仍由 `scroll-margin-top` 与浏览器的滚动负责，信息一点不少。 */
+  section:target,
+  .faq-category:target,
+  .faq-list details:target {
     animation: none;
   }
 
