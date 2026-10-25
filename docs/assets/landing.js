@@ -1224,6 +1224,28 @@
       apply();
       target.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
     });
+
+    /* 按 `/` 直接落到这一格的筛选框：它是全页最有用的控件，却只能靠滚过去发现。
+       配置页里 `/` 早就绑成「聚焦搜索」，同一个手感不该只在扩展里有。
+       三处必须让路，一处都不许省：
+       ① 带任何修饰键（⌘/ 与 Ctrl+/ 是浏览器与别的东西的，不是我们的）；
+       ② 焦点已经在可输入的地方（输入框、textarea、select、contenteditable）——用户正在打字，
+          把光标从他的正文里抢走比「没找到搜索框」糟得多；
+       ③ 这一页压根没有筛选框（隐私页那一节都不在）——整个监听器就不该挂上，
+          所以它写在 `if (faqFilter)` 里面，不是写了再判：两份对比页有 FAQ 也有筛选框，
+          这一格对它们同样成立，别把它当成首页独有。
+       让路的时候一个 preventDefault 都不发，浏览器自己的 `/`（Firefox 快速填充那一类）保持原样。 */
+    document.addEventListener('keydown', event => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active.isContentEditable) return;
+      }
+      event.preventDefault();
+      faqFilter.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
+      faqFilter.focus();
+    });
   }
 
   /* ─────────────── 14. 窄屏下的对比表：横滑的那一侧给个信号 ─────────────── */

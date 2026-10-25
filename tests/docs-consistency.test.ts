@@ -3433,6 +3433,45 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       );
       expect(body).toContain('var(--lp-accent-strong)');
     });
+
+    /**
+     * `/` 直达 FAQ 筛选框。三处让路（修饰键 / 焦点已在输入处 / 这一页压根没有那一格）与
+     * 「提示写在 HTML 里、只有筛选框的那几页才写」是这一格的全部契约；
+     * 行为在真 Chrome 用真的 `Input.dispatchKeyEvent` 验过（`.test-tmp/probe/slash-focus-live.cjs`，
+     * 不入库：首页 1280 与 390、两份对比页、隐私页、英文页、Ctrl+/、焦点已在别的输入框、
+     * 以及把 landing.js 整个摘掉那一份，共 21 项全绿）。
+     */
+    it('`/` 的监听挂在「这一页真有筛选框」那道闸门里，且三处让路都在', () => {
+      const slashAt = js.indexOf("event.key !== '/'");
+      expect(slashAt, '/ 这条快捷键的判据不见了').toBeGreaterThan(-1);
+      const guard = js.indexOf('if (faqFilter) {');
+      const nextSection = js.indexOf('14. 窄屏下的对比表');
+      expect(guard).toBeGreaterThan(-1);
+      expect(nextSection).toBeGreaterThan(guard);
+      expect(
+        slashAt > guard && slashAt < nextSection,
+        '/ 的监听必须住在 faqFilter 闸门内，挂到外面就是给没有那一格的页面也挂上',
+      ).toBe(true);
+      expect(js, '带修饰键的 / 是浏览器自己的').toContain('event.metaKey');
+      expect(js, '焦点已在输入处时必须让路').toContain('active.isContentEditable');
+      expect(js).toContain("tag === 'TEXTAREA'");
+    });
+
+    it('每一张有筛选框的页都写了 / 的提示，没有的页不许写', () => {
+      for (const file of [
+        'docs/index.html',
+        'docs/en.html',
+        'docs/alternatives.html',
+        'docs/en-alternatives.html',
+        'docs/privacy.html',
+      ]) {
+        const html = read(file);
+        const hasFilter = html.includes('faq-filter-input');
+        const hinted =
+          html.includes('faq-filter-hint') && /<kbd class="kbd">\s*\/\s*<\/kbd>/.test(html.replace(/\s+/g, ' '));
+        expect(hinted, `${file}：有筛选框=${hasFilter}，提示却=${hinted}（两者必须同起同落）`).toBe(hasFilter);
+      }
+    });
   });
 
   describe('同构网格的末行不许只剩半格（源码契约）', () => {
