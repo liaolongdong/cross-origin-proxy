@@ -2749,6 +2749,18 @@ html.js .faq-category[hidden] {
   scroll-margin-top: 88px;
 }
 
+/* 关键词筛选的命中词底色。只换背景、字色一律 `color: inherit`：UA 给 `<mark>` 的默认是黑字压黄底，
+   暗色档里那就是一块读不清的补丁；而给它另指一个强调色等于把装饰令牌当文字色用——本仓那条
+   「凡是 color: 出去的字必须在同主题每一种底上 ≥ 4.5:1」的规矩不允许走那条路。
+   底色取现成的软色块面 `--lp-warn-soft`（浅 #fff4e0 / 暗 #33230f），正文墨色压在上面
+   浅档 12.1:1、暗档 10.4:1（真机两档各量一遍，见 CHANGELOG），不必再造一个新令牌。
+   刻意不加 padding：内联元素加横向内边距会改每一行的可断点，长答案会因此多折一行。 */
+.faq-list mark.faq-hit {
+  color: inherit;
+  background-color: var(--lp-warn-soft);
+  border-radius: 2px;
+}
+
 /* ---------- 深链落点要说得出话 ----------
  * 搜索引擎、分享的 `#faq-basics-3`、目录里的 `#faq-install-1`……跳进来之后浏览器只负责「滚到那里」，
  * 页面上没有任何东西说「就是这儿」。读者要么重新往上扫，要么以为自己点错了。

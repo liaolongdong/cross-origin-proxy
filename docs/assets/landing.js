@@ -27,8 +27,9 @@
  * 12. FAQ 的直达链接：hash 指向某一问时替它展开，悬停/聚焦到那一行则给一枚复制链接的
  *     链形按钮（无 JS 时按钮不出现，深链退化成「滚到那一问，自己点开」）；
  * 13. FAQ 的关键词筛选：按「问题 + 答案」收起不相关的条目与空掉的分类标题，Esc 清空；
+ *     命中那两个以上的字同时在条目里涂出底色（只切文本节点、不用 innerHTML，`textContent` 一字不变）；
  *     一句都筛不到那一刻给两条下一步——页内/仓库的出口，加上从本页分类标题现取的几枚直达小片
- *     （没有 JS 就没有筛选，也就没有这一刻：两者都默认不画，只由脚本按「命中数为 0」显影）
+ *     （没有 JS 就没有筛选，也就没有这一刻与高亮：都默认不画，只由脚本按「命中数为 0」显影）
  *     （无 JS 时整块不出现，问答照旧全部可读、可点、可滚）。
  * 14. 窄屏下对比表的横滑提示：与第 3 项共用同一份「截断在哪一侧」的判据，
  *     只给右缘渐隐——左那一列是钉住的，淡掉它反而读不出比的是哪一家。
@@ -1044,6 +1045,60 @@
     const emptyMessage = (status && status.getAttribute('data-empty')) || '';
     const total = items.length;
 
+    /* 命中了哪几个字要看得见：筛的是「问题 + 答案」整段，很多词只出现在答案里，
+       而屏幕上只有一句命中计数——读者面对四条命中还是得逐条读完，才知道刚才那一下对不对。
+       所以把命中的片段包进 `<mark>`。这里绝不用 innerHTML：只切文本节点、只造 createElement('mark')。
+       两个前提撑住这件事——
+       ① `<mark>` 只是把同一段文字拆开再包起来，`textContent` 一个字都不变，
+          所以上面那份「一次算好的 haystack」不会因为高亮而失准，两边不会分叉；
+       ② 每轮先整体摘干净再按新的词重包，所以 mark 不会套进 mark，
+          筛完清空、Esc、点分类直达，走的都是同一句 `clearMarks`。
+       只给可见的那几条包：藏起来的条目没有读者，替它们包一遍只是白干活。
+       一个字的词不高亮（MIN_MARK_QUERY）：单字（「改」「a」）会把满页涂黄，那是噪声而不是提示。 */
+    const MIN_MARK_QUERY = 2;
+    const clearMarks = root => {
+      root.querySelectorAll('mark.faq-hit').forEach(mark => {
+        const parent = mark.parentNode;
+        if (!parent) return;
+        while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+        parent.removeChild(mark);
+        /* 合并回一个文本节点：不 normalize 的话一次筛选会在正文里留下十几段碎片，
+           下一轮再包时切的就是这些碎片，命中位置容易对不齐。 */
+        parent.normalize();
+      });
+    };
+    const markHits = (root, query) => {
+      const nodes = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.data || !node.data.trim()) continue;
+        const tag = node.parentElement ? node.parentElement.tagName : '';
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') continue;
+        nodes.push(node);
+      }
+      nodes.forEach(node => {
+        const lower = node.data.toLowerCase();
+        /* toLowerCase 对极少数字符会改变长度（如 İ）。长度一错开，小写串里的下标就不再对应原文，
+           拿它切正文就是替作者改稿——宁可这一处不高亮，筛与计数照旧对。 */
+        if (lower.length !== node.data.length) return;
+        let at = lower.indexOf(query);
+        if (at < 0) return;
+        const frag = document.createDocumentFragment();
+        let from = 0;
+        while (at >= 0) {
+          if (at > from) frag.appendChild(document.createTextNode(node.data.slice(from, at)));
+          const mark = document.createElement('mark');
+          mark.className = 'faq-hit';
+          mark.textContent = node.data.slice(at, at + query.length);
+          frag.appendChild(mark);
+          from = at + query.length;
+          at = lower.indexOf(query, from);
+        }
+        if (from < node.data.length) frag.appendChild(document.createTextNode(node.data.slice(from)));
+        if (node.parentNode) node.parentNode.replaceChild(frag, node);
+      });
+    };
+
     const apply = () => {
       const query = faqFilter.value.trim().toLowerCase();
       let shown = 0;
@@ -1052,6 +1107,14 @@
         item.hidden = !hit;
         if (hit) shown += 1;
       });
+      /* 高亮跟着这一轮的命中走：先整体摘掉，再只给留下来的那些重包。
+         顺序是承重的——反过来就等于在上一轮的 mark 里找下一轮的词。 */
+      clearMarks(list);
+      if (query.length >= MIN_MARK_QUERY) {
+        items.forEach(item => {
+          if (!item.hidden) markHits(item, query);
+        });
+      }
       /* 整类都被筛掉时把分类标题也收起来：留着一个底下空空的标题，
          读起来像「这一节一条都没有」，而它只是被筛掉了。 */
       headings.forEach(heading => {

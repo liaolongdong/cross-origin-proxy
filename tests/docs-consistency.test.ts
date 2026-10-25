@@ -3345,6 +3345,65 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
    * 五段区间各补一条规则，本文件把它们钉住。**区间的边界值是量出来的，不是算出来的**——
    * 改 `.wrap` 内边距、右栏比例或任何一条 minmax 下限，都要回真机重扫一遍再改这里。
    */
+  /**
+   * FAQ 筛选「命中词高亮」的守卫（源码契约）。
+   *
+   * 这一格的行为在真机验过（一次性量具 `.test-tmp/probe/faq-mark-live.cjs`，不入库：
+   * 中英两页 × 明暗两档共 4 档 72 项全绿——mark 文字逐枚等于所打的词、`textContent` 前后逐字相同、
+   * 只包可见条目、mark 不套 mark、重复同词不堆第二层、单字不高亮但仍在筛、
+   * Esc / 零命中 / 分类直达都摘干净、条目高度 53.2px 前后一致、对比度浅 5.77 深 8.23、横向溢出 0px）。
+   * 本环境没有 DOM，所以这里钉的是「做法」而不是「观感」：不许用 innerHTML、清理必须先于重包、
+   * 两侧类名必须同名、字色必须继承。
+   */
+  describe('FAQ 命中词高亮只造节点、不改文字（源码契约）', () => {
+    const js = read('docs/assets/landing.js');
+    const css = read('docs/assets/landing.css');
+
+    it('高亮只用 createElement 与 TreeWalker，全文没有 innerHTML 家族', () => {
+      expect(js).toContain("document.createElement('mark')");
+      expect(js).toContain('NodeFilter.SHOW_TEXT');
+      // 按**用法**查而不是按词面查：这一格的注释里就写着「绝不用 innerHTML」，
+      // 按裸词查会让基线自己红（第一版正是这样，改完才绿——记在这里免得再犯）。
+      for (const pattern of [
+        [/\.\s*(innerHTML|outerHTML)\s*(=|\+=)/, 'innerHTML / outerHTML 赋值'],
+        [/\binsertAdjacentHTML\s*\(/, 'insertAdjacentHTML 调用'],
+        [/\beval\s*\(/, 'eval 调用'],
+      ] as const) {
+        expect(js, `landing.js 出现${pattern[1]}：命中的是给人读的原文，包错一个字符就是替作者改稿`).not.toMatch(
+          pattern[0],
+        );
+      }
+    });
+
+    it('清理排在重包之前，且 faq-hit 这个名字两侧都还在', () => {
+      const clearAt = js.indexOf('clearMarks(list)');
+      const markAt = js.indexOf('markHits(item, query)');
+      expect(clearAt, '那份「先整体摘掉」不见了').toBeGreaterThan(-1);
+      expect(markAt, '那份「按新词重包」不见了').toBeGreaterThan(-1);
+      expect(clearAt, '顺序反了：在上一轮的 mark 里找下一轮的词').toBeLessThan(markAt);
+      // 名字漂了是静默失效：包照旧发生，只是没有任何样式（读起来像「高亮坏了」而不是「两边不同名」）
+      expect(js).toContain("mark.className = 'faq-hit'");
+      expect(css, 'CSS 侧的 .faq-list mark.faq-hit 与脚本不同名了').toContain('.faq-list mark.faq-hit');
+    });
+
+    it('一个字的词不高亮，而这个下限只有一份', () => {
+      const m = /MIN_MARK_QUERY = (\d+)/.exec(js);
+      expect(m, '命中词高亮的长度下限不见了').toBeTruthy();
+      expect(Number(m?.[1]), '单字高亮会把满页涂黄').toBeGreaterThanOrEqual(2);
+      expect((js.match(/const MIN_MARK_QUERY/g) ?? []).length, '下限常量只能有一处定义').toBe(1);
+      expect(js, '判据必须引用那份下限，不许另写一个魔法数').toContain('query.length >= MIN_MARK_QUERY');
+    });
+
+    it('高亮样式字色继承、底色走令牌，不许出现硬编码颜色', () => {
+      const at = css.indexOf('.faq-list mark.faq-hit');
+      expect(at).toBeGreaterThan(-1);
+      const body = css.slice(at, css.indexOf('}', at));
+      expect(body, 'UA 给 mark 的默认是黑字压黄底，暗色档会读不清').toContain('color: inherit');
+      expect(body, '底色必须是这一站已有的软色块令牌').toMatch(/background-color:\s*var\(--lp-[\w-]+\)/);
+      expect(body, '不许写死十六进制或 rgb 颜色').not.toMatch(/#[0-9a-fA-F]{3,8}\b|\brgba?\(/);
+    });
+  });
+
   describe('同构网格的末行不许只剩半格（源码契约）', () => {
     const cssFlat = read('docs/assets/landing.css').replace(/\s+/g, ' ');
     const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
