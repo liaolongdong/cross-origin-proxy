@@ -838,6 +838,18 @@ html.js .nav-menu-panel a[aria-current] {
   gap: 10px;
 }
 
+/* 四条数字在「容器刚好只塞得下三格」的那两段宽度上会排成 3+1——最后一格单独掉一行，
+   读起来像这一屏漏了一条。轨道数由上面那份 minmax 下限反算：三格从 3×120+2×10=380 起，
+   四格要到 4×120+3×10=510，所以 380≤容器<510 必然只剩三格。视口区间按真机 1px 一档量出来钉：
+   412–549（单列首屏，容器 = 视口 − 40；窄屏那条 gap:6px 把下界推到 412）与 1001–1159
+   （双列首屏，右栏 443.6–509.9px；1160 起右栏封顶 510.1px，四格自己就回来了）。
+   两段都只是把「3+1」排成「2+2」，行数、卡内文字与字号一概不动。 */
+@media ((width >= 412px) and (width <= 549px)) or ((width >= 1001px) and (width <= 1159px)) {
+  .stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .stat {
   padding: 12px 14px;
   background: var(--lp-surface);
@@ -1243,6 +1255,18 @@ section[aria-labelledby] {
   gap: 18px;
 }
 
+/* 「怎么拿到这个扩展」那一节的三张卡（运行环境 / 构建环境 / 开发命令）在两份首页上各有组 .grid。
+   两格的区间是 2×258+18=534 起、三格要到 3×258+2×18=810 才够，也就是视口 574–849 这一段
+   只有两格宽——第三张单独掉一行、还只占半宽，右边留一块空洞。让它把最后一行铺满：
+   收尾一整行，而不是「没排满」。
+   选择器用 :nth-child(3):nth-last-child(1) 精确咬住「一共就三张」的那种 .grid——
+   对比页那份 .grid 是六张卡，同一区间排成 2/2/2 本来就是齐的，不该被这条规则碰到。 */
+@media (width >= 574px) and (width <= 849px) {
+  .grid > :nth-child(3):nth-last-child(1) {
+    grid-column: 1 / -1;
+  }
+}
+
 .card {
   padding: 20px 22px;
   background: var(--lp-surface);
@@ -1268,6 +1292,18 @@ section[aria-labelledby] {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 18px;
+}
+
+/* 对比页那五种替代方案各一张卡（Dev Server 代理 / 系统级抓包代理 / API 客户端 /
+   改请求头的扩展 / 改应用自己的配置）在 658–975 这一段只有两格宽
+   （两格从 2×300+18=618 起、三格要到 3×300+2×18=936 才够），于是排成 2/2/1，
+   第五张单独一行、只占半宽。让它铺满最后一行当收尾。
+   :nth-child(5):nth-last-child(1) 只在「一共五张」时命中——首页那份是 12 张，
+   它的收尾由下面 @media (width >= 1000px) 里那条居中规则管，两条互不越界。 */
+@media (width >= 658px) and (width <= 975px) {
+  .feature-grid > :nth-child(5):nth-last-child(1) {
+    grid-column: 1 / -1;
+  }
 }
 
 .feature-card {
@@ -1322,6 +1358,17 @@ section[aria-labelledby] {
      那一格，这一行读起来才是收尾，而不是「没排满」。 */
   .feature-card:last-child {
     grid-column: 3 / span 2;
+  }
+}
+
+/* 上面那条居中只管到 ≥1000 的六格宏网格，可同一件事在 976–999 也发生一次：
+   三格宽（3×300+2×18=936 起）时两张整宽卡各占一行，剩下 10 张排成 3/3/3/1，
+   第 12 张孤零零落在最后一行的**左边**那一格。同一条「摆进中间那一格」在这里的写法是
+   grid-column: 2；:nth-child(12):nth-last-child(1) 只在「一共十二张」时命中，
+   对比页那五张卡由上面 658–975 的铺满规则管，两条各管各的区间。 */
+@media (width >= 976px) and (width <= 999px) {
+  .feature-grid > :nth-child(12):nth-last-child(1) {
+    grid-column: 2;
   }
 }
 
@@ -1824,6 +1871,15 @@ html.js .gallery-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
   gap: 18px;
+}
+
+/* 四步上手的卡在 772–1021 这一段只塞得下三格（三格从 3×232+2×18=732 起、
+   四格要到 4×232+3×18=982 才够），第四步单独掉一行。步骤是有先后的，孤行读起来像少了半张卡，
+   所以这一整段钉成 2×2——行数本来就还是两行，卡的宽高与文案一概不动。 */
+@media (width >= 772px) and (width <= 1021px) {
+  .step-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .step-card {

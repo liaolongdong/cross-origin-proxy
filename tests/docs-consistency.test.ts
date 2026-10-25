@@ -3326,4 +3326,148 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       ).toEqual([]);
     });
   });
+
+  /**
+   * 五份 auto-fit 网格在窄区间的「末行只剩一格」守卫。
+   *
+   * 为什么会红：轨道数由 `minmax(Xpx, 1fr)` 的下限反算，条数又写在 HTML 里，两边各自漂一点，
+   * 就会出现 4 条数字排成 3+1、3 张卡排成 2+1 这种「最后一行只落一张、还只占半宽」的形状。
+   * 2026-10-25 用真机按 1px 一档把四页的五张网格扫了一遍（量具 `.test-tmp/probe/orphan-bands.cjs`，不入库），
+   * 五段区间各补一条规则，本文件把它们钉住。**区间的边界值是量出来的，不是算出来的**——
+   * 改 `.wrap` 内边距、右栏比例或任何一条 minmax 下限，都要回真机重扫一遍再改这里。
+   */
+  describe('同构网格的末行不许只剩半格（源码契约）', () => {
+    const cssFlat = read('docs/assets/landing.css').replace(/\s+/g, ' ');
+    const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+    /** 按大括号配对取出那条 `@media` 的整块（这些块里只有一层规则）。 */
+    const mediaBody = (cond: string): string => {
+      const at = cssFlat.indexOf('@media ' + norm(cond) + ' {');
+      expect(at, `CSS 里找不到这条 @media：${cond}`).toBeGreaterThan(-1);
+      let depth = 0;
+      for (let i = at; i < cssFlat.length; i += 1) {
+        if (cssFlat[i] === '{') depth += 1;
+        else if (cssFlat[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return cssFlat.slice(at, i + 1);
+        }
+      }
+      throw new Error(`@media ${cond} 的大括号没配上`);
+    };
+
+    /** 取出「媒体条件 + 选择器」那条规则的声明串（空白归一后逐字比）。 */
+    const declOf = (cond: string, selector: string): string => {
+      const body = mediaBody(cond);
+      const needle = norm(selector) + ' {';
+      const at = body.indexOf(needle);
+      expect(at, `${cond} 里找不到规则 ${selector}`).toBeGreaterThan(-1);
+      return norm(body.slice(at + needle.length, body.indexOf('}', at))).replace(/;$/, '');
+    };
+
+    const BANDS = [
+      {
+        cond: '((width >= 412px) and (width <= 549px)) or ((width >= 1001px) and (width <= 1159px))',
+        sel: '.stat-strip',
+        decl: 'grid-template-columns: repeat(2, minmax(0, 1fr))',
+      },
+      {
+        cond: '(width >= 772px) and (width <= 1021px)',
+        sel: '.step-grid',
+        decl: 'grid-template-columns: repeat(2, minmax(0, 1fr))',
+      },
+      {
+        cond: '(width >= 574px) and (width <= 849px)',
+        sel: '.grid > :nth-child(3):nth-last-child(1)',
+        decl: 'grid-column: 1 / -1',
+      },
+      {
+        cond: '(width >= 658px) and (width <= 975px)',
+        sel: '.feature-grid > :nth-child(5):nth-last-child(1)',
+        decl: 'grid-column: 1 / -1',
+      },
+      {
+        cond: '(width >= 976px) and (width <= 999px)',
+        sel: '.feature-grid > :nth-child(12):nth-last-child(1)',
+        decl: 'grid-column: 2',
+      },
+    ] as const;
+
+    it('五条区间规则都在，声明一个字不差', () => {
+      for (const b of BANDS) {
+        expect(declOf(b.cond, b.sel), `规则漂了：${b.sel} @ ${b.cond}`).toBe(norm(b.decl));
+      }
+      // 只准「加 minmax(0,1fr) 或 grid-column」这一种手段，不许顺手改 gap/padding/字号去凑
+      for (const b of BANDS) {
+        const props = [...declOf(b.cond, b.sel).matchAll(/([a-z-]+):/g)].map(m => m[1]);
+        expect(props, `${b.sel} 那条只该改网格轨道或跨列`).toEqual([b.decl.split(':')[0].trim()]);
+      }
+    });
+
+    /** 数容器里的直接子卡条数：按同名标签配平截出整段，再数类名（class 允许带别的名字）。 */
+    const cardCount = (html: string, open: string, childClass: string): number => {
+      const at = html.indexOf(open);
+      expect(at, `页面里找不到 ${open}`).toBeGreaterThan(-1);
+      const tag = /^<(\w+)/.exec(open)?.[1] ?? 'div';
+      const re = new RegExp(`<${tag}\\b|</${tag}>`, 'g');
+      let depth = 0;
+      let end = -1;
+      let m: RegExpExecArray | null;
+      re.lastIndex = at;
+      while ((m = re.exec(html))) {
+        depth += m[0].startsWith('</') ? -1 : 1;
+        if (depth === 0) {
+          end = m.index + m[0].length;
+          break;
+        }
+      }
+      expect(end, `${open} 没能配平收尾`).toBeGreaterThan(-1);
+      const slice = html.slice(at, end);
+      // 按**整词**比 class 令牌：`\bcard\b` 会连 "feature-card" 里的 card 一起数进去
+      const tokens = [...slice.matchAll(/class="([^"]*)"/g)].map(m => m[1].trim().split(/\s+/));
+      return tokens.filter(list => list.includes(childClass)).length;
+    };
+
+    // 页 → 该页各容器「开标签 / 子卡类名 / 真机扫到的条数」
+    const GRIDS: Array<[string, string, string, number]> = [
+      ['docs/index.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/en.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/alternatives.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/en-alternatives.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/index.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/en.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/alternatives.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/en-alternatives.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/index.html', '<div class="grid">', 'card', 3],
+      ['docs/en.html', '<div class="grid">', 'card', 3],
+      ['docs/alternatives.html', '<div class="grid">', 'card', 6],
+      ['docs/en-alternatives.html', '<div class="grid">', 'card', 6],
+      ['docs/index.html', '<div class="feature-grid">', 'feature-card', 12],
+      ['docs/en.html', '<div class="feature-grid">', 'feature-card', 12],
+      ['docs/alternatives.html', '<div class="feature-grid">', 'feature-card', 5],
+      ['docs/en-alternatives.html', '<div class="feature-grid">', 'feature-card', 5],
+    ];
+
+    it('每条 :nth-child 锚点数的卡数，与 HTML 里实际条数对得上', () => {
+      const anchors = BANDS.map(b => /:nth-child\((\d+)\):nth-last-child\(1\)/.exec(b.sel)?.[1])
+        .filter(Boolean)
+        .map(Number)
+        .sort((a, b) => a - b);
+      // 三个锚点各自守着一张「卡数固定」的网格：3（首页 .grid）、5（对比页 .feature-grid）、12（首页 .feature-grid）
+      expect(anchors).toEqual([3, 5, 12]);
+      for (const n of anchors) {
+        const hit = GRIDS.filter(([, , , count]) => count === n);
+        expect(hit.length, `CSS 里的 :nth-child(${n}) 锚点在这五页上找不到对应的网格`).toBeGreaterThan(0);
+      }
+    });
+
+    it('四页的网格卡数与真机扫到的那份一致（改卡数必须回来重判区间）', () => {
+      for (const [file, open, childClass, count] of GRIDS) {
+        const html = read(file);
+        expect(cardCount(html, open, childClass), `${file} 里 ${open} 的直接子卡条数变了`).toBe(count);
+      }
+      // 六张卡的 .grid 落在 1/2/3/4 轨都不剩孤卡（4 轨是 4/2），所以它**不该**被任何跨列规则碰到——
+      // 上一那条锚点表只登记 3/5/12，正是这个意思；哪天这条断言把 6 报出来，就得重扫区间再补规则。
+      expect(GRIDS.filter(([, , , count]) => count === 6).length, '六张卡的 .grid 消失了——区间表要重算').toBe(2);
+    });
+  });
 });
