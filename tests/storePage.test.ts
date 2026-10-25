@@ -8,9 +8,21 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { isStoreInstalled, storeReviewUrl } from '@/utils/storePage';
+import { isStoreInstalled, storeDetailUrl, storeReviewUrl } from '@/utils/storePage';
 
 const settings = readFileSync('components/options/SettingsDialog.vue', 'utf8');
+
+describe('storeDetailUrl — 条目页地址', () => {
+  it('形状是 detail/<id>：不带 slug，也不带 /reviews', () => {
+    const url = new URL(storeDetailUrl('abc'));
+    expect(url.host).toBe('chromewebstore.google.com');
+    expect(url.pathname).toBe('/detail/abc');
+  });
+
+  it('评分页是它加一段 /reviews（同一份基址，两条链接不会各自漂）', () => {
+    expect(storeReviewUrl('abc')).toBe(`${storeDetailUrl('abc')}/reviews`);
+  });
+});
 
 describe('storeReviewUrl — 条目 ID 现拼，不写 slug', () => {
   it('形状是 detail/<id>/reviews，域名是 chromewebstore', () => {

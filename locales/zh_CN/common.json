@@ -24,5 +24,10 @@
   "diagnosisNoRules": "还没有任何代理规则，先新建一条。",
   "diagnosisDisabledMatch": "规则「$1」匹配这个地址，但它当前是关闭的，启用即可生效。",
   "diagnosisMethodFiltered": "规则「$1」匹配这个地址，但它只处理方法 $2，这一笔的方法不在其中。",
-  "diagnosisPatternRejected": "规则「$1」的匹配模式没有被接受（正则语法不合法或有灾难性回溯风险），它永远不会命中，请改写这个模式。"
+  "diagnosisPatternRejected": "规则「$1」的匹配模式没有被接受（正则语法不合法或有灾难性回溯风险），它永远不会命中，请改写这个模式。",
+  "linksTitle": "项目链接",
+  "linkRepo": "开源仓库",
+  "linkDocs": "使用说明",
+  "linkStore": "Chrome 商店",
+  "linkIssues": "反馈问题"
 }

@@ -555,5 +555,6 @@
   "logsSkeletonA11y": "Loading request logs",
   "ratingTitle": "If it has been useful",
   "ratingDesc": "The review page lives in the Chrome Web Store; clicking just takes you there. Nothing pops up on its own, nothing is blocked while you decide, and there is no reward to earn — this extension collects no usage data, so it never learns whether you clicked.",
-  "ratingAction": "Open the store review page"
+  "ratingAction": "Open the store review page",
+  "linksHint": "The source, the guide and the issue tracker live at these addresses. Clicking just opens a tab: the extension makes no request because of it and never learns whether you clicked — there is no telemetry here."
 }

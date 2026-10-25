@@ -1,5 +1,5 @@
 /**
- * 商店页面的地址（评分入口用）
+ * 商店页面的地址（评分入口与条目页入口用）
  *
  * 两件事都在 Chrome Web Store 的政策与官方文档上核过（2026-10-19）：
  * - 政策禁的是**操纵**评价——激励换评、刷量、自评与关联方评；它没有禁止「征求评价」这件事本身。
@@ -11,9 +11,19 @@
  * 出现品牌名的地方）这条链接就当场断掉，而且断在用户最想点的那一格上。
  */
 
+/**
+ * 商店条目页地址
+ *
+ * `extensionId` 由调用方给 `chrome.runtime.id`，理由与评分页那一份完全相同：写死 ID 的链接
+ * 在解包加载与别的商店的安装下必然 404，而这一格点的偏偏是「想去商店看看」。
+ */
+export function storeDetailUrl(extensionId: string): string {
+  return `https://chromewebstore.google.com/detail/${extensionId}`;
+}
+
 /** 商店评分页的直达地址；`extensionId` 由调用方给 `chrome.runtime.id`，不要在这里现取 */
 export function storeReviewUrl(extensionId: string): string {
-  return `https://chromewebstore.google.com/detail/${extensionId}/reviews`;
+  return `${storeDetailUrl(extensionId)}/reviews`;
 }
 
 /**

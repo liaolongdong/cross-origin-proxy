@@ -294,6 +294,29 @@
           {{ t('ratingAction') }}
         </el-button>
       </div>
+
+      <!-- 项目链接：与配置页顶栏那一行、弹窗底部那一行共用同一份清单（URL 与「商店安装才出现」
+           那道闸门都只有一处出口，见 composables/useProjectLinks.ts）。
+           形态沿用上一条的取舍：原生 a 标签 + target=_blank，不自动出现、不拦操作、不写 storage、
+           不发 runtime 消息——点开只是让浏览器开一个标签页。 -->
+      <div class="setting-section">
+        <div class="setting-label">{{ t('linksTitle') }}</div>
+        <nav
+          class="project-links"
+          :aria-label="t('linksTitle')"
+        >
+          <a
+            v-for="link in projectLinks"
+            :key="link.key"
+            class="project-link"
+            :href="link.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            >{{ t(link.key) }}</a
+          >
+        </nav>
+        <p class="project-links-hint">{{ t('linksHint') }}</p>
+      </div>
     </div>
   </el-dialog>
 </template>
@@ -328,6 +351,7 @@ import { collectRuleVariableRefs, findUndefinedVariableRefs, isVariableName } fr
 import { formatLocaleDateTime } from '@/utils/formatters';
 import { useVariables } from '@/composables/useVariables';
 import { useConfigHistory } from '@/composables/useConfigHistory';
+import { useProjectLinks } from '@/composables/useProjectLinks';
 import { useI18n } from '@/composables/useI18n';
 
 defineOptions({
@@ -725,6 +749,9 @@ function openReviewPage() {
   void chrome.tabs.create({ url: reviewUrl });
 }
 
+/** 项目外链清单（开源仓库 / 使用说明 / 商店条目 / 反馈）：三处落点共用的一份，见 composable */
+const projectLinks = useProjectLinks();
+
 function addVariable() {
   variableRows.value.push({ uid: ++rowUidSeed, name: '', value: '' });
 }
@@ -823,6 +850,41 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
 
 .rating-desc {
   margin-bottom: 10px;
+}
+
+/* 项目链接：一行可换行的文字链接。
+   下划线常驻而不只在 hover 出现——这一格与它上面的说明文字同色同字号区，
+   只靠主色区分等于把「哪个能点」交给颜色说（WCAG 1.4.1），暗色下主色还会翻亮。
+   显式列过渡属性而不是 `all`：`all` 会把语言切换时的宽度变化一并拖进过渡。 */
+.project-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.project-link {
+  font-size: 13px;
+  color: var(--cop-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-radius: 4px;
+  transition: color var(--cop-duration-instant) var(--cop-ease-standard);
+}
+
+.project-link:hover {
+  color: var(--cop-primary-hover);
+}
+
+.project-link:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 2px;
+}
+
+.project-links-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-text-color-secondary);
 }
 
 .site-scope-warning {
