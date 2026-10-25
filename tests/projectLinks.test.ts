@@ -21,12 +21,14 @@ import path from 'node:path';
 import { currentLocale } from '@/utils/i18n';
 import { useProjectLinks } from '@/composables/useProjectLinks';
 
-/** 三处渲染项目链接的界面 */
+/** 三处渲染项目链接的界面（「关于」抽屉 / 设置弹窗那一节 / 弹窗底部一行） */
 const SURFACES = [
-  'components/options/HeaderBar.vue',
+  'components/options/AboutDrawer.vue',
   'components/options/SettingsDialog.vue',
   'entrypoints/popup/App.vue',
 ];
+/** 之外还有一枚既有外链的界面：顶栏那枚版本徽标（点它直达 Releases），一起进锚点扫描面 */
+const EXTRA_ANCHOR_FILES = ['components/options/HeaderBar.vue'];
 /** 唯一可以出现外链字面量的两份真源 */
 const URL_SOURCES = ['utils/urls.ts', 'utils/storePage.ts'];
 const SCAN_DIRS = ['components', 'composables', 'entrypoints', 'utils'];
@@ -110,11 +112,12 @@ describe('三处落点读的是同一份清单', () => {
   }
 
   it('锚点总数是 4（三处各一枚 + 顶栏版本徽标那枚既有链接），且每一枚都带 target 与 rel', () => {
-    const anchors = SURFACES.flatMap(file => [
+    const anchors = [...SURFACES, ...EXTRA_ANCHOR_FILES].flatMap(file => [
       ...readFileSync(file, 'utf8')
         .matchAll(/<a\s[\s\S]*?>/g)
         .map(m => ({ file, tag: m[0] })),
     ]);
+    // 三处各一枚 v-for 模板锚点 + 顶栏版本徽标那枚既有的
     expect(anchors.length, '一枚锚点都没扫到＝判据空转；数目变了＝有界面自己添了一枚外链').toBe(4);
     const bad = anchors
       .filter(a => !/target="_blank"/.test(a.tag) || !/rel="noopener noreferrer"/.test(a.tag))
@@ -191,5 +194,47 @@ describe('useProjectLinks 的清单（运行时）', () => {
         );
       }
     }
+  });
+});
+
+describe('「关于」那一格的入口与接线（源码契约）', () => {
+  it('顶栏右侧那颗按钮发的是 openAbout，且用的是次要档（不带 type）与 :icon prop', () => {
+    const src = readFileSync('components/options/HeaderBar.vue', 'utf8');
+    expect(src, 'emits 里少了 openAbout 那一项').toMatch(/openAbout:\s*\[\];/);
+    // 按「这一枚按钮自己的标签」判，不按「全文某处有 type=」判：整屏往后看会把六个次要档一起误杀
+    const tags = [...src.matchAll(/<el-button\b[\s\S]*?<\/el-button>/g)].map(m => m[0]);
+    const aboutButton = tags.find(tag => tag.includes("$emit('openAbout')")) ?? '';
+    expect(aboutButton, '顶栏没有那颗「关于」按钮').toBeTruthy();
+    expect(aboutButton, '这颗是次要动作，不该带 type（这一排六个都不带）').not.toContain('type=');
+    expect(aboutButton, '图标要走 :icon prop，不要内联 el-icon 手摆间距').toContain(':icon="InfoFilled"');
+    expect(aboutButton).toContain("{{ t('about') }}");
+  });
+
+  it('顶栏不再自己画一排外链：一份清单的三个消费者是抽屉、设置那一节与弹窗底部', () => {
+    const src = readFileSync('components/options/HeaderBar.vue', 'utf8');
+    expect(src, '同一屏既有一排链接又有一颗「关于」，等于把四个出口摆两遍').not.toContain(
+      'v-for="link in projectLinks"',
+    );
+    expect(src).not.toContain('useProjectLinks');
+    expect(src, '那排链接的样式没跟着摘掉就是死代码').not.toContain('.header-link');
+  });
+
+  it('App.vue 把那颗按钮接到抽屉上，而抽屉是分片、不进首屏', () => {
+    const src = readFileSync('components/options/App.vue', 'utf8');
+    expect(src).toContain('@open-about="showAbout = true"');
+    expect(src).toContain('const showAbout = ref(false)');
+    expect(src).toContain('<AboutDrawer v-model:visible="showAbout" />');
+    expect(src).toContain("defineAsyncComponent(() => import('./AboutDrawer.vue'))");
+  });
+
+  it('抽屉里那三条隐私事实与评分闸门都在，且没有第二份地址', () => {
+    const src = readFileSync('components/options/AboutDrawer.vue', 'utf8');
+    for (const key of ['aboutFactStorage', 'aboutFactTelemetry', 'aboutFactCredentials']) {
+      expect(src, `抽屉少了「${key}」那一条事实`).toContain(`t('${key}')`);
+    }
+    // 评分入口沿用「商店装的构建才有」那道闸门：闸门判据只有 storePage 那一份
+    expect(src).toContain('isStoreInstalled(chrome.runtime.getManifest().update_url)');
+    expect(src).toContain('v-if="reviewUrl"');
+    expect(src, '抽屉不该自己拼商店地址').not.toMatch(/chromewebstore\.google\.com/);
   });
 });

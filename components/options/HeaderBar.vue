@@ -78,41 +78,39 @@
       >
         {{ t('tabSettings') }}
       </el-button>
-    </div>
-
-    <!-- 项目链接：与偏好设置弹窗那一节、弹窗底部那一行共用同一份清单
-         （URL 与「商店装的构建才出现」那道闸门各只有一处出口，见 composables/useProjectLinks.ts）。
-         刻意用原生 a 标签而不是 el-link：后者会把 Element Plus 的链接皮肤带进首屏 chunk。 -->
-    <nav
-      class="header-links"
-      :aria-label="t('linksTitle')"
-    >
-      <a
-        v-for="link in projectLinks"
-        :key="link.key"
-        class="header-link"
-        :href="link.href"
-        target="_blank"
-        rel="noopener noreferrer"
-        >{{ t(link.key) }}</a
+      <!-- 关于：与其余工具按钮同档（不带 type 的次要动作），点开的是右侧那枚抽屉。
+           项目外链收进抽屉，不在这一屏摆两排出口——见 components/options/AboutDrawer.vue。 -->
+      <el-button
+        :icon="InfoFilled"
+        @click="$emit('openAbout')"
       >
-    </nav>
+        {{ t('about') }}
+      </el-button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Plus, Document, Search, FolderOpened, Collection, Setting, Promotion } from '@element-plus/icons-vue';
+import {
+  Plus,
+  Document,
+  Search,
+  FolderOpened,
+  Collection,
+  Setting,
+  Promotion,
+  InfoFilled,
+} from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
-import { useProjectLinks } from '@/composables/useProjectLinks';
 import { GITHUB_RELEASES_PAGE_URL } from '@/utils/urls';
 
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
  * 包含标题、可点击的版本徽标、代理状态信号灯（与代理总开关同一行），
- * 第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置），
- * 以及第三行一排项目外链（开源仓库 / 使用说明 / 商店条目 / 反馈）。
+ * 第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置/关于）。
+ * 「关于」是这一排的最右一颗，点开的是右侧那枚抽屉——项目外链收在那里，不在这一屏摆两排出口。
  * 间距与按钮皮肤对齐 account-password-helper 的顶栏实现；总开关刻意不套胶囊，见样式里的说明。
  */
 const props = defineProps<{
@@ -137,14 +135,13 @@ defineEmits<{
   openProfiles: [];
   /** 打开偏好设置弹窗 */
   openSettings: [];
+  /** 打开「关于」抽屉（项目外链与隐私事实收在那一格） */
+  openAbout: [];
   /** 切换代理总开关 */
   toggleProxy: [enabled: boolean];
 }>();
 
 const { t } = useI18n();
-
-/** 项目外链清单：这一行的第三排，与设置弹窗、弹窗底部同一份 */
-const projectLinks = useProjectLinks();
 
 /** 状态灯与总开关共用同一句状态话，悬停提示也只在标题行这一处拼 */
 const statusText = computed(() =>
@@ -360,36 +357,6 @@ const statusText = computed(() =>
 :deep(.header-actions .el-button--primary:active) {
   box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
   transform: translateY(0);
-}
-
-/* 第三行：一排项目外链。顶栏是主色实底，字色只能走 on-primary 那一族（暗色下随令牌一起翻深墨），
-   透明度与总开关那句话同档（92%）——链接比正文还淡就是「看不出能点」的另一半。
-   下划线常驻而不是只在 hover 出现：这一行紧贴工具栏，只靠颜色分不出「哪个能点」。
-   显式列过渡属性而不是 `all`：`all` 会把语言切换时变化的文字宽度一并纳入过渡。 */
-.header-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  align-items: center;
-}
-
-.header-link {
-  font-size: 12px;
-  color: rgb(var(--cop-on-primary-rgb) / 92%);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  border-radius: 4px;
-  transition: color var(--cop-duration-instant) var(--cop-ease-standard);
-}
-
-.header-link:hover {
-  color: var(--cop-text-color-on-primary);
-}
-
-/* 焦点环也走 on-primary 通道，与本文件其余几条一致（EP 那圈主题蓝压在渐变底上等于看不见） */
-.header-link:focus-visible {
-  outline: 2px solid rgb(var(--cop-on-primary-rgb) / 80%);
-  outline-offset: 2px;
 }
 
 /* 总开关：不套胶囊。顶栏本身就是主色实底，再包一层薄膜等于在同一行里叠出第三个
