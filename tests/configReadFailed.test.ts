@@ -185,3 +185,78 @@ describe('读取失败面板排在空态引导之前（源码契约）', () => {
     expect(app).toMatch(/:read-failed="configReadFailed"/);
   });
 });
+
+/**
+ * 「筛完一行不剩」那一格：说对话，并且给得出下一步（2026-10-24）
+ *
+ * 这一格此前借用了 `noMatch`——那句是「规则不匹配此 URL」，它的读者是 URL 测试弹窗与规则表单里
+ * 那条「测试这条 pattern」的临时规则；而这一格没有 URL 参与：`rules` 是筛选后的、`hasAnyRules`
+ * 是筛选前的总数，走到这里只可能是搜索/状态/类型/标签把行全筛掉了。说错话之外还没有出口——
+ * 四格筛选里只有搜索与类型带 ×，读者得自己回想动过哪一格。
+ *
+ * 钉四件事，缺一件这句话就画不圆：措辞按「谁筛的」说；那颗按钮只交出一个意图；父组件真的清四格
+ * **且不动勾选**（清了勾选就是替用户撤了他没做过的事——筛选一撤，那几行本来就要回到屏幕上）；
+ * 搜索框必须回读父组件的值（否则表格里全是行、输入框还留着旧关键词，界面当着用户自相矛盾）。
+ */
+describe('筛选无结果那一格说对了话，而且有出口（源码契约）', () => {
+  const table = fs.readFileSync('components/options/RuleTable.vue', 'utf8');
+  const app = fs.readFileSync('components/options/App.vue', 'utf8');
+  const bar = fs.readFileSync('components/options/SearchFilterBar.vue', 'utf8');
+  const form = fs.readFileSync('components/options/RuleFormDialog.vue', 'utf8');
+  const zh = JSON.parse(fs.readFileSync('locales/zh_CN/options.json', 'utf8')) as Record<string, string>;
+  const en = JSON.parse(fs.readFileSync('locales/en/options.json', 'utf8')) as Record<string, string>;
+
+  it('那一格不再出现「规则不匹配此 URL」，改按筛选说话；而 noMatch 这个 key 没被顺手删', () => {
+    const panel = table.slice(table.indexOf('key="no-match"'), table.indexOf('</el-table>'));
+    expect(panel, '这一格还在校验一条 URL 的地方说 URL').not.toContain("t('noMatch')");
+    expect(panel).toContain("t('filterNoMatch')");
+    expect(panel).toContain("t('filterNoMatchKeyword'");
+    // 有 keyword 与没 keyword 是两件事：只有状态/类型/标签在场时，报一个空关键词就是句坏话。
+    expect(panel).toMatch(/searchText\.trim\(\)\s*\?\s*t\('filterNoMatchKeyword'/);
+    // 反过来，那句 URL 措辞在它的两个真读者那里必须还在——删掉它就是改了无关界面的文案。
+    expect(form).toContain("t('noMatch')");
+    expect(zh.noMatch).toContain('URL');
+    expect(en.noMatch).toContain('URL');
+  });
+
+  it('中英两边都有那三把 key，且都是成对的非空句子', () => {
+    for (const key of ['filterNoMatch', 'filterNoMatchKeyword', 'clearFilters']) {
+      expect(zh[key], `中文少了 ${key}`).toBeTruthy();
+      expect(en[key], `英文少了 ${key}`).toBeTruthy();
+    }
+    // 占位符必须两边都在：i18n 是单轮替换，少一处就是英文界面画出一个字面量 $1。
+    expect(zh.filterNoMatchKeyword).toContain('$1');
+    expect(en.filterNoMatchKeyword).toContain('$1');
+  });
+
+  it('按钮只交出一个意图，声明与接线成对存在', () => {
+    expect(table).toMatch(/@click="\$emit\('clearFilters'\)"/);
+    expect(table).toMatch(/clearFilters: \[\];/);
+    expect(app).toMatch(/@clear-filters="clearRuleFilters"/);
+  });
+
+  it('父组件清的是那四格，且刻意不碰勾选', () => {
+    const body = /function clearRuleFilters\(\) \{([\s\S]*?)\n\}/.exec(app);
+    expect(body, 'App.vue 里找不到 clearRuleFilters 的函数体').not.toBeNull();
+    const lines = body![1].replace(/\s+/g, ' ');
+    for (const [name, blank] of [
+      ['searchText', "''"],
+      ['statusFilter', "''"],
+      ['matchTypeFilter', "''"],
+      ['tagsFilter', '[]'],
+    ]) {
+      expect(lines, `清除筛选漏了 ${name}`).toContain(`${name}.value = ${blank}`);
+    }
+    // 这一条是承重的反判据，理由真机量过：0 行那一格把 `<el-table>` 整个换掉（`panel-swap` 是
+    // `mode="out-in"`），表格实例重建后 EP 自己发一次空的 `selection-change`，勾选本来就活不过
+    // 这次替换。所以这里再清一次是拿一行代码去赌一个已经发生的事实——而它一旦哪天变成承重的
+    // （那一格不再替换表格实例），就必须是**用户没有要求**的删除，因此宁可钉住「不许动」。
+    expect(lines, '这里不该动勾选').not.toContain('clearRuleSelection');
+  });
+
+  it('搜索框回读父组件的值：外部清了筛选，输入框不许还留着旧关键词', () => {
+    expect(bar).toMatch(/watch\(\s*\(\) => props\.searchText,/);
+    // 只有两边说的不是同一件事才动它——否则自己 emit 出去的回声会把打字中的光标与输入法合成态拽走。
+    expect(bar).toMatch(/if \(val !== localSearchText\.value\) localSearchText\.value = val;/);
+  });
+});

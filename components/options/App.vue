@@ -68,6 +68,7 @@
       @use-template="handleUseTemplate"
       @reorder="handleReorder"
       @refresh="fetchConfig"
+      @clear-filters="clearRuleFilters"
     />
 
     <!-- 弹窗与抽屉（全部异步组件，首屏不加载） -->
@@ -174,6 +175,7 @@ import { collectRuleTags, ruleMatchesTagFilter } from '@/utils/ruleTags';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
+import { parseSelfCheckTab } from '@/utils/selfCheck';
 import HeaderBar from './HeaderBar.vue';
 import SearchFilterBar from './SearchFilterBar.vue';
 import RuleTable from './RuleTable.vue';
@@ -352,6 +354,24 @@ const ruleTableRef = ref<{ clearSelection: () => void } | null>(null);
 function clearRuleSelection() {
   tableSelection.value = [];
   ruleTableRef.value?.clearSelection();
+}
+
+/**
+ * 「筛选无结果」那一颗清除筛选：四格一次清干净。
+ *
+ * 判据不在这里重复——那个面板的入口条件（有规则、筛完为 0）本身就意味着这四格里至少有一格
+ * 非空，所以它不需要先问「现在有没有筛选在场」，也就不需要第二份「什么算筛过」的模型。
+ * **勾选这里不动**，但不是因为它能活下来：真机量过（2026-10-24，`.test-tmp/probe/filter-deadend-live.cjs`），
+ * 0 行那一格会把 `<el-table>` 整个换掉（`panel-swap` 是 `mode="out-in"`），表格实例重建、EP 发一次
+ * `selection-change` 空数组，勾选本来就活不过这次替换——清完筛选界面上数得出「选中 0 行」。
+ * 既然两侧同一时刻都是 0，这里再加一句 `clearRuleSelection()` 就只是拿一行代码去赌一个已经发生的
+ * 事实；哪天那一格不再替换表格实例，这句才第一次承重。
+ */
+function clearRuleFilters() {
+  searchText.value = '';
+  statusFilter.value = '';
+  matchTypeFilter.value = '';
+  tagsFilter.value = [];
 }
 
 // 日志抽屉过滤器（提升到容器层，避免抽屉关闭后重置）

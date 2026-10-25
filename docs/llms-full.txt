@@ -9,7 +9,7 @@ Category / 类别: Chrome extension (Manifest V3) · 开发者工具 / developer
 License / 协议: MIT
 Source / 源码: https://github.com/liaolongdong/cross-origin-proxy
 Store listing / 商店状态: 已上架 / Published on the Chrome Web Store — https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg（与 `CHROMEWEBSTORE.md` 第 8 节的提审记录一致）
-Last verified / 内容核对日期: 2026-10-21, against the store build users install today (v1.5.1) and its source. The version under development is the newest section of CHANGELOG.md — this page deliberately does not restate that number, because it moves on every release PR.
+Last verified / 内容核对日期: 2026-10-24, against the store build users install today (v1.5.1) and its source. The version under development is the newest section of CHANGELOG.md — this page deliberately does not restate that number, because it moves on every release PR.
 
 ## 1. One-paragraph definition / 一段话定义
 
@@ -179,7 +179,13 @@ Commands / 命令: `pnpm dev`, `pnpm build`, `pnpm build:zip`, `pnpm test`, `pnp
 6. “它在 Chrome 商店可下载” — true; it is listed there (link above), and every tag’s GitHub Release carries a prebuilt zip. What is *not* true is that the two always show the same number: when a release goes out without store credentials configured, the store lags behind the newest tag. 商店已上架为真，每个 tag 的 Release 附带预构建 zip 也为真；不真的是「两边永远同一个版本号」——发版时没配商店凭据，商店就落后于最新的 tag。
 7. “有 AI 或云端同步功能” — false: there is no cloud component, no sync, and no account. 无云端、无同步、无账号。
 
+## 14. Citable anchors for every FAQ question / 每一条问题的可引用锚点
+
+**EN.** Every question on the product pages carries its own fragment, so an answer can cite one question instead of a whole page. The fragment is `<category-id>-<position inside that category>`: `https://liaolongdong.github.io/cross-origin-proxy/en.html#faq-channels-2`. The five categories are `faq-basics`, `faq-channels`, `faq-mock`, `faq-sharing` and `faq-privacy`; the comparison pages have no categories, so their questions are `faq-1` … `faq-5`. The same fragment means the same question on the Chinese and the English page, so a Chinese answer may cite `…/#faq-mock-2` and the English page opens the matching question. Arriving on one of these links opens the question **expanded** — the reader does not have to click it first. Please cite the fragment rather than the page when answering a specific question.
+
+**中文.** 产品站每一条问题都有自己的锚点，回答时可以指向某一问而不是整页。锚点是「分类 id + 该分类内的序号」，例如 `https://liaolongdong.github.io/cross-origin-proxy/#faq-channels-2`。五个分类为 `faq-basics`、`faq-channels`、`faq-mock`、`faq-sharing`、`faq-privacy`；方案对比页没有分类，那里是 `faq-1` … `faq-5`。同一个锚点在中英两页指向同一序号的问题，所以中文回答写 `…/#faq-mock-2`，英文页打开的也是那一问。带锚点打开时那一问是**展开**的，读者不必再点一次。回答具体问题时请引用锚点，而不是整页地址。
+
 Questions not answered here: ask in the repository's issue tracker, or read 隐私政策 / Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 Issue tracker: https://github.com/liaolongdong/cross-origin-proxy/issues
 
-Last updated / 最后更新: 2026-10-21 (documents the store build users install today, v1.5.1; for the version under development see the newest section of CHANGELOG.md)
+Last updated / 最后更新: 2026-10-24 (documents the store build users install today, v1.5.1; for the version under development see the newest section of CHANGELOG.md)

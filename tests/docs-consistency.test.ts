@@ -312,7 +312,15 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       /** 分类：`[锚点 id, 该分类下的折叠条数]`，保持文档顺序。 */
       const categoriesOf = (file: string): Array<[string, number]> => {
         const html = faqHtml(file);
-        const marks = [...html.matchAll(/<h3\b[^>]*\bid="([^"]+)"/g)].map(m => [m[1], m.index] as [string, number]);
+        // 认**类名**，不认标签层级：这一格的意思是「每个分类都有目录可达的锚点」，
+        // 而不是「分类恰好写成 h3」。侧栏卡的标题与分类是不同的一种东西，
+        // 按层级数会把它们数进来（2026-10-24 把那一枚标题从 h4 抬到 h3 时就是这样撞红的）。
+        const marks = [...html.matchAll(/<h[2-6]\b[^>]*>/g)]
+          .filter(m => /class="[^"]*\bfaq-category\b/.test(m[0]))
+          .map(m => [/id="([^"]+)"/.exec(m[0])?.[1] ?? '', m.index] as [string, number]);
+        for (const [id] of marks) {
+          expect(id, '有一枚 .faq-category 标题没有 id —— 目录指不过去，这一格先红在这里').not.toBe('');
+        }
         return marks.map(([id, start], i) => {
           const end = marks[i + 1]?.[1] ?? html.length;
           return [id, [...html.slice(start, end).matchAll(/<details\b/g)].length] as [string, number];
@@ -932,6 +940,15 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      */
     const jsGated = new Map([['lp-gallery-auto', 'autoPossible']]);
 
+    /**
+     * 「这条动画关掉没有」按**逗号清单的每一项**判：`a, b { animation: X }` 要 a 与 b 都在
+     * 减弱动效段落里被关掉。旧写法拿整串清单去查那份按逗号拆开存的 `switchedOff`，于是任何
+     * 多选择器的动画规则都会假红——2026-10-25 加 `lp-target-cue` 时正是这样撞红的，
+     * 那次是量具的口径缺了一格，不是漏了关闭项（关闭项本来就写在 CSS 里）。
+     */
+    const switchedOffList = (selector: string): boolean =>
+      selector.split(',').every(part => switchedOff.has(flat(part)));
+
     it('每条使用关键帧的规则都在减弱动效段落里关掉', () => {
       expect(reducedStart, 'landing.css 里没有 prefers-reduced-motion 段落').toBeGreaterThan(0);
       expect(declared.size, 'landing.css 里没有 @keyframes').toBeGreaterThan(0);
@@ -943,7 +960,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
             .map(name => [name, flat(selector).replace(/^html\.js /, '')] as const),
         )
         .filter(([name]) => !jsGated.has(name))
-        .filter(([, selector]) => !switchedOff.has(selector))
+        .filter(([, selector]) => !switchedOffList(selector))
         .map(([name, selector]) => `${selector} 播了 ${name}()，减弱动效段落没关它`);
 
       expect(missing, '新增动画漏了减弱动效关闭项').toEqual([]);
@@ -1033,6 +1050,1089 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       // 渐进增强的前提没变：入口默认不存在，只有面板真的装配好了才出现。
       expect(withoutComments).toMatch(/\.hero-example-cta\s*\{\s*display: none;/);
       expect(withoutComments).toMatch(/html\.js\.try-ready \.hero-example-cta\s*\{\s*display: inline-block;/);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 落地页汉堡面板：绝对定位在吸顶头之下，比视口高时没有任何人替它滚
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * 面板是绝对定位、包含块是吸顶的 `.site-header`，因此它超过视口高度时既不会被页面滚动
+   * 带走、也没有任何东西替它滚——手机横屏（实测视口高 232px）下面板 552px、底边 610px，
+   * 面板底部「English / GitHub / 完整对比」这三个出口怎么滚都够不到。修法是给它一个
+   * 「视口 − 页头」的上限并让它自己滚。
+   *
+   * node 环境没有布局，几何读数只能记在 CHANGELOG；这里钉的是那三项声明本身。
+   */
+  describe('落地页汉堡面板不越出视口', () => {
+    it('面板按「视口 − 页头」封顶并自己滚，滚到尽头不带走整页', () => {
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      const block = /\.nav-menu-panel\s*\{([^}]*)\}/.exec(css)?.[1];
+      expect(block, 'landing.css 里找不到 .nav-menu-panel 规则，守卫形同空转').toBeTruthy();
+      const body = block!.replace(/\s+/g, ' ');
+
+      // `100%` 解析的是包含块（页头）的高度，正好等于 `top: 100%` 那段偏移。
+      expect(body, '面板少了视口上限：比视口高时底部入口永远够不到').toContain('max-height: calc(100dvh - 100%)');
+      expect(body, '面板不能自己滚，上限只是把底部内容裁掉').toContain('overflow-y: auto');
+      expect(body, '面板滚到尽头会把整页一起带着滚').toContain('overscroll-behavior: contain');
+      // 写死像素会在页头变高时重新出界。
+      expect(body, '上限不该是固定像素：页头一变高就又出界了').not.toMatch(/max-height:\s*\d+px/);
+
+      // 面板成了滚动容器（overflow-y: auto 会把另一轴也变成 auto），满宽链接的焦点环
+      // 若还画在盒外，左右各会被切掉 5px（3px 环 + 2px 偏移）——必须向内画。
+      const focusRule = /\.nav-menu-panel a:focus-visible\s*\{([^}]*)\}/.exec(css)?.[1];
+      expect(focusRule, '面板链接没有专属的焦点环规则，满宽行在滚动容器里会被切边').toBeTruthy();
+      expect(
+        focusRule!.replace(/\s+/g, ' '),
+        '焦点环要向内画（负 outline-offset），否则被面板这个滚动容器裁掉左右两边',
+      ).toMatch(/outline-offset:\s*-\d+px/);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 落地页特性区的三列门槛：不能比它自己的单卡下限还窄
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * 基准规则是 `repeat(auto-fit, minmax(300px, 1fr))`——300px 是这张版式自己给
+   * 单卡定的下限。而旧的三列断点写在 900px：那时内容宽 860px，三列每张只剩
+   * 274.7px，比下限还窄一截，恰好是「断点一过卡片反而变窄」那种跳变。
+   * 2026-10-23 在 CFT 155 里量过中英两页：900px 时特性区 3678.8 / 5245.5px 高，
+   * 英文页单卡被压到 2240.7px；同样宽度改回两列后是 3584.7 / 4841.8px，单卡最高
+   * 1330.2px。所以门槛按「三列都还不窄于下限」反算：3×300 + 2×18 间距 + 40 内边距
+   * 得 976，取整到 1000。
+   *
+   * node 环境没有布局，这里钉的是这条算术：门槛、内边距、间距、下限四处任一改动
+   * 只要让单卡重新掉到 300px 以下，这条就红。
+   */
+  describe('落地页特性区的三列门槛守得住单卡下限', () => {
+    it('断点处算回来的单卡宽度不低于 auto-fit 那条 300px 下限', () => {
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      const gridRule = /\.feature-grid\s*\{([^}]*)\}/.exec(css)?.[1];
+      expect(gridRule, '落地页找不到 .feature-grid 基准规则，这条守卫形同空转').toBeTruthy();
+
+      const floor = /minmax\(\s*(\d+)px\s*,\s*1fr\s*\)/.exec(gridRule!)?.[1];
+      expect(floor, '基准规则不再是 auto-fit + minmax(Npx, 1fr)：单卡下限没有出处了').toBeTruthy();
+      expect(gridRule!, '基准规则不再是 auto-fit：门槛以下就没有列数了').toContain('repeat(auto-fit');
+      const gap = Number(/gap:\s*(\d+)px/.exec(gridRule!)?.[1]);
+      expect(Number.isFinite(gap) && gap > 0, '特性区的 gap 读不出来，下面的减法算不出单卡宽度').toBe(true);
+
+      const wrapRule = /\.wrap\s*\{([^}]*)\}/.exec(css)?.[1];
+      expect(wrapRule, '落地页找不到 .wrap 规则').toBeTruthy();
+      const pad = Number(/padding:\s*0\s+(\d+)px/.exec(wrapRule!)?.[1]);
+      expect(Number.isFinite(pad) && pad > 0, '.wrap 的左右内边距读不出来，下面的减法算不出内容宽').toBe(true);
+
+      // 三列那一档：找到写 repeat(6, 1fr) 的那条 `width >= Npx` 媒体查询。
+      const threeUp = [...css.matchAll(/@media \(width >= (\d+)px\)\s*\{([\s\S]*?)\n\}/g)].find(m =>
+        m[2].includes('repeat(6, 1fr)'),
+      );
+      expect(threeUp, '找不到把 .feature-grid 切成六列（每卡跨两列）的那条媒体查询').toBeTruthy();
+
+      const threshold = Number(threeUp![1]);
+      const cardAtThreshold = (threshold - 2 * pad - 2 * gap) / 3;
+      expect(
+        cardAtThreshold,
+        `三列门槛 ${threshold}px 处单卡只有 ${cardAtThreshold.toFixed(1)}px，低于版式自己给的 ${floor}px 下限——` +
+          '门槛一过卡片反而更窄、内容被压高，这正是这条守卫要拦的跳变',
+      ).toBeGreaterThanOrEqual(Number(floor));
+    });
+  });
+
+  /**
+   * 两张整宽的卡各占满一行，剩下 10 张三列卡正好排出 3+3+3+1，最后一行只落一张、
+   * 靠左悬着，右边空出三分之二。把它摆进中间那一格（`grid-column: 3 / span 2`）
+   * 这一行才读成收尾。中英两页在 1000px 与 1280px 处量过：左右两侧留白逐像素相等
+   * （326 / 326 与 379 / 379），行数仍是 5。
+   *
+   * 这条声明只在「余 1」时说得通，所以这里钉的是前提而不是像素：真机布局在 node
+   * 环境里没有对应物，而卡数一变，居中就会从「收尾」变成「空两格」。同一条声明还
+   * 有一个更隐蔽的破坏面——`:last-child` 的权重（0,2,0）压得过 `.feature-card-lg`
+   * （0,1,0），最后一张若换成整宽卡，那半行就会被拽进中间两列。
+   */
+  describe('三列下最后一行那张孤卡摆在中间', () => {
+    it('前提成立（余 1、末张不是整宽）且声明就在三列那一档里', () => {
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      const threeUp = [...css.matchAll(/@media \(width >= (\d+)px\)\s*\{([\s\S]*?)\n\}/g)].find(m =>
+        m[2].includes('repeat(6, 1fr)'),
+      );
+      expect(threeUp, '找不到把 .feature-grid 切成三列那一档媒体查询').toBeTruthy();
+      expect(
+        threeUp![2],
+        '三列那一档里找不到 `.feature-card:last-child { grid-column: 3 / span 2 }`——孤卡又挂回左边了',
+      ).toMatch(/\.feature-card:last-child\s*\{[^}]*grid-column:\s*3\s*\/\s*span\s*2/);
+
+      for (const page of ['docs/index.html', 'docs/en.html']) {
+        const classes = [...read(page).matchAll(/<article class="(feature-card[^"]*)"/g)].map(m => m[1]);
+        expect(classes.length, `${page} 一张特性卡都没读到，下面的余数就成了空话`).toBeGreaterThan(0);
+        const regular = classes.filter(c => !c.includes('feature-card-lg')).length;
+        expect(
+          regular % 3,
+          `${page} 的三分之一宽卡片有 ${regular} 张（${classes.length} 张里 ${classes.length - regular} 张整宽），` +
+            '除以 3 的余数已不是 1——最后一行要么排满、要么落两张，居中这一格不再说得通，请重新决定排版',
+        ).toBe(1);
+        expect(
+          classes[classes.length - 1],
+          `${page} 的最后一张是整宽卡：\`:last-child\` 的权重压得过 \`.feature-card-lg\`，会把它从 1 / -1 拽进中间两列`,
+        ).not.toContain('feature-card-lg');
+      }
+    });
+  });
+
+  describe('页头锚点条溢出时只滚动自己，不压住出口簇', () => {
+    /* 2026-10-24 用真 Chrome 量到的原形：英文页 1280 视口下 8 个锚点要 541px，
+       而 1160 的容器只给得出 444px，链接直接画到 `.nav-actions` 上面——截图里读得出
+       「CompareAlternativesFAQ」「Alternatives 压在 Use cases 上」这种叠字。
+       五件事缺一件就退回原形（或退成一个新原形）：① 锚点条自己是横向滚动容器；
+       ② 它按 padding box 裁切，所以落在盒外的东西都需要内边距垫底——`.site-nav > a::after`
+       那根下划条是其一；②' 键盘焦点环是其二，而且这一条是改版之后**新长出来的**回归：
+       `outline` 画在元素盒外，滚动容器一样照裁，真机读到「ring 7 / 上下各余 6 / 左余 0」，
+       Tab 到第一个锚点时环的左半边整个不存在；③ 被截断的是哪一侧由 `data-edge` 分档
+       （固定的右侧渐隐滚到底之后还在，看起来像永远还有更多）；④ 页头宽屏比正文宽——
+       英文那一行要 1188px，`--lp-max` 的 1160 给不出。 */
+    const css = (): string => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    /** 取一个顶格选择器的声明块（够这几条判据用）。 */
+    const block = (source: string, selector: string): string =>
+      new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(source)?.[1] ??
+      '';
+
+    const px = (value: string | undefined): number => Number(value?.replace(/px$/, ''));
+
+    /** 锚点条上那圈键盘焦点环的半径：全局 `outline` 线宽 + 本条自己的 `outline-offset`。 */
+    const focusRingPx = (source: string): number => {
+      const width = px(/(?:^|\n):focus-visible\s*\{[^}]*outline:\s*(\d+(?:\.\d+)?)px/.exec(source)?.[1]);
+      const offset = px(
+        /outline-offset:\s*(-?\d+(?:\.\d+)?)px/.exec(block(source, '.site-nav > a:focus-visible'))?.[1],
+      );
+      return width + offset;
+    };
+
+    /** 把 `.site-nav` 上的 padding 声明折成两个轴的可用余量（`padding` 简写 + 两轴长写）。
+     *  两条长写都按声明边界锚定：不锚定时 `padding-inline` 会命中 `scroll-padding-inline`，
+     *  于是「摘掉 padding 只留 scroll-padding」这种变异照样读出一个好看的余量。 */
+    const padAxes = (navBlock: string): { block: number; inline: number } => {
+      let blockPad = 0;
+      let inlinePad = 0;
+      const shorthand = /(?:^|;)\s*padding:\s*([^;]+)/.exec(navBlock)?.[1];
+      if (shorthand) {
+        const parts = shorthand.trim().split(/\s+/).map(px);
+        if (parts.length === 1) [blockPad, inlinePad] = [parts[0], parts[0]];
+        else if (parts.length === 2) [blockPad, inlinePad] = [parts[0], parts[1]];
+        else [blockPad, inlinePad] = [Math.min(parts[0], parts[2]), Math.min(parts[1], parts[3])];
+      }
+      const pb = /(?:^|;)\s*padding-block:\s*(\d+(?:\.\d+)?)px/.exec(navBlock)?.[1];
+      if (pb) blockPad = px(pb);
+      const pi = /(?:^|;)\s*padding-inline:\s*(\d+(?:\.\d+)?)px/.exec(navBlock)?.[1];
+      if (pi) inlinePad = px(pi);
+      return { block: blockPad, inline: inlinePad };
+    };
+
+    /** 判据本体：一份样式表是否把锚点条做成了「自己滚动 + 三档渐隐 + 下划条与焦点环都在 padding 内」。 */
+    const navIsOverflowSafe = (source: string): boolean => {
+      const nav = block(source, '.site-nav');
+      const after = block(source, '.site-nav > a::after');
+      const bottom = Number(/bottom:\s*(-?\d+(?:\.\d+)?)px/.exec(after)?.[1]);
+      const ring = focusRingPx(source);
+      const pad = padAxes(nav);
+      return (
+        /overflow-x:\s*auto/.test(nav) &&
+        /scrollbar-width:\s*none/.test(nav) &&
+        Number.isFinite(bottom) &&
+        Number.isFinite(ring) &&
+        pad.block >= Math.max(ring, -bottom) &&
+        pad.inline >= ring &&
+        ['start', 'end', 'both'].every(edge =>
+          new RegExp(`\\.site-nav\\[data-edge='${edge}'\\][^{]*\\{[^}]*mask-image:\\s*linear-gradient`).test(source),
+        )
+      );
+    };
+
+    /** 焦点环这一格单独长牙的写法：除了 `padding-inline`，其余判据全都在。
+     *  两份对照都必须顶格写——`block()` 与焦点环那条按行首锚定，缩进会让它们读成空。 */
+    const WITHOUT_INLINE_ROOM = `
+:focus-visible { outline: 3px solid var(--lp-primary); outline-offset: 2px; }
+.site-nav { display: flex; flex: 1; gap: 12px; min-width: 0; padding-block: 8px;
+  overflow-x: auto; scrollbar-width: none; }
+.site-nav > a::after { position: absolute; bottom: -5px; height: 2px; }
+.site-nav > a:focus-visible { outline-offset: 4px; border-radius: 6px; }
+.site-nav[data-edge='start'] { mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); }
+.site-nav[data-edge='end'] { mask-image: linear-gradient(90deg, transparent, #000 32px); }
+.site-nav[data-edge='both'] { mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+`;
+
+    it('阳性对照：判据对改版前的写法、以及对「只留上下不留左右」都不点头', () => {
+      const legacy = `
+.site-nav { display: flex; flex: 1; gap: 18px; align-items: center; min-width: 0; font-size: 15px; }
+.site-nav > a::after { position: absolute; bottom: -6px; height: 2px; }
+@media (width <= 900px) {
+  .site-nav { padding-right: 28px; padding-bottom: 4px; overflow-x: auto; scrollbar-width: none;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent); }
+}
+`;
+      expect(navIsOverflowSafe(legacy), '判据对「链接画到出口簇上」的老写法也点头，等于什么都没守着').toBe(false);
+      expect(
+        focusRingPx(WITHOUT_INLINE_ROOM),
+        '焦点环半径没从样式表里读出来（读成 0 或 NaN 时，下面那条对照就是空话）',
+      ).toBe(7);
+      expect(
+        padAxes(block(WITHOUT_INLINE_ROOM, '.site-nav')),
+        '对照样本里的 `padding-block` 没被读出来，那下面这条红就是假红',
+      ).toEqual({ block: 8, inline: 0 });
+      expect(
+        navIsOverflowSafe(WITHOUT_INLINE_ROOM),
+        '判据对「上下留了 8px、左右一分没留」点头——那正是 79dccc3 那一版的形状，Tab 到第一个锚点时环的左半边被裁掉',
+      ).toBe(false);
+    });
+
+    it('锚点条自己滚动、下划条与键盘焦点环都落在 padding 内、渐隐按 data-edge 三档', () => {
+      const source = css();
+      expect(navIsOverflowSafe(source)).toBe(true);
+
+      const ring = focusRingPx(source);
+      const pad = padAxes(block(source, '.site-nav'));
+      expect(ring, '焦点环半径读不出来').toBeGreaterThan(0);
+      expect(
+        pad.inline,
+        `\`padding-inline\` 收掉了：滚动容器按 padding box 裁切，第一个锚点的焦点环左半边当场不存在（真机读到 ring ${ring} / 左余 0）`,
+      ).toBeGreaterThanOrEqual(ring);
+      expect(
+        pad.block,
+        `\`padding-block\` 收掉了：环的上下各 ${ring}px 会被裁，下划条也一起没了`,
+      ).toBeGreaterThanOrEqual(ring);
+
+      const wide = /@media \(width >= 1200px\)\s*\{\s*\.site-header \.wrap\s*\{([^}]*)\}/.exec(source)?.[1] ?? '';
+      expect(wide, '页头在宽屏没有放宽 `.wrap`：英文那排 8 个锚点加三个出口要 1188px，1160 的容器放不下').toMatch(
+        /max-width:\s*1360px/,
+      );
+
+      const bodyWidth = Number(/--lp-max:\s*(\d+)px/.exec(source)?.[1]);
+      expect(bodyWidth, '正文宽度 `--lp-max` 读不出来，下面的比较就成了空话').toBe(1160);
+      expect(Number(/max-width:\s*(\d+)px/.exec(wide)?.[1])).toBeGreaterThan(bodyWidth);
+    });
+
+    it('landing.js：三档按滚动位置算，滚轮到头就交还页面，高亮项沿用减弱动效的设置', () => {
+      const js = read('docs/assets/landing.js');
+      expect(js, '锚点条的溢出/截断判据不见了：`data-edge` 三档是把「还有更多」和「到头了」分开的唯一出口').toMatch(
+        /const edge = atStart \? 'start' : atEnd \? 'end' : 'both';/,
+      );
+      expect(js, '只在值变了时才写属性，否则滚一下就让整条样式反复失效').toMatch(
+        /getAttribute\('data-edge'\) !== edge/,
+      );
+      expect(js, '滚轮到头仍然 preventDefault 的话，指针停在页头上就再也滚不动页面').toMatch(
+        /if \(next === navStrip\.scrollLeft\) return;\s*event\.preventDefault\(\);/,
+      );
+      expect(js, '高亮项没有被滚进视野：英文 1000 下读到最后几节时选中态落在条外').toMatch(
+        /revealNavLink\(current\.find/,
+      );
+      expect(js, '高亮项自动跟进必须沿用 `scrollBehavior()`，减弱动效时不能硬滑').toMatch(
+        /navStrip\.scrollTo\(\{\s*left:[^}]*behavior: scrollBehavior\(\)/,
+      );
+    });
+  });
+
+  describe('FAQ 每一问都可直达、可分享', () => {
+    /* 2026-10-24 之前，52 条问题没有一条带 `id`：搜索结果与 AI 回答只能链到整节，
+       同事之间也没法说「看第三问」。更深的一层是——就算有人手写了 `#faq-mock-2`，
+       浏览器滚过去看到的仍是一条**折叠着**的问题，得再点一次才知道链接给对了没有。
+       所以这一格要同时钉住四件事：id 存在、中英同序同集合、锚点指向自己、
+       以及深链进来那一问是展开的。 */
+    const FAQ_PAGES: Array<[string, string]> = [
+      ['docs/en.html', 'docs/index.html'],
+      ['docs/en-alternatives.html', 'docs/alternatives.html'],
+    ];
+
+    const faqSection = (file: string): string =>
+      read(file).match(/<section\b[^>]*\bid="faq"[\s\S]*?<\/section>/)?.[0] ?? '';
+
+    /** 按文档顺序读出每条问题的 `id` 与它那条 permalink 的 `href`。
+     *  属性之间允许换行：prettier 会把这一长串折开，按「同一行」匹配就成了假红。 */
+    const faqItems = (file: string): Array<{ id: string; href: string; anchors: number }> =>
+      [...faqSection(file).matchAll(/<details id="([^"]+)">([\s\S]*?)<\/summary>/g)].map(m => {
+        const tags = [...m[2].matchAll(/<a\b[^>]*class="faq-permalink"[^>]*>/g)];
+        return {
+          id: m[1],
+          href: tags.length ? (/href="#([^"]+)"/.exec(tags[0][0])?.[1] ?? '') : '',
+          anchors: tags.length,
+        };
+      });
+
+    it('四条 FAQ 页每条都带 id，且锚点恰好一条、指向自己', () => {
+      for (const [en, zh] of FAQ_PAGES) {
+        for (const file of [en, zh]) {
+          const items = faqItems(file);
+          const bare = [...faqSection(file).matchAll(/<details>/g)].length;
+          expect(items.length, `${file} 的 FAQ 小节一条问题都没读到，下面的断言就成了空话`).toBeGreaterThan(0);
+          expect(bare, `${file} 里有 ${bare} 条没带 id 的 <details>：那一问谁也链不到`).toBe(0);
+          for (const item of items) {
+            expect(item.anchors, `${file} 的 #${item.id} 应当恰好一枚 permalink`).toBe(1);
+            expect(item.href, `${file} 的 #${item.id} 那枚锚点指向了别处`).toBe(item.id);
+          }
+          expect(new Set(items.map(i => i.id)).size, `${file} 出现重复 id`).toBe(items.length);
+        }
+      }
+    });
+
+    it('中英两页同一序号的问题拿到同一个 id，深链不会在两语之间指错', () => {
+      for (const [en, zh] of FAQ_PAGES) {
+        const enIds = faqItems(en).map(i => i.id);
+        const zhIds = faqItems(zh).map(i => i.id);
+        expect(zhIds.length, `${en} / ${zh} 的条目数不等，id 的对应关系无从谈起`).toBe(enIds.length);
+        expect(zhIds, '同一序号在中英两页指向了不同的问题（id 是按分类与顺序算出来的）').toEqual(enIds);
+      }
+    });
+
+    it('landing.js 按 hash 展开那一问，样式在没有 JS 时把锚点整枚藏掉', () => {
+      const js = read('docs/assets/landing.js');
+      const openFn = /const openFromHash = \(\) => \{[\s\S]*?\n {4}\};/.exec(js)?.[0] ?? '';
+      expect(openFn, 'openFromHash 读不出来（函数被改走了？），下面三条就成了空话').not.toBe('');
+      expect(openFn, '深链进来不再展开那一问：折叠着的问题等于把答案藏回原来的位置').toMatch(
+        /target\.tagName !== 'DETAILS' \|\| target\.open/,
+      );
+      expect(openFn, '只认 `<details>`：hash 指向小节标题或分类时不该有任何动作').toMatch(/getElementById/);
+      expect(
+        openFn,
+        '落点归样式那条 scroll-margin-top 管，脚本这边只展开：实测补一次 scrollIntoView 是多余的接手（摘掉后真机 26 项读数逐位不变），而 behavior 写成 auto 还会跟随 html { scroll-behavior: smooth } 变成第二段动画',
+      ).not.toMatch(/\.scrollIntoView\(/);
+      expect(js, '只在 hashchange 时判一次的话，第一次点进来那一问仍是折叠的').toMatch(
+        /window\.addEventListener\('hashchange', openFromHash\);\s*openFromHash\(\);/,
+      );
+      expect(js, '复制链接不该顺手把这一条开合掉').toMatch(/event\.preventDefault\(\);/);
+
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css, '没有 JS 时这枚锚点会露出来：它点下去只会顺手开合这一条，复制那件事根本做不到').toMatch(
+        /(?:^|\n)\.faq-permalink\s*\{\s*display: none;/,
+      );
+      expect(css, '深链落点没躲开吸顶页头：把这一问纠正到视口顶之后，问题正好压在页头底下，等于白滚').toMatch(
+        /(?:^|\n)\.faq-list details\s*\{\s*scroll-margin-top:\s*88px;/,
+      );
+      expect(css, '复制成功那一下的弹跳在减弱动效档必须停，且 `html.js` 那一层要照抄（少写就压不住正文那条）').toMatch(
+        /@media \(prefers-reduced-motion: reduce\)[\s\S]*?html\.js \.faq-permalink\.is-copied\s*\{\s*animation: none;/,
+      );
+    });
+  });
+
+  describe('FAQ 关键词筛选', () => {
+    /* 「找答案」不该靠滚 21 条折叠项。这一格要钉住的是它的降级口径与实现边界：
+       ① 没有 JS 时整块不出现（一个不会生效的输入框比没有更糟），问答照旧全部可读；
+       ② 筛选用 `hidden` 属性而不是删节点——上面那三条 FAQ 守卫数的是源码里的条目数与顺序，
+          而「第 3 问是 #faq-basics-3」这件事不能因为读者打了两个字就变；
+       ③ 那句结果读数的**措辞住在 HTML**，脚本只挑 `data-*`（与预演面板同一条规矩），
+          否则中英两页的话就有一份是脚本里写死的。 */
+    const FILTER_PAGES = ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html'];
+
+    const faqSectionOf = (file: string): string =>
+      read(file).match(/<section\b[^>]*\bid="faq"[\s\S]*?<\/section>/)?.[0] ?? '';
+
+    it('四页各有一个带标签的筛选框与一处结果读数', () => {
+      for (const file of FILTER_PAGES) {
+        const section = faqSectionOf(file);
+        expect(section, `${file} 读不到 FAQ 小节`).not.toBe('');
+        expect([...section.matchAll(/class="faq-filter"/g)].length, `${file} 的筛选项应当恰好一处`).toBe(1);
+        const forId = /for="([^"]+)"/.exec(section)?.[1];
+        expect(forId, `${file} 的筛选框标签没有 for，读屏念不出这格是干什么的`).toBeTruthy();
+        expect(new RegExp(`id="${forId}"`).test(section), `${file} 的标签 for="${forId}" 指不到任何元素`).toBe(true);
+        expect(/type="search"/.test(section), `${file} 的筛选框不是 type=search`).toBe(true);
+        const status = /<p\b[^>]*class="faq-filter-status"[\s\S]*?>/.exec(section)?.[0] ?? '';
+        expect(status, `${file} 读不到那句结果读数`).not.toBe('');
+        expect(/role="status"/.test(status), `${file} 的结果读数不是 role=status`).toBe(true);
+        expect(/aria-describedby="[^"]*"/.test(section), `${file} 的输入框没有 aria-describedby 指向读数`).toBe(true);
+        const template = /data-count="([^"]*)"/.exec(status)?.[1] ?? '';
+        expect(template, `${file} 的读数模板读不出来`).toContain('{n}');
+        expect(template).toContain('{total}');
+        expect(/data-empty="[^"]{4,}"/.test(status), `${file} 少了「没有匹配」那一句`).toBe(true);
+      }
+    });
+
+    /**
+     * 上面那条只验「标签指得到输入框」，没管标签**里那个数**。它写的是「筛选这 21 问」，
+     * 而 21 是这条小节里 `<details id="faq-` 的条数——加一条问答却不改这句话，界面就当着读者
+     * 说错自己有几条，且没有任何一处会红（本仓「散文里写一次版本号就假一次」同一族）。
+     */
+    it('标签里写给读者看的那个条数，等于这一页真的有的问答条数', () => {
+      for (const file of FILTER_PAGES) {
+        const section = faqSectionOf(file);
+        const label = /class="faq-filter-label"[\s\S]*?>([\s\S]*?)</.exec(section)?.[1] ?? '';
+        const claimed = Number((label.replace(/\s+/g, ' ').match(/\d+/) ?? [])[0]);
+        const actual = [...section.matchAll(/<details id="faq-/g)].length;
+        expect(
+          Number.isInteger(claimed),
+          `${file} 的筛选标签没写给读者看的条数（这一句是「这 N 问」的口径，缺了它读者不知道筛的是多大一堆）`,
+        ).toBe(true);
+        expect(claimed, `${file} 的筛选标签写着「${claimed} 问」，可这一页的小节里实际有 ${actual} 条`).toBe(actual);
+      }
+    });
+
+    it('筛选靠 hidden 属性，不靠删节点；措辞全在 HTML 的 data-* 里', () => {
+      const js = read('docs/assets/landing.js');
+      expect(js, '筛掉一条改用移除节点的话，源码里的条目数与 id 顺序就与屏幕上不一致了').toMatch(/item\.hidden = !hit/);
+      expect(js, '空掉的分类标题也要跟着收，否则底下空空的标题读起来像「这一节没有问答」').toMatch(
+        /heading\.hidden = !anyVisible/,
+      );
+      expect(js, 'Esc 清空是这格的退路，读者打完字得能一把回到全部').toMatch(
+        /event\.key !== 'Escape' \|\| !faqFilter\.value/,
+      );
+      expect(
+        js,
+        '筛选挡在深链前面时深链赢——而且让位之后要把它滚进视野：那一问刚从 display:none 出来，浏览器那一次滚的是空（真机量到停在原地 1691px）',
+      ).toMatch(
+        /faqFilter\.value = '';\s*apply\(\);\s*target\.scrollIntoView\(\{ behavior: scrollBehavior\(\), block: 'start' \}\)/,
+      );
+      expect(js, '读数模板从 HTML 挑，脚本里不该出现任何一句语言').not.toMatch(/问匹配|questions match/);
+      expect(js, '「没有匹配」那句也只能住在 HTML：脚本的兜底必须留空，否则中英两页共享同一句写死的语言').toMatch(
+        /data-empty'\)\) \|\| '';/,
+      );
+      expect(js, '总条数从条目自己数，别在脚本里写死 21').not.toMatch(/haystacks\.length \+ 21|total = 21/);
+
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css, '没有 JS 时筛选框会露出来，可它什么都不会做').toMatch(/(?:^|\n)\.faq-filter\s*\{\s*display: none;/);
+      expect(css, 'JS 在场时得真的画出来，光有上面那条负判据就是整块消失').toMatch(
+        /html\.js \.faq-filter\s*\{\s*display: grid;/,
+      );
+      expect(css, '`details` 自带 display:list-item，只靠 UA 的 [hidden] 在个别引擎上压不住').toMatch(
+        /html\.js \.faq-list details\[hidden\][^{]*\{\s*display: none;/,
+      );
+    });
+
+    /**
+     * 零命中那一刻的出口。这一格守的是「失败发生的地方要有下一步」，
+     * 以及它与筛选框同一条降级契约：没有 JS 就没有筛选，也就没有死路，
+     * 所以这句话默认不画，只由脚本挂 `is-shown` 显影。
+     * 措辞与链接一律住在 HTML——两页的去处本来就不同（落地页有页内 #community，
+     * 对比页只有仓库 issue），脚本里出现任何一句就是替页面编话。
+     */
+    it('一句都筛不到时，出口就摆在失败发生的地方', () => {
+      for (const file of FILTER_PAGES) {
+        const section = faqSectionOf(file);
+        const none = /<p\b[^>]*class="faq-filter-none"[\s\S]*?<\/p>/.exec(section)?.[0] ?? '';
+        expect(none, `${file} 读不到那句「还是没找到」的出口`).not.toBe('');
+        const hrefs = [...none.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
+        expect(hrefs.length, `${file} 的出口一句连一个去处都没有`).toBeGreaterThanOrEqual(1);
+        const text = none
+          .replace(/<[^>]+>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        expect(text.length, `${file} 的出口只有链接没有话`).toBeGreaterThan(4);
+        // 页内去处必须真的存在（外部 https 去处交给链接卫生检查）
+        for (const h of hrefs.filter(x => x.startsWith('#'))) {
+          expect(
+            new RegExp(`id="${h.slice(1)}"`).test(section) || read(file).includes(`id="${h.slice(1)}"`),
+            `${file} 的出口指向 ${h}，可这一页没有那个锚点`,
+          ).toBe(true);
+        }
+      }
+
+      const js = read('docs/assets/landing.js');
+      expect(js, '脚本要按「命中数为 0」切这个类，不是按别的').toMatch(
+        /none\.classList\.toggle\('is-shown', shown === 0\)/,
+      );
+      expect(js, '出口那句措辞只能住在 HTML：脚本里不许出现任何一句语言').not.toMatch(/还是没找到|Still no match/);
+
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css, '没有 JS 时这句话会一直挂在筛选框下面，而那时根本没有筛选').toMatch(
+        /(?:^|\n)\.faq-filter-none\s*\{\s*display: none;/,
+      );
+      expect(css, 'JS 数到 0 时要真的画出来').toMatch(/html\.js \.faq-filter-none\.is-shown\s*\{\s*display: block;/);
+    });
+
+    /**
+     * 零命中那一刻的第二条路：把这一页自己的分类摆成可直接点的几枚直达片。
+     * 守三件会静默坏掉的事：
+     * ① 它必须与筛选框同一条降级契约——容器默认 `hidden`，脚本真的填得出东西才放开。
+     *    而 `.faq-jump { display: inline-flex }` 与 UA 的 `[hidden]{display:none}` 特异度相同、
+     *    作者表又排在前面，所以那条显式的 `.faq-jump[hidden]` 是**承重**的，不是重复；
+     * ② 片的文字来自 `.faq-category` 标题本身。脚本里出现任何一句分类名就是第二份目录，
+     *    将来改标题时界面会指着页面上根本不存在的分类；
+     * ③ 这一页压根没有分类（两份对比页），那块容器在那里就不该存在——填不满的控件不是出口。
+     */
+    it('筛不出东西时，还摆着这一页自己的那几类', () => {
+      const LANDING = ['docs/index.html', 'docs/en.html'];
+      const js = read('docs/assets/landing.js');
+      const css = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      for (const file of LANDING) {
+        const section = faqSectionOf(file);
+        // prettier 会把这一个标签的属性和文字折成多行，判据必须按**标签边界**读，
+        // 不能按「写在同一行」的写法锚定（本仓被这一坑绊过三次）。
+        const jumpTag = /<span\b[^>]*class="faq-jump"[^>]*>/s.exec(section);
+        expect(jumpTag, `${file} 少了那块「直接看某一类」的容器`).not.toBeNull();
+        expect(jumpTag![0], `${file} 的容器没写默认 hidden：没有 JS 时那句引导就光秃秃挂着`).toMatch(/\shidden\b/);
+        const lead = section
+          .slice(jumpTag!.index + jumpTag![0].length)
+          .split('</span>')[0]
+          .replace(/\s+/g, ' ')
+          .trim();
+        expect(lead.length, `${file} 的那块容器连一句引导都没有`).toBeGreaterThan(1);
+
+        const heads = [...section.matchAll(/<h3\b[^>]*class="faq-category"[^>]*>/g)]
+          .map(m => /id="([^"]+)"/.exec(m[0])?.[1])
+          .filter((x): x is string => !!x);
+        expect(heads.length, `${file} 的分类少于三类，摆直达片就没意义了`).toBeGreaterThanOrEqual(3);
+        for (const id of heads) {
+          expect(section, `${file} 的片指向 #${id}，可这一页没有那个锚点`).toContain(`id="${id}"`);
+        }
+
+        // 分类名只许有一份：脚本里出现任何一句就是第二份目录
+        const labels = [...section.matchAll(/<h3\b[^>]*class="faq-category"[\s\S]*?<\/h3>/g)]
+          .map(m =>
+            m[0]
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim(),
+          )
+          .filter(x => x.length > 1);
+        expect(labels.length, `${file} 的分类标题一句都没读到（那上面的解析口径坏了）`).toBeGreaterThanOrEqual(3);
+        for (const label of labels) {
+          expect(js, `脚本里出现了「${label}」——分类名只能住在 HTML，两处必然分叉`).not.toContain(label);
+        }
+      }
+
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html']) {
+        expect(faqSectionOf(file), `${file} 没有分类，却摆了一块永远填不满的直达容器`).not.toContain(
+          'class="faq-jump"',
+        );
+      }
+
+      expect(js).toContain(`document.querySelectorAll('.faq-category[id]')`);
+      expect(js, '不剥掉前面那枚图标，片的文字会带着一个图形占位').toContain("copy.querySelector('.feature-icon')");
+      expect(js, '一片都造不出来时必须把容器按回 hidden').toContain('jump.hidden = jump.children.length === 0');
+
+      expect(css, '只写 .faq-jump{display:inline-flex} 会盖掉 UA 的 [hidden]：没有 JS 时这块就露出来了').toMatch(
+        /(?:^|\n)\.faq-jump\[hidden\]\s*\{\s*display: none;/,
+      );
+      expect(css).toMatch(/(?:^|\n)\.faq-jump\s*\{\s*display: inline-flex;/);
+    });
+
+    /**
+     * 零命中那一档的标题层级。Lighthouse 的 heading-order 只在「筛到 0」那一档红：
+     * 分类标题（h3）连同它们的内容一起隐藏，侧栏那两张卡的标题若写成一枚比 h3 还低一档的
+     * 层级，序列就变成「小节 h2 → 卡片 h4」的跳级。
+     * 静态能算的代理就是这里用的这条：把 `.faq-category` 从序列里整个摘掉（模拟全部隐藏），
+     * 剩下的层级序列仍不许跳级——五页全过才算，因为对比页与隐私页没有侧栏卡，
+     * 它们要证明的是「这一页本来就没有这一格」，不是「恰好没算出来」。
+     *
+     * 顺带钉住样式侧的那半：`.faq-rail-card :is(h3, h4)` 必须两级都吃。换标签层级与换观感
+     * 是两件事，若选择器还只认 h4，这次修层级就顺手把侧栏卡的字号与间距改掉了。
+     */
+    it('筛掉所有分类标题之后，剩下的层级序列仍然不跳级', () => {
+      for (const file of [...FILTER_PAGES, 'docs/privacy.html']) {
+        const html = read(file);
+        const seq: number[] = [];
+        for (const m of html.matchAll(/<h([2-6])\b([^>]*)>/g)) {
+          const cls = /class="([^"]*)"/.exec(m[2])?.[1] ?? '';
+          if (cls.includes('faq-category')) continue;
+          seq.push(Number(m[1]));
+        }
+        const skips: string[] = [];
+        for (let i = 1; i < seq.length; i++) {
+          if (seq[i] - seq[i - 1] > 1) skips.push(`h${seq[i - 1]}→h${seq[i]}`);
+        }
+        expect(seq.length, `${file} 一个标题都没读到（那正则坏了）`).toBeGreaterThan(3);
+        expect(skips, `${file} 在零命中那一档跳级：${skips.join(', ')}`).toEqual([]);
+      }
+      expect(read('docs/assets/landing.css')).toMatch(/\.faq-rail-card\s+:is\(h3,\s*h4\)\s*\{/);
+    });
+  });
+
+  /**
+   * FAQ 卡片展开时的「长高」过渡。这里守的不是审美而是四件会静默坏掉的事：
+   * ① 整层包在 `@supports selector(::details-content)` 里——不支持的引擎一条都不沾，
+   *    行为与这层不存在时相同（真机 A/B 量过：摘掉两处 @supports 后，`block-size` 的
+   *    中间像素读数为 0 个，盒高第一帧就是终值）；
+   * ② 时长与曲线**必须**跟加减号、卡边、答案淡入是同一档（240ms + 签名曲线）——
+   *    这四样说的是同一个动作，其中任何一件改了数，动作就裂成前后错位；
+   * ③ `interpolate-size` 只许挂在 `.faq-list details` 上。它是可继承属性，
+   *    写到 `:root` 会把站内**所有** `height: auto` 的过渡一并改成可插值，
+   *    包括移动端菜单面板那两处与这一格无关的声明；
+   * ④ reduce 档要把这层一起摘掉——只停答案淡入、留高度过渡，读起来仍是「跳一下」。
+   * 动画对象本身在 Chrome 155 的 `getAnimations()` 里读不到（实测整表 85 条，挂在 DETAILS
+   * 上的只有 border-*-color 与 box-shadow），所以这一格只能按源码契约钉，运行时那一面
+   * 由逐帧盒高与 `::details-content` 的 used value 作证。
+   */
+  describe('FAQ 卡片展开时的高度过渡', () => {
+    const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const CURVE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+
+    const block = (needle: string): string => {
+      const s = css();
+      const at = s.indexOf(needle);
+      if (at === -1) return '';
+      const open = s.indexOf('{', at);
+      let depth = 0;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) return s.slice(open + 1, i);
+        }
+      }
+      return '';
+    };
+
+    it('整层包在能力判定里，且四个面用的是同一条时长与曲线', () => {
+      const s = css();
+      expect(s, '这层没有包在 @supports 能力判定里：不支持的引擎会拿到一份说不清行为的 CSS').toMatch(
+        /@supports selector\(::details-content\)/,
+      );
+      const guard = block('@supports selector(::details-content)');
+      expect(guard, '能力判定那块是空的').not.toBe('');
+      expect(guard).toMatch(/\.faq-list details\s*\{\s*interpolate-size:\s*allow-keywords;/);
+      expect(guard).toMatch(/\.faq-list details::details-content\s*\{/);
+      expect(guard).toMatch(/\.faq-list details\[open\]::details-content\s*\{\s*block-size:\s*auto;/);
+      expect(guard, '收起时 content-visibility 那一刀要在动画末尾落下，不然读者看到「先空后长」').toMatch(
+        /transition-behavior:\s*allow-discrete;/,
+      );
+      expect(guard, '过渡必须同时管着 block-size 与 content-visibility，只写一个就是半截动画').toMatch(
+        /transition:\s*block-size\s+0\.24s\s+cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\),\s*content-visibility\s+0\.24s;/,
+      );
+      expect(guard, '长高途中要裁掉溢出，否则答案会从还矮的盒子里漏出去').toMatch(/overflow:\s*clip;/);
+      expect(guard).not.toMatch(/transition:\s*all/);
+
+      /* 同一个动作的另外三面：答案淡入、卡边、加减号，读数必须与上面那一档逐字相同。 */
+      expect(s, '答案淡入与卡片长高不同档了——它们说的是同一个动作').toMatch(
+        new RegExp(`details\\[open\\] > p \\{\\s*animation: lp-answer 0\\.24s ${CURVE.replace(/[.()]/g, '\\$&')}`),
+      );
+      expect(s, '卡片描边/阴影的过渡与长高不同档了').toContain(
+        `transition:\n    border-color 0.24s ${CURVE},\n    box-shadow 0.24s ${CURVE};`,
+      );
+    });
+
+    it('interpolate-size 只挂在 FAQ 的 details 上，不挂到根元素', () => {
+      const s = css();
+      const hits = [...s.matchAll(/interpolate-size:/g)].length;
+      expect(hits, 'interpolate-size 出现的次数与守卫预期不符——回来把这一条的口径一起重判').toBe(1);
+      const rootish =
+        /(?:^|\n)\s*:root\s*\{[^}]*interpolate-size/.test(s) || /(?:^|\n)\s*html\s*\{[^}]*interpolate-size/.test(s);
+      expect(
+        rootish,
+        '写到 :root/html 上会把站内所有 height:auto 的过渡改成可插值（含移动端菜单面板那两处），这一格的范围是 FAQ 卡片',
+      ).toBe(false);
+    });
+
+    it('reduce 档把这层一起摘掉', () => {
+      const s = css();
+      const at = s.indexOf('@media (prefers-reduced-motion: reduce)');
+      expect(at, '读不到 reduce 那一段').toBeGreaterThan(-1);
+      const open = s.indexOf('{', at);
+      let depth = 0;
+      let end = -1;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
+      }
+      const reduce = s.slice(open, end);
+      expect(reduce, 'reduce 段里没有 ::details-content 这一条：只停淡入、留高度过渡，读起来仍是「跳一下」').toMatch(
+        /\.faq-list details::details-content\s*\{\s*transition:\s*none;/,
+      );
+      expect(reduce, 'reduce 段里的这一条也得包在能力判定里，否则不支持的引擎拿到一条永远不匹配的声明').toContain(
+        '@supports selector(::details-content)',
+      );
+    });
+  });
+
+  /**
+   * 产品站浅色/暗色两档的**文字对比度**。这条守的是令牌值，不是渲染结果——
+   * 真机全量扫描（五页 × 两档、所有 `<details>` 展开、外加「已复制」与筛选读数那两枚
+   * 只在交互后才存在的节点，共 3,000 多个文本节点）在本环境无法进 CI，
+   * 所以这里把「承载文字的色必须在自己那一主题的每一种底上都 ≥ 4.5:1」这条算式钉住：
+   * 谁把 `--lp-ink-faint` 调回 `#8a97a5`、或把 `--lp-cta` 在暗色档改成浅蓝，这里当场红。
+   * 2026-10-24 那轮的起点正是 Lighthouse 报的 29 处：浅色档 `--lp-accent` 2.32、
+   * `--lp-warn` 3.28、`--lp-ink-faint` 2.98、白字压 `--lp-primary` 2.78，全都在暗色档是达标的，
+   * 所以修法是「要读的字」与「只做装饰的面」各一份值，而不是统一调色。
+   */
+  describe('产品站的文字对比度与 llms.txt 的机器可读链接', () => {
+    const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    /** 取某一段声明块里的自定义属性（`:root` 与暗色覆盖块共用） */
+    const customProps = (blockSource: string): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const m of blockSource.matchAll(/(--lp-[\w-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+      return out;
+    };
+
+    const rootBlock = () => {
+      const s = css();
+      const at = s.indexOf(':root {');
+      const open = s.indexOf('{', at);
+      let depth = 0;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) return s.slice(open + 1, i);
+        }
+      }
+      return '';
+    };
+
+    const darkBlock = () => {
+      const s = css();
+      const at = s.indexOf('@media (prefers-color-scheme: dark)');
+      if (at === -1) return '';
+      const open = s.indexOf('{', s.indexOf('{', at) + 1); // 外层 @media 的 { 之后，:root 的 {
+      let depth = 0;
+      for (let i = open; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) return s.slice(open + 1, i);
+        }
+      }
+      return '';
+    };
+
+    const hex = (v: string): [number, number, number] | null => {
+      const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v);
+      if (!m) return null;
+      const h = m[1];
+      const full =
+        h.length === 3
+          ? h
+              .split('')
+              .map(c => c + c)
+              .join('')
+          : h;
+      return [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16)) as [number, number, number];
+    };
+
+    const lum = (c: [number, number, number]) => {
+      const f = (v: number) => {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+    };
+
+    const ratio = (a: [number, number, number], b: [number, number, number]) => {
+      const l1 = lum(a);
+      const l2 = lum(b);
+      const hi = Math.max(l1, l2);
+      const lo = Math.min(l1, l2);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+
+    /** 每一主题里会被当作「文字压在上面」的那些面。带 alpha 的（暗色 `--lp-primary-faint`）跳过：
+        它是叠色，静态算不出真实合成值，而那一格由真机扫描覆盖。 */
+    const SURFACES = [
+      '--lp-bg',
+      '--lp-bg-alt',
+      '--lp-surface',
+      '--lp-primary-soft',
+      '--lp-primary-faint',
+      '--lp-accent-soft',
+      '--lp-warn-soft',
+    ];
+    const TEXT_TOKENS = [
+      '--lp-ink',
+      '--lp-ink-soft',
+      '--lp-ink-faint',
+      '--lp-primary-strong',
+      '--lp-accent-strong',
+      '--lp-warn-strong',
+      '--lp-danger-strong',
+      '--lp-cyan-strong',
+      '--lp-purple-strong',
+    ];
+
+    const themeTable = (dark: boolean) => {
+      const base = customProps(rootBlock());
+      return dark ? { ...base, ...customProps(darkBlock()) } : base;
+    };
+
+    it.each([
+      ['浅色', false],
+      ['暗色', true],
+    ] as const)('%s档：每一个文字令牌在这档的每一种面上都 ≥ 4.5:1', (label, dark) => {
+      const map = themeTable(dark);
+      for (const token of TEXT_TOKENS) {
+        const fg = hex(map[token] ?? '');
+        expect(fg, `${label}档 ${token} 读不出十六进制值（${map[token]}）`).not.toBeNull();
+        for (const surface of SURFACES) {
+          const raw = map[surface] ?? '';
+          const bg = hex(raw);
+          if (!bg) continue;
+          const r = ratio(fg as [number, number, number], bg);
+          expect(
+            r,
+            `${label}档 ${token}（${map[token]}）压在 ${surface}（${raw}）上只有 ${r.toFixed(2)}:1，低于 AA 的 4.5:1`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    });
+
+    it('实底 CTA 的底色两档同值，且白字压在它上面达标', () => {
+      const light = customProps(rootBlock())['--lp-cta'];
+      const dark = customProps(darkBlock())['--lp-cta'];
+      expect(light, '浅色档读不到 --lp-cta').toBeTruthy();
+      expect(
+        dark,
+        '暗色档不该覆盖 --lp-cta：白字要读得出，底就必须是这一档深度，跟 `-strong` 一起翻会把白字压到 1.6:1',
+      ).toBe(light);
+      const bg = hex(light);
+      expect(bg, `--lp-cta 不是可解析的十六进制（${light}）`).not.toBeNull();
+      const r = ratio([255, 255, 255], bg as [number, number, number]);
+      expect(r, `白字压在 --lp-cta（${light}）上只有 ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('文字不许再直接吃那几个装饰用的亮色令牌', () => {
+      const s = css();
+      /** 判据必须锚在**属性起点**：`border-color: var(--lp-primary)` 这类装饰描边本就该用亮色
+          （本轮一次不锚行首的替换顺手把 9 处边框也拖深了，正是这条的分寸）。 */
+      const banned = ['--lp-accent', '--lp-warn', '--lp-danger', '--lp-primary'].map(
+        t => new RegExp(`(?:^|\\n)\\s*color:\\s*var\\(${t}\\)`),
+      );
+      for (const re of banned) {
+        expect(re.test(s), `${re.source} —— 这四个是「面/装饰」用的亮色，承载文字必须用对应的 -strong`).toBe(false);
+      }
+      // 反面那一半：装饰那一档确实还在用亮色，否则上面四条就成了「谁都没在用」的假绿
+      const decorative = /(?:^|\n)\s*(?:border-[a-z-]*color|background):\s*var\(--lp-(?:primary|accent)\);/.test(s);
+      expect(decorative, '装饰侧一个亮色令牌都不用了？那这四条判据就没在管任何东西，回来重判口径').toBe(true);
+    });
+
+    /** llms.txt 的规格要求条目是 markdown 链接；只写裸 URL 时 Lighthouse 的 `llms-txt`
+        会报「File does not appear to contain any links」（2026-10-24 在 127.0.0.1 上第一次查到的——
+        线上那次没报，因为 Pages 的 `/llms.txt` 落在项目基路径下，审计器根本没取到这份文件）。
+        这份承诺同样是被查过的，不是写完就成立。 */
+    it('llms.txt 真的用 markdown 链接交出关键地址，而不是只写裸 URL', () => {
+      const text = read('docs/llms.txt');
+      const links = [...text.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g)];
+      expect(links.length, 'llms.txt 一条 markdown 链接都没有：大模型侧按规格读不到出口').toBeGreaterThanOrEqual(10);
+      const labels = links.map(m => m[1]);
+      const urls = links.map(m => m[2]);
+      for (const need of ['Source code', 'Privacy Policy', 'Full reference for AI systems']) {
+        // 标签是中英一行的（`源码仓库 / Source code`），所以按「包含」判而不是全等
+        expect(
+          labels.some(l => l.includes(need)),
+          `llms.txt 的链接清单里少了「${need}」这条出口`,
+        ).toBe(true);
+      }
+      // 举的那个锚点样例必须真的存在于两页（与上面 llms 锚点那条守卫同一口径，这里数分母）
+      const withFragment = urls.filter(u => /#faq-/.test(u));
+      expect(withFragment.length, 'llms.txt 的锚点样例不见了——那条承诺就退化成一句空话').toBeGreaterThanOrEqual(1);
+      for (const u of withFragment) {
+        const id = u.split('#')[1];
+        expect(read('docs/index.html'), `#faq 样例 ${id} 在中文页查不到`).toContain(`id="${id}"`);
+      }
+    });
+  });
+
+  /**
+   * 窄屏下对比表的横滑提示。390px 实测这张 7 列表要滑 228px（中文）/413px（英文）才看得完，
+   * 而触屏滚动条是覆盖式的——不碰就不存在，所以「这边还有」必须画出来。
+   * 两条契约：
+   * ① **判据只有一份**——页头锚点条与表格共用 `syncEdge`/`watchOverflow`。写成两份，
+   *    将来就只有一处会淡（本仓反复踩过的「第二个模型」形状）；
+   * ② 滚到最右要**自己退场**——CSS 里不许出现 `.table-scroll[data-edge='end']` 的渐隐，
+   *    否则读者永远觉得还有更多。
+   */
+  /**
+   * 站内跳转的完整性。README 的目录与 CTA 行、产品站的页头导航与 52 枚 FAQ 直达链接，
+   * 全都靠「目标 id/标题恰好还在」这一件事成立——而改标题、挪小节、重排 FAQ 都是日常操作，
+   * 断了的代价是读者点一下什么都没发生（README 上还包括 Google 会抓的 jump link）。
+   * 没有任何东西守着它：Markdown 的锚点连浏览器都不报错，只是不跳。
+   *
+   * Markdown 侧的 slug 规则照 `github-slugger`：小写 → 去掉「非 字母/数字/空格/下划线/连字符」
+   * → 空格全部换成 `-`，**不 trim**。最后那一步是这条判据的牙口所在：
+   * `## 📥 安装` 去掉 emoji 之后留下一个前导空格，于是 GitHub 实际生成的锚点是 `-安装`
+   * 而不是 `安装`——按直觉 trim 一下，README 里 15 条链接会全部假报断链。
+   */
+  describe('仓库里的站内跳转都落到真实锚点', () => {
+    const mdSlug = (t: string): string =>
+      t
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N} _-]/gu, '')
+        .replace(/ /g, '-');
+
+    const headingSlugs = (src: string): Set<string> => {
+      const out = new Set<string>();
+      for (const m of src.matchAll(/^#{1,6}\s+(.+)$/gm)) out.add(mdSlug(m[1]));
+      return out;
+    };
+
+    it.each(['README.md', 'README.en.md'])('%s 的每条 ](#…) 都指得到一个真实标题', file => {
+      const src = read(file);
+      const heads = headingSlugs(src);
+      const links = [...src.matchAll(/\]\(#([^)]+)\)/g)].map(m => m[1]);
+      // 分母：一条锚点都没有的话，「零断链」只是没东西可断
+      expect(links.length, `${file} 的站内锚点少于 10 条——目录与 CTA 行被动过了？回来重判这条`).toBeGreaterThanOrEqual(
+        10,
+      );
+      const bad = [...new Set(links.filter(l => !heads.has(decodeURIComponent(l))))];
+      expect(bad, `${file} 这些锚点落不到任何标题：${bad.join(' | ')}`).toEqual([]);
+    });
+
+    const ANCHOR_PAGES = [
+      'docs/index.html',
+      'docs/en.html',
+      'docs/alternatives.html',
+      'docs/en-alternatives.html',
+      'docs/privacy.html',
+    ];
+
+    /** 每页的页内跳转数量下限（2026-10-24 实测：两份落地页各 48、两份对比页各 18、隐私页 1）。
+        这不是审美阈值，而是**防空转**：`bad === []` 在「一条锚点都没有」时也成立，
+        那正是最需要报警的形状——导航与 FAQ 直达链接被整片删掉。留一档余量给日常增删。 */
+    const ANCHOR_FLOOR: Record<string, number> = {
+      'docs/index.html': 40,
+      'docs/en.html': 40,
+      'docs/alternatives.html': 15,
+      'docs/en-alternatives.html': 15,
+      'docs/privacy.html': 1,
+    };
+
+    it.each(ANCHOR_PAGES)('%s 的每个 href="#…" 都指得到一个同页的 id', file => {
+      const src = read(file);
+      const ids = new Set([...src.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
+      const links = [...src.matchAll(/href="#([^"]+)"/g)].map(m => m[1]);
+      const floor = ANCHOR_FLOOR[file];
+      expect(
+        links.length,
+        `${file} 的页内跳转只剩 ${links.length} 处（基线 ${floor}）——导航或 FAQ 锚点被整片删过？`,
+      ).toBeGreaterThanOrEqual(floor);
+      const bad = [...new Set(links.filter(l => !ids.has(l)))];
+      expect(bad, `${file} 这些页内跳转点下去什么都没发生：${bad.join(' | ')}`).toEqual([]);
+    });
+  });
+
+  /**
+   * 命中区下限（24×24）的回归守卫。数出来的是真机普查：五页 × 两个宽度里每一个可点元素的实际盒子。
+   * 守的四排都是独立控件行（页头锚点条 23.8、页脚导航 23.8、工具卡链接 22.9、页脚语言切换 18px）；
+   * 句子里的内联链接按规范豁免、不在射程内。
+   *
+   * 两条读法都是踩出来的坑，写在这儿是因为都反直觉：
+   * ① 锚在**声明**上、往前取它自己的选择器清单——反过来锚 `.site-nav a,` 会撞上别的规则
+   *    （那串在样式表里出现 3 次），第一版就是这样在干净树上假红；
+   * ② 整块声明一起吃——于是「有人往块里加了一条 padding」红在属性那条判据上，而不是三条一起红
+   *    （上一版要求块里只有 min-height 一条声明，一针下去三条全红，等于没隔离）。
+   * 「规则在不在」由第一条单独判；拿不到唯一规则时其余三条直接返回，不重复红第二遍。
+   */
+  describe('可点元素的命中区下限（源码契约）', () => {
+    const cssText = read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...cssText.matchAll(/([^{}]+)\{([^{}]*min-height:[^{}]*24px[^{}]*)\}/g)];
+    const one = rules.length === 1 ? rules[0] : null;
+
+    it('那条命中区规则存在，且只有一条', () => {
+      expect(rules.length, `命中区规则读到 ${rules.length} 条（0 = 被删或数值改了；>1 = 判据指不定该管谁）`).toBe(1);
+    });
+
+    it('四组独立控件行都在那份清单里', () => {
+      if (!one) return;
+      for (const sel of ['.site-nav a', '.site-footer nav a', '.tool-links a', '.footer-meta a']) {
+        expect(one[1], `命中区清单少了 ${sel}`).toContain(sel);
+      }
+    });
+
+    it('块里只准有 min-height 这一条声明', () => {
+      if (!one) return;
+      const props = one[2]
+        .split(';')
+        .map(d => (d.split(':')[0] || '').trim())
+        .filter(Boolean);
+      expect(
+        props,
+        `只该加 min-height：多出来的每一条要么挪字的位置、要么牵动页头那道按 padding 算的焦点环判据 ${JSON.stringify(props)}`,
+      ).toEqual(['min-height']);
+    });
+
+    it('不许扩成整页所有链接（内联链接按规范是豁免的）', () => {
+      if (!one) return;
+      // 判的是「有一条选择器就是裸 a」，不是「某条以 a 结尾」——后者会把 .site-nav a 也误杀
+      const oneOf = one[1]
+        .split(',')
+        .map(x => x.trim())
+        .filter(Boolean);
+      expect(
+        oneOf.every(x => x !== 'a'),
+        `把裸 a 拉进清单会连句子里的内联链接一起撑大，那是排版事故：${JSON.stringify(oneOf)}`,
+      ).toBe(true);
+    });
+  });
+
+  describe('窄屏对比表的横滑提示', () => {
+    const css = () => read('docs/assets/landing.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const js = () => read('docs/assets/landing.js');
+
+    it('表格的右缘渐隐按 data-edge 画，且滚到最右那一档不存在', () => {
+      const s = css();
+      expect(s, '表格没有按 data-edge 的渐隐：窄屏读不出还有多少列').toMatch(
+        /\.table-scroll\[data-edge='start'\],\s*\.table-scroll\[data-edge='both'\]\s*\{\s*mask-image:\s*linear-gradient/,
+      );
+      expect(s, "出现了 .table-scroll[data-edge='end'] 的渐隐——滚到头之后还挂着「还有更多」是假信号").not.toMatch(
+        /\.table-scroll\[data-edge='end'\]/,
+      );
+      // 只淡右缘：左那一列是 sticky 的读者锚点
+      expect(s, '渐隐不该同时吃左缘：钉住那一列被淡掉就读不出比的是哪一家').not.toMatch(
+        /\.table-scroll\[data-edge[^]]*\][^{]*\{\s*mask-image:\s*linear-gradient\(90deg,\s*transparent/,
+      );
+    });
+
+    it('溢出判据只有一份，锚点条与表格都走它', () => {
+      const src = js();
+      const writes = [...src.matchAll(/setAttribute\('data-edge'/g)].length;
+      expect(writes, `data-edge 的写入有 ${writes} 处——两处各判一次，将来只会有一处会淡`).toBe(1);
+      expect(src, '锚点条没有走共用判据').toMatch(/\n {2}watchOverflow\(navStrip\);/);
+      expect(src, '锚点条自己那份判据还留着（syncNavEdge）——两处各判一次就是两份事实源').not.toMatch(/syncNavEdge/);
+      expect(src, '表格没有走共用判据').toMatch(
+        /document\.querySelectorAll\('\.table-scroll'\)\.forEach\(shell => \{\s*if \(shell\.querySelector\('table'\)\) watchOverflow\(shell\);/,
+      );
+      expect(src, '判据里三个状态缺一不可（贴右端要能撤掉渐隐）').toMatch(
+        /const edge = atStart \? 'start' : atEnd \? 'end' : 'both';/,
+      );
+    });
+  });
+
+  describe('llms 文件承诺的问答锚点真的对得上页面', () => {
+    /* 面向 AI 的那两份文件现在写了一句可核对的话：「每一条问题都有锚点，中英同一序号
+       指同一问」。这句话一旦与页面脱钩，被引用的锚点就是 404 级别的东西——所以它必须
+       是被查过的，而不是写下去就永远成立。 */
+    const ANCHOR_RE = /#(faq-[a-z]+-\d+|faq-\d+)\b/g;
+
+    const idsOn = (file: string): string[] => [...read(file).matchAll(/<details id="([^"]+)"/g)].map(m => m[1]);
+
+    const categoryIdsOn = (file: string): string[] =>
+      [...read(file).matchAll(/class="faq-category"[\s\S]{0,80}?id="(faq-[a-z-]+)"/g)].map(m => m[1]);
+
+    it('两份 llms 文件都还在说锚点这件事', () => {
+      const full = read('docs/llms-full.txt');
+      const index = read('docs/llms.txt');
+      expect(full, 'llms-full 少了那一节：AI 系统就不知道该引用某一问而不是整页').toMatch(
+        /Citable anchors for every FAQ question/,
+      );
+      expect(full).toMatch(/cites?|cite the fragment|引用锚点|请引用锚点/);
+      expect(index, 'llms.txt 那份简明索引没跟上').toMatch(/锚点/);
+      expect(index, 'llms.txt 只留了中文那半句：这份索引是双语一行的，英文半边也要在').toMatch(/citable fragment/i);
+    });
+
+    it('文中举例的每一个锚点，在中英两页都查得到对应的条目', () => {
+      const cited = new Set<string>();
+      for (const file of ['docs/llms-full.txt', 'docs/llms.txt']) {
+        for (const m of read(file).matchAll(ANCHOR_RE)) cited.add(m[1]);
+      }
+      expect(cited.size, '两份 llms 文件里一个锚点例子都没读到，这条断言就成了空话').toBeGreaterThan(0);
+      const zh = idsOn('docs/index.html');
+      const en = idsOn('docs/en.html');
+      for (const anchor of cited) {
+        expect(zh, `llms 文件举例用了 #${anchor}，中文页查不到这一问`).toContain(anchor);
+        expect(en, `llms 文件举例用了 #${anchor}，英文页查不到这一问`).toContain(anchor);
+      }
+    });
+
+    it('列出的分类清单与页面实际的分类标题一一对应', () => {
+      const listed = [...read('docs/llms-full.txt').matchAll(/`(faq-[a-z]+)`/g)].map(m => m[1]);
+      const unique = [...new Set(listed)];
+      expect(unique.length, 'llms-full 里一个分类 id 都没列出来，下面的比较就是空话').toBeGreaterThan(0);
+      for (const file of ['docs/index.html', 'docs/en.html']) {
+        const actual = categoryIdsOn(file);
+        expect(actual.length, `${file} 读不到分类标题的 id`).toBeGreaterThan(0);
+        expect(unique.sort(), `llms 文件列的分类与 ${file} 实际的分类标题不一致`).toEqual([...actual].sort());
+      }
     });
   });
 
@@ -2233,6 +3333,598 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         topics.filter(t => !/^[a-z0-9][a-z0-9-]{0,49}$/.test(t)),
         'topic slug 必须小写连字符',
       ).toEqual([]);
+    });
+  });
+
+  /**
+   * 五份 auto-fit 网格在窄区间的「末行只剩一格」守卫。
+   *
+   * 为什么会红：轨道数由 `minmax(Xpx, 1fr)` 的下限反算，条数又写在 HTML 里，两边各自漂一点，
+   * 就会出现 4 条数字排成 3+1、3 张卡排成 2+1 这种「最后一行只落一张、还只占半宽」的形状。
+   * 2026-10-25 用真机按 1px 一档把四页的五张网格扫了一遍（量具 `.test-tmp/probe/orphan-bands.cjs`，不入库），
+   * 五段区间各补一条规则，本文件把它们钉住。**区间的边界值是量出来的，不是算出来的**——
+   * 改 `.wrap` 内边距、右栏比例或任何一条 minmax 下限，都要回真机重扫一遍再改这里。
+   */
+  /**
+   * FAQ 筛选「命中词高亮」的守卫（源码契约）。
+   *
+   * 这一格的行为在真机验过（一次性量具 `.test-tmp/probe/faq-mark-live.cjs`，不入库：
+   * 中英两页 × 明暗两档共 4 档 72 项全绿——mark 文字逐枚等于所打的词、`textContent` 前后逐字相同、
+   * 只包可见条目、mark 不套 mark、重复同词不堆第二层、单字不高亮但仍在筛、
+   * Esc / 零命中 / 分类直达都摘干净、条目高度 53.2px 前后一致、对比度浅 5.77 深 8.23、横向溢出 0px）。
+   * 本环境没有 DOM，所以这里钉的是「做法」而不是「观感」：不许用 innerHTML、清理必须先于重包、
+   * 两侧类名必须同名、字色必须继承。
+   */
+  describe('FAQ 命中词高亮只造节点、不改文字（源码契约）', () => {
+    const js = read('docs/assets/landing.js');
+    const css = read('docs/assets/landing.css');
+
+    it('高亮只用 createElement 与 TreeWalker，全文没有 innerHTML 家族', () => {
+      expect(js).toContain("document.createElement('mark')");
+      expect(js).toContain('NodeFilter.SHOW_TEXT');
+      // 按**用法**查而不是按词面查：这一格的注释里就写着「绝不用 innerHTML」，
+      // 按裸词查会让基线自己红（第一版正是这样，改完才绿——记在这里免得再犯）。
+      for (const pattern of [
+        [/\.\s*(innerHTML|outerHTML)\s*(=|\+=)/, 'innerHTML / outerHTML 赋值'],
+        [/\binsertAdjacentHTML\s*\(/, 'insertAdjacentHTML 调用'],
+        [/\beval\s*\(/, 'eval 调用'],
+      ] as const) {
+        expect(js, `landing.js 出现${pattern[1]}：命中的是给人读的原文，包错一个字符就是替作者改稿`).not.toMatch(
+          pattern[0],
+        );
+      }
+    });
+
+    it('清理排在重包之前，且 faq-hit 这个名字两侧都还在', () => {
+      const clearAt = js.indexOf('clearMarks(list)');
+      const markAt = js.indexOf('markHits(item, query)');
+      expect(clearAt, '那份「先整体摘掉」不见了').toBeGreaterThan(-1);
+      expect(markAt, '那份「按新词重包」不见了').toBeGreaterThan(-1);
+      expect(clearAt, '顺序反了：在上一轮的 mark 里找下一轮的词').toBeLessThan(markAt);
+      // 名字漂了是静默失效：包照旧发生，只是没有任何样式（读起来像「高亮坏了」而不是「两边不同名」）
+      expect(js).toContain("mark.className = 'faq-hit'");
+      expect(css, 'CSS 侧的 .faq-list mark.faq-hit 与脚本不同名了').toContain('.faq-list mark.faq-hit');
+    });
+
+    it('一个字的词不高亮，而这个下限只有一份', () => {
+      const m = /MIN_MARK_QUERY = (\d+)/.exec(js);
+      expect(m, '命中词高亮的长度下限不见了').toBeTruthy();
+      expect(Number(m?.[1]), '单字高亮会把满页涂黄').toBeGreaterThanOrEqual(2);
+      expect((js.match(/const MIN_MARK_QUERY/g) ?? []).length, '下限常量只能有一处定义').toBe(1);
+      expect(js, '判据必须引用那份下限，不许另写一个魔法数').toContain('query.length >= MIN_MARK_QUERY');
+    });
+
+    it('高亮样式字色继承、底色走令牌，不许出现硬编码颜色', () => {
+      const at = css.indexOf('.faq-list mark.faq-hit');
+      expect(at).toBeGreaterThan(-1);
+      const body = css.slice(at, css.indexOf('}', at));
+      expect(body, 'UA 给 mark 的默认是黑字压黄底，暗色档会读不清').toContain('color: inherit');
+      expect(body, '底色必须是这一站已有的软色块令牌').toMatch(/background-color:\s*var\(--lp-[\w-]+\)/);
+      expect(body, '不许写死十六进制或 rgb 颜色').not.toMatch(/#[0-9a-fA-F]{3,8}\b|\brgba?\(/);
+    });
+
+    /**
+     * 「答案里命中」那枚徽标的措辞必须住在 HTML：中英各一句、脚本零字面量，与计数句同一条规矩。
+     * 这一格守的是三件事——两页都给了文案（缺一个语言就是给另一群人画个空白pill）、
+     * 脚本只挑属性不写文案、样式侧**没有声明 display**（声明了就会顶掉 UA 的 `[hidden]`，
+     * 徽标在没有筛选时也挂着，正是 `.faq-jump` 那条要靠显式规则赢回来的处境）。
+     */
+    it('答案命中的徽标：文案在 HTML、脚本只挑属性、样式不写 display', () => {
+      for (const file of ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html']) {
+        const html = read(file);
+        const copy = /data-answer-hit="([^"]+)"/.exec(html)?.[1];
+        expect(copy, `${file} 的筛选状态元素少了 data-answer-hit 那句文案`).toBeTruthy();
+        expect((copy ?? '').length, `${file} 的徽标文案短得不像一句话`).toBeGreaterThanOrEqual(4);
+      }
+      expect(read('docs/privacy.html'), '隐私页没有筛选框，不该出现徽标文案').not.toContain('data-answer-hit');
+      const zh = /data-answer-hit="([^"]+)"/.exec(read('docs/index.html'))?.[1] ?? '';
+      const en = /data-answer-hit="([^"]+)"/.exec(read('docs/en.html'))?.[1] ?? '';
+      expect(zh, '中英两句必须真是两种语言（抄成一样的就是其中一页没翻译）').not.toBe(en);
+      expect(js, '脚本里不许出现徽标文案的字面量').not.toContain(zh);
+      expect(js, '脚本里不许出现徽标文案的字面量').not.toContain(en);
+      expect(js).toContain("getAttribute('data-answer-hit')");
+      const at = css.indexOf('.faq-hit-where {');
+      expect(at, '徽标的样式不见了（脚本还在造节点，页面上却是无样式的一串字）').toBeGreaterThan(-1);
+      // 正文必须从 `{` 之后截：整条规则连着选择器一起查时，`display` 前面是 `{` 而不是 `;`，
+      // 那条 `(^|;)` 的判据就永远不命中——第一版正是这样，变异 F2（补上 display）当场假绿。
+      const open = css.indexOf('{', at);
+      const body = css.slice(open + 1, css.indexOf('}', open));
+      expect(body, '这一格一旦声明 display 就会顶掉 UA 的 [hidden]{display:none}，徽标会在没有筛选时挂着').not.toMatch(
+        /(^|;)\s*display\s*:/,
+      );
+      expect(body).toContain('var(--lp-accent-strong)');
+    });
+
+    /**
+     * `/` 直达 FAQ 筛选框。三处让路（修饰键 / 焦点已在输入处 / 这一页压根没有那一格）与
+     * 「提示写在 HTML 里、只有筛选框的那几页才写」是这一格的全部契约；
+     * 行为在真 Chrome 用真的 `Input.dispatchKeyEvent` 验过（`.test-tmp/probe/slash-focus-live.cjs`，
+     * 不入库：首页 1280 与 390、两份对比页、隐私页、英文页、Ctrl+/、焦点已在别的输入框、
+     * 以及把 landing.js 整个摘掉那一份，共 21 项全绿）。
+     */
+    it('`/` 的监听挂在「这一页真有筛选框」那道闸门里，且三处让路都在', () => {
+      const slashAt = js.indexOf("event.key !== '/'");
+      expect(slashAt, '/ 这条快捷键的判据不见了').toBeGreaterThan(-1);
+      const guard = js.indexOf('if (faqFilter) {');
+      const nextSection = js.indexOf('14. 窄屏下的对比表');
+      expect(guard).toBeGreaterThan(-1);
+      expect(nextSection).toBeGreaterThan(guard);
+      expect(
+        slashAt > guard && slashAt < nextSection,
+        '/ 的监听必须住在 faqFilter 闸门内，挂到外面就是给没有那一格的页面也挂上',
+      ).toBe(true);
+      expect(js, '带修饰键的 / 是浏览器自己的').toContain('event.metaKey');
+      expect(js, '焦点已在输入处时必须让路').toContain('active.isContentEditable');
+      expect(js).toContain("tag === 'TEXTAREA'");
+    });
+
+    it('每一张有筛选框的页都写了 / 的提示，没有的页不许写', () => {
+      for (const file of [
+        'docs/index.html',
+        'docs/en.html',
+        'docs/alternatives.html',
+        'docs/en-alternatives.html',
+        'docs/privacy.html',
+      ]) {
+        const html = read(file);
+        const hasFilter = html.includes('faq-filter-input');
+        const hinted =
+          html.includes('faq-filter-hint') && /<kbd class="kbd">\s*\/\s*<\/kbd>/.test(html.replace(/\s+/g, ' '));
+        expect(hinted, `${file}：有筛选框=${hasFilter}，提示却=${hinted}（两者必须同起同落）`).toBe(hasFilter);
+      }
+    });
+  });
+
+  /**
+   * 2026-10-25 独立评审提出的六条，逐条钉住（每条都先用真机读数复验过再修）：
+   * F1 `<mark>` 一度被插成 `display:flex` 的 `<summary>` 的直接子元素 → 块化成独立 flex item，
+   *    问题文字被切成 `'Does this bypass\\nCORS\\nrestrictions?'` 三盒、盒间空格被剥；
+   * F3 徽标 `flex:none` + `nowrap` 在 390 档把英文那句顶成 `scrollWidth-clientWidth = 16px` 溢出；
+   * F5 `/` 之后 `focus()` 自己会滚，把在跑的那次平滑滚动顶成「nearest」；
+   * F6 高亮的 walker 只排除了徽标，没排除复制状态那颗界面 chrome。
+   * 依据（`.test-tmp/probe/verify-review.cjs`，修后复量）：四档 innerText 全部回到整句、
+   * `markDisplay=inline`、`scrollWidth-clientWidth` 全 0、等滚动落定后 `centered` 四档全真。
+   */
+  describe('评审那六条的落点（源码契约）', () => {
+    const js = read('docs/assets/landing.js');
+    /* 先剥注释再截正文：CSS 注释里写着「原来写的是 flex: none + white-space: nowrap」这种复盘句，
+       按词面查会把它当成声明自己（本仓这条不变量已经被注释撞过两次，剥注释是正确读法，不是放松判据）。 */
+    const cssFlat = read('docs/assets/landing.css')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\s+/g, ' ');
+    const ruleBody = (selector: string): string => {
+      const needle = selector.replace(/\s+/g, ' ') + ' {';
+      const at = cssFlat.indexOf(needle);
+      expect(at, `CSS 里找不到 ${selector}`).toBeGreaterThan(-1);
+      const open = at + needle.length - 1;
+      let depth = 0;
+      for (let i = open; i < cssFlat.length; i += 1) {
+        if (cssFlat[i] === '{') depth += 1;
+        else if (cssFlat[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return cssFlat.slice(open + 1, i).trim();
+        }
+      }
+      throw new Error(`${selector} 大括号没配上`);
+    };
+
+    it('F1：summary 的文字被包进 .faq-q，且两侧类名对得上、min-width:0 在位', () => {
+      expect(js, '把 summary 文字包进 span 的那一步不见了（`<mark>` 会重新变成独立 flex item）').toContain(
+        "span.className = 'faq-q'",
+      );
+      expect(js, '装配必须逐条做一次').toContain('items.forEach(ensureQuestionSpan)');
+      expect(ruleBody('.faq-q')).toContain('min-width: 0');
+      // 名字漂了是静默失效：脚本包了 span、样式没这一条 → flex 子项按 min-content 撑，长英文句撑爆同行
+      expect(js).toContain("'faq-q'");
+    });
+
+    it('F3：徽标可缩可换行，不许再写 nowrap 或 flex:none', () => {
+      const body = ruleBody('.faq-hit-where');
+      expect(body, '390 档英文徽标实测把行顶到溢出 16px，就是 flex:none 造成的').toContain('flex: 0 1 auto');
+      expect(body, 'nowrap 与 summary 的 nowrap 行叠在一起就没有退路').not.toContain('white-space');
+      expect(body).toContain('min-width: 0');
+    });
+
+    it('F5：focus 带 preventScroll 且排在滚动之前，修饰键四个都点名', () => {
+      const focusAt = js.indexOf('faqFilter.focus({ preventScroll: true })');
+      const scrollAt = js.indexOf("faqFilter.scrollIntoView({ behavior: scrollBehavior(), block: 'center' })");
+      expect(focusAt, '`/` 的 focus 不见了或不再带 preventScroll').toBeGreaterThan(-1);
+      expect(scrollAt).toBeGreaterThan(-1);
+      expect(focusAt < scrollAt, '次序反了：focus 自己会滚，会把在跑的平滑滚动顶成 nearest').toBe(true);
+      const handler = js.slice(js.indexOf("event.key !== '/'"), scrollAt);
+      for (const mod of ['metaKey', 'ctrlKey', 'altKey', 'shiftKey']) {
+        expect(handler, `让路判据少了 ${mod}（只断言 metaKey 时摘掉它照样绿）`).toContain(`event.${mod}`);
+      }
+      expect(js, '按住不放会一遍遍重发起滚动').toContain('event.repeat');
+    });
+
+    it('F6：高亮绕开所有界面 chrome，不只是徽标', () => {
+      expect(js, '复制状态那颗也是界面自己加的话，命中它会把界面文字涂黄').toContain(
+        "closest('.faq-hit-where, .faq-copy-status')",
+      );
+    });
+
+    it('高亮的清理与重包各只有一个调用点，且清理在前', () => {
+      const clears = [...js.matchAll(/clearMarks\(list\)/g)].map(m => m.index);
+      const marks = [...js.matchAll(/markHits\(item, query\)/g)].map(m => m.index);
+      expect(clears.length, '清理调用点应当只有一处').toBe(1);
+      expect(marks.length, '重包调用点多了一处就会有一次没先清理').toBe(1);
+      expect(clears[0] < marks[0], '在上一轮的 mark 里找下一轮的词').toBe(true);
+    });
+
+    it('`:target` 那条规则只准三条声明（补一条 animation-fill-mode 就该红）', () => {
+      const at = cssFlat.indexOf('section:target, .faq-category:target, .faq-list details:target {');
+      expect(at).toBeGreaterThan(-1);
+      const open = cssFlat.indexOf('{', at);
+      const body = cssFlat.slice(open + 1, cssFlat.indexOf('}', open));
+      const props = [...body.matchAll(/([a-z-]+):/g)].map(m => m[1]);
+      expect(props, '这一格的声明清单漂了：多一条 animation-fill-mode 就会把 transparent 冻在元素上').toEqual([
+        'outline',
+        'outline-offset',
+        'animation',
+      ]);
+      expect(cssFlat, '整份 CSS 里不许给这一格写 fill-mode').not.toMatch(/animation-fill-mode:[^;]*(forwards|both)/);
+      // 通栏的 section 向外画会掉到视口外：那一档必须改成向内
+      expect(ruleBody('section:target')).toContain('outline-offset: -3px');
+    });
+
+    it('/ 的提示住在 .faq-filter 那块里（挪出去就是对着不存在的控件说话）', () => {
+      const blockOf = (html: string, openTag: string): string => {
+        const at = html.indexOf(openTag);
+        expect(at, `找不到 ${openTag}`).toBeGreaterThan(-1);
+        let depth = 0;
+        const re = /<div\b|<\/div>/g;
+        re.lastIndex = at;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(html))) {
+          depth += m[0].startsWith('</') ? -1 : 1;
+          if (depth === 0) return html.slice(at, m.index + 6);
+        }
+        throw new Error('div 没配平');
+      };
+      for (const file of ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html']) {
+        const block = blockOf(read(file), '<div class="faq-filter">');
+        expect(block, `${file}：提示跑到了筛选块外面（那块本身没有 html.js 门控）`).toContain('faq-filter-hint');
+        expect(block, `${file}：筛选框与提示不同块`).toContain('faq-filter-input');
+      }
+    });
+  });
+
+  describe('同构网格的末行不许只剩半格（源码契约）', () => {
+    const cssFlat = read('docs/assets/landing.css').replace(/\s+/g, ' ');
+    const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+    /** 按大括号配对取出那条 `@media` 的整块（这些块里只有一层规则）。 */
+    const mediaBody = (cond: string): string => {
+      const at = cssFlat.indexOf('@media ' + norm(cond) + ' {');
+      expect(at, `CSS 里找不到这条 @media：${cond}`).toBeGreaterThan(-1);
+      let depth = 0;
+      for (let i = at; i < cssFlat.length; i += 1) {
+        if (cssFlat[i] === '{') depth += 1;
+        else if (cssFlat[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return cssFlat.slice(at, i + 1);
+        }
+      }
+      throw new Error(`@media ${cond} 的大括号没配上`);
+    };
+
+    /** 取出「媒体条件 + 选择器」那条规则的声明串（空白归一后逐字比）。 */
+    const declOf = (cond: string, selector: string): string => {
+      const body = mediaBody(cond);
+      const needle = norm(selector) + ' {';
+      const at = body.indexOf(needle);
+      expect(at, `${cond} 里找不到规则 ${selector}`).toBeGreaterThan(-1);
+      return norm(body.slice(at + needle.length, body.indexOf('}', at))).replace(/;$/, '');
+    };
+
+    const BANDS = [
+      {
+        cond: '((width >= 412px) and (width <= 549px)) or ((width >= 1001px) and (width <= 1159px))',
+        sel: '.stat-strip',
+        decl: 'grid-template-columns: repeat(2, minmax(0, 1fr))',
+      },
+      {
+        cond: '(width >= 772px) and (width <= 1021px)',
+        sel: '.step-grid',
+        decl: 'grid-template-columns: repeat(2, minmax(0, 1fr))',
+      },
+      {
+        cond: '(width >= 574px) and (width <= 849px)',
+        sel: '.grid > :nth-child(3):nth-last-child(1)',
+        decl: 'grid-column: 1 / -1',
+      },
+      {
+        cond: '(width >= 658px) and (width <= 975px)',
+        sel: '.feature-grid > :nth-child(5):nth-last-child(1)',
+        decl: 'grid-column: 1 / -1',
+      },
+      {
+        cond: '(width >= 976px) and (width <= 999px)',
+        sel: '.feature-grid > :nth-child(12):nth-last-child(1)',
+        decl: 'grid-column: 2',
+      },
+    ] as const;
+
+    it('五条区间规则都在，声明一个字不差', () => {
+      for (const b of BANDS) {
+        expect(declOf(b.cond, b.sel), `规则漂了：${b.sel} @ ${b.cond}`).toBe(norm(b.decl));
+      }
+      // 只准「加 minmax(0,1fr) 或 grid-column」这一种手段，不许顺手改 gap/padding/字号去凑
+      for (const b of BANDS) {
+        const props = [...declOf(b.cond, b.sel).matchAll(/([a-z-]+):/g)].map(m => m[1]);
+        expect(props, `${b.sel} 那条只该改网格轨道或跨列`).toEqual([b.decl.split(':')[0].trim()]);
+      }
+    });
+
+    /** 数容器里的直接子卡条数：按同名标签配平截出整段，再数类名（class 允许带别的名字）。 */
+    const cardCount = (html: string, open: string, childClass: string): number => {
+      const at = html.indexOf(open);
+      expect(at, `页面里找不到 ${open}`).toBeGreaterThan(-1);
+      const tag = /^<(\w+)/.exec(open)?.[1] ?? 'div';
+      const re = new RegExp(`<${tag}\\b|</${tag}>`, 'g');
+      let depth = 0;
+      let end = -1;
+      let m: RegExpExecArray | null;
+      re.lastIndex = at;
+      while ((m = re.exec(html))) {
+        depth += m[0].startsWith('</') ? -1 : 1;
+        if (depth === 0) {
+          end = m.index + m[0].length;
+          break;
+        }
+      }
+      expect(end, `${open} 没能配平收尾`).toBeGreaterThan(-1);
+      const slice = html.slice(at, end);
+      // 按**整词**比 class 令牌：`\bcard\b` 会连 "feature-card" 里的 card 一起数进去
+      const tokens = [...slice.matchAll(/class="([^"]*)"/g)].map(m => m[1].trim().split(/\s+/));
+      return tokens.filter(list => list.includes(childClass)).length;
+    };
+
+    // 页 → 该页各容器「开标签 / 子卡类名 / 真机扫到的条数」
+    const GRIDS: Array<[string, string, string, number]> = [
+      ['docs/index.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/en.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/alternatives.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/en-alternatives.html', '<div class="stat-strip">', 'stat', 4],
+      ['docs/index.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/en.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/alternatives.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/en-alternatives.html', '<div class="step-grid">', 'step-card', 4],
+      ['docs/index.html', '<div class="grid">', 'card', 3],
+      ['docs/en.html', '<div class="grid">', 'card', 3],
+      ['docs/alternatives.html', '<div class="grid">', 'card', 6],
+      ['docs/en-alternatives.html', '<div class="grid">', 'card', 6],
+      ['docs/index.html', '<div class="feature-grid">', 'feature-card', 12],
+      ['docs/en.html', '<div class="feature-grid">', 'feature-card', 12],
+      ['docs/alternatives.html', '<div class="feature-grid">', 'feature-card', 5],
+      ['docs/en-alternatives.html', '<div class="feature-grid">', 'feature-card', 5],
+    ];
+
+    it('每条 :nth-child 锚点数的卡数，与 HTML 里实际条数对得上', () => {
+      const anchors = BANDS.map(b => /:nth-child\((\d+)\):nth-last-child\(1\)/.exec(b.sel)?.[1])
+        .filter(Boolean)
+        .map(Number)
+        .sort((a, b) => a - b);
+      // 三个锚点各自守着一张「卡数固定」的网格：3（首页 .grid）、5（对比页 .feature-grid）、12（首页 .feature-grid）
+      expect(anchors).toEqual([3, 5, 12]);
+      for (const n of anchors) {
+        const hit = GRIDS.filter(([, , , count]) => count === n);
+        expect(hit.length, `CSS 里的 :nth-child(${n}) 锚点在这五页上找不到对应的网格`).toBeGreaterThan(0);
+      }
+    });
+
+    it('四页的网格卡数与真机扫到的那份一致（改卡数必须回来重判区间）', () => {
+      for (const [file, open, childClass, count] of GRIDS) {
+        const html = read(file);
+        expect(cardCount(html, open, childClass), `${file} 里 ${open} 的直接子卡条数变了`).toBe(count);
+      }
+      // 六张卡的 .grid 落在 1/2/3/4 轨都不剩孤卡（4 轨是 4/2），所以它**不该**被任何跨列规则碰到——
+      // 上一那条锚点表只登记 3/5/12，正是这个意思；哪天这条断言把 6 报出来，就得重扫区间再补规则。
+      expect(GRIDS.filter(([, , , count]) => count === 6).length, '六张卡的 .grid 消失了——区间表要重算').toBe(2);
+    });
+  });
+
+  /**
+   * 深链落点那一圈淡出描边（`lp-target-cue`）的守卫。
+   *
+   * 这一格整条写在 CSS 里、禁 JS 也照常生效，所以本环境只能按源码契约钉；行为另由一次性量具
+   * 在真 Chrome 里逐帧验过（`.test-tmp/probe/target-cue-live.cjs`，不入库：两页 × 「整节 / 某一问」
+   * × 常规与 reduce 共 8 档、44 项全绿——描边出现过、2.2s 收回透明、offsetWidth 一位没动、
+   * 非目标元素 outline-style 恒为 none、整页横向溢出 0px）。
+   */
+  describe('深链落点的淡出描边只动 outline（源码契约）', () => {
+    const cssFlat = read('docs/assets/landing.css').replace(/\s+/g, ' ');
+    const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+    const TARGETS = 'section:target, .faq-category:target, .faq-list details:target';
+
+    /** 从 `from`（指向 `{`）起按大括号配对取出一整块。 */
+    const braceBlock = (from: number): string => {
+      let depth = 0;
+      for (let i = from; i < cssFlat.length; i += 1) {
+        if (cssFlat[i] === '{') depth += 1;
+        else if (cssFlat[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return cssFlat.slice(from, i + 1);
+        }
+      }
+      throw new Error('大括号没配上');
+    };
+
+    const ruleIn = (scope: string, selector: string): string => {
+      const needle = norm(selector) + ' {';
+      const at = scope.indexOf(needle);
+      expect(at, `找不到规则 ${selector}`).toBeGreaterThan(-1);
+      // 括号配对只在**这一块正文**里走（早先写成把相对下标交给按全文取数的 braceBlock，
+      // 于是从文件头的 :root 令牌块里端出来一长串声明当「规则正文」，红得莫名其妙）。
+      const open = at + needle.length - 1;
+      let depth = 0;
+      for (let i = open; i < scope.length; i += 1) {
+        if (scope[i] === '{') depth += 1;
+        else if (scope[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return norm(scope.slice(open + 1, i)).replace(/;$/, '');
+        }
+      }
+      throw new Error(`规则 ${selector} 的大括号没配上`);
+    };
+
+    it('那一圈只声明 outline 与 animation，且 animation 不带 fill-mode', () => {
+      const body = ruleIn(cssFlat, TARGETS);
+      expect(body).toContain('outline: 3px solid transparent');
+      expect(body).toContain('outline-offset: 3px');
+      expect(body).toContain('animation: lp-target-cue 1.4s ease-out');
+      expect(
+        body,
+        '不许用 background / box-shadow / transform 做这一圈（会与卡片自己的底色与阴影抢同一件事）',
+      ).not.toMatch(/background|box-shadow|transform/);
+      // 承重：动画在级联里排在作者声明**之前**，带 forwards/both 会把末帧那个 transparent 冻在元素上，
+      // 之后任何给它画 outline 的规则（键盘焦点环那一类）都被压掉——而 :target 一路成立到地址变化为止。
+      const anim = /animation:([^;]*)/.exec(body)?.[1] ?? '';
+      expect(anim, '这条动画不能有 fill-mode，末帧冻结会压掉后续 outline').not.toMatch(/forwards|both|backwards/);
+    });
+
+    it('关键帧存在，且 from / to 两侧只改 outline-color', () => {
+      const at = cssFlat.indexOf('@keyframes lp-target-cue {');
+      expect(at, '关键帧 lp-target-cue 不见了').toBeGreaterThan(-1);
+      const block = braceBlock(at + '@keyframes lp-target-cue'.length);
+      const sides = [...block.matchAll(/(from|to)\s*\{([^{}]*)\}/g)].map(m => norm(m[2]));
+      expect(sides.length, 'from / to 两侧都要在').toBe(2);
+      for (const side of sides) {
+        // 按**声明条数**判，不是按「以 outline-color 开头」判：`^outline-color: .+;$` 那条贪婪式
+        // 会把 `outline-color: …; opacity: 0.4;` 整串收进去，变异实测——多塞一条声明照样绿。
+        const decls = side
+          .split(';')
+          .map(s => norm(s))
+          .filter(Boolean);
+        expect(decls.length, `每一侧只准一条声明，实际是 ${JSON.stringify(decls)}`).toBe(1);
+        expect(/^outline-color: .+$/.test(decls[0] ?? ''), `那一侧只准动 outline-color，实际是 ${decls[0]}`).toBe(true);
+      }
+    });
+
+    it('reduce 档把这一圈整条摘掉，而不是只放慢', () => {
+      const at = cssFlat.indexOf('@media (prefers-reduced-motion: reduce) {');
+      expect(at).toBeGreaterThan(-1);
+      expect(ruleIn(braceBlock(at + '@media (prefers-reduced-motion: reduce)'.length), TARGETS)).toBe(
+        'animation: none',
+      );
+    });
+
+    it('三个落点形状在页面上真的存在（不许守一个不存在的锚）', () => {
+      for (const file of ['docs/index.html', 'docs/en.html']) {
+        const html = read(file);
+        expect(
+          (html.match(/<section[^>]*\bid="/g) ?? []).length,
+          `${file} 的可落地 section 变少了`,
+        ).toBeGreaterThanOrEqual(6);
+        expect((html.match(/<details[^>]*\bid="/g) ?? []).length, `${file} 的可落地问答变少了`).toBeGreaterThanOrEqual(
+          5,
+        );
+        expect(html, `${file} 的分类标题锚点不见了`).toContain('class="faq-category"');
+      }
+      // 对比页没有 FAQ 列表与分类标题，只有整节——那也够用（另两个选择器在那儿恒不命中，不是缺陷）
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html']) {
+        expect(
+          (read(file).match(/<section[^>]*\bid="/g) ?? []).length,
+          `${file} 的可落地 section 变少了`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    });
+  });
+
+  describe('「/」直达与「带走」那句用法（源码契约）', () => {
+    /** 带筛选框的四页 = 挂着 `/` 处理程序的四页：一边多、一边少都算漂移。 */
+    const FILTER_PAGES = ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html'];
+    const flat = (s: string): string => s.replace(/\s+/g, ' ');
+
+    /** 某个语言下所有可见文案的值（三个命名空间一起收，界面上说得出的话都可能被正文引用）。 */
+    const localeValues = (lang: 'zh_CN' | 'en'): Set<string> => {
+      const out = new Set<string>();
+      const walk = (node: unknown): void => {
+        if (typeof node === 'string') out.add(node);
+        else if (Array.isArray(node)) node.forEach(walk);
+        else if (node && typeof node === 'object') Object.values(node).forEach(walk);
+      };
+      for (const ns of ['common', 'options', 'popup']) walk(JSON.parse(read(`locales/${lang}/${ns}.json`)));
+      return out;
+    };
+
+    it('四页的筛选输入框都把自己「可以用 / 直达」交给了辅助技术', () => {
+      for (const file of FILTER_PAGES) {
+        const tag = /<input[^>]*class="faq-filter-input"[^>]*>/.exec(read(file));
+        expect(tag, `${file} 的筛选输入框不见了`).not.toBeNull();
+        expect(flat(tag ? tag[0] : ''), `${file}：筛选框没带这枚快捷键声明`).toContain('aria-keyshortcuts="/"');
+      }
+    });
+
+    it('页面上宣告的那个键，就是脚本里比较的那个键', () => {
+      const handler = /event\.repeat \|\| event\.key !== '(.)'/.exec(read('docs/assets/landing.js'));
+      expect(handler, '「/」处理程序那一句的形状变了，回来把这一格一起重判').not.toBeNull();
+      const listened = handler ? handler[1] : '';
+      expect(listened, '这一格守的是「/」，改成别的键就要连着界面提示一起改').toBe('/');
+      for (const file of FILTER_PAGES) {
+        const announced = [...read(file).matchAll(/aria-keyshortcuts="([^"]*)"/g)].map(m => m[1]);
+        // 每一枚都会被读屏在到达该控件时播报一次，多一枚就是多说一句没用的话
+        expect(announced.length, `${file}：快捷键声明应当只有一枚，实际 ${announced.length} 枚`).toBe(1);
+        expect(announced[0], `${file}：宣告的键与监听的键不一致`).toBe(listened);
+      }
+    });
+
+    it('隐私政策没有筛选框，也就不许宣告一个按了没反应的快捷键', () => {
+      const html = read('docs/privacy.html');
+      expect(html, '这一页压根没有筛选框，这枚声明会让读屏报出一个不做任何事的键').not.toContain('aria-keyshortcuts');
+      expect(html, '筛选框若真被加进这一页，上面那格就得跟着重判').not.toContain('faq-filter-input');
+    });
+
+    it('「带走」那句用法引出的界面标签，在对应语言的文案里逐字存在', () => {
+      const cases: Array<[string, 'zh_CN' | 'en', RegExp]> = [
+        ['docs/index.html', 'zh_CN', /[「]([^「」]+)[」]/g],
+        ['docs/en.html', 'en', /"([^"]+)"/g],
+      ];
+      for (const [file, lang, quoted] of cases) {
+        const found = /<p class="try-take-howto">([\s\S]*?)<\/p>/.exec(read(file));
+        expect(found, `${file}：「带走」那一格的用法那句不见了`).not.toBeNull();
+        const text = flat((found ? found[1] : '').replace(/<[^>]+>/g, ''));
+        const labels = [...text.matchAll(quoted)].map(m => m[1].trim());
+        expect(labels.length, `${file}：那句用法一个界面标签都没引出，等于没告诉读者粘回哪里`).toBeGreaterThanOrEqual(
+          2,
+        );
+        // 界面标签常以冒号收尾（「或直接粘贴 JSON 配置：」），正文引到冒号之前是刻意的
+        const bare = new Set([...localeValues(lang)].map(v => v.replace(/[：:]\s*$/, '')));
+        for (const label of labels) {
+          expect(bare.has(label), `${file}：「${label}」在 ${lang} 的界面文案里找不到逐字对应的标签`).toBe(true);
+        }
+      }
+    });
+
+    it('那句用法只出现在两份落地页（对比页与隐私页没有可带走的 JSON）', () => {
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html', 'docs/privacy.html']) {
+        expect(read(file), `${file}：不该出现「带走」的用法句，那一格只在两份落地页`).not.toContain('try-take-howto');
+      }
+    });
+
+    it('提示行引出的每一枚键帽，脚本都真的接得住（四页一致，不多不少这两枚）', () => {
+      const js = read('docs/assets/landing.js');
+      /* 键帽上印的是键盘图例（Esc），不是 KeyboardEvent 的键名（Escape），所以判据问的是「筛选框自己那个
+         监听有没有比较 Escape」——全仓还有第二处 Esc 监听（汉堡菜单），按「脚本里某处在比较 Escape」判
+         就是一枚假牙：变异实测把筛选框那处改掉、判据照样绿，因为菜单那处替它答了话。 */
+      const filterAt = js.indexOf("faqFilter.addEventListener('keydown'");
+      expect(filterAt, '筛选框自己的 keydown 监听不见了，提示行却还写着 Esc 清空').toBeGreaterThan(-1);
+      expect(
+        js.slice(filterAt, filterAt + 200),
+        '提示行写着 Esc 清空，可筛选框的监听不再比较 Escape 了（菜单那处不算，它管的是别的门）',
+      ).toContain("event.key !== 'Escape'");
+      expect(js, '提示行写着 / 直达，可文档级那个监听不再比较 "/" 了').toMatch(
+        /event\.repeat \|\| event\.key !== '\/'/,
+      );
+      for (const file of FILTER_PAGES) {
+        const hint = /<span class="faq-filter-hint"[^>]*>([\s\S]*?)<\/span\s*>/.exec(flat(read(file)));
+        expect(hint, `${file}：筛选框的提示行不见了`).not.toBeNull();
+        const chips = [...(hint ? hint[1] : '').matchAll(/<kbd class="kbd"[^>]*>([^<]+)<\/kbd\s*>/g)]
+          .map(m => m[1].trim())
+          .sort();
+        expect(chips, `${file}：提示行的键帽应当恰好是 / 与 Esc 这两枚`).toEqual(['/', 'Esc']);
+      }
     });
   });
 });

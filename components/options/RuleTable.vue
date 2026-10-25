@@ -48,13 +48,27 @@
         @use-template="data => $emit('useTemplate', data)"
       />
 
-      <!-- 筛选无结果 -->
+      <!-- 筛选无结果。此前这一格借用的是 `noMatch`——那句写的是「规则不匹配此 URL」，
+           它的读者是 URL 测试弹窗与规则表单里那条「测试这条 pattern」的临时规则；
+           而这一格压根没有 URL 参与：`rules` 是筛选后的、`hasAnyRules` 是筛选前的总数，
+           能走到这里就说明**搜索/状态/类型/标签这四格里有非空的那几格把行全筛掉了**。
+           说错了话之外还没有出口——四格里只有两格带 ×，读者得自己回想刚才动过哪一格。
+           所以措辞按「谁筛的」说，并把出口摆在失败发生的地方（与产品站 FAQ 零命中那同一条）。
+           不另写一份判据：这里不重新问「有没有筛选在场」，只把上面那条早退的形状说出来。 -->
       <div
         v-else-if="rules.length === 0"
         key="no-match"
         class="no-match"
       >
-        <p>{{ t('noMatch') }}</p>
+        <p>
+          {{ searchText.trim() ? t('filterNoMatchKeyword', [searchText.trim()]) : t('filterNoMatch') }}
+        </p>
+        <el-button
+          size="small"
+          @click="$emit('clearFilters')"
+        >
+          {{ t('clearFilters') }}
+        </el-button>
       </div>
 
       <!--
@@ -457,7 +471,7 @@ const props = defineProps<{
   readFailed?: boolean;
   /** 最近新增规则 id（进场动画用） */
   highlightRuleId?: string | null;
-  /** 搜索关键字（用于高亮） */
+  /** 搜索关键字（用于高亮，以及「筛选无结果」那一格点名是谁筛空的） */
   searchText: string;
   /** 规则命中统计（ruleId → 分通道读数，**不相加**） */
   hitStats: Map<string, RuleHitStats>;
@@ -481,6 +495,8 @@ const emit = defineEmits<{
   reorder: [fromId: string, toId: string];
   /** 「读取失败」那一格里的刷新按钮 */
   refresh: [];
+  /** 「筛选无结果」那一格里的清除筛选按钮（四格筛选由父组件持有，这里只交出一个意图） */
+  clearFilters: [];
 }>();
 
 const { t } = useI18n();
@@ -923,6 +939,10 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
 }
 
 .no-match {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
   padding: 48px 0;
   color: var(--cop-text-color-secondary);
   text-align: center;
