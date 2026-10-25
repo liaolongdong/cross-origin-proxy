@@ -3831,4 +3831,76 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       }
     });
   });
+
+  describe('「/」直达与「带走」那句用法（源码契约）', () => {
+    /** 带筛选框的四页 = 挂着 `/` 处理程序的四页：一边多、一边少都算漂移。 */
+    const FILTER_PAGES = ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html'];
+    const flat = (s: string): string => s.replace(/\s+/g, ' ');
+
+    /** 某个语言下所有可见文案的值（三个命名空间一起收，界面上说得出的话都可能被正文引用）。 */
+    const localeValues = (lang: 'zh_CN' | 'en'): Set<string> => {
+      const out = new Set<string>();
+      const walk = (node: unknown): void => {
+        if (typeof node === 'string') out.add(node);
+        else if (Array.isArray(node)) node.forEach(walk);
+        else if (node && typeof node === 'object') Object.values(node).forEach(walk);
+      };
+      for (const ns of ['common', 'options', 'popup']) walk(JSON.parse(read(`locales/${lang}/${ns}.json`)));
+      return out;
+    };
+
+    it('四页的筛选输入框都把自己「可以用 / 直达」交给了辅助技术', () => {
+      for (const file of FILTER_PAGES) {
+        const tag = /<input[^>]*class="faq-filter-input"[^>]*>/.exec(read(file));
+        expect(tag, `${file} 的筛选输入框不见了`).not.toBeNull();
+        expect(flat(tag ? tag[0] : ''), `${file}：筛选框没带这枚快捷键声明`).toContain('aria-keyshortcuts="/"');
+      }
+    });
+
+    it('页面上宣告的那个键，就是脚本里比较的那个键', () => {
+      const handler = /event\.repeat \|\| event\.key !== '(.)'/.exec(read('docs/assets/landing.js'));
+      expect(handler, '「/」处理程序那一句的形状变了，回来把这一格一起重判').not.toBeNull();
+      const listened = handler ? handler[1] : '';
+      expect(listened, '这一格守的是「/」，改成别的键就要连着界面提示一起改').toBe('/');
+      for (const file of FILTER_PAGES) {
+        const announced = [...read(file).matchAll(/aria-keyshortcuts="([^"]*)"/g)].map(m => m[1]);
+        // 每一枚都会被读屏在到达该控件时播报一次，多一枚就是多说一句没用的话
+        expect(announced.length, `${file}：快捷键声明应当只有一枚，实际 ${announced.length} 枚`).toBe(1);
+        expect(announced[0], `${file}：宣告的键与监听的键不一致`).toBe(listened);
+      }
+    });
+
+    it('隐私政策没有筛选框，也就不许宣告一个按了没反应的快捷键', () => {
+      const html = read('docs/privacy.html');
+      expect(html, '这一页压根没有筛选框，这枚声明会让读屏报出一个不做任何事的键').not.toContain('aria-keyshortcuts');
+      expect(html, '筛选框若真被加进这一页，上面那格就得跟着重判').not.toContain('faq-filter-input');
+    });
+
+    it('「带走」那句用法引出的界面标签，在对应语言的文案里逐字存在', () => {
+      const cases: Array<[string, 'zh_CN' | 'en', RegExp]> = [
+        ['docs/index.html', 'zh_CN', /[「]([^「」]+)[」]/g],
+        ['docs/en.html', 'en', /"([^"]+)"/g],
+      ];
+      for (const [file, lang, quoted] of cases) {
+        const found = /<p class="try-take-howto">([\s\S]*?)<\/p>/.exec(read(file));
+        expect(found, `${file}：「带走」那一格的用法那句不见了`).not.toBeNull();
+        const text = flat((found ? found[1] : '').replace(/<[^>]+>/g, ''));
+        const labels = [...text.matchAll(quoted)].map(m => m[1].trim());
+        expect(labels.length, `${file}：那句用法一个界面标签都没引出，等于没告诉读者粘回哪里`).toBeGreaterThanOrEqual(
+          2,
+        );
+        // 界面标签常以冒号收尾（「或直接粘贴 JSON 配置：」），正文引到冒号之前是刻意的
+        const bare = new Set([...localeValues(lang)].map(v => v.replace(/[：:]\s*$/, '')));
+        for (const label of labels) {
+          expect(bare.has(label), `${file}：「${label}」在 ${lang} 的界面文案里找不到逐字对应的标签`).toBe(true);
+        }
+      }
+    });
+
+    it('那句用法只出现在两份落地页（对比页与隐私页没有可带走的 JSON）', () => {
+      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html', 'docs/privacy.html']) {
+        expect(read(file), `${file}：不该出现「带走」的用法句，那一格只在两份落地页`).not.toContain('try-take-howto');
+      }
+    });
+  });
 });
