@@ -3410,12 +3410,13 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * 徽标在没有筛选时也挂着，正是 `.faq-jump` 那条要靠显式规则赢回来的处境）。
      */
     it('答案命中的徽标：文案在 HTML、脚本只挑属性、样式不写 display', () => {
-      for (const file of ['docs/index.html', 'docs/en.html']) {
+      for (const file of ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html']) {
         const html = read(file);
         const copy = /data-answer-hit="([^"]+)"/.exec(html)?.[1];
         expect(copy, `${file} 的筛选状态元素少了 data-answer-hit 那句文案`).toBeTruthy();
         expect((copy ?? '').length, `${file} 的徽标文案短得不像一句话`).toBeGreaterThanOrEqual(4);
       }
+      expect(read('docs/privacy.html'), '隐私页没有筛选框，不该出现徽标文案').not.toContain('data-answer-hit');
       const zh = /data-answer-hit="([^"]+)"/.exec(read('docs/index.html'))?.[1] ?? '';
       const en = /data-answer-hit="([^"]+)"/.exec(read('docs/en.html'))?.[1] ?? '';
       expect(zh, '中英两句必须真是两种语言（抄成一样的就是其中一页没翻译）').not.toBe(en);
@@ -3470,6 +3471,121 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         const hinted =
           html.includes('faq-filter-hint') && /<kbd class="kbd">\s*\/\s*<\/kbd>/.test(html.replace(/\s+/g, ' '));
         expect(hinted, `${file}：有筛选框=${hasFilter}，提示却=${hinted}（两者必须同起同落）`).toBe(hasFilter);
+      }
+    });
+  });
+
+  /**
+   * 2026-10-25 独立评审提出的六条，逐条钉住（每条都先用真机读数复验过再修）：
+   * F1 `<mark>` 一度被插成 `display:flex` 的 `<summary>` 的直接子元素 → 块化成独立 flex item，
+   *    问题文字被切成 `'Does this bypass\\nCORS\\nrestrictions?'` 三盒、盒间空格被剥；
+   * F3 徽标 `flex:none` + `nowrap` 在 390 档把英文那句顶成 `scrollWidth-clientWidth = 16px` 溢出；
+   * F5 `/` 之后 `focus()` 自己会滚，把在跑的那次平滑滚动顶成「nearest」；
+   * F6 高亮的 walker 只排除了徽标，没排除复制状态那颗界面 chrome。
+   * 依据（`.test-tmp/probe/verify-review.cjs`，修后复量）：四档 innerText 全部回到整句、
+   * `markDisplay=inline`、`scrollWidth-clientWidth` 全 0、等滚动落定后 `centered` 四档全真。
+   */
+  describe('评审那六条的落点（源码契约）', () => {
+    const js = read('docs/assets/landing.js');
+    /* 先剥注释再截正文：CSS 注释里写着「原来写的是 flex: none + white-space: nowrap」这种复盘句，
+       按词面查会把它当成声明自己（本仓这条不变量已经被注释撞过两次，剥注释是正确读法，不是放松判据）。 */
+    const cssFlat = read('docs/assets/landing.css')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\s+/g, ' ');
+    const ruleBody = (selector: string): string => {
+      const needle = selector.replace(/\s+/g, ' ') + ' {';
+      const at = cssFlat.indexOf(needle);
+      expect(at, `CSS 里找不到 ${selector}`).toBeGreaterThan(-1);
+      const open = at + needle.length - 1;
+      let depth = 0;
+      for (let i = open; i < cssFlat.length; i += 1) {
+        if (cssFlat[i] === '{') depth += 1;
+        else if (cssFlat[i] === '}') {
+          depth -= 1;
+          if (depth === 0) return cssFlat.slice(open + 1, i).trim();
+        }
+      }
+      throw new Error(`${selector} 大括号没配上`);
+    };
+
+    it('F1：summary 的文字被包进 .faq-q，且两侧类名对得上、min-width:0 在位', () => {
+      expect(js, '把 summary 文字包进 span 的那一步不见了（`<mark>` 会重新变成独立 flex item）').toContain(
+        "span.className = 'faq-q'",
+      );
+      expect(js, '装配必须逐条做一次').toContain('items.forEach(ensureQuestionSpan)');
+      expect(ruleBody('.faq-q')).toContain('min-width: 0');
+      // 名字漂了是静默失效：脚本包了 span、样式没这一条 → flex 子项按 min-content 撑，长英文句撑爆同行
+      expect(js).toContain("'faq-q'");
+    });
+
+    it('F3：徽标可缩可换行，不许再写 nowrap 或 flex:none', () => {
+      const body = ruleBody('.faq-hit-where');
+      expect(body, '390 档英文徽标实测把行顶到溢出 16px，就是 flex:none 造成的').toContain('flex: 0 1 auto');
+      expect(body, 'nowrap 与 summary 的 nowrap 行叠在一起就没有退路').not.toContain('white-space');
+      expect(body).toContain('min-width: 0');
+    });
+
+    it('F5：focus 带 preventScroll 且排在滚动之前，修饰键四个都点名', () => {
+      const focusAt = js.indexOf('faqFilter.focus({ preventScroll: true })');
+      const scrollAt = js.indexOf("faqFilter.scrollIntoView({ behavior: scrollBehavior(), block: 'center' })");
+      expect(focusAt, '`/` 的 focus 不见了或不再带 preventScroll').toBeGreaterThan(-1);
+      expect(scrollAt).toBeGreaterThan(-1);
+      expect(focusAt < scrollAt, '次序反了：focus 自己会滚，会把在跑的平滑滚动顶成 nearest').toBe(true);
+      const handler = js.slice(js.indexOf("event.key !== '/'"), scrollAt);
+      for (const mod of ['metaKey', 'ctrlKey', 'altKey', 'shiftKey']) {
+        expect(handler, `让路判据少了 ${mod}（只断言 metaKey 时摘掉它照样绿）`).toContain(`event.${mod}`);
+      }
+      expect(js, '按住不放会一遍遍重发起滚动').toContain('event.repeat');
+    });
+
+    it('F6：高亮绕开所有界面 chrome，不只是徽标', () => {
+      expect(js, '复制状态那颗也是界面自己加的话，命中它会把界面文字涂黄').toContain(
+        "closest('.faq-hit-where, .faq-copy-status')",
+      );
+    });
+
+    it('高亮的清理与重包各只有一个调用点，且清理在前', () => {
+      const clears = [...js.matchAll(/clearMarks\(list\)/g)].map(m => m.index);
+      const marks = [...js.matchAll(/markHits\(item, query\)/g)].map(m => m.index);
+      expect(clears.length, '清理调用点应当只有一处').toBe(1);
+      expect(marks.length, '重包调用点多了一处就会有一次没先清理').toBe(1);
+      expect(clears[0] < marks[0], '在上一轮的 mark 里找下一轮的词').toBe(true);
+    });
+
+    it('`:target` 那条规则只准三条声明（补一条 animation-fill-mode 就该红）', () => {
+      const at = cssFlat.indexOf('section:target, .faq-category:target, .faq-list details:target {');
+      expect(at).toBeGreaterThan(-1);
+      const open = cssFlat.indexOf('{', at);
+      const body = cssFlat.slice(open + 1, cssFlat.indexOf('}', open));
+      const props = [...body.matchAll(/([a-z-]+):/g)].map(m => m[1]);
+      expect(props, '这一格的声明清单漂了：多一条 animation-fill-mode 就会把 transparent 冻在元素上').toEqual([
+        'outline',
+        'outline-offset',
+        'animation',
+      ]);
+      expect(cssFlat, '整份 CSS 里不许给这一格写 fill-mode').not.toMatch(/animation-fill-mode:[^;]*(forwards|both)/);
+      // 通栏的 section 向外画会掉到视口外：那一档必须改成向内
+      expect(ruleBody('section:target')).toContain('outline-offset: -3px');
+    });
+
+    it('/ 的提示住在 .faq-filter 那块里（挪出去就是对着不存在的控件说话）', () => {
+      const blockOf = (html: string, openTag: string): string => {
+        const at = html.indexOf(openTag);
+        expect(at, `找不到 ${openTag}`).toBeGreaterThan(-1);
+        let depth = 0;
+        const re = /<div\b|<\/div>/g;
+        re.lastIndex = at;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(html))) {
+          depth += m[0].startsWith('</') ? -1 : 1;
+          if (depth === 0) return html.slice(at, m.index + 6);
+        }
+        throw new Error('div 没配平');
+      };
+      for (const file of ['docs/index.html', 'docs/en.html', 'docs/alternatives.html', 'docs/en-alternatives.html']) {
+        const block = blockOf(read(file), '<div class="faq-filter">');
+        expect(block, `${file}：提示跑到了筛选块外面（那块本身没有 html.js 门控）`).toContain('faq-filter-hint');
+        expect(block, `${file}：筛选框与提示不同块`).toContain('faq-filter-input');
       }
     });
   });

@@ -1066,6 +1066,23 @@
       const summary = item.querySelector('summary');
       return (summary ? summary.textContent : '').toLowerCase().replace(/\s+/g, ' ');
     });
+    /* `<summary>` 在样式里是 `display:flex` 的行：直接把 `<mark>` 插成它的子元素，那一枚就被
+       块化成一个独立 flex item——问题文字被切成并排的几个盒子、断点两侧不再换行、盒间的空格被剥掉
+       （真机 innerText 读出 `Does this bypass\nCORS\nrestrictions?`）。
+       所以装配那一刻先把 summary 的直接文字节点包进 `.faq-q`：那个 span 顶替的正是原来那个匿名
+       flex item，布局一位不变，而 `<mark>` 退回它本来的行内语境。`textContent` 逐字不变，
+       `haystacks` / `questions` 那两份快照照旧成立。 */
+    const ensureQuestionSpan = item => {
+      const summary = item.querySelector('summary');
+      if (!summary) return;
+      const text = [...summary.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim());
+      if (!text.length) return;
+      const span = document.createElement('span');
+      span.className = 'faq-q';
+      summary.insertBefore(span, text[0]);
+      text.forEach(node => span.appendChild(node));
+    };
+    items.forEach(ensureQuestionSpan);
     const clearMarks = root => {
       root.querySelectorAll('mark.faq-hit').forEach(mark => {
         const parent = mark.parentNode;
@@ -1086,7 +1103,7 @@
         if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') continue;
         // 徽标那一句是界面自己的话（文案住在 HTML 的 data-*，脚本里没有第二份），不是问答原文：
         // 打了「答案」这类词时，不该把徽标自己涂黄
-        if (node.parentElement && node.parentElement.closest('.faq-hit-where')) continue;
+        if (node.parentElement && node.parentElement.closest('.faq-hit-where, .faq-copy-status')) continue;
         nodes.push(node);
       }
       nodes.forEach(node => {
@@ -1236,15 +1253,19 @@
           这一格对它们同样成立，别把它当成首页独有。
        让路的时候一个 preventDefault 都不发，浏览器自己的 `/`（Firefox 快速填充那一类）保持原样。 */
     document.addEventListener('keydown', event => {
-      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      // 按住不放会一遍遍重发起滚动；带任何修饰键的都是浏览器自己的
+      if (event.repeat || event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       const active = document.activeElement;
       if (active) {
         const tag = active.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active.isContentEditable) return;
       }
       event.preventDefault();
+      /* 顺序承重：先 focus 且**不许它自己滚**，再滚到中间。
+         反过来的话 focus 会以「nearest」把元素滚进视野，把在跑的那次平滑滚动直接顶掉
+         ——真机读到四次里四次 centered=false，英文 390 那一档落点还在视口外（top 901 / 视口 860）。 */
+      faqFilter.focus({ preventScroll: true });
       faqFilter.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
-      faqFilter.focus();
     });
   }
 
