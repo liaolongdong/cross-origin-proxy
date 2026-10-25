@@ -78,21 +78,39 @@
       >
         {{ t('tabSettings') }}
       </el-button>
+      <!-- 关于：与其余工具按钮同档（不带 type 的次要动作），点开的是右侧那枚抽屉。
+           项目外链收进抽屉，不在这一屏摆两排出口——见 components/options/AboutDrawer.vue。 -->
+      <el-button
+        :icon="InfoFilled"
+        @click="$emit('openAbout')"
+      >
+        {{ t('about') }}
+      </el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Plus, Document, Search, FolderOpened, Collection, Setting, Promotion } from '@element-plus/icons-vue';
+import {
+  Plus,
+  Document,
+  Search,
+  FolderOpened,
+  Collection,
+  Setting,
+  Promotion,
+  InfoFilled,
+} from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
-import { GITHUB_RELEASES_PAGE_URL } from '@/utils/constants';
+import { GITHUB_RELEASES_PAGE_URL } from '@/utils/urls';
 
 /**
  * Options 页头部组件（135° 主题渐变通栏）
  *
  * 包含标题、可点击的版本徽标、代理状态信号灯（与代理总开关同一行），
- * 以及第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置）。
+ * 第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置/关于）。
+ * 「关于」是这一排的最右一颗，点开的是右侧那枚抽屉——项目外链收在那里，不在这一屏摆两排出口。
  * 间距与按钮皮肤对齐 account-password-helper 的顶栏实现；总开关刻意不套胶囊，见样式里的说明。
  */
 const props = defineProps<{
@@ -117,6 +135,8 @@ defineEmits<{
   openProfiles: [];
   /** 打开偏好设置弹窗 */
   openSettings: [];
+  /** 打开「关于」抽屉（项目外链与隐私事实收在那一格） */
+  openAbout: [];
   /** 切换代理总开关 */
   toggleProxy: [enabled: boolean];
 }>();
@@ -168,7 +188,7 @@ const statusText = computed(() =>
 }
 
 /* 版本号链接：弱化的可点击徽标，hover 提亮反馈，不争夺标题注意力。
-   点开直达 GitHub Releases 查看最新版本与构建产物，与 Popup 帮助弹窗的版本链接同一心智。 */
+   点开直达 GitHub Releases 查看最新版本与构建产物。 */
 .version-tag-link {
   display: inline-flex;
   flex-shrink: 0;

@@ -688,6 +688,24 @@
         </li>
       </TransitionGroup>
     </div>
+
+    <!-- 项目链接：与配置页顶栏那一行、偏好设置弹窗那一节共用同一份清单
+         （URL 与「商店装的构建才出现」那道闸门各只有一处出口，见 composables/useProjectLinks.ts）。
+         原生 a 标签：点开只是让浏览器开一个标签页，不写 storage、不发 runtime 消息。 -->
+    <nav
+      class="popup-links"
+      :aria-label="t('linksTitle')"
+    >
+      <a
+        v-for="link in projectLinks"
+        :key="link.key"
+        class="popup-link"
+        :href="link.href"
+        target="_blank"
+        rel="noopener noreferrer"
+        >{{ t(link.key) }}</a
+      >
+    </nav>
   </div>
 </template>
 
@@ -713,6 +731,7 @@ import { useProxyStatus } from '@/composables/useProxyStatus';
 import { useI18n } from '@/composables/useI18n';
 import { useDiagnosisText } from '@/composables/useDiagnosis';
 import { useProfiles } from '@/composables/useProfiles';
+import { useProjectLinks } from '@/composables/useProjectLinks';
 import { MessageType } from '@/utils/types';
 import { probeCorsSuspects, probePageApiOrigins } from '@/utils/pageApiProbe';
 import { buildPickerRows, type ApiPickerRow, type CorsSuspect } from '@/utils/corsSuspects';
@@ -740,7 +759,7 @@ import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@
 /**
  * Popup 弹窗（动作卡片风格，参照 account-password-helper）
  *
- * 结构：头部 → 开关状态行 → 数据点 → 动作区（两列宫格七张卡，按使用频率排）→ 最近请求列表。
+ * 结构：头部 → 开关状态行 → 数据点 → 动作区（两列宫格七张卡，按使用频率排）→ 最近请求列表 → 项目链接行。
  * 主卡要么就地展开面板（环境配置、为当前页创建规则），要么直达 Options 的规则列表；
  * 次级那一行（请求日志 / 导入导出 / 设置）经 URL hash 直达 Options 的对应弹窗或抽屉。
  * 卡片与次级行都排在诊断三块（数据点 / 站点范围 / 本页命中）之后——「这一页有没有生效」
@@ -748,6 +767,8 @@ import type { DnrSample, InterceptorStatsEntry, ProxyConfig, ProxyRule } from '@
  */
 const { t } = useI18n();
 const { diagnosisText } = useDiagnosisText();
+/** 项目外链清单（页脚那一行）：与配置页顶栏、偏好设置弹窗共用同一份 */
+const projectLinks = useProjectLinks();
 const {
   enabled,
   activeRuleCount,
@@ -2585,5 +2606,38 @@ async function openOptionsPage(hash = '') {
 
 .log-row-move {
   transition: transform var(--cop-duration-slow) var(--cop-ease-standard);
+}
+
+/* 页脚的项目链接行：一条分隔线把它与「最近请求」隔开，居中排——它是出口，不是又一排动作。
+   下划线常驻而不是只在 hover 出现：四个词并排时，只靠主色分不出「哪个能点」，
+   而这一行的字色与它上面的时间戳同属次要读数区。
+   320px 内容宽下中英各四个短标签都排得进一行；真排不下时 flex-wrap 折行，
+   宁可两行也不产生横向溢出（这一屏的宽度三个数是 320 / 352 / 368，见 AGENTS）。 */
+.popup-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  justify-content: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--cop-border-color-light);
+}
+
+.popup-link {
+  font-size: 12px;
+  color: var(--cop-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-radius: 4px;
+  transition: color var(--cop-duration-instant) var(--cop-ease-standard);
+}
+
+.popup-link:hover {
+  color: var(--cop-primary-hover);
+}
+
+.popup-link:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 2px;
 }
 </style>

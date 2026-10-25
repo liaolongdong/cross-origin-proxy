@@ -24,5 +24,10 @@
   "diagnosisNoRules": "No proxy rules yet — create one first.",
   "diagnosisDisabledMatch": "Rule “$1” matches this address, but it is currently off — enable it.",
   "diagnosisMethodFiltered": "Rule “$1” matches this address, but it only handles $2, and this request's method is not in that list.",
-  "diagnosisPatternRejected": "Rule “$1” has a pattern that was rejected (invalid regex syntax or catastrophic backtracking risk), so it never matches. Rewrite the pattern."
+  "diagnosisPatternRejected": "Rule “$1” has a pattern that was rejected (invalid regex syntax or catastrophic backtracking risk), so it never matches. Rewrite the pattern.",
+  "linksTitle": "Project links",
+  "linkRepo": "GitHub",
+  "linkDocs": "Guide",
+  "linkStore": "Chrome Web Store",
+  "linkIssues": "Feedback"
 }

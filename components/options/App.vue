@@ -11,6 +11,7 @@
       @open-import-export="showImportExport = true"
       @open-profiles="showProfiles = true"
       @open-settings="showSettings = true"
+      @open-about="showAbout = true"
       @toggle-proxy="handleToggleProxy"
     />
 
@@ -142,6 +143,7 @@
       @create-rule-from-log="handleCreateRuleFromLog"
       @create-mock-from-log="handleCreateMockFromLog"
     />
+    <AboutDrawer v-model:visible="showAbout" />
   </div>
 </template>
 
@@ -184,7 +186,7 @@ import RuleTable from './RuleTable.vue';
  * Options 根组件（容器层，只做编排）
  *
  * 布局：渐变 HeaderBar → 搜索筛选卡片 → 计数信息行 → 规则表格卡片；
- * 设置/导入导出走弹窗，日志走右侧抽屉（支持 URL hash #logs 直达）。
+ * 设置/导入导出走弹窗，日志与「关于」走右侧抽屉（日志支持 URL hash #logs 直达）。
  * 弹窗与抽屉组件全部懒加载，不进首屏关键路径。
  */
 const RuleFormDialog = defineAsyncComponent(() => import('./RuleFormDialog.vue'));
@@ -194,6 +196,7 @@ const SettingsDialog = defineAsyncComponent(() => import('./SettingsDialog.vue')
 const UrlTestDialog = defineAsyncComponent(() => import('./UrlTestDialog.vue'));
 const SelfCheckDialog = defineAsyncComponent(() => import('./SelfCheckDialog.vue'));
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
+const AboutDrawer = defineAsyncComponent(() => import('./AboutDrawer.vue'));
 const MigrateTargetsDialog = defineAsyncComponent(() => import('./MigrateTargetsDialog.vue'));
 
 const { t } = useI18n();
@@ -274,6 +277,8 @@ const showUrlTest = ref(false);
 const showSelfCheck = ref(false);
 const selfCheckTabId = ref<number | null>(null);
 const showLogs = ref(false);
+/** 「关于」抽屉：项目外链与「数据去哪儿了」那三条事实收在这一格 */
+const showAbout = ref(false);
 const showMigrate = ref(false);
 /**
  * 七个弹窗/抽屉里是否有一个在场

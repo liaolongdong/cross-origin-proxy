@@ -874,24 +874,70 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      */
     const FRESHNESS_PAGES = ['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html'];
 
-    it.each(FRESHNESS_PAGES)('%s 的三处新鲜度日期彼此一致', file => {
-      const text = read(`docs/${file}`);
-      const inPage = [
-        ...text.matchAll(/(?:"dateModified":\s*"|(?:Last|·) updated\s+|最后更新\s*|更新于\s*)(\d{4}-\d{2}-\d{2})/g),
+    /** 页内那几处新鲜度日期（JSON-LD 的 dateModified 与页脚/眉标的「最后更新 / Last updated」）。 */
+    const inPageDates = (file: string): string[] =>
+      [
+        ...read(`docs/${file}`).matchAll(
+          /(?:"dateModified":\s*"|(?:Last|·) updated\s+|最后更新\s*|更新于\s*)(\d{4}-\d{2}-\d{2})/g,
+        ),
       ].map(m => m[1]);
-      expect(inPage.length, `${file} 应同时带 dateModified 与页脚最后更新日期`).toBeGreaterThanOrEqual(2);
 
+    /** `sitemap.xml` 里这条 URL 的 `<lastmod>`。 */
+    const lastmodOf = (file: string): string => {
       const url = `${PAGES_BASE}/${file}`.replace('/index.html', '/');
       const entry = read('docs/sitemap.xml')
         .split('<url>')
         .find(block => block.includes(`<loc>${url}</loc>`));
-      const lastmod = entry?.match(/<lastmod>([^<]+)<\/lastmod>/)?.[1];
-      expect(lastmod, `${file} 在 sitemap.xml 里缺少对应的 <lastmod>`).toBeDefined();
+      const value = entry?.match(/<lastmod>([^<]+)<\/lastmod>/)?.[1] ?? '';
+      expect(value, `${file} 在 sitemap.xml 里缺少对应的 <lastmod>`).toBeTruthy();
+      return value;
+    };
+
+    it.each(FRESHNESS_PAGES)('%s 的三处新鲜度日期彼此一致', file => {
+      const inPage = inPageDates(file);
+      expect(inPage.length, `${file} 应同时带 dateModified 与页脚最后更新日期`).toBeGreaterThanOrEqual(2);
 
       expect(
-        new Set([...inPage, lastmod]).size,
-        `${file} 的新鲜度日期不一致：${[...new Set([...inPage, lastmod])].join(' / ')}`,
+        new Set([...inPage, lastmodOf(file)]).size,
+        `${file} 的新鲜度日期不一致：${[...new Set([...inPage, lastmodOf(file)])].join(' / ')}`,
       ).toBe(1);
+    });
+
+    /**
+     * 待发布区那句「日期推到哪天」必须与页面上那一批同值
+     *
+     * 上面那条只管**页内三处彼此一致**，管不到 release notes 里怎么写——而那一串日期正是
+     * 会被留在草稿区的过期读数（本轮改之前它写着 2026-10-24，页面早已推到 2026-10-25，
+     * 全仓没有一条守卫拦得住）。发版时这一节就是要并进 `## [x.y.z]` 给商店读者看的话，
+     * 所以它说的必须当场量得到。
+     */
+    it('待发布区那句日期说的就是页面上那一批（说明里不许留过期读数）', () => {
+      const changelog = read('CHANGELOG.md');
+      const from = changelog.indexOf('## 待发布');
+      expect(from, 'CHANGELOG 顶部找不到「待发布」小节').toBeGreaterThan(-1);
+      const nextSection = changelog.indexOf('\n## [', from);
+      const draft = changelog.slice(from, nextSection > from ? nextSection : changelog.length);
+      const lines = draft.split('\n').filter(line => line.includes('<lastmod>'));
+      // 中英各一行：条目数一变（少一边、或有人又写了一条日期），这里先红，再回去看是不是漏了对偶
+      expect(lines.length, `待发布区提到 <lastmod> 的行应当恰好中英两条，读到 ${lines.length} 条`).toBe(2);
+
+      const pageDate = new Set(FRESHNESS_PAGES.flatMap(f => [...inPageDates(f), lastmodOf(f)]));
+      expect(pageDate.size, `四页自己就不止一个新鲜度日期：${[...pageDate].join(' / ')}`).toBe(1);
+      const marketing = [...pageDate][0];
+
+      const privacySchema = read('docs/privacy.html').match(/"dateModified":\s*"(\d{4}-\d{2}-\d{2})"/)?.[1] ?? '';
+      expect(privacySchema, 'privacy.html 的 dateModified 读不出来').toBeTruthy();
+      expect(lastmodOf('privacy.html'), 'privacy.html 的 lastmod 与 dateModified 已经分家').toBe(privacySchema);
+
+      for (const [i, line] of lines.entries()) {
+        const stated = [...line.matchAll(/\d{4}-\d{2}-\d{2}/g)].map(m => m[0]);
+        expect(
+          stated.length,
+          `第 ${i + 1} 行该点两个日期（四页推到哪天 + privacy 停在哪天），读到 ${stated.join(', ')}`,
+        ).toBe(2);
+        expect(stated[0], `第 ${i + 1} 行写的四页日期与页面上的 ${marketing} 不一致`).toBe(marketing);
+        expect(stated[1], `第 ${i + 1} 行写的 privacy 日期与它自己的 ${privacySchema} 不一致`).toBe(privacySchema);
+      }
     });
   });
 
