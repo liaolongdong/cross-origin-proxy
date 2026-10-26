@@ -895,7 +895,14 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 0 4px;
+
+  /* 左右各 10px，不是 4px：`.el-dialog__body` 是 `overflow: auto` 的滚动容器（纵向要滚，
+     于是横向的 `visible` 被规范折算成 `auto`），裁切边界落在它自己的 padding box 上——
+     真机量过：容器左沿 154.1，第一枚色卡选中那圈的 `box-shadow` 外沿只到 152.4，
+     左边被切掉约 1.7px（`transform: scale(1.08)` 又先把盒沿往外推了 1.28px）。
+     焦点环比选中圈更远（`outline-offset: 5px` + 2px 宽，缩放后到 8.84px），所以余量按它取。
+     这一格刻意动的是容器内的留白而不是色卡本身：圈、缩放、与标签的对齐关系都不变。 */
+  padding: 0 10px;
 }
 
 .setting-label {
