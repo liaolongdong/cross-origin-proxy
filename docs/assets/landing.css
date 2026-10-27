@@ -109,6 +109,14 @@
   }
 }
 
+/* 跨文档转场：只在用户没有要求减弱动效时启用；不支持这一条的浏览器直接普通导航，
+   不写任何 JS 兜底。默认交叉淡入即可，不自定义 ::view-transition-*。 */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
 *,
 *::before,
 *::after {
@@ -310,6 +318,39 @@ pre {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+/* 首屏那枚分享按钮是图标型：与三颗 ghost 同高，但不凑成第五颗文字 CTA。
+   默认不画，只有脚本跑起来才出现（禁用 JS 时按钮不做事，就不该在屏上）。 */
+.btn-icon {
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+
+.share-btn {
+  display: none;
+}
+
+html.js .share-btn {
+  display: inline-flex;
+}
+
+.share-btn .share-check {
+  display: none;
+}
+
+.share-btn.is-shared .share-icon {
+  display: none;
+}
+
+.share-btn.is-shared .share-check {
+  display: inline;
+}
+
+.share-btn.is-shared {
+  color: var(--lp-accent-strong);
+  border-color: var(--lp-accent-strong);
 }
 
 /* ---------- 顶部导航 ---------- */
@@ -3165,6 +3206,49 @@ html.js .copy-btn {
   color: var(--lp-danger-strong);
 }
 
+/* 只给读屏的播报区：分享结果仍要能被念出来，但首屏按钮那一行放不下第二句可见文字。 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip-path: inset(50%);
+}
+
+/* 分享的结果先写进上面那块读屏区；剪贴板这条路径再把它显形成一条轻提示。
+   `visually-hidden` 是 0-1-0，这里 0-2-0，钳制方向正确：成功与失败都看得见，
+   系统分享面板那一路不弹（面板本身就是反馈）。 */
+.share-status.is-shown {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 16px;
+  z-index: 12;
+  display: block;
+  width: min(420px, calc(100% - 32px));
+  height: auto;
+  padding: 10px 14px;
+  margin: 0 auto;
+  overflow: visible;
+  font-size: 13px;
+  color: var(--lp-ink);
+  text-align: center;
+  white-space: normal;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: 10px;
+  box-shadow: var(--lp-shadow-lg);
+  clip-path: none;
+}
+
+.share-status.is-failed {
+  color: var(--lp-danger-strong);
+}
+
 /* ---------- 代码块的一键复制 ---------- */
 
 /* 按钮钉在右上角，文本从兄弟 <code> 现读（`data-copy-from`），
@@ -3289,6 +3373,31 @@ html.js .code-copy {
   color: #fff;
 }
 
+/* 页脚那条是文字入口，形状与相邻链接一致；它是一个动作不是地址，所以用 button。 */
+.footer-share {
+  display: none;
+  padding: 2px 0;
+  font: inherit;
+  color: var(--lp-footer-ink);
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+html.js .footer-share {
+  display: inline-flex;
+  align-items: center;
+}
+
+.footer-share:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.footer-share.is-shared {
+  color: var(--lp-accent-strong);
+}
+
 .footer-main {
   flex: 1 1 420px;
   min-width: 0;
@@ -3321,6 +3430,98 @@ html.js .code-copy {
   align-items: center;
   padding-top: 18px;
   border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+/* ---------- 移动端安装条（仅 JS + 窄屏出现；滚过首屏才滑入） ---------- */
+
+.install-bar {
+  display: none;
+}
+
+@media (width <= 720px) {
+  html.js .install-bar {
+    position: fixed;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 12px;
+    z-index: 8;
+    display: flex;
+    visibility: hidden;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px 8px 14px;
+    background: var(--lp-surface);
+    border: 1px solid var(--lp-line);
+    border-radius: 14px;
+    box-shadow: var(--lp-shadow-lg);
+    opacity: 0;
+    transform: translateY(calc(100% + 20px));
+    transition:
+      opacity 0.22s ease,
+      transform 0.22s ease,
+      visibility 0s linear 0.22s;
+  }
+
+  html.js .install-bar.is-visible {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      opacity 0.22s ease,
+      transform 0.22s ease;
+  }
+
+  /* 安装条在时把回顶导轨抬到它上面：两者都钉在右下角，不抬就会叠在一起。 */
+  html.js .install-bar.is-visible ~ .scroll-rail {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+}
+
+.install-bar-link {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lp-ink);
+  text-decoration: none;
+}
+
+.install-bar-link strong {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  background: var(--lp-cta);
+  border-radius: 9px;
+}
+
+.install-bar-link:hover strong {
+  background: #2c86e8;
+}
+
+.install-bar-close {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--lp-ink-soft);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+}
+
+.install-bar-close:hover {
+  color: var(--lp-ink);
+  background: var(--lp-bg-alt);
 }
 
 /* ---------- 回顶 / 到底导轨（仅 JS 可用时出现） ---------- */
@@ -3967,6 +4168,13 @@ html.js .tool-card:hover::before {
   html.js .feature-card::before,
   html.js .tool-card::before {
     display: none;
+  }
+
+  /* 移动安装条的下滑同样是纯装饰：减弱动效下直接出现 / 消失。
+     `is-visible` 那条的过渡声明特异度更高，必须点名一起关，否则只关得掉隐藏态。 */
+  html.js .install-bar,
+  html.js .install-bar.is-visible {
+    transition: none;
   }
 
   /* 「本扩展」那一列的一次性光晕：停的只是那一下刷白。格子本身的底色由 `.col-us` 那条规则给，
