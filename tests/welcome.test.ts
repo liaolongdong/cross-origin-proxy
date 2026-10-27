@@ -131,6 +131,18 @@ describe('装配层源码契约', () => {
     expect(card).toContain('height: 24px;');
   });
 
+  it('三步的动作按钮只有两档：一颗 primary、两颗不带 type，没有 link 档', () => {
+    const card = read('components/options/WelcomeCard.vue');
+    // 闭合标签在模板里写成 `</el-button\n>`（prettier 的换行风格），所以收尾要容得下空白
+    const tags = [...card.matchAll(/<el-button\b[\s\S]*?<\/el-button\s*>/g)].map(match => match[0]);
+    expect(tags.length, '三步各一颗动作按钮').toBe(3);
+    expect(tags.filter(tag => tag.includes('type="primary"')).length, '一张卡只该有一颗主行动').toBe(1);
+    expect(
+      tags.some(tag => /\blink\b/.test(tag)),
+      '「打开设置」是去一个地方，不是行内轻操作；摆成 link 档会让三格并列里的一格看着像被禁用',
+    ).toBe(false);
+  });
+
   it('组件里每个欢迎文案键都在中英两份字典里', () => {
     const card = read('components/options/WelcomeCard.vue');
     const used = [...card.matchAll(/t\('(welcome[^']+)'\)/g)].map(match => match[1]);

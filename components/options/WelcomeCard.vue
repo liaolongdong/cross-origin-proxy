@@ -37,12 +37,9 @@
         <div class="welcome-step-body">
           <h3 class="welcome-step-title">{{ t('welcomeStep2Title') }}</h3>
           <p class="welcome-step-desc">{{ t('welcomeStep2Desc') }}</p>
-          <el-button
-            link
-            type="primary"
-            @click="$emit('openSettings')"
-            >{{ t('welcomeStep2Action') }}</el-button
-          >
+          <!-- 与第三步同档（不带 `type`）：这一步是「去一个地方」，不是行内轻操作。
+               摆在 `link` 档上时，三格并列里就数它没有边框，读起来像一行灰字或被禁用的按钮。 -->
+          <el-button @click="$emit('openSettings')">{{ t('welcomeStep2Action') }}</el-button>
         </div>
       </li>
       <li class="welcome-step">
