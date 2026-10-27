@@ -1091,3 +1091,26 @@ export async function restoreConfigHistory(
     return { success: true, restored: entry.ruleCount };
   });
 }
+
+// ─── Onboarding ─────────────────────────────────────────────────────────────
+
+/**
+ * 首装欢迎卡是否已被关闭
+ *
+ * 只服务界面：缺失、手改成字符串等一切非 `true` 的原文都当「没关过」——宁可再提示一次，
+ * 也不因为一次读失败或一处手改把引导永久藏起来。它不进任何导出、不参与任何判定。
+ */
+export async function getWelcomeDismissed(): Promise<boolean> {
+  try {
+    const stored = await chrome.storage.local.get(STORAGE_KEYS.WELCOME_DISMISSED);
+    return stored[STORAGE_KEYS.WELCOME_DISMISSED] === true;
+  } catch (error) {
+    logger.warn('Failed to read welcome dismissal:', error);
+    return false;
+  }
+}
+
+/** 记下「欢迎卡已关闭」；单键写入、没有读改写，因此不占互斥锁。 */
+export async function dismissWelcome(): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.WELCOME_DISMISSED]: true });
+}
