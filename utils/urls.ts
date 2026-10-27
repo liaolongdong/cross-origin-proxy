@@ -11,8 +11,11 @@
  * 属于别的商店，而这一格点的偏偏是「想去商店看看」的那一刻。
  */
 
+/** 作者 GitHub 主页：仓库、Releases 与 Issues 都从这一份基址派生，主机字面量只写一次 */
+export const AUTHOR_GITHUB_URL = 'https://github.com/liaolongdong';
+
 /** GitHub 仓库首页（开源代码、README 与 Issues 入口都从这里派生） */
-export const REPO_GITHUB_URL = 'https://github.com/liaolongdong/cross-origin-proxy';
+export const REPO_GITHUB_URL = `${AUTHOR_GITHUB_URL}/cross-origin-proxy`;
 
 /** Releases 页：每个 `v*` tag 附带构建好的 zip，顶栏版本徽标与「看最新版本」都指这里 */
 export const GITHUB_RELEASES_PAGE_URL = `${REPO_GITHUB_URL}/releases`;
@@ -20,11 +23,17 @@ export const GITHUB_RELEASES_PAGE_URL = `${REPO_GITHUB_URL}/releases`;
 /** Issues 页：缺陷与功能请求优先开在这里（带上请求日志与规则导出，比截图好定位） */
 export const GITHUB_ISSUES_URL = `${REPO_GITHUB_URL}/issues`;
 
+/** 许可证全文：页面底部那句 MIT 指向这里 */
+export const REPO_LICENSE_URL = `${REPO_GITHUB_URL}/blob/main/LICENSE`;
+
 /** 产品使用说明（中文）：能力、快速上手与 FAQ */
 export const PRODUCT_DOCS_URL = 'https://liaolongdong.github.io/cross-origin-proxy/';
 
 /** 产品使用说明（英文）：与中文页条目对等，见 `tests/docs-consistency.test.ts` */
 export const PRODUCT_DOCS_URL_EN = `${PRODUCT_DOCS_URL}en.html`;
+
+/** 隐私政策：与商店后台填的 URL 同源，站点根下的一页 */
+export const PRODUCT_PRIVACY_URL = `${PRODUCT_DOCS_URL}privacy.html`;
 
 /**
  * 按界面语言取说明文档地址
