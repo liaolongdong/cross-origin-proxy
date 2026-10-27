@@ -11,6 +11,17 @@
       </template>
     </el-input>
 
+    <!-- 命令面板的鼠标入口：只有键盘快捷键的功能等于对鼠标用户不存在 -->
+    <button
+      type="button"
+      class="command-hint"
+      :title="t('commandOpenHint')"
+      :aria-label="t('commandOpenHint')"
+      @click="$emit('openCommandPalette')"
+    >
+      {{ commandShortcutLabel }}
+    </button>
+
     <el-select
       :model-value="statusFilter"
       :placeholder="t('filterAll')"
@@ -145,6 +156,8 @@ const props = defineProps<{
   selectedCount: number;
   /** 规则总数（>0 时显示全部启用/停用按钮） */
   totalRules: number;
+  /** 命令面板的快捷键显示值（Mac ⌘K / 其它 Ctrl K），由容器层按平台传入 */
+  commandShortcutLabel: string;
 }>();
 
 const emit = defineEmits<{
@@ -160,6 +173,8 @@ const emit = defineEmits<{
   batchMigrate: [];
   /** 全部启用/停用所有规则 */
   toggleAll: [enabled: boolean];
+  /** 打开命令面板（鼠标入口） */
+  openCommandPalette: [];
 }>();
 
 const { t } = useI18n();
@@ -224,6 +239,24 @@ onUnmounted(() => {
 .search-input {
   flex: 1 1 260px;
   min-width: 220px;
+}
+
+.command-hint {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--cop-text-color-secondary);
+  cursor: pointer;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: 6px;
+}
+
+.command-hint:hover {
+  color: var(--cop-primary);
+  border-color: var(--cop-primary);
 }
 
 .status-select {

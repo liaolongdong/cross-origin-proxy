@@ -929,6 +929,9 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
     // onMounted 里同步置位时分片还没取回，watcher 不带 immediate 就是**一屏「不知道」永远不刷新**。
     // 它的 watcher 源是一个数组（还要跟着 tabId 与那份 RE2 判定重算），所以判据收两种形状。
     'components/options/SelfCheckDialog.vue',
+    // 命令面板：分片可能在键盘按下后才取回，带着 visible === true 挂载；查询重置与聚焦
+    // 全靠这一次 immediate watcher，没有它就会带着上一次的查询与焦点打开。
+    'components/options/CommandPalette.vue',
   ];
 
   it('承担初始化/数据拉取的 props.visible watcher 一律带 immediate', () => {
@@ -1217,12 +1220,13 @@ describe('[Batch 3] 弹窗保存与快捷键的闸门（源码契约）', () => 
       'showUrlTest',
       'showLogs',
       'showMigrate',
+      'showCommandPalette',
     ]) {
       expect(decl, `${flag} 不在快捷键的让位判据里`).toContain(`${flag}.value`);
     }
     const handler = fnSource(optionsAppSrc, 'function handleKeydown');
-    // 两处：N 那一支与 / 那一支。少一处就是「导入弹窗开着时按 N，规则弹窗叠上去抢焦点」
-    expect(handler.match(/if \(anyOverlayOpen\.value\) return;/g)).toHaveLength(2);
+    // 三处：N、/ 与命令面板的 ⌘K。少一处就是「遮罩开着时快捷键把另一层叠上去抢焦点」
+    expect(handler.match(/if \(anyOverlayOpen\.value\) return;/g)).toHaveLength(3);
   });
 
   it('自动关闭倒计时归零只刷一次状态：先清 `autoOffAt` 再拉（L-8）', () => {
