@@ -239,7 +239,8 @@ async function copyShareText() {
   gap: 10px;
   padding: 14px 16px;
   margin: 0;
-  background: var(--cop-surface);
+  background: var(--cop-primary-bg);
+  border: 1px solid var(--cop-primary-border);
   border-radius: 10px;
 }
 
