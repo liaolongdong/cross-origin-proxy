@@ -327,6 +327,8 @@ git push origin main    # 本地分支不叫 main 时写 `git push origin <你�
 
 落地页页脚版本与日期、`llms*.txt` 里关于 tag 的句子、README「方式 B」那条**安装途径**的 Releases 提示（与本文 §2 的发版路径 B 无关）、`CHROMEWEBSTORE.md` §8 的提审状态——清单只有一个出口：[`CHROMEWEBSTORE.md` §12](./CHROMEWEBSTORE.md)。它现在是一张**翻牌记录**：八行已经全部翻过（2026-10-01 那一次），最后一列写着每处当前的措辞；其中第 4、5、7、8 行说的是**商店在装的版本**，所以商店每真正吃到一个新包就要回来再翻一次，而行 1、2、3、6 讲的是 tag 的存在性，翻了就不再回来。翻完跑 `pnpm test` 与本次改动文件的 `pnpm exec prettier --check`。
 
+**九处的版本值现在只认仓库根的 `store-version.json`**：先把 `version` 改成刚现量到的商店版本、`verifiedAt` 改成今天，再跑 `pnpm test`——`tests/storeVersion.test.ts` 会把落后于它的那一处连文件名一起点名，逐处改完再跑一次转绿。守卫只防「少翻一处」，「九处一起忘了翻」仍要靠这一节的人工步骤；`store-version.json` 说的是**商店在装**那一包，不是 `package.json`。
+
 ### 2.3 不用机器人的那条路（紧急修复、或机器人没跑）
 
 **这一节说的是「谁写版本号」，不是「谁点头」**——它和 §2 路径 B（谁点头）正交：手工把号写进 `package.json` 之后，你照样可以走路径 A 让人审批，也可以直接推 tag。手工 bump 依然完全有效，`release.yml` 不在乎号是谁写的：

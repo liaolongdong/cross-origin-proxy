@@ -29,5 +29,10 @@
   "linkRepo": "开源仓库",
   "linkDocs": "使用说明",
   "linkStore": "Chrome 商店",
-  "linkIssues": "反馈问题"
+  "linkIssues": "反馈问题",
+  "linkPrivacy": "隐私政策",
+  "linkLicense": "开源许可证全文",
+  "linkReleases": "最新版本与下载",
+  "linkAuthor": "作者 GitHub 主页",
+  "linkNewTabSuffix": "（新标签页打开）"
 }

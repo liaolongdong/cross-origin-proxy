@@ -1005,3 +1005,40 @@ describe('落地页 reduce 段落逐字点到每条动画', () => {
     }
   });
 });
+
+describe('设置框里那圈色卡描边不能被滚动容器裁掉（算式守卫）', () => {
+  it('留白 ≥ 缩放推出去的盒沿 + 缩放后的外扩量（现读现算，不写死 10px）', () => {
+    const src = readFileSync('components/options/SettingsDialog.vue', 'utf8');
+    const flat = src.replace(/\s+/g, ' ');
+    const num = (re: RegExp, what: string): number => {
+      const m = re.exec(flat);
+      expect(m, `读不到 ${what}（判据的前提变了，回来重判这一格）`).not.toBeNull();
+      return Number(m ? m[1] : NaN);
+    };
+
+    const box = num(/\.theme-swatch \{ width: (\d+(?:\.\d+)?)px/, '色卡的盒宽');
+    const activeScale = num(/\.theme-swatch\.active \{[^}]*?transform: scale\((\d+(?:\.\d+)?)\)/, '选中态缩放');
+    const hoverScale = num(/\.theme-swatch:hover \{[^}]*?transform: scale\((\d+(?:\.\d+)?)\)/, '悬停缩放');
+    const activeBlock = /\.theme-swatch\.active \{([^}]*?)\}/.exec(flat)?.[1] ?? '';
+    const ringSpreads = [...activeBlock.matchAll(/0 0 0 (\d+(?:\.\d+)?)px/g)].map(m => Number(m[1]));
+    expect(ringSpreads.length, '选中那圈不是「0 0 0 Npx」的 box-shadow 写法，判据读不到它').toBeGreaterThanOrEqual(2);
+    const ring = Math.max(...ringSpreads);
+    const outlineWidth = num(/\.theme-swatch:focus-visible \{ outline: (\d+(?:\.\d+)?)px/, '焦点环线宽');
+    const outlineOffset = num(/\.theme-swatch:focus-visible \{[^}]*?outline-offset: (\d+(?:\.\d+)?)px/, '焦点环偏移');
+    const padding = num(
+      /\.settings-body \{[^}]*?padding: (?:0 |\d+(?:\.\d+)?px )(\d+(?:\.\d+)?)px/,
+      '设置框正文的左右留白',
+    );
+
+    const scale = Math.max(activeScale, hoverScale);
+    const reach = Math.max(ring, outlineWidth + outlineOffset);
+    // 盒沿被缩放推出去的那一半 + 缩放后的外扩量
+    const needed = ((scale - 1) / 2) * box + scale * reach;
+    expect(
+      padding,
+      `第一枚色卡会被 el-dialog__body 那道滚动容器切掉 ${(needed - padding).toFixed(2)}px：` +
+        `盒宽 ${box}、最严缩放 ${scale}、外扩 ${reach}（选中圈 ${ring} / 焦点环 ${outlineWidth}+${outlineOffset}），` +
+        `左右留白至少要 ${needed.toFixed(2)}px，现在只有 ${padding}px`,
+    ).toBeGreaterThanOrEqual(needed);
+  });
+});

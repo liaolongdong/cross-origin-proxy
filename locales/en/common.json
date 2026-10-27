@@ -29,5 +29,10 @@
   "linkRepo": "GitHub",
   "linkDocs": "Guide",
   "linkStore": "Chrome Web Store",
-  "linkIssues": "Feedback"
+  "linkIssues": "Feedback",
+  "linkPrivacy": "Privacy policy",
+  "linkLicense": "MIT license",
+  "linkReleases": "Latest release",
+  "linkAuthor": "Author on GitHub",
+  "linkNewTabSuffix": " (opens in a new tab)"
 }

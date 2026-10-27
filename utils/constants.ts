@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   CONFIG_HISTORY: 'config_history', // 配置恢复点（成套替换所换掉的那份整包配置，见 utils/storage.ts）
   RECENT_TARGETS: 'recent_targets', // 最近用过的目标环境 origin（便利候选，不参与判定、不进任何导出）
   SITE_STATE: 'site_proxy_state', // 站点维度的生效范围（见 utils/siteScope.ts）；不进任何导出
+  WELCOME_DISMISSED: 'welcome_dismissed', // 首装欢迎卡是否被关过；纯界面状态，不参与判定、不进任何导出
 } as const;
 
 // Theme modes

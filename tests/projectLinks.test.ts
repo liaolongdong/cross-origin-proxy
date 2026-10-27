@@ -19,14 +19,14 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { currentLocale } from '@/utils/i18n';
-import { useProjectLinks } from '@/composables/useProjectLinks';
+import { useAboutMoreLinks, useProjectLinks } from '@/composables/useProjectLinks';
 
-/** 三处渲染项目链接的界面（「关于」抽屉 / 设置弹窗那一节 / 弹窗底部一行） */
-const SURFACES = [
-  'components/options/AboutDrawer.vue',
-  'components/options/SettingsDialog.vue',
-  'entrypoints/popup/App.vue',
-];
+/** 两处短清单界面（设置弹窗那一节、弹窗底部一行） */
+const SHORT_SURFACES = ['components/options/SettingsDialog.vue', 'entrypoints/popup/App.vue'];
+/** 「关于」抽屉：共享四条之外还有抽屉自己的补充出口 */
+const ABOUT_SURFACE = 'components/options/AboutDrawer.vue';
+/** 三处渲染项目链接的界面，用于「外链字面量」的扫描面 */
+const SURFACES = [...SHORT_SURFACES, ABOUT_SURFACE];
 /** 之外还有一枚既有外链的界面：顶栏那枚版本徽标（点它直达 Releases），一起进锚点扫描面 */
 const EXTRA_ANCHOR_FILES = ['components/options/HeaderBar.vue'];
 /** 唯一可以出现外链字面量的两份真源 */
@@ -102,7 +102,7 @@ describe('三处落点读的是同一份清单', () => {
     currentLocale.value = 'zh_CN';
   });
 
-  for (const file of SURFACES) {
+  for (const file of SHORT_SURFACES) {
     it(`${file} 渲染的是 useProjectLinks 那一份，不是自己拼的数组`, () => {
       const src = readFileSync(file, 'utf8');
       expect(src).toContain("import { useProjectLinks } from '@/composables/useProjectLinks'");
@@ -111,13 +111,22 @@ describe('三处落点读的是同一份清单', () => {
     });
   }
 
-  it('锚点总数是 4（三处各一枚 + 顶栏版本徽标那枚既有链接），且每一枚都带 target 与 rel', () => {
+  it('「关于」抽屉在共享四条之上追加 moreLinks，不自己拼地址', () => {
+    const src = readFileSync(ABOUT_SURFACE, 'utf8');
+    expect(src, '抽屉不再读共享清单').toContain('const projectLinks = useProjectLinks()');
+    expect(src, '抽屉没有补充出口').toContain('const moreLinks = useAboutMoreLinks()');
+    expect(src, '补充出口没有并进渲染列表').toContain('projectLinks.value');
+    expect(src).toContain('moreLinks.value');
+    expect(src).toContain('v-for="link in allLinks"');
+  });
+
+  it('锚点总数是 4（两处短清单 + 抽屉 + 顶栏版本徽标），且每一枚都带 target 与 rel', () => {
     const anchors = [...SURFACES, ...EXTRA_ANCHOR_FILES].flatMap(file => [
       ...readFileSync(file, 'utf8')
         .matchAll(/<a\s[\s\S]*?>/g)
         .map(m => ({ file, tag: m[0] })),
     ]);
-    // 三处各一枚 v-for 模板锚点 + 顶栏版本徽标那枚既有的
+    // 两处短清单各一枚 v-for 模板锚点 + 抽屉一枚 + 顶栏版本徽标那枚既有的
     expect(anchors.length, '一枚锚点都没扫到＝判据空转；数目变了＝有界面自己添了一枚外链').toBe(4);
     const bad = anchors
       .filter(a => !/target="_blank"/.test(a.tag) || !/rel="noopener noreferrer"/.test(a.tag))
@@ -175,9 +184,42 @@ describe('useProjectLinks 的清单（运行时）', () => {
     );
   });
 
+  it('「关于」补充出口：商店装的构建下评分排最前，随后隐私 / 许可证 / 版本 / 作者', () => {
+    stubManifest(GOOGLE_UPDATER);
+    const links = useAboutMoreLinks().value;
+    expect(links.map(l => l.key)).toEqual(['aboutReview', 'linkPrivacy', 'linkLicense', 'linkReleases', 'linkAuthor']);
+    expect(links[0].href).toBe(`https://chromewebstore.google.com/detail/${EXTENSION_ID}/reviews`);
+  });
+
+  it('「关于」补充出口：解包加载下评分那条整个消失，其余四条照常', () => {
+    stubManifest(undefined);
+    expect(useAboutMoreLinks().value.map(l => l.key)).toEqual([
+      'linkPrivacy',
+      'linkLicense',
+      'linkReleases',
+      'linkAuthor',
+    ]);
+  });
+
+  it('「关于」补充出口：Edge 那种分发同样收起评分（与商店条目同一道闸门）', () => {
+    stubManifest('https://edge.microsoft.com/extensionwebstorebase/v1/crx');
+    expect(useAboutMoreLinks().value.some(l => l.key === 'aboutReview')).toBe(false);
+  });
+
+  it('「关于」补充出口不随界面语言改落点（隐私政策与许可证各只有一份）', () => {
+    stubManifest(GOOGLE_UPDATER);
+    const zh = useAboutMoreLinks().value;
+    currentLocale.value = 'en';
+    expect(useAboutMoreLinks().value.map(l => l.href)).toEqual(zh.map(l => l.href));
+  });
+
   it('清单里的每个文案键在中英字典都存在、非空，且恰好定义在一份命名空间里', () => {
     stubManifest(GOOGLE_UPDATER);
-    const keys = [...useProjectLinks().value.map(l => l.key), 'linksTitle'];
+    const keys = [
+      ...useProjectLinks().value.map(l => l.key),
+      ...useAboutMoreLinks().value.map(l => l.key),
+      'linksTitle',
+    ];
     for (const locale of ['zh_CN', 'en'] as const) {
       // 三份 json 在构建期合并成一张扁平字典：同一个键定义在两处，就是后加载的那份盖掉前一份，
       // 而界面上完全看不出被盖掉过（少一个键则把 linkRepo 这种英文标识直接画出来）
@@ -227,14 +269,17 @@ describe('「关于」那一格的入口与接线（源码契约）', () => {
     expect(src).toContain("defineAsyncComponent(() => import('./AboutDrawer.vue'))");
   });
 
-  it('抽屉里那三条隐私事实与评分闸门都在，且没有第二份地址', () => {
-    const src = readFileSync('components/options/AboutDrawer.vue', 'utf8');
+  it('抽屉里那三条隐私事实在，评分闸门留在组合式函数里，且没有第二份地址', () => {
+    const src = readFileSync(ABOUT_SURFACE, 'utf8');
     for (const key of ['aboutFactStorage', 'aboutFactTelemetry', 'aboutFactCredentials']) {
       expect(src, `抽屉少了「${key}」那一条事实`).toContain(`t('${key}')`);
     }
-    // 评分入口沿用「商店装的构建才有」那道闸门：闸门判据只有 storePage 那一份
-    expect(src).toContain('isStoreInstalled(chrome.runtime.getManifest().update_url)');
-    expect(src).toContain('v-if="reviewUrl"');
+    // 评分入口沿用「商店装的构建才有」那道闸门：判据只有 storePage 那一份，消费侧不重判
+    const links = readFileSync('composables/useProjectLinks.ts', 'utf8');
+    expect(links, '评分闸门不再认 Google 那台更新服务器').toContain(
+      'isStoreInstalled(chrome.runtime.getManifest().update_url)',
+    );
+    expect(links, '评分地址没有从 storeReviewUrl 派生').toContain('storeReviewUrl(chrome.runtime.id)');
     expect(src, '抽屉不该自己拼商店地址').not.toMatch(/chromewebstore\.google\.com/);
   });
 });

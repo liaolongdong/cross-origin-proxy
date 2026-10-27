@@ -1,7 +1,15 @@
 import { computed, type ComputedRef } from 'vue';
 import { currentLocale } from '@/utils/i18n';
-import { isStoreInstalled, storeDetailUrl } from '@/utils/storePage';
-import { GITHUB_ISSUES_URL, productDocsUrl, REPO_GITHUB_URL } from '@/utils/urls';
+import { isStoreInstalled, storeDetailUrl, storeReviewUrl } from '@/utils/storePage';
+import {
+  AUTHOR_GITHUB_URL,
+  GITHUB_ISSUES_URL,
+  GITHUB_RELEASES_PAGE_URL,
+  productDocsUrl,
+  PRODUCT_PRIVACY_URL,
+  REPO_GITHUB_URL,
+  REPO_LICENSE_URL,
+} from '@/utils/urls';
 
 /** 一条项目外链：`key` 是界面文案键，`href` 只来自 `utils/urls.ts` 或 `utils/storePage.ts` */
 export interface ProjectLink {
@@ -26,6 +34,17 @@ const PROJECT_LINK_KEYS: Record<ProjectLinkId, string> = {
   issues: 'linkIssues',
 };
 
+/** 「关于」抽屉在共享四条之外补的出口；评分与商店条目同一道闸门 */
+type AboutMoreLinkId = 'review' | 'privacy' | 'license' | 'releases' | 'author';
+
+const ABOUT_MORE_LINK_KEYS: Record<AboutMoreLinkId, string> = {
+  review: 'aboutReview',
+  privacy: 'linkPrivacy',
+  license: 'linkLicense',
+  releases: 'linkReleases',
+  author: 'linkAuthor',
+};
+
 /**
  * 项目外链清单（配置页顶栏、偏好设置弹窗、弹窗底部三处共用这一份）
  *
@@ -46,6 +65,30 @@ export function useProjectLinks(): ComputedRef<ProjectLink[]> {
       links.push({ key: PROJECT_LINK_KEYS.store, href: storeDetailUrl(chrome.runtime.id) });
     }
     links.push({ key: PROJECT_LINK_KEYS.issues, href: GITHUB_ISSUES_URL });
+    return links;
+  });
+}
+
+/**
+ * 「关于」抽屉在共享四条之外补的出口
+ *
+ * 顶栏按钮、设置弹窗与弹窗底部只要四个核心出口；抽屉是目录，补上评分、隐私、许可证、版本与作者。
+ * 评分与商店条目共用同一道闸门：解包加载与其它商店分发下，那两条地址在这套安装上必然打不到，
+ * 宁可少两行，也不画两个坏链接。其余四条与安装来源无关，语言也不改动它们——隐私政策与许可证
+ * 在仓库里各只有一份。
+ */
+export function useAboutMoreLinks(): ComputedRef<ProjectLink[]> {
+  return computed(() => {
+    const links: ProjectLink[] = [];
+    if (isStoreInstalled(chrome.runtime.getManifest().update_url)) {
+      links.push({ key: ABOUT_MORE_LINK_KEYS.review, href: storeReviewUrl(chrome.runtime.id) });
+    }
+    links.push(
+      { key: ABOUT_MORE_LINK_KEYS.privacy, href: PRODUCT_PRIVACY_URL },
+      { key: ABOUT_MORE_LINK_KEYS.license, href: REPO_LICENSE_URL },
+      { key: ABOUT_MORE_LINK_KEYS.releases, href: GITHUB_RELEASES_PAGE_URL },
+      { key: ABOUT_MORE_LINK_KEYS.author, href: AUTHOR_GITHUB_URL },
+    );
     return links;
   });
 }

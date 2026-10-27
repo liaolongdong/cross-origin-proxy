@@ -15,6 +15,16 @@
       @toggle-proxy="handleToggleProxy"
     />
 
+    <!-- 首装欢迎卡：只做「定位」（三步），空态继续做「动手」（模板卡） -->
+    <WelcomeCard
+      v-if="welcomeVisible"
+      :proxy-enabled="proxyEnabled"
+      @add-rule="handleAddRule"
+      @open-settings="showSettings = true"
+      @enable-proxy="handleToggleProxy(true)"
+      @dismiss="handleDismissWelcome"
+    />
+
     <!-- 搜索筛选卡片 -->
     <SearchFilterBar
       v-model:search-text="searchText"
@@ -178,9 +188,12 @@ import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
 import { parseSelfCheckTab } from '@/utils/selfCheck';
+import { dismissWelcome, getWelcomeDismissed } from '@/utils/storage';
+import { shouldShowWelcome } from '@/utils/welcome';
 import HeaderBar from './HeaderBar.vue';
 import SearchFilterBar from './SearchFilterBar.vue';
 import RuleTable from './RuleTable.vue';
+import WelcomeCard from './WelcomeCard.vue';
 
 /**
  * Options 根组件（容器层，只做编排）
@@ -280,6 +293,21 @@ const showLogs = ref(false);
 /** 「关于」抽屉：项目外链与「数据去哪儿了」那三条事实收在这一格 */
 const showAbout = ref(false);
 const showMigrate = ref(false);
+/**
+ * 首装欢迎卡的关闭标记：三态
+ *
+ * `null` = 这一次打开页面后还没读到标记——那一刻不画（关过卡的老用户会先看到它再被抹掉），
+ * 也不当成「没关过」。
+ */
+const welcomeDismissed = ref<boolean | null>(null);
+/** 只在「读到过配置 + 一条规则都没有 + 没关过」时画；判据的唯一出口是 utils/welcome.ts */
+const welcomeVisible = computed(() =>
+  shouldShowWelcome({
+    everRead: configEverRead.value,
+    rulesCount: rules.value.length,
+    dismissed: welcomeDismissed.value,
+  }),
+);
 /**
  * 七个弹窗/抽屉里是否有一个在场
  *
@@ -461,6 +489,7 @@ onMounted(async () => {
   currentTheme.value = await getStoredTheme();
   themeMode.value = await getStoredThemeMode();
   applyThemeMode(themeMode.value);
+  welcomeDismissed.value = await getWelcomeDismissed();
 
   void fetchDnrStats();
   void fetchSwStats();
@@ -585,6 +614,16 @@ async function handleToggleProxy(val: boolean) {
     ElMessage.error(t('toggleFailed'));
     logger.error('Toggle proxy failed:', error);
   }
+}
+
+/**
+ * 关掉首装欢迎卡
+ *
+ * 先让卡消失再落盘：写失败只记日志，下次打开可能再出现——比「关不掉」或「永久消失」都安全。
+ */
+function handleDismissWelcome() {
+  welcomeDismissed.value = true;
+  void dismissWelcome().catch(error => logger.warn('Failed to persist welcome dismissal:', error));
 }
 
 // 规则操作

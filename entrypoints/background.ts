@@ -26,6 +26,12 @@ export default defineBackground(() => {
       // 显式同步 DNR 规则，确保安装后规则立即生效
       await syncDnrRules(DEFAULT_PROXY_CONFIG);
       logger.info('Extension installed, default config set');
+      // 装完把用户送到配置页：那里的空态有模板与三步引导。只在 install 触发，update 不打扰。
+      try {
+        await chrome.tabs.create({ url: chrome.runtime.getURL('/options.html') });
+      } catch (error) {
+        logger.warn('Failed to open the options page after install:', error);
+      }
     } else if (details.reason === 'update') {
       logger.info('Extension updated to', chrome.runtime.getManifest().version);
     }
