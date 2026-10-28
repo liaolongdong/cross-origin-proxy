@@ -50,6 +50,8 @@
     "postinstall": "wxt prepare",
     "assets": "node scripts/generate-store-assets.mjs",
     "assets:en": "node scripts/generate-store-assets.mjs --en",
+    "shots": "node scripts/capture-screenshots.mjs",
+    "shots:en": "node scripts/capture-screenshots.mjs --en",
     "promo": "node scripts/record-promo-video.mjs",
     "promo:en": "node scripts/record-promo-video.mjs --en",
     "mock": "node scripts/mock-env/index.mjs",
