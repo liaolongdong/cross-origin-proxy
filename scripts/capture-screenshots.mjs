@@ -29,6 +29,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const EXT = path.join(ROOT, '.output/chrome-mv3');
 const EN = process.argv.includes('--en');
 const OUT_ARG = process.argv.find(arg => arg.startsWith('--out='));
@@ -240,7 +241,8 @@ const VARIABLES = {
 };
 
 const IMPORT_PAYLOAD = {
-  version: '1.7.0',
+  // 演示文件由当前这份构建导出，版本号跟着 package.json 走（脚本里不复述）
+  version: PKG.version,
   schemaVersion: 2,
   exportTime: now,
   config: {
