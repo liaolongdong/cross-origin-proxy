@@ -644,47 +644,60 @@
           :key="log.id"
           class="recent-item"
         >
-          <!--
-            两处 `as TagProps['type']` 是给 `pnpm typecheck:vue` 的纯类型断言（编译后不存在）。
-            Element Plus 的 `type` 联合里**没有「中性」这一档**，而 `getMethodColor` /
-            `getStatusColor` 用空串表示它（GET 徽章、3xx 状态徽章；`utils/formatters.ts` 写了
-            3xx 刻意落中性、不许挪到 success 那边）。空串在运行时靠 `.el-tag` 基础规则画成浅色底
-            + **继承字色**，改成 `'primary'`（也就是不传 `type`）字色就变主题蓝——那是视觉改动，
-            不在本轮范围，所以值原样交出去，只在类型层对齐。
-          -->
-          <el-tag
-            :type="getMethodColor(log.method) as TagProps['type']"
-            size="small"
-            class="method-tag"
-            disable-transitions
+          <button
+            type="button"
+            class="recent-hit"
+            :title="t('recentOpenLogs')"
+            :aria-label="`${t('recentOpenLogs')} · ${log.method} ${log.originalUrl}`"
+            @click="openRecentLog(log.originalUrl)"
           >
-            {{ log.method }}
-          </el-tag>
-          <span
-            class="recent-url"
-            :title="log.originalUrl"
-          >
-            {{ truncateUrl(log.originalUrl) }}
-          </span>
-          <el-tag
-            v-if="log.status"
-            :type="getStatusColor(log.status) as TagProps['type']"
-            size="small"
-            class="status-tag"
-            disable-transitions
-          >
-            {{ log.status }}
-          </el-tag>
-          <el-tag
-            v-else-if="log.error"
-            type="danger"
-            size="small"
-            class="status-tag"
-            disable-transitions
-          >
-            {{ t('requestFailed') }}
-          </el-tag>
-          <span class="recent-time">{{ formatTimeAgo(log.timestamp) }}</span>
+            <!--
+              两处 `as TagProps['type']` 是给 `pnpm typecheck:vue` 的纯类型断言（编译后不存在）。
+              Element Plus 的 `type` 联合里**没有「中性」这一档**，而 `getMethodColor` /
+              `getStatusColor` 用空串表示它（GET 徽章、3xx 状态徽章；`utils/formatters.ts` 写了
+              3xx 刻意落中性、不许挪到 success 那边）。空串在运行时靠 `.el-tag` 基础规则画成浅色底
+              + **继承字色**，改成 `'primary'`（也就是不传 `type`）字色就变主题蓝——那是视觉改动，
+              不在本轮范围，所以值原样交出去，只在类型层对齐。
+            -->
+            <el-tag
+              :type="getMethodColor(log.method) as TagProps['type']"
+              size="small"
+              class="method-tag"
+              disable-transitions
+            >
+              {{ log.method }}
+            </el-tag>
+            <span
+              class="recent-url"
+              :title="log.originalUrl"
+            >
+              {{ truncateUrl(log.originalUrl) }}
+            </span>
+            <el-tag
+              v-if="log.status"
+              :type="getStatusColor(log.status) as TagProps['type']"
+              size="small"
+              class="status-tag"
+              disable-transitions
+            >
+              {{ log.status }}
+            </el-tag>
+            <el-tag
+              v-else-if="log.error"
+              type="danger"
+              size="small"
+              class="status-tag"
+              disable-transitions
+            >
+              {{ t('requestFailed') }}
+            </el-tag>
+            <span class="recent-time">{{ formatTimeAgo(log.timestamp) }}</span>
+            <el-icon
+              class="recent-open"
+              aria-hidden="true"
+              ><ArrowRight
+            /></el-icon>
+          </button>
         </li>
       </TransitionGroup>
     </div>
@@ -725,6 +738,7 @@ import {
   Refresh,
   Link,
   CircleCheck,
+  ArrowRight,
 } from '@element-plus/icons-vue';
 import type { TagProps } from 'element-plus';
 import { useProxyStatus } from '@/composables/useProxyStatus';
@@ -1495,6 +1509,11 @@ async function reloadCurrentTab() {
     logger.warn('重载当前标签页失败:', error);
     ElMessage.error(t('configNotSyncedReloadFailed'));
   }
+}
+
+/** 最近请求行：带地址打开配置页日志并预筛这一笔 */
+function openRecentLog(url: string) {
+  void openOptionsPage(`#logs?url=${encodeURIComponent(url)}`);
 }
 
 /**
@@ -2427,6 +2446,45 @@ async function openOptionsPage(hash = '') {
 .recent-item:hover {
   background: var(--cop-surface-hover);
   transform: translateX(2px);
+}
+
+/* 整行可点：button 复位成透明容器，焦点环只包住这一行的内容 */
+.recent-hit {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.recent-hit:focus-visible {
+  outline: 2px solid var(--cop-primary, #409eff);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 可点性提示：默认收起，hover / 键盘聚焦时淡入并右移 2px */
+.recent-open {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--cop-text-color-secondary);
+  opacity: 0;
+  transform: translateX(-2px);
+  transition:
+    opacity var(--cop-duration-fast) var(--cop-ease-standard),
+    transform var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+.recent-item:hover .recent-open,
+.recent-hit:focus-visible .recent-open {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .method-tag {

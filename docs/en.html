@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-27"
+            "dateModified": "2026-10-28"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-27",
+            "dateModified": "2026-10-28",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -668,6 +668,58 @@
                 href="#how-it-works"
                 >See how it works</a
               >
+              <button
+                class="btn btn-ghost btn-icon share-btn"
+                type="button"
+                data-share
+                aria-label="Share this page"
+                title="Share this page"
+              >
+                <svg
+                  class="share-icon"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="18"
+                    cy="5"
+                    r="3"
+                  ></circle>
+                  <circle
+                    cx="6"
+                    cy="12"
+                    r="3"
+                  ></circle>
+                  <circle
+                    cx="18"
+                    cy="19"
+                    r="3"
+                  ></circle>
+                  <path d="m8.6 10.7 6.8-4.4"></path>
+                  <path d="m8.6 13.3 6.8 4.4"></path>
+                </svg>
+                <svg
+                  class="share-check"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m5 12.5 4.5 4.5L19 7"></path>
+                </svg>
+              </button>
             </div>
             <p class="hero-note">
               A recent desktop Google Chrome (Manifest V3) is required. We recommend installing from Chrome Web Store,
@@ -3788,7 +3840,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.6.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-10-27</span>
+            <span>Last updated 2026-10-28</span>
             <span
               ><a
                 href="./"
@@ -3856,9 +3908,58 @@ pnpm assets       # regenerate store and landing images</code></pre>
           <a href="en-alternatives.html">vs. dev-server proxy, mitmproxy, API clients</a>
           <a href="llms.txt">llms.txt</a>
           <a href="llms-full.txt">llms-full.txt</a>
+          <button
+            class="footer-share"
+            type="button"
+            data-share
+          >
+            Share this page
+          </button>
         </nav>
       </div>
     </footer>
+
+    <span
+      class="visually-hidden share-status"
+      role="status"
+      data-share-status
+      data-copied="Link copied"
+      data-failed="Copy failed — copy the address manually"
+    ></span>
+
+    <aside
+      class="install-bar"
+      data-install-bar
+      aria-label="Install prompt"
+    >
+      <a
+        class="install-bar-link"
+        href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+      >
+        <span>Cross-Origin Proxy</span>
+        <strong>Add to Chrome</strong>
+      </a>
+      <button
+        class="install-bar-close"
+        type="button"
+        data-install-dismiss
+        aria-label="Dismiss install prompt"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="m6 6 12 12"></path>
+          <path d="M18 6 6 18"></path>
+        </svg>
+      </button>
+    </aside>
 
     <div
       class="scroll-rail"

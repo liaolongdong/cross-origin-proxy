@@ -34,15 +34,22 @@
       :available-tags="availableTags"
       :selected-count="selectedRules.length"
       :total-rules="rules.length"
+      :command-shortcut-label="commandShortcutLabel"
       @batch-toggle="handleBatchToggle"
       @batch-delete="handleBatchDelete"
       @batch-migrate="showMigrate = true"
       @toggle-all="handleToggleAll"
+      @open-command-palette="showCommandPalette = true"
     />
 
     <!-- 规则计数信息行 -->
     <div class="rules-count-info">
       {{ t('rulesCountInfo', [rules.length, enabledCount]) }}
+      <span
+        v-if="filterActive"
+        class="rules-count-filtered"
+        >{{ t('rulesCountFiltered', [filteredRules.length]) }}</span
+      >
       <span
         v-if="dnrSkippedRules.size > 0"
         class="dnr-skipped-summary"
@@ -136,6 +143,7 @@
       v-model:visible="showLogs"
       v-model:method-filter="logMethodFilter"
       v-model:status-filter="logStatusFilter"
+      v-model:url-filter="logUrlFilter"
       :refresh-interval="logRefreshInterval"
       :logs="logs"
       :loading="logLoading"
@@ -154,13 +162,22 @@
       @create-mock-from-log="handleCreateMockFromLog"
     />
     <AboutDrawer v-model:visible="showAbout" />
+    <CommandPalette
+      v-model:visible="showCommandPalette"
+      :rules="rules"
+      :filter-active="filterActive"
+      @edit-rule="handleEditRule"
+      @action="handleCommandAction"
+      @closed="handleCommandPaletteClosed"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, h, defineAsyncComponent } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, h, nextTick, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { ImportResultStats, ProxyRule } from '@/utils/types';
+import type { CommandPaletteAction } from '@/utils/commandPalette';
 import { MessageType } from '@/utils/types';
 import { MAX_RULES, MAX_RECENT_TARGETS, DELETE_UNDO_WINDOW_MS } from '@/utils/constants';
 import { distinctTargetOrigins, sanitizeRecentTargets } from '@/utils/recentTargets';
@@ -184,6 +201,8 @@ import { type ThemeMode } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import { groupHitStatsByRule } from '@/utils/ruleStats';
 import { collectRuleTags, ruleMatchesTagFilter } from '@/utils/ruleTags';
+import { hasActiveRuleFilters, ruleMatchesKeyword } from '@/utils/ruleSearch';
+import { parseLogUrlFilter } from '@/utils/logFilter';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
@@ -211,6 +230,7 @@ const SelfCheckDialog = defineAsyncComponent(() => import('./SelfCheckDialog.vue
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
 const AboutDrawer = defineAsyncComponent(() => import('./AboutDrawer.vue'));
 const MigrateTargetsDialog = defineAsyncComponent(() => import('./MigrateTargetsDialog.vue'));
+const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue'));
 
 const { t } = useI18n();
 
@@ -293,6 +313,11 @@ const showLogs = ref(false);
 /** 「关于」抽屉：项目外链与「数据去哪儿了」那三条事实收在这一格 */
 const showAbout = ref(false);
 const showMigrate = ref(false);
+/** 命令面板：⌘K / Ctrl+K 或搜索框右侧入口打开 */
+const showCommandPalette = ref(false);
+/** 面板离场后再聚焦搜索框：EP 关闭时会把焦点还原到触发点，抢在它前面等于白做 */
+const pendingFocusSearch = ref(false);
+const commandShortcutLabel = navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl K';
 /**
  * 首装欢迎卡的关闭标记：三态
  *
@@ -325,7 +350,8 @@ const anyOverlayOpen = computed(
     showUrlTest.value ||
     showLogs.value ||
     showMigrate.value ||
-    showSelfCheck.value,
+    showSelfCheck.value ||
+    showCommandPalette.value,
 );
 const editingRule = ref<ProxyRule | null>(null);
 /**
@@ -410,15 +436,12 @@ function clearRuleFilters() {
 // 日志抽屉过滤器（提升到容器层，避免抽屉关闭后重置）
 const logMethodFilter = ref('');
 const logStatusFilter = ref('');
+/** 深链 `#logs?url=` 带进来的地址筛选；从顶栏开日志时清空 */
+const logUrlFilter = ref('');
 
 const filteredRules = computed(() => {
-  const keyword = searchText.value.toLowerCase();
   return rules.value.filter(rule => {
-    const matchesSearch =
-      !keyword ||
-      rule.name.toLowerCase().includes(keyword) ||
-      rule.matchPattern.toLowerCase().includes(keyword) ||
-      rule.targetUrl.toLowerCase().includes(keyword);
+    const matchesSearch = ruleMatchesKeyword(rule, searchText.value);
     const matchesStatus =
       !statusFilter.value ||
       (statusFilter.value === 'enabled' && rule.enabled) ||
@@ -427,6 +450,16 @@ const filteredRules = computed(() => {
     return matchesSearch && matchesStatus && matchesMatchType && ruleMatchesTagFilter(rule, tagsFilter.value);
   });
 });
+
+/** 四轴任一非空才算「筛选中」：计数行与命令面板的「清除筛选」共用这一份 */
+const filterActive = computed(() =>
+  hasActiveRuleFilters({
+    searchText: searchText.value,
+    statusFilter: statusFilter.value,
+    matchTypeFilter: matchTypeFilter.value,
+    tagsFilter: tagsFilter.value,
+  }),
+);
 
 /** 筛选下拉与表单候选都从这一份来：条数与排序的判据只住 `collectRuleTags` */
 const availableTags = computed(() => collectRuleTags(rules.value));
@@ -456,7 +489,57 @@ async function switchThemeMode(mode: ThemeMode) {
 
 // 日志抽屉：打开时刷新日志与 DNR 统计
 function openLogs() {
+  // 顶栏入口永远从「全部日志」开始；带地址进来只走 `#logs?url=`
+  logUrlFilter.value = '';
   showLogs.value = true;
+}
+
+/** 命令面板动作：全部走既有入口，面板本身不写业务 */
+function handleCommandAction(action: CommandPaletteAction) {
+  if (action === 'focus-search') {
+    // 等面板离场、EP 还原完焦点之后再抢；提前聚焦会被下一次还原覆盖
+    pendingFocusSearch.value = true;
+    return;
+  }
+  switch (action) {
+    case 'add-rule':
+      handleAddRule();
+      break;
+    case 'logs':
+      openLogs();
+      break;
+    case 'url-test':
+      showUrlTest.value = true;
+      break;
+    case 'import-export':
+      showImportExport.value = true;
+      break;
+    case 'profiles':
+      showProfiles.value = true;
+      break;
+    case 'settings':
+      showSettings.value = true;
+      break;
+    case 'self-check':
+      // 配置页自己不是网页标签页：从这一屏进来时没有「被检查的那一页」
+      selfCheckTabId.value = null;
+      showSelfCheck.value = true;
+      break;
+    case 'about':
+      showAbout.value = true;
+      break;
+    case 'clear-filters':
+      clearRuleFilters();
+      break;
+  }
+}
+
+function handleCommandPaletteClosed() {
+  if (!pendingFocusSearch.value) return;
+  pendingFocusSearch.value = false;
+  void nextTick(() => {
+    document.querySelector<HTMLInputElement>('.search-filter-bar input')?.focus();
+  });
 }
 
 watch(showLogs, visible => {
@@ -514,14 +597,28 @@ onUnmounted(() => {
 
 /** 全局键盘快捷键处理 */
 function handleKeydown(e: KeyboardEvent) {
+  const isMac = navigator.platform.includes('Mac');
+  const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+  // 命令面板必须排在「输入框早退」之前：面板自己的搜索框也是 INPUT，放在后面就会出现
+  // 「打开后按 ⌘K 关不掉」。确认框在场时整条让位（与 Escape 同一条判据）。
+  if (modKey && (e.key === 'k' || e.key === 'K')) {
+    if (document.querySelector('.el-message-box')) return;
+    e.preventDefault();
+    if (showCommandPalette.value) {
+      showCommandPalette.value = false;
+      return;
+    }
+    if (anyOverlayOpen.value) return;
+    showCommandPalette.value = true;
+    return;
+  }
+
   const target = e.target as HTMLElement;
   const isEditable = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
   // 在输入框中仅响应 Escape，其余快捷键跳过
   if (isEditable && e.key !== 'Escape') return;
-
-  const isMac = navigator.platform.includes('Mac');
-  const modKey = isMac ? e.metaKey : e.ctrlKey;
 
   // N（或 Ctrl/Cmd + N）：打开新增规则弹窗。
   // 注意 Ctrl/Cmd+N 在多数平台是浏览器保留快捷键（新窗口），页面无法捕获，
@@ -546,13 +643,15 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Escape：关闭最上层的弹窗/抽屉（优先级：规则弹窗 > 导入导出 > 环境配置 > 设置 > URL 测试 > 日志）
+  // Escape：关闭最上层的弹窗/抽屉（优先级：命令面板 > 规则弹窗 > 导入导出 > 环境配置 > 设置 > URL 测试 > 日志）
   if (e.key === 'Escape') {
     // 确认框在场时整条级联让位：它由 ElMessageBox 自己的焦点陷阱接管 Escape，
     // 而这个监听器挂在 window 上、看不见模态层级，照常往下走就是
     // 「我只想关掉这个确认，结果连背后整个弹窗一起关了」
     if (document.querySelector('.el-message-box')) return;
-    if (showRuleDialog.value) {
+    if (showCommandPalette.value) {
+      showCommandPalette.value = false;
+    } else if (showRuleDialog.value) {
       showRuleDialog.value = false;
     } else if (showImportExport.value) {
       showImportExport.value = false;
@@ -578,6 +677,11 @@ function handleHashNavigation() {
   if (hash === '#add-rule') {
     handleAddRule();
   } else if (hash === '#logs') {
+    logUrlFilter.value = '';
+    showLogs.value = true;
+  } else if (hash.startsWith('#logs?url=')) {
+    // popup 最近请求带过来的地址：只做预筛，不自动聚焦某一行（日志按帧续载，目标行未必在第一窗）
+    logUrlFilter.value = parseLogUrlFilter(hash.slice('#logs?url='.length));
     showLogs.value = true;
   } else if (hash === '#import-export') {
     showImportExport.value = true;
@@ -845,6 +949,7 @@ async function handleBatchToggle(enabled: boolean) {
   }
   try {
     await batchToggleRules(ids, enabled);
+    ElMessage.success(t(enabled ? 'batchEnableSuccess' : 'batchDisableSuccess', [count]));
   } catch (error) {
     ElMessage.error(t('toggleFailed'));
     logger.error('Batch toggle failed:', error);
@@ -1108,11 +1213,16 @@ async function handleReorder(fromId: string, toId: string) {
   color: var(--cop-text-color-secondary);
 }
 
-/* 两条都是 v-if 的追加句：分隔符写在 CSS 里，任何一条单独出现时都不会留下孤点 */
+/* 三条都是 v-if 的追加句：分隔符写在 CSS 里，任何一条单独出现时都不会留下孤点 */
+.rules-count-filtered::before,
 .dnr-skipped-summary::before,
 .hit-stats-stale::before {
   margin-right: 5px;
   content: '·';
+}
+
+.rules-count-filtered {
+  color: var(--cop-text-color-secondary);
 }
 
 .dnr-skipped-summary {

@@ -89,10 +89,11 @@
             />
           </el-select>
           <el-input
-            v-model="urlKeyword"
+            :model-value="urlFilter"
             :placeholder="t('filterByUrl')"
             clearable
             style="width: 180px"
+            @update:model-value="(val: string) => $emit('update:urlFilter', val ?? '')"
           />
         </div>
         <div class="toolbar-right">
@@ -666,6 +667,7 @@ import type { RequestLogEntry, DnrHitStat, ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
 import type { DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
+import { logMatchesFilters } from '@/utils/logFilter';
 import { computeLogStats } from '@/utils/ruleStats';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
@@ -703,12 +705,15 @@ const props = defineProps<{
   swStatsState: SwStatsState;
   methodFilter: string;
   statusFilter: string;
+  /** 地址筛选（受控）：深链 `#logs?url=` 会把它预填，顶栏入口传空串 */
+  urlFilter: string;
 }>();
 
 const emit = defineEmits<{
   'update:visible': [value: boolean];
   'update:methodFilter': [value: string];
   'update:statusFilter': [value: string];
+  'update:urlFilter': [value: string];
   'update:refreshInterval': [value: number];
   clear: [];
   refresh: [value: boolean];
@@ -731,9 +736,8 @@ const { t, locale } = useI18n();
  */
 const fallbackRefreshInterval = REFRESH_INTERVAL_PRESETS[0].value;
 
-// 筛选
+// 筛选（地址一轴受控，其余两轴留在本组件）
 const ruleFilter = ref('');
-const urlKeyword = ref('');
 
 /** 从日志中提取的唯一规则名称列表（用于规则名称下拉） */
 const uniqueRuleNames = computed(() => {
@@ -818,23 +822,16 @@ const logsReadFailedText = computed(() =>
   props.logsReadFailed && props.logs.length > 0 ? `${t('logsReadFailed')} · ${t('logsReadStale')}` : '',
 );
 
-const filteredLogs = computed(() => {
-  const keyword = urlKeyword.value.toLowerCase();
-  return props.logs.filter(log => {
-    const matchesMethod = !props.methodFilter || log.method === props.methodFilter;
-    const matchesStatus =
-      !props.statusFilter ||
-      (props.statusFilter === '2xx' && log.status! >= 200 && log.status! < 300) ||
-      (props.statusFilter === '4xx' && log.status! >= 400 && log.status! < 500) ||
-      (props.statusFilter === '5xx' && log.status! >= 500) ||
-      // 代理失败不带状态码，三档数字区间都圈不住它，单列一档按 error 判定
-      (props.statusFilter === 'error' && !!log.error);
-    const matchesRule = !ruleFilter.value || log.ruleName === ruleFilter.value;
-    const matchesUrl =
-      !keyword || log.originalUrl.toLowerCase().includes(keyword) || log.proxiedUrl.toLowerCase().includes(keyword);
-    return matchesMethod && matchesStatus && matchesRule && matchesUrl;
-  });
-});
+const filteredLogs = computed(() =>
+  props.logs.filter(log =>
+    logMatchesFilters(log, {
+      method: props.methodFilter,
+      status: props.statusFilter,
+      ruleName: ruleFilter.value,
+      urlKeyword: props.urlFilter,
+    }),
+  ),
+);
 
 // 统计（基于筛选后的数据，单次遍历）
 const logStats = computed(() => computeLogStats(filteredLogs.value));
