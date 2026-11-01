@@ -33,6 +33,8 @@
  *     （无 JS 时整块不出现，问答照旧全部可读、可点、可滚）。
  * 14. 窄屏下对比表的横滑提示：与第 3 项共用同一份「截断在哪一侧」的判据，
  *     只给右缘渐隐——左那一列是钉住的，淡掉它反而读不出比的是哪一家。
+ * 15. 分享这一页：系统分享优先，失败回落到复制当前地址；结果写进 `role="status"` 并显形成轻提示。
+ * 16. 移动端安装条：窄屏滚过首屏后出现，页脚/菜单/关闭时让位，关闭只活本次访问、不写 storage。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
@@ -1279,4 +1281,105 @@
   document.querySelectorAll('.table-scroll').forEach(shell => {
     if (shell.querySelector('table')) watchOverflow(shell);
   });
+
+  /* ─────────────── 15. 分享这一页 ─────────────── */
+
+  const shareButtons = all('[data-share]');
+
+  if (shareButtons.length) {
+    const shareStatus = document.querySelector('[data-share-status]');
+    const reportShare = statusReporter(shareStatus);
+    /* 文案只住 HTML 的 data-* 里：脚本不存第二份，也不在脚本里写任何一句界面语言。 */
+    const copiedMessage = shareStatus ? shareStatus.getAttribute('data-copied') || '' : '';
+    const failedMessage = shareStatus ? shareStatus.getAttribute('data-failed') || '' : '';
+    let shareStatusTimer = null;
+    let flashTimer = null;
+
+    /**
+     * 播报结果，并把同一块读屏区显形成一条轻提示；4 秒后收回。
+     * @param {string} message 要显示的文案（来自 HTML）
+     * @param {boolean} ok 是否成功
+     */
+    const showShareStatus = (message, ok) => {
+      reportShare(message, ok);
+      if (!shareStatus) return;
+      shareStatus.classList.add('is-shown');
+      shareStatus.classList.toggle('is-failed', !ok);
+      if (shareStatusTimer !== null) clearTimeout(shareStatusTimer);
+      shareStatusTimer = setTimeout(() => {
+        shareStatus.classList.remove('is-shown', 'is-failed');
+        shareStatusTimer = null;
+      }, 4000);
+    };
+
+    /**
+     * 成功那一下换对勾 / 变一次成功色，1.2 秒后收回。
+     * 共用一个计时器：连点两枚入口时不会留下前一枚永远停在成功态。
+     * @param {HTMLElement} btn 被点的那一枚
+     */
+    const flashShare = btn => {
+      if (flashTimer !== null) clearTimeout(flashTimer);
+      shareButtons.forEach(button => button.classList.toggle('is-shared', button === btn));
+      flashTimer = setTimeout(() => {
+        shareButtons.forEach(button => button.classList.remove('is-shared'));
+        flashTimer = null;
+      }, 1200);
+    };
+
+    shareButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (navigator.share) {
+          try {
+            await navigator.share({ title: document.title, url: location.href });
+            flashShare(btn);
+            return;
+          } catch (error) {
+            // 用户在系统面板里取消不是失败：不降级成复制，也不报错
+            if (error && error.name === 'AbortError') return;
+          }
+        }
+        const copied = await copyText(location.href);
+        showShareStatus(copied ? copiedMessage : failedMessage, copied);
+        if (copied) flashShare(btn);
+      });
+    });
+  }
+
+  /* ─────────────── 16. 移动端安装条 ─────────────── */
+
+  const installBar = document.querySelector('[data-install-bar]');
+
+  if (installBar) {
+    let dismissed = false;
+
+    /**
+     * 滚过首屏才出现；页脚露面、移动菜单展开、用户点过关闭时让位。
+     * 关闭只活这一次访问，不写 storage。
+     * @param {{ y: number, viewport: number }=} metrics 滚动通道合流后的一份读数
+     */
+    const updateInstallBar = metrics => {
+      if (dismissed) {
+        installBar.classList.remove('is-visible');
+        return;
+      }
+      const y = metrics ? metrics.y : window.scrollY;
+      const viewport = metrics ? metrics.viewport : window.innerHeight;
+      const footer = document.querySelector('.site-footer');
+      const footerTop = footer ? footer.getBoundingClientRect().top : Infinity;
+      const menuOpen = navMenu ? navMenu.open : false;
+      const visible = y > viewport * 0.8 && footerTop >= viewport - 24 && !menuOpen;
+      installBar.classList.toggle('is-visible', visible);
+    };
+
+    watchScroll(updateInstallBar);
+    if (navMenu) navMenu.addEventListener('toggle', () => updateInstallBar());
+
+    const dismiss = installBar.querySelector('[data-install-dismiss]');
+    if (dismiss) {
+      dismiss.addEventListener('click', () => {
+        dismissed = true;
+        installBar.classList.remove('is-visible');
+      });
+    }
+  }
 })();

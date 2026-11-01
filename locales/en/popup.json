@@ -5,6 +5,7 @@
   "todayRequests": "Via ext · today",
   "recentRequests": "Recent requests (via extension)",
   "noRecentRequests": "No requests yet",
+  "recentOpenLogs": "View this request in the log",
   "recentRequestsDnrHint": "Network-layer redirects are not logged — see the “This tab” count or the URL match tester",
   "actionOpenConfig": "Manage Rules",
   "actionOpenConfigDesc": "Open the rule list to add, edit or remove",

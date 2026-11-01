@@ -42,6 +42,18 @@
       v-loading="true"
       class="profiles-loading"
     ></div>
+    <!-- 读不到 ≠ 没有：读取失败必须单独占一句，不能落进下面的「暂无配置」 -->
+    <div
+      v-else-if="profilesReadFailed"
+      class="profiles-failed"
+    >
+      <p>{{ t('profilesReadFailed') }}</p>
+      <el-button
+        size="small"
+        @click="fetchProfiles"
+        >{{ t('refresh') }}</el-button
+      >
+    </div>
     <div
       v-else-if="profiles.length === 0"
       class="profiles-empty"
@@ -141,6 +153,8 @@ const { profiles, loadingProfiles: loading, loadProfiles, loadProfile } = usePro
 const saving = ref(false);
 const newProfileName = ref('');
 const rulesCount = ref(0);
+/** 列表这一次读失败：与「读到 0 个」分开画，重试走同一个入口 */
+const profilesReadFailed = ref(false);
 
 function formatTime(ts: number): string {
   return formatLocaleDateTime(ts, locale.value);
@@ -158,7 +172,9 @@ async function fetchRulesCount() {
 
 async function fetchProfiles() {
   // 两笔各自兜错：恢复点写坏、SW 刚回收这类事不该让列表和按钮闸门一起空白
-  await Promise.all([loadProfiles(), fetchRulesCount()]);
+  profilesReadFailed.value = false;
+  const [ok] = await Promise.all([loadProfiles(), fetchRulesCount()]);
+  profilesReadFailed.value = !ok;
 }
 
 // 打开即拉取。不走 el-dialog 的 `open` 事件：它只在 modelValue 的 watcher 里 emit，
@@ -302,6 +318,21 @@ async function handleDeleteProfile(profile: ProfileView) {
 
 .profiles-loading {
   min-height: 120px;
+}
+
+.profiles-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 28px 0;
+  color: var(--cop-text-color-secondary);
+  text-align: center;
+}
+
+.profiles-failed p {
+  margin: 0;
+  font-size: 13px;
 }
 
 .profiles-empty {

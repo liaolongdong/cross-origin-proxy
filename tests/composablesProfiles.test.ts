@@ -331,6 +331,17 @@ describe('界面这一半：Options 弹窗与 popup 卡片怎么用这个出口�
     expect(apply).toContain('void computePageHit();');
   });
 
+  it('快照列表读失败单独占一句：消费 loadProfiles 返回值，分支排在空态之前', () => {
+    expect(dialogSrc).toContain('const [ok] = await Promise.all([loadProfiles(), fetchRulesCount()]);');
+    expect(dialogSrc).toContain('profilesReadFailed.value = !ok;');
+    const loading = dialogSrc.indexOf('v-if="loading"');
+    const failed = dialogSrc.indexOf('v-else-if="profilesReadFailed"');
+    const empty = dialogSrc.indexOf('v-else-if="profiles.length === 0"');
+    expect(loading, '加载分支不见了').toBeGreaterThan(-1);
+    expect(failed, '读失败分支不见了：读不到会被画成「暂无配置」').toBeGreaterThan(loading);
+    expect(empty, '空态分支不见了').toBeGreaterThan(failed);
+  });
+
   it('确认那句必须点名两件副作用，而 storage 那一侧必须真的做这两件事', () => {
     // 措辞与 `utils/storage.ts` 的 `loadProfile` 同源：整套替换 + 打开总开关 + 先落恢复点
     const storageSrc = readFileSync('utils/storage.ts', 'utf-8');

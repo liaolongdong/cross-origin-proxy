@@ -209,6 +209,12 @@
             <kbd>F</kbd>
           </div>
           <div class="shortcut-item">
+            <span class="shortcut-desc">{{ t('shortcutCommandPalette') }}</span>
+            <kbd>{{ isMac ? '⌘' : 'Ctrl' }}</kbd>
+            <span class="shortcut-plus">+</span>
+            <kbd>K</kbd>
+          </div>
+          <div class="shortcut-item">
             <span class="shortcut-desc">{{ t('shortcutClose') }}</span>
             <kbd>Esc</kbd>
           </div>
