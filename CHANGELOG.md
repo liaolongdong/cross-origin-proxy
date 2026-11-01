@@ -121,18 +121,16 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
 ## [1.8.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.7.0...v1.8.0) (2026-11-01)
 
-
 ### Added
 
-* ⌘K 命令面板 + 站点转场/分享/安装条 + 截图流水线 ([921d62c](https://github.com/liaolongdong/cross-origin-proxy/commit/921d62c7055ec82f9ec0c46154e372b50a7e3079))
-* **docs:** 商店与落地页图按 1.7.0 重拍，截图流水线可复算 ([9d11433](https://github.com/liaolongdong/cross-origin-proxy/commit/9d11433e8a275450b60b49fd1894cd122389fecb))
-* **docs:** 跨页转场、分享入口与移动端安装条 ([650528f](https://github.com/liaolongdong/cross-origin-proxy/commit/650528f4e785e0436375a96fe3cdfe2420661fd1))
-* **options:** ⌘K 命令面板与日志深链，快照读失败不再画成空 ([d949d58](https://github.com/liaolongdong/cross-origin-proxy/commit/d949d58ad6db78a9cfb37eb5e955ddab44928370))
-
+- ⌘K 命令面板 + 站点转场/分享/安装条 + 截图流水线 ([921d62c](https://github.com/liaolongdong/cross-origin-proxy/commit/921d62c7055ec82f9ec0c46154e372b50a7e3079))
+- **docs:** 商店与落地页图按 1.7.0 重拍，截图流水线可复算 ([9d11433](https://github.com/liaolongdong/cross-origin-proxy/commit/9d11433e8a275450b60b49fd1894cd122389fecb))
+- **docs:** 跨页转场、分享入口与移动端安装条 ([650528f](https://github.com/liaolongdong/cross-origin-proxy/commit/650528f4e785e0436375a96fe3cdfe2420661fd1))
+- **options:** ⌘K 命令面板与日志深链，快照读失败不再画成空 ([d949d58](https://github.com/liaolongdong/cross-origin-proxy/commit/d949d58ad6db78a9cfb37eb5e955ddab44928370))
 
 ### Fixed
 
-* **scripts:** 截图脚本的演示导入载荷不再写死版本号 ([589f9bd](https://github.com/liaolongdong/cross-origin-proxy/commit/589f9bd96a0049627ce421f3e09b48797a11e0f4))
+- **scripts:** 截图脚本的演示导入载荷不再写死版本号 ([589f9bd](https://github.com/liaolongdong/cross-origin-proxy/commit/589f9bd96a0049627ce421f3e09b48797a11e0f4))
 
 ## [1.7.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.6.0...v1.7.0) (2026-10-25)
 
