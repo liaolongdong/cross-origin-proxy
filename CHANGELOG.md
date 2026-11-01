@@ -119,6 +119,21 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
   **The filter's hint now names both keys it actually honors.** It used to advertise only `/` — the "press Esc to clear and get all 21 back" path was knowledge you had to already have. All four filter pages now read "press `/` to jump to it, `Esc` to clear" (zh: 「按 `/` 直达、`Esc` 清空」), reusing the existing key-cap style. A new guard requires every key cap in that hint to be a key the script really compares, and pins the four pages to exactly these two. **The first draft of that guard was toothless**: it asked whether _anywhere in the script_ something compared `Escape`, and the hamburger menu has its own Esc listener — deleting the filter's comparison stayed green. It now locates `faqFilter.addEventListener('keydown'` first and only asks inside that stretch; the mutation reddens, together with the pre-existing "filter works by hiding" case, the two pointing at each other. Live in Chrome for Testing 155 with real `Input.dispatchKeyEvent`, all four pages: before `/` the active element is BODY, after it the filter input with an empty value; inserting `CORS` makes the status line read "3 / 21 问匹配" (comparison pages: "1 / 5"); after Esc the value is empty again and 21 questions (5 there) are visible again. At 390 and 1280 across four pages: zero clipped key caps, zero page-level horizontal overflow, measured cap widths 23.8 and 39.5 px. The existing guard that reconciles "these 21 questions" in the label with the page's actual `<details>` count was untouched — that number didn't move.
 
+## [1.8.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.7.0...v1.8.0) (2026-11-01)
+
+
+### Added
+
+* ⌘K 命令面板 + 站点转场/分享/安装条 + 截图流水线 ([921d62c](https://github.com/liaolongdong/cross-origin-proxy/commit/921d62c7055ec82f9ec0c46154e372b50a7e3079))
+* **docs:** 商店与落地页图按 1.7.0 重拍，截图流水线可复算 ([9d11433](https://github.com/liaolongdong/cross-origin-proxy/commit/9d11433e8a275450b60b49fd1894cd122389fecb))
+* **docs:** 跨页转场、分享入口与移动端安装条 ([650528f](https://github.com/liaolongdong/cross-origin-proxy/commit/650528f4e785e0436375a96fe3cdfe2420661fd1))
+* **options:** ⌘K 命令面板与日志深链，快照读失败不再画成空 ([d949d58](https://github.com/liaolongdong/cross-origin-proxy/commit/d949d58ad6db78a9cfb37eb5e955ddab44928370))
+
+
+### Fixed
+
+* **scripts:** 截图脚本的演示导入载荷不再写死版本号 ([589f9bd](https://github.com/liaolongdong/cross-origin-proxy/commit/589f9bd96a0049627ce421f3e09b48797a11e0f4))
+
 ## [1.7.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.6.0...v1.7.0) (2026-10-25)
 
 ### Added
