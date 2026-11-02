@@ -13,9 +13,19 @@
  * - 先 `pnpm build`，脚本装的是 `.output/chrome-mv3`；
  * - 本机 Chrome for Testing（`CHROME_BIN` 指过去，或放在 `.test-tmp/chrome-mac-<arch>/`、
  *   `~/.cache/chrome-for-testing/<version>/chrome-mac-<arch>/`）；
- * - `CFT_PORT=<端口>` 时不再自起浏览器，直接连一个已经带
- *   `--enable-unsafe-extension-debugging --remote-allow-origins=*` 起好的 CFT；
+ * - `CFT_PORT=<端口>` 时不再自起浏览器，直接连一个已经起好的 CFT——那一面需要带
+ *   `--enable-unsafe-extension-debugging`；**不需要** `--remote-allow-origins`（见下面那一段）；
  * - 本脚本不跑 CI：它要一个已构建的扩展与本机浏览器。
+ *
+ * 关于 CDP 的 origin 白名单（**别再往回加 `*`**）：本脚本用 Node 全局 `WebSocket` 连 CDP。
+ * 2026-11-02 在本机 Chrome 156 + Node 24 上按本脚本的真实连接形状实测：不给任何 origin 旗标时
+ * 连得上、`Browser.getVersion` 正常回话；Node 那一头**不发 `Origin` 头**，而手工带上
+ * `Origin: http://127.0.0.1:<同一个端口>` 同样 101；带上 `Origin: https://evil.example` 则
+ * browser 端点与 page 端点都是 403。也就是说 `--remote-allow-origins=*` 换来的东西等于零，
+ * 代价却是「本机任意网页命中那枚端口就能驱动这个装着扩展的浏览器」——所以启动配方里不带它，
+ * 细节与反面情形写在 `scripts/cdp-launch.mjs` 的文件头。profile 是 `.test-tmp` 下的一次性目录，
+ * 里面只有 `example.com` 演示数据与一条假 token；进程由脚本按 pid 收干净（`SIGINT` / `SIGTERM`
+ * / `SIGHUP` 与 `exit` 四条出口都接管）。
  *
  * 用法：
  *   pnpm shots                 # 中文，写入 screenshots/
@@ -25,8 +35,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchCdpChrome } from './cdp-launch.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -321,9 +331,9 @@ if (PORT) {
   wsUrl = version.webSocketDebuggerUrl;
 } else {
   fs.rmSync(PROFILE, { recursive: true, force: true });
-  chromeProc = spawn(
-    process.env.CHROME_BIN,
-    [
+  const launched = await launchCdpChrome({
+    chromeBin: process.env.CHROME_BIN,
+    baseArgs: [
       '--headless=new',
       '--disable-gpu',
       '--no-first-run',
@@ -334,15 +344,13 @@ if (PORT) {
       '--disable-renderer-backgrounding',
       `--user-data-dir=${PROFILE}`,
       '--enable-unsafe-extension-debugging',
-      '--remote-debugging-port=0',
-      '--remote-allow-origins=*',
-      'about:blank',
     ],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
-  );
+  });
+  chromeProc = launched.proc;
+  wsUrl = launched.wsUrl;
   const kill = () => {
     try {
-      chromeProc.kill('SIGKILL');
+      chromeProc?.kill('SIGKILL');
     } catch {
       /* noop */
     }
@@ -354,18 +362,6 @@ if (PORT) {
       process.exit(1);
     });
   }
-  wsUrl = await new Promise((resolve, reject) => {
-    let buf = '';
-    const timer = setTimeout(() => reject(new Error('Chrome 没有报出调试端口')), 60000);
-    chromeProc.stderr.on('data', chunk => {
-      buf += chunk.toString();
-      const match = buf.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[0-9a-f-]{36})/);
-      if (match) {
-        clearTimeout(timer);
-        resolve(match[1]);
-      }
-    });
-  });
 }
 
 const socket = new WebSocket(wsUrl);

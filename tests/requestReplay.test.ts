@@ -200,6 +200,15 @@ describe('readReplayEnvelope — 这一笔到底发生了什么', () => {
     expect(
       readReplayEnvelope(envelope({ status: 0, statusText: 'Proxy Bypass', body: 'Invalid request payload' })).outcome,
     ).toBe('malformed');
+    // 第四句：地址的协议不在白名单上（入站那一串，或规则重写出来的那一串）。它与「没命中规则」
+    // 在页面上是同一份信封，而修法相反——那一档的下一步是加规则，这一档的下一步是改规则的目标地址
+    expect(
+      readReplayEnvelope(envelope({ status: 0, statusText: 'Proxy Bypass', body: 'Unsupported protocol' })).outcome,
+    ).toBe('protocolUnsupported');
+    // 表外的那个键不许读出对象原型上的东西：正文来自回包，`__proto__` 在普通对象字面量上是个真值
+    expect(readReplayEnvelope(envelope({ status: 0, statusText: 'Proxy Bypass', body: '__proto__' })).outcome).toBe(
+      'malformed',
+    );
   });
 
   it('那些编码只在 status 0 上算数：服务器自己回一个 statusText 叫 Blocked 的 200，讲的是它的故事', () => {
@@ -249,16 +258,25 @@ describe('readReplayEnvelope — 这一笔到底发生了什么', () => {
 
   it('内部编码那几档不再贴英文原文，对面说的话与体积上限那句留着', () => {
     const shown = (statusText: string, body: string) => readReplayEnvelope(envelope({ status: 0, statusText, body }));
-    // 这六档的英文原文已经被上面那句中文说完了，再贴一遍只是噪声（顺带把这六档的映射一起钉住）
+    // 这七档的英文原文已经被上面那句中文说完了，再贴一遍只是噪声（顺带把这七档的映射一起钉住）
     const internal = [
       shown('Proxy Bypass', 'Site excluded'),
       shown('Proxy Bypass', 'Proxy is disabled'),
       shown('Proxy Bypass', 'No matching rule'),
+      shown('Proxy Bypass', 'Unsupported protocol'),
       shown('Blocked', 'Request blocked by proxy rule'),
       shown('Invalid Rule Headers', 'Rule contains invalid header override'),
       shown('Proxy Bypass', 'Invalid request payload'),
     ].map(r => r.outcome);
-    expect(internal).toEqual(['siteExcluded', 'disabled', 'noRule', 'blocked', 'invalidRuleHeaders', 'malformed']);
+    expect(internal).toEqual([
+      'siteExcluded',
+      'disabled',
+      'noRule',
+      'protocolUnsupported',
+      'blocked',
+      'invalidRuleHeaders',
+      'malformed',
+    ]);
     for (const outcome of internal) {
       expect(replayBodyUseful(outcome)).toBe(false);
     }
@@ -282,8 +300,9 @@ describe('readReplayEnvelope — 这一笔到底发生了什么', () => {
    * 界面说的是「没能读到这一笔的答案」，而答案其实好好地回来了。所以这里按源码把那几个串钉住。
    *
    * 钉的是**出现次数**而不是「有没有出现」：`Body Too Large` 与 `Invalid Rule Headers` 各有两处
-   * （请求方向与回包方向 / 两处规则头拒绝），`Proxy Bypass` 有三处。只 `toContain` 时改掉其中一处
-   * 照样绿，而那一处正是某个方向的档位从此静默改判——数次数才数得到「这几句都还在，且一句不多一句不少」。
+   * （请求方向与回包方向 / 两处规则头拒绝），`Unsupported protocol` 也有两处（入站那一串与重写
+   * 之后的那一串），`Proxy Bypass` 有五处。只 `toContain` 时改掉其中一处照样绿，而那一处正是某个
+   * 方向的档位从此静默改判——数次数才数得到「这几句都还在，且一句不多一句不少」。
    */
   it('后台那几句字面量各在预期的次数上（改了那一头必须回来同步这张判读表）', () => {
     const handler = readFileSync('entrypoints/background/proxyHandler.ts', 'utf-8');
@@ -293,10 +312,11 @@ describe('readReplayEnvelope — 这一笔到底发生了什么', () => {
       ["statusText: 'Body Too Large'", 2],
       ["statusText: 'Invalid Rule Headers'", 2],
       ["statusText: 'Proxy Error'", 1],
-      ["statusText: 'Proxy Bypass'", 3],
+      ["statusText: 'Proxy Bypass'", 5],
       ["body: 'Site excluded'", 1],
       ["body: 'Proxy is disabled'", 1],
       ["body: 'No matching rule'", 1],
+      ["body: 'Unsupported protocol'", 2],
       ['Request body exceeds', 1],
       ['Response body exceeds', 1],
     ];

@@ -59,6 +59,15 @@
         </button>
       </template>
 
+      <!-- 「规则那一半」此刻的答案形状，就排在规则那一组该在的位置上——排在命令之后，
+           读起来像是在说命令，而它说的是规则 -->
+      <p
+        v-if="rulesNoteText && ruleItems.length === 0"
+        class="command-note"
+      >
+        {{ rulesNoteText }}
+      </p>
+
       <template v-if="actionItems.length > 0">
         <div class="command-group">{{ t('commandPaletteActions') }}</div>
         <button
@@ -79,7 +88,7 @@
       </template>
 
       <p
-        v-if="ruleItems.length === 0 && actionItems.length === 0"
+        v-if="ruleItems.length === 0 && actionItems.length === 0 && !rulesNoteText"
         class="command-empty"
       >
         {{ t('commandPaletteEmpty') }}
@@ -96,9 +105,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import type { ProxyRule } from '@/utils/types';
 import type { CommandPaletteAction, CommandPaletteActionEntry } from '@/utils/commandPalette';
+import { MAX_COMMAND_RULE_RESULTS } from '@/utils/commandPalette';
 import { ruleMatchesKeyword } from '@/utils/ruleSearch';
 import { useI18n } from '@/composables/useI18n';
 
@@ -114,6 +124,15 @@ const props = defineProps<{
   rules: ProxyRule[];
   /** 有筛选时「清除筛选」才出现 */
   filterActive: boolean;
+  /**
+   * 首屏那一次配置往返是否还在路上（与 `everRead` 一起用，判据同 `RuleTable`：
+   * 已经读到过一次之后的刷新不该再闪一句「正在读取」）
+   */
+  rulesLoading: boolean;
+  /** 这一次打开页面后是否至少成功读到过一次规则 */
+  rulesEverRead: boolean;
+  /** 读到的是失败（抛错 / 信封不成形状）——手里那份空列表不是答案 */
+  rulesReadFailed: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -147,12 +166,30 @@ const actionEntries = computed<CommandPaletteActionEntry[]>(() => {
 // 空查询只列动作；输入后才搜规则（200 条规则全铺出来等于噪声）
 const ruleItems = computed(() => {
   if (!query.value) return [];
-  return props.rules.filter(rule => ruleMatchesKeyword(rule, query.value)).slice(0, 6);
+  return props.rules.filter(rule => ruleMatchesKeyword(rule, query.value)).slice(0, MAX_COMMAND_RULE_RESULTS);
 });
 
 const actionItems = computed(() => {
   const keyword = query.value.toLowerCase();
   return actionEntries.value.filter(entry => !keyword || entry.label.toLowerCase().includes(keyword));
+});
+
+/**
+ * 「规则那半此刻没有结果」要说哪一句
+ *
+ * 三种事实三句话：没搜规则（空串，无话要说）、首屏那一次还在路上、以及读到了失败。
+ * 判据与 `RuleTable` 同一条（`loading && !everRead`）——已经读到过一次之后的刷新不该再闪一句「正在读取」。
+ *
+ * 存在的理由：「没有匹配的规则」这句话只有真的搜过之后才有资格说。SW 冷启动时立刻按 ⌘K 打字，
+ * 手里那份 `rules` 空数组既不是「一条规则都没有」也不是「都没匹配上」，它是什么都还没说；
+ * 读失败那一档更直白——同一屏的规则表正在说「暂时读不到」，面板却指着同一条空列表说「没匹配」，
+ * 两句话并排就是本仓反复消灭的那类自相矛盾。
+ */
+const rulesNoteText = computed(() => {
+  if (!query.value) return '';
+  if (props.rulesReadFailed) return t('readFailed');
+  if (props.rulesLoading && !props.rulesEverRead) return t('commandPaletteRulesReading');
+  return '';
 });
 
 const flatLength = computed(() => ruleItems.value.length + actionItems.value.length);
@@ -171,11 +208,20 @@ function close() {
   emit('update:visible', false);
 }
 
+/**
+ * 进场补焦那枚定时器
+ *
+ * 只允许一枚在途：下一次补焦先掐掉上一枚，卸载时一并掐掉。EP 的焦点还原与进场动画谁先落地
+ * 不保证，所以那 80ms 的兜底必须有，但叠着来就是同一帧里好几个回调互相抢焦点。
+ */
+let focusTimer: number | undefined;
+
 function focusInput() {
-  // EP 的焦点陷阱在进场时会把焦点放到 dialog 容器上；`@opened` 之后再补一拍，
-  // 让搜索框真正接住键盘。只补一次，不在打开期间反复抢焦点。
+  // EP 的焦点陷阱在进场时会把焦点放到 dialog 容器上；过一拍再抢给搜索框，让键盘真正落在输入处。
   void nextTick(() => inputRef.value?.focus());
-  window.setTimeout(() => {
+  if (focusTimer !== undefined) window.clearTimeout(focusTimer);
+  focusTimer = window.setTimeout(() => {
+    focusTimer = undefined;
     if (props.visible) inputRef.value?.focus();
   }, 80);
 }
@@ -183,9 +229,13 @@ function focusInput() {
 function reset() {
   query.value = '';
   activeIndex.value = 0;
-  // 正常路径由 `@opened` 在进场结束后补焦；这里先聚焦一次，覆盖「分片取回前已经 visible」的挂载分支
+  // 覆盖「分片取回前已经 visible」那条挂载分支：那一路不会有 `@opened`，只能在这里补
   void nextTick(focusInput);
 }
+
+onUnmounted(() => {
+  if (focusTimer !== undefined) window.clearTimeout(focusTimer);
+});
 
 // 分片可能带着 visible === true 挂载（键盘在分片取回前按下），所以必须 immediate
 watch(
@@ -335,6 +385,15 @@ function chooseAction(action: CommandPaletteAction) {
 .command-empty {
   padding: 28px 0;
   margin: 0;
+  color: var(--cop-text-color-secondary);
+  text-align: center;
+}
+
+/* 「规则那半没说上话」那一句：比空态矮一档，因为它是补话不是主句 */
+.command-note {
+  padding: 12px 8px;
+  margin: 0;
+  font-size: 12px;
   color: var(--cop-text-color-secondary);
   text-align: center;
 }

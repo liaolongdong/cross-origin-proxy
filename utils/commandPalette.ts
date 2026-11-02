@@ -11,6 +11,14 @@ export type CommandPaletteAction =
   | 'focus-search'
   | 'clear-filters';
 
+/**
+ * 规则结果一屏最多列几条
+ *
+ * 住在这一层而不是组件里，是因为「最多 6 条」在 AGENTS.md 与 README 里都是被当契约说的：
+ * 200 条规则全铺出来等于噪声，而面板只给一次方向键的射程。
+ */
+export const MAX_COMMAND_RULE_RESULTS = 6;
+
 export interface CommandPaletteActionEntry {
   key: CommandPaletteAction;
   label: string;

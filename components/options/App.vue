@@ -143,6 +143,7 @@
       v-model:visible="showLogs"
       v-model:method-filter="logMethodFilter"
       v-model:status-filter="logStatusFilter"
+      v-model:rule-filter="logRuleFilter"
       v-model:url-filter="logUrlFilter"
       :refresh-interval="logRefreshInterval"
       :logs="logs"
@@ -166,6 +167,9 @@
       v-model:visible="showCommandPalette"
       :rules="rules"
       :filter-active="filterActive"
+      :rules-loading="ruleLoading"
+      :rules-ever-read="configEverRead"
+      :rules-read-failed="configReadFailed"
       @edit-rule="handleEditRule"
       @action="handleCommandAction"
       @closed="handleCommandPaletteClosed"
@@ -203,6 +207,7 @@ import { groupHitStatsByRule } from '@/utils/ruleStats';
 import { collectRuleTags, ruleMatchesTagFilter } from '@/utils/ruleTags';
 import { hasActiveRuleFilters, ruleMatchesKeyword } from '@/utils/ruleSearch';
 import { parseLogUrlFilter } from '@/utils/logFilter';
+import { decodeHashValue } from '@/utils/hashParam';
 import { buildDuplicateRuleData } from '@/utils/ruleDuplicate';
 import { mergeReorderedVisible } from '@/utils/ruleOrder';
 import { resolveSelectedRules } from '@/utils/ruleSelection';
@@ -436,6 +441,12 @@ function clearRuleFilters() {
 // 日志抽屉过滤器（提升到容器层，避免抽屉关闭后重置）
 const logMethodFilter = ref('');
 const logStatusFilter = ref('');
+/**
+ * 规则名筛选（受控）：此前只有它留在抽屉内部，于是深链那一次没法把它交回复位——
+ * 用户从弹窗点「最近请求」进来看的是这一笔，手里却还压着上一次手选的规则名，
+ * 两轴一交，表格画「筛选无匹配」而没人知道上面那条下拉还在工作。
+ */
+const logRuleFilter = ref('');
 /** 深链 `#logs?url=` 带进来的地址筛选；从顶栏开日志时清空 */
 const logUrlFilter = ref('');
 
@@ -489,8 +500,11 @@ async function switchThemeMode(mode: ThemeMode) {
 
 // 日志抽屉：打开时刷新日志与 DNR 统计
 function openLogs() {
-  // 顶栏入口永远从「全部日志」开始；带地址进来只走 `#logs?url=`
+  // 顶栏入口从「全部日志」开始：地址与规则名这两条「看哪一笔」的轴一起复位。
+  // 方法 / 状态两轴按容器层那份口径留着——它们说的是「看哪一类」，不是「看哪一笔」。
+  // 带地址进来只走 `#logs?url=`。
   logUrlFilter.value = '';
+  logRuleFilter.value = '';
   showLogs.value = true;
 }
 
@@ -579,14 +593,16 @@ onMounted(async () => {
   void loadRecentTargets();
 
   // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出，
-  // #profiles 打开环境配置，#url-test 打开 URL 匹配预演，
+  // #profiles 打开环境配置，#url-test 打开 URL 匹配预演，#logs?url=<encoded> 带地址预筛日志，
   // #add-rule-from-tab=<url> 按当前标签页地址预填通配符规则；
-  // 监听 hashchange：popup 复用已打开的 Options 标签页时通过更新 hash 触发同文档导航
-  handleHashNavigation();
+  // 监听 hashchange：popup 复用已打开的 Options 标签页时通过更新 hash 触发同文档导航。
+  // 监听器排在首屏 hash 读取**之前**登记：`handleHashNavigation` 里任何一步抛出都不该把
+  // 键盘层（⌘K / N / / / Escape）与 hashchange 留在身后——配置页挂载后再没人补这三行。
   window.addEventListener('hashchange', handleHashNavigation);
   // 全局键盘快捷键
   window.addEventListener('keydown', handleKeydown);
   document.addEventListener('visibilitychange', handleVisibilityChange);
+  handleHashNavigation();
 });
 
 onUnmounted(() => {
@@ -677,10 +693,13 @@ function handleHashNavigation() {
   if (hash === '#add-rule') {
     handleAddRule();
   } else if (hash === '#logs') {
-    logUrlFilter.value = '';
-    showLogs.value = true;
+    // 交给同一个出口，不在这里各拼一遍复位：深链与顶栏两条路必须说同一句「从全部日志开始」
+    openLogs();
   } else if (hash.startsWith('#logs?url=')) {
-    // popup 最近请求带过来的地址：只做预筛，不自动聚焦某一行（日志按帧续载，目标行未必在第一窗）
+    // popup 最近请求带过来的地址：只做预筛，不自动聚焦某一行（日志按帧续载，目标行未必在第一窗）。
+    // 规则名一并交回「全部」——这一串自带一条筛选，留着上一次手选的规则名就是拿两轴相乘，
+    // 筛空之后表格说的是「这一笔没日志」，而它其实说的是「那条下拉还在工作」。
+    logRuleFilter.value = '';
     logUrlFilter.value = parseLogUrlFilter(hash.slice('#logs?url='.length));
     showLogs.value = true;
   } else if (hash === '#import-export') {
@@ -701,8 +720,12 @@ function handleHashNavigation() {
     // popup 动作区「设置」那一格的出口：整页设置（语言、主题、整张站点名单、凭据变量）此前在弹窗里没有通往的路
     showSettings.value = true;
   } else if (hash.startsWith('#add-rule-from-tab=')) {
-    // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）
-    handleCreateRuleFromUrl(decodeURIComponent(hash.slice('#add-rule-from-tab='.length)));
+    // popup 传入的地址经 encodeURIComponent 编码，此处解码后校验（视为不可信输入）。
+    // 解码只走 `decodeHashValue`：畸形百分号串让 `decodeURIComponent` 当场抛，而这一句排在
+    // `history.replaceState` 之前，抛出就是 hash 留在地址栏、刷新再弹一次——与它同批的
+    // `#logs?url=` 与 `#self-check?tab=` 都按「解不出就当没带」收口，这一格不能例外。
+    // 空串交给 `handleCreateRuleFromUrl`，它解不出 URL 会说得出那句失败提示。
+    handleCreateRuleFromUrl(decodeHashValue(hash.slice('#add-rule-from-tab='.length)));
   }
   if (hash) {
     history.replaceState(null, '', window.location.pathname);

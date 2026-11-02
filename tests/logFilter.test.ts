@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_LOG_URL_FILTER_LENGTH,
   logMatchesFilters,
+  hasActiveLogFilters,
   parseLogUrlFilter,
   type LogFilterState,
 } from '@/utils/logFilter';
@@ -97,5 +98,22 @@ describe('parseLogUrlFilter', () => {
     expect(parseLogUrlFilter('')).toBe('');
     expect(parseLogUrlFilter(null)).toBe('');
     expect(parseLogUrlFilter(undefined)).toBe('');
+  });
+});
+
+describe('hasActiveLogFilters — 「筛到空」与「没有日志」的分界', () => {
+  it('四轴全空 = 没在筛', () => {
+    expect(hasActiveLogFilters(empty)).toBe(false);
+  });
+
+  it('任一轴非空即算在筛（四轴各一条，缺一轴就是下一次加轴时漏掉的那一半）', () => {
+    expect(hasActiveLogFilters({ ...empty, method: 'GET' })).toBe(true);
+    expect(hasActiveLogFilters({ ...empty, status: '4xx' })).toBe(true);
+    expect(hasActiveLogFilters({ ...empty, ruleName: 'FAT → UAT' })).toBe(true);
+    expect(hasActiveLogFilters({ ...empty, urlKeyword: '/api/' })).toBe(true);
+  });
+
+  it('`el-select` 的「全部」是空串，与未设同档', () => {
+    expect(hasActiveLogFilters({ method: '', status: '', ruleName: '', urlKeyword: '' })).toBe(false);
   });
 });
