@@ -252,6 +252,9 @@ onUnmounted(() => {
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color-light);
   border-radius: 6px;
+  transition:
+    color var(--cop-duration-instant) var(--cop-ease-standard),
+    border-color var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
 .command-hint:hover {

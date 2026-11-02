@@ -85,5 +85,6 @@
   "siteScopeDisabledHere": "这台站点已停用代理（含子域名）",
   "siteScopeParentCovered": "这台站点由名单里的父域名覆盖，无法单独切换。请到设置页调整父域名。",
   "siteScopeCapReached": "站点名单已到 $1 条上限，这台加不进去。请到设置页删掉一条再试。",
-  "siteScopeSaveFailed": "站点设置保存失败，请重试"
+  "siteScopeSaveFailed": "站点设置保存失败，请重试",
+  "openOptionsPageFailed": "没能打开配置页，请从工具栏图标再试一次"
 }

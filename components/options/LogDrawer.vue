@@ -72,10 +72,11 @@
             />
           </el-select>
           <el-select
-            v-model="ruleFilter"
+            :model-value="ruleFilter"
             :placeholder="t('filterByRule')"
             clearable
             style="width: 150px"
+            @update:model-value="(val: string | number | undefined) => emit('update:ruleFilter', (val as string) ?? '')"
           >
             <el-option
               :label="t('allRules')"
@@ -667,7 +668,7 @@ import type { RequestLogEntry, DnrHitStat, ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
 import type { DnrSampleState } from '@/utils/dnrSample';
 import { useI18n } from '@/composables/useI18n';
-import { logMatchesFilters } from '@/utils/logFilter';
+import { logMatchesFilters, hasActiveLogFilters } from '@/utils/logFilter';
 import { computeLogStats } from '@/utils/ruleStats';
 import { isSensitiveHeaderName } from '@/utils/exportSanitize';
 import { resolveHeaderDisplayValue } from '@/utils/headerMask';
@@ -705,6 +706,8 @@ const props = defineProps<{
   swStatsState: SwStatsState;
   methodFilter: string;
   statusFilter: string;
+  /** 规则名筛选（受控）：与其余三轴同源，容器层才能在深链那一次把它一并交回「全部」 */
+  ruleFilter: string;
   /** 地址筛选（受控）：深链 `#logs?url=` 会把它预填，顶栏入口传空串 */
   urlFilter: string;
 }>();
@@ -713,6 +716,7 @@ const emit = defineEmits<{
   'update:visible': [value: boolean];
   'update:methodFilter': [value: string];
   'update:statusFilter': [value: string];
+  'update:ruleFilter': [value: string];
   'update:urlFilter': [value: string];
   'update:refreshInterval': [value: number];
   clear: [];
@@ -736,8 +740,8 @@ const { t, locale } = useI18n();
  */
 const fallbackRefreshInterval = REFRESH_INTERVAL_PRESETS[0].value;
 
-// 筛选（地址一轴受控，其余两轴留在本组件）
-const ruleFilter = ref('');
+// 筛选：四轴全部受控（method / status / ruleName / url 都住在容器层），
+// 所以深链那一次能把整套筛选交回容器统一复位，抽屉内部不再藏一条只有它自己知道的轴。
 
 /** 从日志中提取的唯一规则名称列表（用于规则名称下拉） */
 const uniqueRuleNames = computed(() => {
@@ -775,14 +779,28 @@ const dnrStatsEmptyText = computed(() => {
 const swStatsEmptyText = computed(() => (props.swStatsState === 'fresh' ? t('swStatsEmpty') : t('statsUnavailable')));
 
 /**
- * 空表那一句：三档事实，三句话
+ * 四轴的当前取值：命中筛选与「有没有在筛」共用这一份，不留两处各拼一遍
+ * （下一次加第五轴时，漏掉那一半的会是「无匹配」那句话，而不是表格）。
+ */
+const filterState = computed(() => ({
+  method: props.methodFilter,
+  status: props.statusFilter,
+  ruleName: props.ruleFilter,
+  urlKeyword: props.urlFilter,
+}));
+
+/**
+ * 空表那一句：四档事实，四句话
  *
  * 这一轮没读到 → 「日志没读到」；从来没有读到过（首屏那一次往返还在路上）→ 「未知」；
- * 确实读到了空 → 「暂无请求记录」。合并前两档就是把「还不知道」说成「确实没有」。
+ * 手里有行而当前条件一条都不命中 → 「筛选无匹配」；确实读到了一份空的日志 → 「暂无请求记录」。
+ * 合并前两档就是把「还不知道」说成「确实没有」，把后两档合并就是把「筛不出来」说成「代理没接到请求」
+ * ——深链 `#logs?url=` 让界面在用户没动手时就自带筛选，所以「筛选无匹配」必须排在「暂无」之前。
  */
 const logsEmptyText = computed(() => {
   if (props.logsReadFailed) return t('logsReadFailed');
   if (!props.logsEverRead) return t('statusUnknown');
+  if (hasActiveLogFilters(filterState.value)) return t('logsFilterNoMatch');
   return t('noLogs');
 });
 
@@ -822,16 +840,7 @@ const logsReadFailedText = computed(() =>
   props.logsReadFailed && props.logs.length > 0 ? `${t('logsReadFailed')} · ${t('logsReadStale')}` : '',
 );
 
-const filteredLogs = computed(() =>
-  props.logs.filter(log =>
-    logMatchesFilters(log, {
-      method: props.methodFilter,
-      status: props.statusFilter,
-      ruleName: ruleFilter.value,
-      urlKeyword: props.urlFilter,
-    }),
-  ),
-);
+const filteredLogs = computed(() => props.logs.filter(log => logMatchesFilters(log, filterState.value)));
 
 // 统计（基于筛选后的数据，单次遍历）
 const logStats = computed(() => computeLogStats(filteredLogs.value));
@@ -1100,6 +1109,8 @@ const replaySentence = computed(() => {
       return t('replaySiteExcluded');
     case 'disabled':
       return t('replayDisabled');
+    case 'protocolUnsupported':
+      return t('replayProtocolUnsupported');
     case 'invalidRuleHeaders':
       return t('replayInvalidRuleHeaders');
     case 'requestTooLarge':

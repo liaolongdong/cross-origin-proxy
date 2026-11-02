@@ -990,6 +990,27 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
       expect(src, stateless).not.toMatch(/@open\s*=/);
     }
   });
+
+  it('hash 分派里取值只走解码收口，且监听器排在首屏读取之前', () => {
+    const appSrc = fs.readFileSync('components/options/App.vue', 'utf-8');
+    const start = appSrc.indexOf('function handleHashNavigation');
+    const router = appSrc.slice(start, appSrc.indexOf('\n}\n', start));
+    // `decodeURIComponent` 对畸形百分号串（`%ZZ`）抛 URIError 而不是回空串，而这一句排在
+    // `history.replaceState` 之前：抛出就是 hash 留在地址栏（刷新再弹一张）、`#add-rule-from-tab=`
+    // 那张卡永远打不开。同批的 `#logs?url=` 与 `#self-check?tab=` 都收了口，这一格不能是例外。
+    expect(router, 'hash 分派里出现了裸 decodeURIComponent').not.toMatch(/decodeURIComponent\(/);
+    expect(router, '#add-rule-from-tab= 没走 decodeHashValue').toContain('decodeHashValue(');
+
+    // 先登记监听器、再读首屏 hash：`handleHashNavigation` 里任何一步抛出都不该把键盘层留在身后。
+    const hashListener = appSrc.indexOf("window.addEventListener('hashchange', handleHashNavigation)");
+    const keyListener = appSrc.indexOf("window.addEventListener('keydown', handleKeydown)");
+    const firstRead = appSrc.indexOf('handleHashNavigation();');
+    expect(hashListener).toBeGreaterThan(-1);
+    expect(keyListener).toBeGreaterThan(-1);
+    expect(firstRead, '首屏 hash 读取不见了').toBeGreaterThan(-1);
+    expect(hashListener, 'hashchange 排在首屏读取之后：抛出就没人补这行').toBeLessThan(firstRead);
+    expect(keyListener, 'keydown 排在首屏读取之后：⌘K / N / / / Escape 当场失联').toBeLessThan(firstRead);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

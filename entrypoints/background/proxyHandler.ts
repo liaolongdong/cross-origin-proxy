@@ -1,4 +1,5 @@
 import { findMatchingRule, matchRule, rewriteUrl, applyQueryOverrides, isRegexSafe } from '@/utils/urlMatcher';
+import { isProxyableUrl, protocolOf } from '@/utils/proxyProtocol';
 import { filterIncomingHeaders, isValidHeaderEntry, validateRuleHeaders } from '@/utils/headerValidation';
 import {
   configRules,
@@ -439,6 +440,25 @@ async function runProxyRequest(
   senderHost = '',
 ): Promise<ProxyResponsePayload> {
   const startTime = Date.now();
+
+  // 出站协议白名单排在一切判断之前：这一串是页面给的，而同页任意脚本都能往桥接层那个频道发消息。
+  // 一条 `{wildcard, '*', targetUrl:''}` 的规则形状合法、`isSimpleRule` 因空目标强制交给 SW、
+  // `rewriteUrl` 对空目标原样返回 URL——三件事各自都对，叠起来就是页面可以点名让扩展去取任意地址，
+  // 并由扩展的 `<all_urls>` 权限把正文送回它手里（内网端点与云元数据地址不需要任何额外开关）。
+  // 判据只住 `utils/proxyProtocol.ts`，与重放同一份。日志里只写协议，不写整串——被拒的这串
+  // 可能是页面凭空编的本地路径，把那串原文存进 `request_logs` 等于替它记了一遍案。
+  if (!isProxyableUrl(data.url)) {
+    logger.warn(`拒绝代发非 http(s) 协议: ${protocolOf(data.url) || '(读不出协议)'}`);
+    return {
+      requestId: data.requestId,
+      status: 0,
+      statusText: 'Proxy Bypass',
+      headers: {},
+      body: 'Unsupported protocol',
+      isBase64: false,
+    };
+  }
+
   const config = await getProxyConfig();
 
   // 站点范围在这里再判一次，且 `senderHost` 来自 Chrome 写的 frame `sender.url`：桥接层拿到的那份
@@ -591,6 +611,26 @@ async function runProxyRequest(
   // 查询参数位点上放的常常正是 token，落进 `request_logs` 就违背了「日志不含真实凭据」。
   const loggedUrl = applyQueryOverrides(rewrittenUrl, rule.queryOverrides);
   const targetUrl = resolvedQuery ? applyQueryOverrides(rewrittenUrl, resolvedQuery.resolved) : loggedUrl;
+
+  // 重写之后再看一遍：入站那一道闸守的是页面给的那一串，这一道守的是**规则给的那一串**。
+  // `targetUrl` 同样是自由文本（手改存储、别人分享的导入文件），一条把目标写成 `file://` 的规则
+  // 会让扩展替用户去读本地文件并把正文送回页面——与入站那档同一个结局，只是门在另一边。
+  // 这一笔要落进日志：规则是用户自己写的，看不见这一行就只剩一句「代理没生效」，
+  // 而真正该改的是那条规则的目标地址。
+  if (!isProxyableUrl(targetUrl)) {
+    const reason = `Rewrite target rejected: ${protocolOf(targetUrl) || '(读不出协议)'}`;
+    logger.warn(`${reason} (rule: ${rule.name})`);
+    await logRejectedRequest(rule, data.url, data.method, startTime, reason);
+    return {
+      requestId: data.requestId,
+      status: 0,
+      statusText: 'Proxy Bypass',
+      headers: {},
+      body: 'Unsupported protocol',
+      isBase64: false,
+    };
+  }
+
   logger.info(`Proxying: ${data.url} → ${loggedUrl}`);
 
   // ─── 准备请求参数（重试循环外，避免重复计算）────────────────────────────────

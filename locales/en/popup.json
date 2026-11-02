@@ -85,5 +85,6 @@
   "siteScopeDisabledHere": "Proxy disabled for this site (subdomains included)",
   "siteScopeParentCovered": "A parent domain in the list also covers this host, so it cannot be switched separately. Adjust the parent domain in Settings.",
   "siteScopeCapReached": "The site list is full at $1 entries, so this host can't be added. Remove one in Settings and try again.",
-  "siteScopeSaveFailed": "Could not save the site setting — try again"
+  "siteScopeSaveFailed": "Could not save the site setting — try again",
+  "openOptionsPageFailed": "Couldn't open the Options page — try again from the toolbar icon"
 }

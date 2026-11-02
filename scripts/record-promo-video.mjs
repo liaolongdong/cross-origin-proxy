@@ -25,8 +25,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { launchCdpChrome } from './cdp-launch.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -270,9 +271,11 @@ const SEED = `(async () => {
 
 /* ───────── CDP 客户端 ───────── */
 
-const chrome = spawn(
-  CHROME,
-  [
+// 启动配方只住 `scripts/cdp-launch.mjs` 一份：那里的 origin 白名单是安全相关的（写成 `*`
+// 等于把「本机任意网页命中端口即可驱动这个装着扩展的浏览器」这一扇门开着），抄第二遍最容易照抄成 `*`。
+const { proc: chrome, wsUrl } = await launchCdpChrome({
+  chromeBin: CHROME,
+  baseArgs: [
     '--headless=new',
     '--disable-gpu',
     '--no-first-run',
@@ -282,14 +285,10 @@ const chrome = spawn(
     // 扩展只由 CDP 的 Extensions.loadUnpacked 装一次：再叠一个 --load-extension
     // 会同时存在两份实例，界面里看到的是哪一份就不确定了。
     '--enable-unsafe-extension-debugging',
-    '--remote-debugging-port=0',
-    '--remote-allow-origins=*',
-    'about:blank',
   ],
-  { stdio: ['ignore', 'pipe', 'pipe'] },
-);
-/** 收掉那个 headless Chrome：它带着 `--remote-allow-origins=*` 的调试端口和本机的
- *  `--user-data-dir`，进程活着就意味着一个「任何来源都能连的 CDP 门面」开着。
+});
+/** 收掉那个 headless Chrome：它带着一个只对 127.0.0.1 监听、且已登记了本机某个源的调试端口，
+ *  进程活着就意味着这扇本地门面开着。
  *
  *  只挂 `exit` 是不够的：`process.on('exit')` 在 SIGTERM/SIGHUP 默认终止下根本不跑，
  *  Ctrl-C（SIGINT）同理，于是「录到一半中止」= 一个孤儿 Chrome 常驻后台，
@@ -310,19 +309,6 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.exit(1);
   });
 }
-
-const wsUrl = await new Promise((resolve, reject) => {
-  let buf = '';
-  const t = setTimeout(() => reject(new Error('Chrome 没报调试端口')), 60000);
-  chrome.stderr.on('data', c => {
-    buf += c.toString();
-    const m = buf.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[0-9a-f-]{36})/);
-    if (m) {
-      clearTimeout(t);
-      resolve(m[1]);
-    }
-  });
-});
 
 const socket = await new Promise((resolve, reject) => {
   const ws = new WebSocket(wsUrl);

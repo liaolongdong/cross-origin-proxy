@@ -129,6 +129,34 @@ describe('popup → options 的出口', () => {
     expect(router, 'options 分派里没有 #settings').toContain("hash === '#settings'");
     expect(popup).toContain("openOptionsPage('#settings')");
   });
+
+  it('深链那一次先按消费端同一个上界截短', () => {
+    // `log.originalUrl` 允许带到 `MAX_LOG_FIELD_SIZE`（8K 字符，含截断后缀），而
+    // `parseLogUrlFilter` 钳 2048——生产端不钳，就是把一条超长串交给 `chrome.tabs.update`，
+    // 那一笔被拒时用户看到的是「弹窗一闪、什么都没打开」。两侧必须是同一个具名数，不是两个巧合相等的字面量。
+    expect(popup).toContain("import { MAX_LOG_URL_FILTER_LENGTH } from '@/utils/logFilter';");
+    expect(popup).toContain('url.slice(0, MAX_LOG_URL_FILTER_LENGTH)');
+    expect(popup, 'hash 里拼的是没截过的原串').toContain('#logs?url=${encodeURIComponent(clipped)}');
+  });
+
+  it('两条开路都失败时说话，且不关弹窗（关了那句就跟着界面一起没了）', () => {
+    const start = popup.indexOf('async function openOptionsPage');
+    const fn = popup.slice(start, popup.indexOf('\n}', start));
+    // 降级那一笔此前是 `void chrome.tabs.create(...)`：拒绝无人接手，弹窗照旧 close
+    expect(fn, '降级那一笔仍被 void 掉：拒绝没人接手').not.toMatch(/void chrome\.tabs\.create/);
+    expect(fn).toContain('opened = true');
+    expect(fn).toContain("ElMessage.error(t('openOptionsPageFailed'))");
+    // 次序承重：失败分支必须在 `window.close()` 之前 return
+    const failBranch = fn.indexOf('openOptionsPageFailed');
+    // 带分号找那条语句：函数自己的注释里就写着「`window.close()` 一执行」，不带分号会先撞上那句
+    const close = fn.lastIndexOf('window.close();');
+    expect(failBranch, '失败那句不见了').toBeGreaterThan(-1);
+    expect(close, '没有 window.close()：弹窗会赖在原页面上').toBeGreaterThan(failBranch);
+    expect(fn.slice(failBranch, close), '失败分支没先 return：那句 toast 会被 close 带走').toContain('return;');
+    // 中英各一句，缺一档屏幕上裸出键名
+    expect(readFileSync('locales/zh_CN/popup.json', 'utf-8')).toContain('"openOptionsPageFailed"');
+    expect(readFileSync('locales/en/popup.json', 'utf-8')).toContain('"openOptionsPageFailed"');
+  });
 });
 
 describe('popup 动作区的形状', () => {

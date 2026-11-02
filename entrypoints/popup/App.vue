@@ -753,6 +753,7 @@ import { applyQueryOverrides, findMatchingRule, isSimpleRule, rewriteUrl } from 
 import { diagnoseRequest, type Diagnosis, type DiagnosisCode } from '@/utils/diagnosis';
 import { sanitizeSiteState, siteAllows, siteScopeToggle, hostnameOf } from '@/utils/siteScope';
 import { MAX_SITE_STATE_HOSTS } from '@/utils/constants';
+import { MAX_LOG_URL_FILTER_LENGTH } from '@/utils/logFilter';
 import type { SiteState } from '@/utils/types';
 import { findDnrSkippedRules, usesDnrChannel } from '@/utils/dnrSupport';
 import { describeDnrSample, isDnrSample } from '@/utils/dnrSample';
@@ -1511,19 +1512,30 @@ async function reloadCurrentTab() {
   }
 }
 
-/** 最近请求行：带地址打开配置页日志并预筛这一笔 */
+/**
+ * 最近请求行：带地址打开配置页日志并预筛这一笔
+ *
+ * 上界在两侧各守一次同一件数（`MAX_LOG_URL_FILTER_LENGTH`）：日志字段本身允许到
+ * `MAX_LOG_FIELD_SIZE`（8K 字符，外加 `capLogEntry` 留下的截断后缀），而消费端钳 2048。
+ * 生产端不钳，就是把一条地址栏里的超长串原样交给 `chrome.tabs.update`——那一笔被拒时
+ * 用户看到的是「弹窗一闪、什么都没打开」。截短不改变命中：筛选是 `includes`，前缀照样命中这一行。
+ */
 function openRecentLog(url: string) {
-  void openOptionsPage(`#logs?url=${encodeURIComponent(url)}`);
+  const clipped = url.slice(0, MAX_LOG_URL_FILTER_LENGTH);
+  void openOptionsPage(`#logs?url=${encodeURIComponent(clipped)}`);
 }
 
 /**
  * 打开 Options 页；带 hash 时直达对应弹窗/抽屉
- * （#add-rule / #logs / #import-export / #settings / #self-check?tab=<id> / #add-rule-from-tab=<encoded url>）。
+ * （#add-rule / #logs / #logs?url=<encoded> / #import-export / #settings / #self-check?tab=<id>
+ * / #add-rule-from-tab=<encoded url>）。
  * 优先复用已打开的 Options 标签页（通过 runtime.getContexts 查找，无需 tabs 权限），
  * 避免重复打开；更新 hash 属同文档导航，Options 侧监听 hashchange 响应直达。
  */
 async function openOptionsPage(hash = '') {
   const optionsUrl = chrome.runtime.getURL('/options.html');
+  const targetUrl = `${optionsUrl}${hash}`;
+  let opened = false;
   try {
     const contexts = await chrome.runtime.getContexts({
       contextTypes: [chrome.runtime.ContextType.TAB],
@@ -1532,16 +1544,31 @@ async function openOptionsPage(hash = '') {
     if (existing && existing.tabId !== -1) {
       await chrome.tabs.update(existing.tabId, {
         active: true,
-        ...(hash ? { url: `${optionsUrl}${hash}` } : {}),
+        ...(hash ? { url: targetUrl } : {}),
       });
       await chrome.windows.update(existing.windowId, { focused: true });
+      opened = true;
     } else {
-      await chrome.tabs.create({ url: `${optionsUrl}${hash}` });
+      await chrome.tabs.create({ url: targetUrl });
+      opened = true;
     }
   } catch (error) {
-    // 降级处理：直接新建标签页
+    // 降级处理：直接新建标签页。这一笔必须有人接手——`void` 掉的拒绝在弹窗即将关闭的瞬间
+    // 变成一条未处理拒绝，而用户那边只剩「按了行、什么都没发生」。
     logger.warn('Reuse options tab failed, creating a new one:', error);
-    void chrome.tabs.create({ url: `${optionsUrl}${hash}` });
+    try {
+      await chrome.tabs.create({ url: targetUrl });
+      opened = true;
+    } catch (fallbackError) {
+      logger.warn('Create options tab failed:', fallbackError);
+    }
+  }
+
+  if (!opened) {
+    // 两条路都断了要说话，而且**不许关弹窗**：`window.close()` 一执行，这句就跟着界面一起没了，
+    // 用户只会看到弹窗自己消失。留着它，这一行才真的有人读得到。
+    ElMessage.error(t('openOptionsPageFailed'));
+    return;
   }
   window.close();
 }

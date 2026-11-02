@@ -15,7 +15,7 @@
  *   `utils/mockFromLog.ts` 对同一件事选的也是拒绝，判据共用 `isTruncatedForLog` 那一份。
  * - **长连接不重放**。日志只由后台通道落，握手不经过它，而 `wss://` 交给 `fetch` 只会得到一个
  *   谁都看不懂的失败——那种「报了一个错」比「这件事我做不到」更难排查。
- * - **回包里的英文串是内部编码，不是文案**。`statusText` 与四句 bypass 的 body 由
+ * - **回包里的英文串是内部编码，不是文案**。`statusText` 与那几句 bypass 的 body 由
  *   `entrypoints/background/proxyHandler.ts` 写死，这里把它们收成 `ReplayOutcome` 那几档，
  *   界面只说 i18n 的那一句，原始编码不进屏幕。
  *   这层映射的全部风险是那一头改了字面量而这一头静默失配，所以判读表两侧由
@@ -24,6 +24,7 @@
  */
 
 import { MAX_LOG_BODY_SIZE } from '@/utils/constants';
+import { PROXYABLE_PROTOCOLS, protocolOf } from '@/utils/proxyProtocol';
 import { filterIncomingHeaders } from '@/utils/headerValidation';
 import { isTruncatedForLog } from '@/utils/formatters';
 import type { ProxyRequestMessage } from '@/utils/types';
@@ -61,8 +62,9 @@ export type ReplayPlan =
   | { ok: true; payload: ReplayPayload; headersPresent: boolean; bodyPresent: boolean }
   | { ok: false; reason: 'noUrl' | 'notHttp' | 'badMethod' | 'truncated' };
 
-/** 只有 http(s) 能被 `fetch` 发出去；其余协议（含 `ws://` / `wss://`）在这里就挡下，不交给网络层报错 */
-const REPLAYABLE_PROTOCOLS: readonly string[] = ['http:', 'https:'];
+/** 只有 http(s) 能被 `fetch` 发出去；其余协议（含 `ws://` / `wss:`）在这里就挡下，不交给网络层报错。
+ * 白名单只住 `utils/proxyProtocol.ts` 一份——两扇门后面是同一次 `fetch`，各写一把尺就是
+ * 下一次其中一扇门忘了关。 */
 
 /** 判读用的方法（HTTP 惯例是大写）；发出去的那一份保持记录里的原样，见 `planReplay` */
 function methodForJudgement(raw: unknown): string {
@@ -100,15 +102,10 @@ export function planReplay(source: ReplaySource): ReplayPlan {
   const rawUrl = typeof source.originalUrl === 'string' ? source.originalUrl.trim() : '';
   if (!rawUrl) return { ok: false, reason: 'noUrl' };
 
-  let protocol: string;
-  try {
-    protocol = new URL(rawUrl).protocol;
-  } catch {
-    // 日志里的地址来自页面，理论上一定是 URL；真读不出（手改过 storage）就说「这条记录发不出去」，
-    // 不拿一个残缺地址去换一次网络错误
-    return { ok: false, reason: 'notHttp' };
-  }
-  if (!REPLAYABLE_PROTOCOLS.includes(protocol)) return { ok: false, reason: 'notHttp' };
+  // 读不出协议（相对路径、手改过的存储）与「协议不在白名单」同档：这条记录发不出去。
+  // 判据与后台代发是同一份（`utils/proxyProtocol.ts`），不在这另写一把尺
+  const protocol = protocolOf(rawUrl);
+  if (!protocol || !PROXYABLE_PROTOCOLS.includes(protocol)) return { ok: false, reason: 'notHttp' };
 
   // 发出去的方法保持记录里的写法（HTTP 方法的大小写是协议的一部分，认不准的动词不为它编一个规范形状）；
   // 要不要先问一句才是判读，走 `methodForJudgement`
@@ -142,6 +139,7 @@ export function needsReplayConfirm(method: unknown): boolean {
 const BYPASS_SITE_EXCLUDED = 'Site excluded';
 const BYPASS_DISABLED = 'Proxy is disabled';
 const BYPASS_NO_RULE = 'No matching rule';
+const BYPASS_UNSUPPORTED_PROTOCOL = 'Unsupported protocol';
 const TEXT_BLOCKED = 'Blocked';
 const TEXT_MOCK = 'Mock';
 const TEXT_BODY_TOO_LARGE = 'Body Too Large';
@@ -170,11 +168,31 @@ export type ReplayOutcome =
   | 'noRule'
   | 'siteExcluded'
   | 'disabled'
+  /** 地址的协议不在白名单上（页面给的串，或规则重写出来的串）：扩展没有代发，也不该代发 */
+  | 'protocolUnsupported'
   | 'invalidRuleHeaders'
   | 'requestTooLarge'
   | 'responseTooLarge'
   | 'failed'
   | 'malformed';
+
+/**
+ * 五句 bypass 的正文各是一档，只有 `Invalid request payload` 故意不在表上
+ *
+ * 这一格不能只说「没走代理」，得说清是没走代理的**哪一个原因**，否则用户会去改规则，
+ * 而问题在总开关、站点名单或那条规则的目标地址上。`Invalid request payload`（载荷形状不合法，
+ * 由 `messageRouter` 在解引用之前回的那一封）至今没有对应的档，认不出来就说「答案没读到」——
+ * 那是本仓认可的诚实落点：不替一个说不清的编码编一句像模像样的解释。
+ *
+ * 用 `Map` 而不是对象字面量：正文是回包里的串，`__proto__` / `constructor` 这类键在普通对象上
+ * 会读出 `Object.prototype`（一个真值），那一档就此变成一个既不是字符串、也不该画到屏幕上的东西。
+ */
+const BYPASS_OUTCOMES = new Map<string, ReplayOutcome>([
+  [BYPASS_SITE_EXCLUDED, 'siteExcluded'],
+  [BYPASS_DISABLED, 'disabled'],
+  [BYPASS_NO_RULE, 'noRule'],
+  [BYPASS_UNSUPPORTED_PROTOCOL, 'protocolUnsupported'],
+]);
 
 /** 读回来的那笔重放结果：给界面的是收好的一档，加上作为数据展示的原文正文 */
 export interface ReplayReading {
@@ -260,18 +278,8 @@ export function readReplayEnvelope(raw: unknown): ReplayReading {
         ? 'responseTooLarge'
         : 'malformed';
   } else if (statusText === TEXT_PROXY_ERROR) outcome = 'failed';
-  else if (statusText === TEXT_PROXY_BYPASS) {
-    // 四种 bypass 在页面上是同一个信封，只有 body 那一句分得开：这一格不能只说「没走代理」，
-    // 得说清是没走代理的**哪一个原因**，否则用户会去改规则，而问题在总开关或站点名单上
-    outcome =
-      bodyText === BYPASS_SITE_EXCLUDED
-        ? 'siteExcluded'
-        : bodyText === BYPASS_DISABLED
-          ? 'disabled'
-          : bodyText === BYPASS_NO_RULE
-            ? 'noRule'
-            : 'malformed';
-  } else outcome = 'malformed';
+  else if (statusText === TEXT_PROXY_BYPASS) outcome = BYPASS_OUTCOMES.get(bodyText) ?? 'malformed';
+  else outcome = 'malformed';
 
   if (outcome === 'malformed') return NO_ANSWER;
 

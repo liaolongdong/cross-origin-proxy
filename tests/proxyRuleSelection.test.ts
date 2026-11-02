@@ -171,6 +171,74 @@ describe('handleProxyRequest — 拦截器已选规则优先于全量重匹配',
     expect(resp.body).toBe('No matching rule');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  // ── 出站协议白名单（`utils/proxyProtocol.ts`）────────────────────────────────
+  // 这两格各自都「什么都不会发生」，而漏掉的那一格是扩展替页面出门取东西、把正文交回它手里。
+
+  it('页面点名 `file://`：一条合法形状的宽匹配空目标规则不足以让它出门', async () => {
+    // 三件事各自都对、叠起来是洞：`{wildcard,'*',targetUrl:''}` 过形状闸（`isValidRuleShape` 只要求
+    // `matchPattern` 非空白、`targetUrl` 是串）、`wildcardToRegex('*')` 命中任何串、
+    // `isSimpleRule` 因空目标**强制**把它交给 SW、`rewriteUrl` 对空目标原样返回 URL。
+    // 于是 `data.url` 那一句由页面说了算，而 `<all_urls>` 由扩展持有。
+    store['proxy_config'] = {
+      enabled: true,
+      rules: [makeRule({ id: 'all', name: '宽到一切', matchPattern: '*', targetUrl: '', headerOverrides: { x: 'y' } })],
+    };
+
+    const resp = await request({ url: 'file:///Users/me/.aws/credentials', method: 'GET' });
+
+    expect(resp.status).toBe(0);
+    expect(resp.statusText).toBe('Proxy Bypass');
+    expect(resp.body).toBe('Unsupported protocol');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('白名单管协议、不管主机：内网与元数据地址是 http 就照常代发', async () => {
+    store['proxy_config'] = {
+      enabled: true,
+      rules: [makeRule({ id: 'all', name: '宽到一切', matchPattern: '*', targetUrl: '', headerOverrides: { x: 'y' } })],
+    };
+
+    for (const url of ['http://169.254.169.254/latest/meta-data/', 'http://127.0.0.1:6379/']) {
+      // 这一档**故意放行**：白名单管协议，不管主机。用户写了宽到一切的规则，内网 http 端点
+      // 本来就在这条规则的射程里；把主机也拦进来就是替用户决定他的代理该覆盖哪些地址。
+      fetchMock.mockClear();
+      const resp = await request({ url, method: 'GET' });
+      expect(resp.body, url).not.toBe('Unsupported protocol');
+      expect(fetchMock, url).toHaveBeenCalledTimes(1);
+    }
+
+    // 而 `ftp:` 那一档不管主机都要拒：不是 fetch 发不出去，是「扩展不该替页面出这种门」
+    fetchMock.mockClear();
+    const ftp = await request({ url: 'ftp://internal/x', method: 'GET' });
+    expect(ftp.body).toBe('Unsupported protocol');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('规则把目标写成 `file://` 时也不出门：入站那一道闸管不到重写之后的串', async () => {
+    // 第二条门在另一边：`targetUrl` 同样是自由文本（手改存储、别人分享的导入文件）。
+    // 只守入站那一头的规则会漏掉这一格——页面给的是 https（过闸），重写出来是个本地路径。
+    // 这条规则刻意不带 mock / block：只有真走到 `fetch` 那一支才谈得上「出门」。
+    store['proxy_config'] = {
+      enabled: true,
+      rules: [
+        makeRule({
+          id: 'evil',
+          name: '目标是本地文件',
+          matchType: 'prefix',
+          matchPattern: 'https://api.example.com/',
+          targetUrl: 'file:///etc/passwd',
+          headerOverrides: { 'x-a': 'b' },
+        }),
+      ],
+    };
+
+    const resp = await request({ url: ADMIN_URL, method: 'GET' });
+
+    expect(resp.status).toBe(0);
+    expect(resp.body).toBe('Unsupported protocol');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('MAIN world 拦截器 — 必须把已选规则带给 SW（源码契约）', () => {

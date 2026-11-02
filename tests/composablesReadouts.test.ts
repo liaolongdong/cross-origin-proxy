@@ -891,14 +891,34 @@ describe('几个读数旗标怎么被界面用（本环境测不到的那半）'
     expect(popupSrc).not.toMatch(/\{\{\s*swRequestCount\s*\}\}/);
   });
 
-  it('日志抽屉：空表三档分说，那一句只在手里有行时出现（同一句不许出现两遍）', () => {
+  it('日志抽屉：空表四档分说且次序固定，那一句只在手里有行时出现（同一句不许出现两遍）', () => {
     expect(drawerSrc).toContain('logsReadFailed: boolean;');
-    // 空表：这一轮没读到 / 从来没读到过（首屏还在路上）/ 确实读到空，三件事实三句话。
-    // 合并前两档就是把「还不知道」交成「确实没有」——正是本文件开头要消灭的那类谎报。
+    // 空表：这一轮没读到 / 从来没读到过（首屏还在路上）/ 筛到一行不剩 / 确实读到空，四件事实四句话。
+    // 合并前两档就是把「还不知道」交成「确实没有」——正是本文件开头要消灭的那类谎报；
+    // 合并后两档就是把「那条筛选没命中」交成「代理没接到任何请求」，而深链 `#logs?url=`
+    // 会让界面在用户没动手时就自带一条筛选，这一档从本轮起是首见路径而不是边角。
     expect(drawerSrc).toContain('{{ logsEmptyText }}');
     expect(drawerSrc).toContain("if (props.logsReadFailed) return t('logsReadFailed');");
     expect(drawerSrc).toContain("if (!props.logsEverRead) return t('statusUnknown');");
+    expect(drawerSrc).toContain("if (hasActiveLogFilters(filterState.value)) return t('logsFilterNoMatch');");
     expect(drawerSrc).toContain("return t('noLogs');");
+    // 次序承重：「筛选无匹配」排在「暂无请求记录」之后等于永远不出现，排在读失败之前就是
+    // 拿一条筛选盖掉「这一轮没读到」那句真话。判据只住 `utils/logFilter.ts` 一个出口，
+    // 换成组件内现拼四条 `||` 也会红——那第五轴加进来时漏的就是这一句。
+    const order = [
+      "if (props.logsReadFailed) return t('logsReadFailed');",
+      "if (!props.logsEverRead) return t('statusUnknown');",
+      "if (hasActiveLogFilters(filterState.value)) return t('logsFilterNoMatch');",
+      "return t('noLogs');",
+    ].map(snippet => drawerSrc.indexOf(snippet));
+    expect(
+      order.every(at => at > -1),
+      `空态那四句里有句子不见了：${JSON.stringify(order)}`,
+    ).toBe(true);
+    expect(order, '空态四句的次序被改了').toEqual([...order].sort((a, b) => a - b));
+    // 命中筛选与「有没有在筛」共用同一份四轴取值，不留两处各拼一遍
+    expect(drawerSrc).toContain('const filterState = computed(() => ({');
+    expect(drawerSrc).toContain('logMatchesFilters(log, filterState.value)');
     // 手里有行时那一行必须同时说出「没读到」和「下面是上一次的记录」——只说前者，读者仍会拿旧账当现状；
     // 而空表时它必须整个不出现，否则与空态那句重复（2026-10-17 真 Chrome 实测到的正是这个重复）
     expect(drawerSrc).toMatch(
@@ -907,6 +927,17 @@ describe('几个读数旗标怎么被界面用（本环境测不到的那半）'
     expect(drawerSrc).not.toMatch(/: t\('logsReadFailed'\);\s*\}/);
     expect(drawerSrc).toContain('v-if="logsReadFailedText"');
     expect(optionsSrc).toContain(':logs-read-failed="logsReadFailed"');
+  });
+
+  it('日志抽屉四轴全部受控，且两条入口都把规则名交回复位', () => {
+    // 规则名此前是抽屉内部的 ref：异步分片常驻，上一次手选的规则名会跟着下一次打开一起工作，
+    // 而深链那次自带地址筛选——两轴一交就筛空，表格说的是「没有日志」。
+    expect(drawerSrc).toContain('ruleFilter: string;');
+    expect(drawerSrc).toContain("'update:ruleFilter': [value: string];");
+    expect(drawerSrc).not.toMatch(/const ruleFilter = ref\(''\)/);
+    expect(optionsSrc).toContain('v-model:rule-filter="logRuleFilter"');
+    // 顶栏入口与深链入口各复位一次：少一处就是那条路仍会带着上一次的规则名进来
+    expect(optionsSrc.match(/logRuleFilter\.value = ''/g) ?? []).toHaveLength(2);
   });
 
   it('日志抽屉 SW 统计：没有读数时说「统计暂不可用」，只有 fresh 才说得上「暂无命中」', () => {
