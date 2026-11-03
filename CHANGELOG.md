@@ -109,11 +109,10 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
 ## [1.8.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.8.0...v1.8.1) (2026-11-03)
 
-
 ### Fixed
 
-* **review:** 收口评审揪出的六格读数谎话、一处代发边界与一条纯风险的 CDP 旗标 ([8f13a0c](https://github.com/liaolongdong/cross-origin-proxy/commit/8f13a0c512f1f6fdaf00b1e7727969055f0aa3f9))
-* **review:** 收口评审揪出的六格读数谎话、一处代发边界与一条纯风险的 CDP 旗标 ([ee94cfb](https://github.com/liaolongdong/cross-origin-proxy/commit/ee94cfb9f05505c9d37ea5bc00d6cc4d5747c513))
+- **review:** 收口评审揪出的六格读数谎话、一处代发边界与一条纯风险的 CDP 旗标 ([8f13a0c](https://github.com/liaolongdong/cross-origin-proxy/commit/8f13a0c512f1f6fdaf00b1e7727969055f0aa3f9))
+- **review:** 收口评审揪出的六格读数谎话、一处代发边界与一条纯风险的 CDP 旗标 ([ee94cfb](https://github.com/liaolongdong/cross-origin-proxy/commit/ee94cfb9f05505c9d37ea5bc00d6cc4d5747c513))
 
 ## [1.8.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.7.0...v1.8.0) (2026-11-01)
 
