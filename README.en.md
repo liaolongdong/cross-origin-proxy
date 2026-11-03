@@ -15,6 +15,7 @@
 [![Product site](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/en.html)
 [![Star this repo](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dednngakllblfilbndkaggphohmpgcbg?label=CWS&color=409eff&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
+[![Store users](https://img.shields.io/chrome-web-store/users/dednngakllblfilbndkaggphohmpgcbg?label=store%20users&color=409eff&logo=googlechrome&logoColor=white "Live from the store's public data; it counts users who currently have it installed, not cumulative installs")](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
 
 <img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy options page: seven demo rules covering a FAT to UAT wildcard rewrite, an injected credential variable, a mocked API, an added delay, a blocked tracker and a WebSocket rewrite, plus the global switch and search filters" width="100%" />
 

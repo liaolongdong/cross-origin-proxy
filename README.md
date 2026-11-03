@@ -15,6 +15,7 @@
 [![产品站](https://img.shields.io/github/actions/workflow/status/liaolongdong/cross-origin-proxy/deploy-pages.yml?label=Product%20site&logo=githubpages&color=409eff)](https://liaolongdong.github.io/cross-origin-proxy/)
 [![给仓库点个 Star](https://img.shields.io/github/stars/liaolongdong/cross-origin-proxy?style=social)](https://github.com/liaolongdong/cross-origin-proxy/stargazers)
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dednngakllblfilbndkaggphohmpgcbg?label=CWS&color=409eff&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
+[![商店用户数](https://img.shields.io/chrome-web-store/users/dednngakllblfilbndkaggphohmpgcbg?label=%E5%95%86%E5%BA%97%E7%94%A8%E6%88%B7%E6%95%B0&color=409eff&logo=googlechrome&logoColor=white '实时取自商店公开数据；它是「当前装着该扩展的人数」，不是累计安装数')](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg)
 
 <img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手配置页规则总览：七条演示规则覆盖 FAT → UAT 通配符重写、注入凭据变量、Mock API、延迟、阻断埋点与 WebSocket 转发，顶部代理总开关与搜索筛选" width="100%" />
 
