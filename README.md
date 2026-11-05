@@ -19,6 +19,8 @@
 
 <img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手配置页规则总览：七条演示规则覆盖 FAT → UAT 通配符重写、注入凭据变量、Mock API、延迟、阻断埋点与 WebSocket 转发，顶部代理总开关与搜索筛选" width="100%" />
 
+**▶ [看 50 秒实拍](https://github.com/liaolongdong/cross-origin-proxy/releases/download/v1.8.0/promo-zh-1280.mp4)**：规则表 → 请求日志 → URL 匹配预演 → 规则表单 → 整页换肤 → 总开关（英文那一条在 [README.en.md](./README.en.md)）
+
 **[🛒 从 Chrome 应用商店添加](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg) · [📥 三种安装方式](#-安装) · [⚡ 一分钟配出第一条规则](#一分钟配出第一条规则) · [🌐 产品站](https://liaolongdong.github.io/cross-origin-proxy/) · [💬 交流群](#-交流与反馈)**
 
 > 页面连着 FAT，你要的修复只在 UAT。传统做法要么改每个项目的 devServer 代理、要么硬塞一个 token、要么请后端放开 CORS 再发一次版。这里只需要在 Chrome 里加一条规则：匹配 `https://fat-api.example.com/*`，目标 `https://uat-api.example.com`。同一套规则还能改写请求头与响应、Mock 数据、注入延迟、阻断请求、转发 WebSocket。

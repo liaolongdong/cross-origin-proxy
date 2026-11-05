@@ -76,6 +76,8 @@ const PAGES_URL_SOURCES = [
   'docs/en.html',
   'docs/alternatives.html',
   'docs/en-alternatives.html',
+  'docs/cors.html',
+  'docs/en-cors.html',
   'docs/privacy.html',
   'docs/llms.txt',
   'docs/llms-full.txt',
@@ -104,6 +106,7 @@ const HUMAN_DOCS = [
 const BILINGUAL_PAIRS: Array<[string, string]> = [
   ['docs/en.html', 'docs/index.html'],
   ['docs/en-alternatives.html', 'docs/alternatives.html'],
+  ['docs/en-cors.html', 'docs/cors.html'],
 ];
 
 /**
@@ -119,6 +122,8 @@ const STORE_URL_SOURCES = [
   'docs/en.html',
   'docs/alternatives.html',
   'docs/en-alternatives.html',
+  'docs/cors.html',
+  'docs/en-cors.html',
   'docs/llms.txt',
   'docs/llms-full.txt',
   'marketing/directory-submissions.md',
@@ -186,32 +191,42 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * `git` 索引里的路径集合见文件顶部的 `trackedFiles()`——Pages 部署的是仓库，不是开发机磁盘。
      */
 
-    it.each(['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'])(
-      '%s 的本地资源全部存在',
-      file => {
-        const refs = localRefs(file);
-        expect(refs.length, `${file} 应当有本地资源引用`).toBeGreaterThan(0);
+    it.each([
+      'index.html',
+      'en.html',
+      'alternatives.html',
+      'en-alternatives.html',
+      'cors.html',
+      'en-cors.html',
+      'privacy.html',
+    ])('%s 的本地资源全部存在', file => {
+      const refs = localRefs(file);
+      expect(refs.length, `${file} 应当有本地资源引用`).toBeGreaterThan(0);
 
-        const missing = refs
-          .map(resolveLocal)
-          .filter(ref => !exists(ref))
-          .sort();
-        expect(missing, `${file} 引用了 docs/ 下不存在的文件`).toEqual([]);
-      },
-    );
+      const missing = refs
+        .map(resolveLocal)
+        .filter(ref => !exists(ref))
+        .sort();
+      expect(missing, `${file} 引用了 docs/ 下不存在的文件`).toEqual([]);
+    });
 
-    it.each(['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'])(
-      '%s 引用的本地资源都已入库（Pages 部署的是仓库，不是工作区）',
-      file => {
-        const tracked = trackedFiles();
-        expect(tracked.size, 'git 索引不应为空').toBeGreaterThan(0);
+    it.each([
+      'index.html',
+      'en.html',
+      'alternatives.html',
+      'en-alternatives.html',
+      'cors.html',
+      'en-cors.html',
+      'privacy.html',
+    ])('%s 引用的本地资源都已入库（Pages 部署的是仓库，不是工作区）', file => {
+      const tracked = trackedFiles();
+      expect(tracked.size, 'git 索引不应为空').toBeGreaterThan(0);
 
-        const untracked = [...new Set(localRefs(file).map(resolveLocal))]
-          .filter(ref => exists(ref) && !tracked.has(ref.split(path.sep).join('/')))
-          .sort();
-        expect(untracked, `${file} 引用了磁盘上有、但没提交进 git 的文件`).toEqual([]);
-      },
-    );
+      const untracked = [...new Set(localRefs(file).map(resolveLocal))]
+        .filter(ref => exists(ref) && !tracked.has(ref.split(path.sep).join('/')))
+        .sort();
+      expect(untracked, `${file} 引用了磁盘上有、但没提交进 git 的文件`).toEqual([]);
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -461,7 +476,14 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
           /data-copy="lld_1025"[\s\S]*class="copy-status"/,
         );
       }
-      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html', 'docs/privacy.html', STORE_DOC]) {
+      for (const file of [
+        'docs/alternatives.html',
+        'docs/en-alternatives.html',
+        'docs/cors.html',
+        'docs/en-cors.html',
+        'docs/privacy.html',
+        STORE_DOC,
+      ]) {
         expect(read(file), `${file} 不该出现微信交流群`).not.toContain('wechat-qr');
       }
     });
@@ -570,7 +592,14 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         ).toBe(items);
       }
 
-      for (const file of ['docs/alternatives.html', 'docs/en-alternatives.html', 'docs/privacy.html', STORE_DOC]) {
+      for (const file of [
+        'docs/alternatives.html',
+        'docs/en-alternatives.html',
+        'docs/cors.html',
+        'docs/en-cors.html',
+        'docs/privacy.html',
+        STORE_DOC,
+      ]) {
         expect(read(file), `${file} 不该出现「作者的其他插件」模块`).not.toContain('author-tools');
       }
     });
@@ -652,7 +681,15 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('docs/ 页面的 SERP 预算与 JSON-LD', () => {
-    const SITE_PAGES = ['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html', 'privacy.html'];
+    const SITE_PAGES = [
+      'index.html',
+      'en.html',
+      'alternatives.html',
+      'en-alternatives.html',
+      'cors.html',
+      'en-cors.html',
+      'privacy.html',
+    ];
 
     /**
      * Google 按可见宽度截断摘要，而不是按码点：CJK 与全角标点约占 2 个单位。
@@ -872,7 +909,14 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
      * 三者**彼此一致**，不校验具体值，所以不会随着日期推移自己变红。
      * privacy.html 不在内：它页脚写的是法律意义上的「生效日期」，与 lastmod 本就不等。
      */
-    const FRESHNESS_PAGES = ['index.html', 'en.html', 'alternatives.html', 'en-alternatives.html'];
+    const FRESHNESS_PAGES = [
+      'index.html',
+      'en.html',
+      'alternatives.html',
+      'en-alternatives.html',
+      'cors.html',
+      'en-cors.html',
+    ];
 
     /** 页内那几处新鲜度日期（JSON-LD 的 dateModified 与页脚/眉标的「最后更新 / Last updated」）。 */
     const inPageDates = (file: string): string[] =>
@@ -1387,6 +1431,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     const FAQ_PAGES: Array<[string, string]> = [
       ['docs/en.html', 'docs/index.html'],
       ['docs/en-alternatives.html', 'docs/alternatives.html'],
+      ['docs/en-cors.html', 'docs/cors.html'],
     ];
 
     const faqSection = (file: string): string =>
@@ -2019,6 +2064,8 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       'docs/en.html',
       'docs/alternatives.html',
       'docs/en-alternatives.html',
+      'docs/cors.html',
+      'docs/en-cors.html',
       'docs/privacy.html',
     ];
 
@@ -2030,6 +2077,8 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       'docs/en.html': 40,
       'docs/alternatives.html': 15,
       'docs/en-alternatives.html': 15,
+      'docs/cors.html': 12,
+      'docs/en-cors.html': 12,
       'docs/privacy.html': 1,
     };
 
