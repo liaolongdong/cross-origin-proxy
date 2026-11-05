@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#ffffff"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#0e1621"
+    />
+    <meta
+      name="google-site-verification"
+      content="unD6BHVEHRxOhyZ353oO_77V8GXyLInc8gvbrh_ARbI"
+    />
+    <title>blocked by CORS: triage and five fixes · Cross-Origin Proxy</title>
+    <meta
+      name="description"
+      content="Three failures look alike: missing ACAO, a preflight that did not pass, or Origin null after a rewrite. Five fixes, sorted by whose code has to change."
+    />
+    <meta
+      name="robots"
+      content="max-image-preview:large"
+    />
+    <meta
+      name="author"
+      content="Better"
+    />
+    <link
+      rel="canonical"
+      href="https://liaolongdong.github.io/cross-origin-proxy/en-cors.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="en"
+      href="https://liaolongdong.github.io/cross-origin-proxy/en-cors.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="zh"
+      href="https://liaolongdong.github.io/cross-origin-proxy/cors.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://liaolongdong.github.io/cross-origin-proxy/cors.html"
+    />
+    <meta
+      property="og:type"
+      content="article"
+    />
+    <meta
+      property="og:site_name"
+      content="Cross-Origin Proxy"
+    />
+    <meta
+      property="og:title"
+      content="blocked by CORS policy in Chrome: triage and five fixes"
+    />
+    <meta
+      property="og:description"
+      content="Missing ACAO, a failed preflight, or Origin null after a rewrite — three different failures that look identical. Five fixes, sorted by whose code changes."
+    />
+    <meta
+      property="og:url"
+      content="https://liaolongdong.github.io/cross-origin-proxy/en-cors.html"
+    />
+    <meta
+      property="og:image"
+      content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-en.png"
+    />
+    <meta
+      property="og:image:width"
+      content="1200"
+    />
+    <meta
+      property="og:image:height"
+      content="630"
+    />
+    <meta
+      property="og:image:alt"
+      content="Cross-Origin Proxy brand image: product name, the tagline about pointing a frontend's API at any environment without code or CORS changes, four capability tags and the site address"
+    />
+    <meta
+      property="og:locale"
+      content="en_US"
+    />
+    <meta
+      property="og:locale:alternate"
+      content="zh_CN"
+    />
+    <meta
+      name="twitter:card"
+      content="summary_large_image"
+    />
+    <meta
+      name="twitter:title"
+      content="blocked by CORS policy in Chrome: triage and five fixes"
+    />
+    <meta
+      name="twitter:description"
+      content="Missing ACAO, a failed preflight, or Origin null after a rewrite — three failures that look identical, and the five fixes they each call for."
+    />
+    <meta
+      name="twitter:image"
+      content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-en.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="Cross-Origin Proxy brand image: product name, tagline, four capability tags and the site address"
+    />
+    <link
+      rel="icon"
+      href="assets/icon.png"
+      sizes="128x128"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="assets/icon.png"
+    />
+    <link
+      rel="stylesheet"
+      href="assets/landing.css"
+    />
+    <script
+      src="assets/landing.js"
+      defer
+    ></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/en-cors.html#webpage",
+            "url": "https://liaolongdong.github.io/cross-origin-proxy/en-cors.html",
+            "name": "blocked by CORS: triage and five fixes · Cross-Origin Proxy",
+            "inLanguage": "en",
+            "isPartOf": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#website"
+            },
+            "about": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#app"
+            },
+            "datePublished": "2026-11-05",
+            "dateModified": "2026-11-05"
+          },
+          {
+            "@type": "Article",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/en-cors.html#article",
+            "headline": "blocked by CORS: triage and five fixes",
+            "inLanguage": "en",
+            "isPartOf": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/en-cors.html#webpage"
+            },
+            "author": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author"
+            },
+            "datePublished": "2026-11-05",
+            "dateModified": "2026-11-05",
+            "publisher": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author"
+            }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/en-cors.html#breadcrumb",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Product overview",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/en.html"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "CORS error triage and fixes",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/en-cors.html"
+              }
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/en-cors.html#faqpage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "The backend log shows the request, but the page says CORS blocked it. Is the backend at fault?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Both statements are true. CORS is a browser behaviour: the request was sent, the server answered, and the browser judged the response headers before handing the body to the page. So the backend is fine and the page is blocked at the same time. The fix is either to send the headers the browser expects, or to stop the page from being the one that makes the request."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "The OPTIONS preflight returned 200 and it still fails. Why?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Only the preflight's response headers count — its status code and body do not. A 200 without Access-Control-Allow-Origin, or with an Access-Control-Allow-Headers that omits one header you actually sent, is still a rejection. The most common miss with custom headers is allowing Content-Type but not the auth header you added."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Why is disabling browser security not a fix?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "It switches off the protection for the whole browser instance: every site in that window can now read every other site's data, not just your API. Worse, it changes the behaviour under observation — you see it working in an unprotected window while colleagues and users still hit the block in a normal one, so the conclusion does not transfer. It is fine for one check — is this really CORS — but it is not a workflow."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How is an extension proxy different from a dev server proxy?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "A dev server proxy changes how your local build sends requests: one config per project, applied at build or start time, and requests must go through that local port. An extension changes how the browser sends them: one rule covers every project and every page on that machine, with no restart and no project files touched. The cost is reach — it only sees browser traffic, so mobile apps, desktop programs and CI scripts never pass through it."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "After a rewrite the backend rejects the Origin. What now?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "That is the browser completing a redirect at the network layer. Once a request is rewritten to a different origin the target receives Origin: null rather than the page's own source (measured on Chrome for Testing 155; rewrites that stay inside the same origin keep the real one), so a backend allowlisting by origin refuses it. A backend answering Access-Control-Allow-Origin: * does take this class of rewrite, but Chrome's network stack has other rejection paths and one cell in that measurement read FAIL in one round and 200 in another, so treat it as neither guaranteed nor doomed. Two dependable routes: have the backend allow it, or give the rule one header override so the extension sends the request itself — the second one drops the check on the page side, and what the target sees as its Origin in that case has never been measured here, so it is a fix worth trying rather than a guarantee."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <a
+      class="skip-link"
+      href="#main"
+      >Skip to main content</a
+    >
+    <header class="site-header">
+      <div class="wrap">
+        <a
+          class="brand"
+          href="en.html"
+        >
+          <img
+            src="assets/icon.png"
+            alt=""
+            width="28"
+            height="28"
+          />
+          <span>Cross-Origin Proxy</span>
+        </a>
+        <nav
+          class="site-nav"
+          aria-label="Page navigation"
+        >
+          <a href="en.html">Product overview</a>
+          <a
+            href="cors.html"
+            hreflang="zh"
+            >跨域排查手册（中文）</a
+          >
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+      <div
+        class="scroll-progress"
+        aria-hidden="true"
+      >
+        <i></i>
+      </div>
+    </header>
+
+    <main id="main">
+      <section
+        class="hero"
+        aria-labelledby="page-title"
+      >
+        <div class="wrap">
+          <div class="hero-copy">
+            <span class="eyebrow"
+              ><span class="dot"></span> Triage guide · judgements from measurements · updated 2026-11-05</span
+            >
+            <h1 id="page-title">
+              After <span class="accent">blocked by CORS policy</span>: name the failure first, then pick which side
+              changes
+            </h1>
+            <p class="lede">
+              That sentence means the browser refused to hand the response to the page under the same-origin policy. It
+              does not mean the backend broke — the server usually received the request and answered it. Before choosing
+              a fix, sort what you have into three cases: a plain request missing
+              <code>Access-Control-Allow-Origin</code>, an <code>OPTIONS</code> preflight that did not pass, or an
+              <code>Origin</code> that became <code>null</code> after a rewrite. Their fixes contradict each other, so
+              trying them in random order only takes longer.
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+                >Add to Chrome</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="#fixes"
+                >What the five fixes cost</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="#origin-null"
+                >Origin is wrong after a rewrite</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="en.html"
+                >Product overview</a
+              >
+            </div>
+            <div class="stat-strip">
+              <div class="stat"><b>5</b><span>fixes, ordered by who changes</span></div>
+              <div class="stat"><b>3</b><span>failures that look alike</span></div>
+              <div class="stat"><b>6</b><span>limits stated up front</span></div>
+              <div class="stat"><b>1</b><span>test that splits the two sides</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="read-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="read-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="10.5"
+                    cy="10.5"
+                    r="6.5"
+                  />
+                  <path d="M15.4 15.4 20 20" /></svg></span
+              >Read the error text, not the label "CORS"
+            </h2>
+            <p class="section-lede">
+              The browser reports several different problems in one shape. The left column below is what you actually
+              see in a console you copied verbatim; the right column says what to do next.
+            </p>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <caption class="visually-hidden">
+                Error text, the likelier cause, and the next step
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">What you see</th>
+                  <th scope="col">More likely</th>
+                  <th scope="col">Next step</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>No 'Access-Control-Allow-Origin' header</code></td>
+                  <td>The response has no such header, or its value does not match the page's origin</td>
+                  <td>
+                    See the first of the <a href="#kinds-title">three failures</a> and the
+                    <a href="#fixes">five fixes</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>Response to preflight request doesn't pass</code></td>
+                  <td>The <code>OPTIONS</code> preflight did not pass</td>
+                  <td>See <a href="#preflight-title">what a preflight must answer</a></td>
+                </tr>
+                <tr>
+                  <td><code>net::ERR_FAILED</code>, with no CORS sentence in the console</td>
+                  <td>A connection-layer failure: DNS, port, TLS, or the service is not running</td>
+                  <td>Run <code>curl -v</code> against that address in a terminal — no browser involved</td>
+                </tr>
+                <tr>
+                  <td><code>status === 0</code>, the page only gets an <code>error</code></td>
+                  <td>CORS blocked, offline, DNS failure and a refused connection all look like this</td>
+                  <td>
+                    Check whether that row in the Network panel has a response at all; if not, it is the connection
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>401</code> / <code>403</code>, but the request went out</td>
+                  <td>The backend refused it — that is not CORS</td>
+                  <td>Read the backend log and the credentials; do not look for a cause in the browser</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout callout--key">
+            <p>
+              <strong>One test splits the two sides</strong>: CORS is a browser behaviour, so the server definitely
+              received the request (a preflight reaches it too). If nothing appears in the server log, the problem is at
+              the connection layer and changing response headers will do nothing.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="kinds-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="kinds-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 3 21 8 12 13 3 8Z" />
+                  <path d="M4 12.5 12 17l8-4.5" />
+                  <path d="M4 16.5 12 21l8-4.5" /></svg></span
+              >Three failures that look alike and need opposite fixes
+            </h2>
+            <p class="section-lede">
+              Put the request in front of you into one of these three, then act. Each has its own test, fix and cost.
+            </p>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <h3>① A plain request with no <code>ACAO</code></h3>
+              <p>
+                A GET without custom headers goes straight out; the response comes back and there is no
+                <code>Access-Control-Allow-Origin</code>, or its value is not this page's origin.
+              </p>
+              <p class="muted">
+                Fix: send that header, or stop the page from making the request itself (see
+                <a href="#fix-extension">fix 5</a>).
+              </p>
+            </div>
+            <div class="card">
+              <h3>② The preflight did not pass</h3>
+              <p>
+                Custom headers, <code>Content-Type: application/json</code>, <code>PUT</code> and
+                <code>DELETE</code> each send an <code>OPTIONS</code> first. That answer has to cover origin, method and
+                headers together; miss one and the whole request is rejected.
+              </p>
+              <p class="muted">
+                Fix: see <a href="#preflight-title">what a preflight must answer</a>. This class is the one most often
+                misread as "the API is down".
+              </p>
+            </div>
+            <div class="card">
+              <h3>③ <code>Origin</code> became <code>null</code> after a rewrite</h3>
+              <p>
+                When a network-layer redirect sends the request to <strong>a different origin</strong>, the target
+                receives <code>Origin: null</code>, not the page's own source. A backend allowlisting by origin rejects
+                it — and it is right to, since that source is none of the ones it knows.
+              </p>
+              <p class="muted">
+                Measured on Chrome for Testing 155 (2026-10-13); rewrites that stay inside the same origin keep the real
+                <code>Origin</code>. See <a href="#origin-null">the readings for this class</a>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="fixes"
+        aria-labelledby="fixes-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="fixes-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M4 6h16" />
+                  <path d="M4 12h16" />
+                  <path d="M4 18h10" /></svg></span
+              >Five fixes, ordered by whose code changes
+            </h2>
+            <p class="section-lede">
+              This table is the point of the page: one error has five common fixes, and they differ not in convenience
+              but in <strong>who has to change, who else is affected, and how easily it can be undone</strong>.
+            </p>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <caption class="visually-hidden">
+                Each fix: who changes, what it costs, when to use it
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Fix</th>
+                  <th scope="col">Who changes</th>
+                  <th scope="col">Cost</th>
+                  <th scope="col">Use it when</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row"><a href="#fix-backend">1. Backend sends CORS headers</a></th>
+                  <td>The service or the gateway, usually through a release</td>
+                  <td>
+                    A deployment change plus sign-off on what is allowed; a temporary opening is the hardest thing here
+                    to take back
+                  </td>
+                  <td>The header belongs in production anyway, or more origins will need it over time</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-devserver">2. Local dev-server proxy</a></th>
+                  <td>One config per project, committed to the repository</td>
+                  <td>
+                    Repeated project by project; applied at start, so every change needs a restart; powerless over an
+                    already deployed page
+                  </td>
+                  <td>One frontend on your machine, talking to a backend that also runs there</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-gateway">3. Same-origin reverse proxy</a></th>
+                  <td>The deployment (Nginx / gateway / load balancer)</td>
+                  <td>Requires the environment; path and domain planning is a team decision</td>
+                  <td>You can change the deployment and want every frontend solved at once</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-noop">4. Disable browser security</a></th>
+                  <td>One browser instance on your own machine</td>
+                  <td>
+                    The whole instance is unprotected, and the observation does not transfer — everyone else is still
+                    blocked
+                  </td>
+                  <td>You only want to confirm once that this really is CORS</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-extension">5. Extension rewrite or proxy</a></th>
+                  <td>Only the browser: no server change, no project files</td>
+                  <td>
+                    Browser traffic only; the rules live in your personal profile, so nothing travels with the project
+                    on its own — sharing means exporting a file and handing it over
+                  </td>
+                  <td>
+                    The environment is someone else's, the code must not change, and you just need this page pointed at
+                    another backend
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="fix-backend">1. Backend sends CORS headers — the only fix that is actually "fixed"</h3>
+          <p>
+            The response needs <code>Access-Control-Allow-Origin</code> (the exact origin, or <code>*</code>), plus
+            <code>Access-Control-Allow-Methods</code> and <code>Access-Control-Allow-Headers</code> when a preflight is
+            involved. If the request must carry cookies, the answer has to echo the specific origin and add
+            <code>Access-Control-Allow-Credentials: true</code> — at that setting <code>*</code> does not count. This is
+            the only fix that also makes production work; the other four only address this browser, right now.
+          </p>
+          <p class="muted">
+            How to check: <code>curl -i -H 'Origin: https://your-frontend-origin' https://the-api-address</code> and
+            look for those headers in the response.
+          </p>
+
+          <h3 id="fix-devserver">
+            2. Local dev-server proxy — turns cross-origin into same-origin, at one config per project
+          </h3>
+          <p>
+            Vite / webpack's <code>devServer.proxy</code>, or a small forwarder you start yourself, maps
+            <code>/api</code> to the backend so the browser only ever sees one origin. It is clean, reviewable, and
+            lives in the repository where the team can share it.
+          </p>
+          <p>
+            Two limits are worth stating first: <strong>its keys are site-relative paths</strong> (<code>/api</code>),
+            so requests stay same-origin and the backend environment never appears in the requested URL; and it only
+            applies while the page itself is served by that local process. If the page you need is
+            <strong>already deployed on FAT</strong>, that config has nothing to say about it.
+          </p>
+
+          <h3 id="fix-gateway">3. Same-origin reverse proxy — change it once and nobody thinks about it again</h3>
+          <p>
+            Put the frontend and the API under one domain at the Nginx / gateway layer (<code>/api</code> forwarded to
+            the service) and cross-origin stops being a question. Of all five this is the only "done and forget", but it
+            needs the deployment, a schedule, and a path plan that is a team-level decision rather than a debugging
+            preference.
+          </p>
+
+          <h3 id="fix-noop">4. Disabling security — it fixes the observation, not the problem</h3>
+          <p>
+            Flags like <code>--disable-web-security</code> make the browser skip the check. This looks fastest and hides
+            its cost best: isolation between <strong>every site</strong> in that window goes away with it, and what you
+            are observing is no longer what anyone else sees. You get "it works" in an unprotected window while
+            colleagues and users are still blocked in a normal one, so nothing from that session transfers. It is good
+            for exactly one question: "is this really CORS".
+          </p>
+
+          <h3 id="fix-extension">
+            5. Extension rewrite or proxy — the one for when neither the code nor the backend can change
+          </h3>
+          <p>That is what this extension does, over two channels with different costs:</p>
+          <ul>
+            <li>
+              A rule that <strong>only rewrites the URL</strong> compiles into a network-layer redirect
+              (<code>declarativeNetRequest</code>): the browser's network stack performs the forwarding, the extension
+              does not send that request and no per-request log is written. To be precise — the page-side wrapper still
+              runs for every request, it simply holds a rule list that does not contain this rule, so it hands the call
+              back to the native implementation untouched. What changes is where the request goes; from the page it is
+              still a cross-origin request, so <a href="#origin-null">failure class ③</a> still happens on this channel.
+            </li>
+            <li>
+              A rule with <strong>any advanced capability</strong> (header or body overrides, response overrides, mock,
+              delay, block, retry, sending cookies, method filtering, query-parameter injection, or a WebSocket rule) is
+              issued by the extension's background: the request goes out from the extension and the page gets a response
+              the extension built, so <strong>the page's own check never runs</strong> — that channel takes classes ①
+              and ② directly. Class ③ is usually moved onto this channel too in practice, but say it plainly:
+              <strong>what the backend receives in that case has never been measured here</strong> (the measurements
+              cover the network-layer redirect), so this row is a fix worth trying, not a guarantee that the other side
+              will accept it.
+            </li>
+          </ul>
+          <p class="muted">
+            Its edge stated up front: browser traffic only. Mobile apps, desktop programs and CI scripts never reach it,
+            and the rules live in your personal profile — share them with colleagues through export and import. The full
+            trade-off is on the
+            <a href="en-alternatives.html">alternatives page</a>.
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="preflight-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="preflight-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M4 12.5 9 17.5 20 6.5" /></svg></span
+              >What a preflight actually has to answer
+            </h2>
+            <p class="section-lede">
+              <code>OPTIONS</code> only happens for non-simple requests: custom headers,
+              <code>Content-Type: application/json</code>, <code>PUT</code> and <code>DELETE</code> all trigger it.
+              Three things must be true at once, and missing any one rejects the whole request.
+            </p>
+          </div>
+          <ul>
+            <li><code>Access-Control-Allow-Origin</code>: the exact origin, or <code>*</code></li>
+            <li><code>Access-Control-Allow-Methods</code>: the method you are actually using</li>
+            <li>
+              <code>Access-Control-Allow-Headers</code>: every header you actually sent — this is the usual miss,
+              allowing <code>Content-Type</code> while the auth header you added is absent
+            </li>
+          </ul>
+          <div class="callout callout--warn">
+            <p>
+              <strong>Two traps</strong>: (1) a preflight that answers 200 without those headers is still a rejection —
+              the preflight's <strong>response headers</strong> count, its status code and body do not. (2) With
+              credentials, <code>*</code> does not count: the answer must echo the origin and add
+              <code>Access-Control-Allow-Credentials: true</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="origin-null"
+        aria-labelledby="origin-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="origin-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 4v10" />
+                  <path d="M8 10.5 12 14.5 16 10.5" />
+                  <circle
+                    cx="12"
+                    cy="18.5"
+                    r="1.4"
+                  /></svg></span
+              >After a rewrite the backend says the <code>Origin</code> is wrong
+            </h2>
+            <p class="section-lede">
+              This one gets misread most often, because it looks like "the proxy did nothing" when the proxy worked and
+              the browser refused to hand the response over.
+            </p>
+          </div>
+          <p>
+            Measured on Chrome for Testing 155, 2026-10-13: a network-layer rule that rewrites the request to
+            <strong>a different origin</strong> delivers <code>Origin: null</code> to the target (<code
+              >Sec-Fetch-Site: cross-site</code
+            >), not the page's own source. Rewrites that land inside the same origin keep the real <code>Origin</code>.
+          </p>
+          <p>Which produces a combination where all three lines are true at once:</p>
+          <ul>
+            <li>Page: <code>Failed to fetch</code>, and <code>net::ERR_FAILED</code> in the Network panel</li>
+            <li>
+              Backend: answered <code>200</code>, with no <code>Access-Control-Allow-Origin</code> in the response
+            </li>
+            <li>
+              The same backend and the same credentials, requested directly: <code>200</code> with the headers present
+            </li>
+          </ul>
+          <p class="muted">
+            Reconciled on the server side separately: <code>curl -H 'Origin: null'</code> returns
+            <code>200</code> without echoing the origin, while <code>-H 'Origin: http://localhost:5300'</code> does echo
+            it — that is the shape of "200, but the browser will not let the page read it".
+          </p>
+          <div class="callout callout--warn">
+            <p>
+              <strong>Do not turn this into a universal rule.</strong> A backend answering
+              <code>Access-Control-Allow-Origin: *</code> does accept cross-origin rewrites (one measured cell did), but
+              Chrome's network stack has other rejection paths for cross-origin fetches — the same cell returned
+              <code>FAIL</code> in one probe round and <code>200</code> in another. So it is neither guaranteed to fail
+              nor guaranteed to pass. Two dependable routes: get the backend to allow it, or add one header override to
+              the rule so it falls onto the extension's own channel.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="limits-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="limits-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="4.5"
+                    y="4.5"
+                    width="15"
+                    height="15"
+                    rx="2.5"
+                  />
+                  <path d="M8 16 16 8" /></svg></span
+              >When a browser-side approach cannot help either
+            </h2>
+            <p class="section-lede">
+              These are not "not yet implemented" — they follow from what the tool is. For these, go back to fix 1 or
+              fix 3.
+            </p>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <h3>Traffic outside the browser</h3>
+              <p>
+                Mobile apps, desktop programs and server processes never route through this browser, so the extension
+                cannot see them.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Config that must pass code review</h3>
+              <p>
+                The extension's rules live in your own <code>chrome.storage.local</code>. A forwarding relationship the
+                whole team shares belongs in the repository — a devServer config or a gateway config.
+              </p>
+            </div>
+            <div class="card">
+              <h3>The API does not exist yet</h3>
+              <p>
+                When the shape still has to be agreed with the backend, the shareable artefact is the request definition
+                in an API client, not a browser rule.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Advanced capabilities on a socket</h3>
+              <p>
+                WebSocket gets three things only: handshake URL rewrite, query-parameter injection and blocking (which
+                works by sending the handshake somewhere unreachable). Header and body overrides, response overrides,
+                mock, delay, retry and sending cookies do not apply to a handshake — that is the protocol, not a bug.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Synchronous <code>XHR</code></h3>
+              <p>
+                When the third argument of <code>open()</code> is <code>false</code>, the result has to be ready before
+                the call stack unwinds, while a proxied answer can only arrive afterwards — so those requests go out as
+                they are. The one exception is a rule that <strong>blocks</strong>: a blocked request never falls back,
+                because falling back would send exactly what the user asked to stop.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Bodies over 10 MB</h3>
+              <p>
+                Request bodies and responses each have a 10 MB ceiling; past it the request fails and is
+                <strong>never truncated</strong> — cutting a JSON document in half only moves the error into the page's
+                <code>JSON.parse</code>. But "it failed" is not "it never left": a <code>fetch</code> falls back to the
+                native request on a proxy failure, so the page can still get an answer from the original address while
+                the extension logs that entry as failed. An <code>XMLHttpRequest</code> does not fall back — it errors
+                with <code>status 0</code>. Only <strong>blocking</strong> truly sends nothing. But "failed" does not
+                mean "never left the machine": a <code>fetch</code> falls back to the native request as a proxy failure,
+                so the page can still receive an answer from the original address while the extension's log records that
+                entry as failed. An <code>XMLHttpRequest</code> does not fall back — it errors with
+                <code>status 0</code>. Only <strong>blocking</strong> really sends nothing.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="faq"
+        aria-labelledby="faq-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="faq-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8.5"
+                  />
+                  <path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.7.2-1.2.9-1.2 1.6v.4" />
+                  <path d="M12 17.2h.01" /></svg></span
+              >Questions
+            </h2>
+            <p class="section-lede">
+              The extension's own FAQ — capability limits, privacy, permissions, how the two channels split — is on the
+              <a href="en.html#faq">product overview</a>. This section only answers "what do I do after the error".
+            </p>
+          </div>
+          <div class="faq-list">
+            <details id="faq-1">
+              <summary>
+                The backend log shows the request, but the page says CORS blocked it. Is the backend at fault?<a
+                  class="faq-permalink"
+                  href="#faq-1"
+                  aria-label="Direct link to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Couldn't copy — the link in the address bar can be copied manually"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                Both statements are true. CORS is a browser behaviour: the request was sent, the server answered, and
+                the browser judged the response headers before handing the body to the page. So the backend is fine and
+                the page is blocked at the same time. The fix is either to send the headers the browser expects, or to
+                stop the page from being the one that makes the request.
+              </p>
+            </details>
+            <details id="faq-2">
+              <summary>
+                The OPTIONS preflight returned 200 and it still fails. Why?<a
+                  class="faq-permalink"
+                  href="#faq-2"
+                  aria-label="Direct link to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Couldn't copy — the link in the address bar can be copied manually"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                Only the preflight's response headers count — its status code and body do not. A 200 without
+                <code>Access-Control-Allow-Origin</code>, or with an <code>Access-Control-Allow-Headers</code> that
+                omits one header you actually sent, is still a rejection. The most common miss with custom headers is
+                allowing <code>Content-Type</code> but not the auth header you added.
+              </p>
+            </details>
+            <details id="faq-3">
+              <summary>
+                Why is disabling browser security not a fix?<a
+                  class="faq-permalink"
+                  href="#faq-3"
+                  aria-label="Direct link to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Couldn't copy — the link in the address bar can be copied manually"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                It switches off the protection for the whole browser instance: every site in that window can now read
+                every other site's data, not just your API. Worse, it changes the behaviour under observation — you see
+                it working in an unprotected window while colleagues and users still hit the block in a normal one, so
+                the conclusion does not transfer. It is fine for one check — is this really CORS — but it is not a
+                workflow.
+              </p>
+            </details>
+            <details id="faq-4">
+              <summary>
+                How is an extension proxy different from a dev server proxy?<a
+                  class="faq-permalink"
+                  href="#faq-4"
+                  aria-label="Direct link to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Couldn't copy — the link in the address bar can be copied manually"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                A dev server proxy changes how your local build sends requests: one config per project, applied at build
+                or start time, and requests must go through that local port. An extension changes how the browser sends
+                them: one rule covers every project and every page on that machine, with no restart and no project files
+                touched. The cost is reach — it only sees browser traffic, so mobile apps, desktop programs and CI
+                scripts never pass through it.
+              </p>
+            </details>
+            <details id="faq-5">
+              <summary>
+                After a rewrite the backend rejects the Origin. What now?<a
+                  class="faq-permalink"
+                  href="#faq-5"
+                  aria-label="Direct link to this question"
+                  data-copy-ok="Link copied"
+                  data-copy-fail="Couldn't copy — the link in the address bar can be copied manually"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                That is the browser completing a redirect at the network layer. Once a request is rewritten to a
+                different origin the target receives
+                <code>Origin: null</code> rather than the page's own source (measured on Chrome for Testing 155;
+                rewrites that stay inside the same origin keep the real one), so a backend allowlisting by origin
+                refuses it. A backend answering <code>Access-Control-Allow-Origin: *</code> does take this class of
+                rewrite, but Chrome's network stack has other rejection paths and one cell in that measurement read
+                <code>FAIL</code> in one round and <code>200</code> in another, so treat it as neither guaranteed nor
+                doomed. Two dependable routes: have the backend allow it, or give the rule one header override so the
+                extension sends the request itself — the second one drops the check on the <strong>page side</strong>,
+                and what the target sees as its <code>Origin</code> in that case has never been measured here, so it is
+                a fix worth trying rather than a guarantee.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div class="footer-main">
+          <p>Cross-Origin Proxy · MIT License · rules and logs stay on your machine</p>
+          <p class="footer-meta">
+            <span>v1.8.0</span>
+            <span>Last updated 2026-11-05</span>
+          </p>
+        </div>
+        <nav aria-label="Footer navigation">
+          <a href="en.html">Product overview</a>
+          <a href="./">产品说明（中文）</a>
+          <a
+            href="cors.html"
+            hreflang="zh"
+            >CORS 排查手册（中文）</a
+          >
+          <a href="en-alternatives.html">Alternatives</a>
+          <a href="privacy.html">Privacy policy</a>
+          <a href="llms.txt">llms.txt</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

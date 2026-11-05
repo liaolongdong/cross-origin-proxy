@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-28"
+            "dateModified": "2026-11-05"
           },
           {
             "@type": "SoftwareApplication",
@@ -175,7 +175,7 @@
             "applicationCategory": "DeveloperApplication",
             "applicationSubCategory": "浏览器扩展",
             "operatingSystem": "Google Chrome（Manifest V3）",
-            "softwareVersion": "1.6.0",
+            "softwareVersion": "1.8.0",
             "url": "https://liaolongdong.github.io/cross-origin-proxy/",
             "codeRepository": "https://github.com/liaolongdong/cross-origin-proxy",
             "downloadUrl": "https://github.com/liaolongdong/cross-origin-proxy/releases",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-28",
+            "dateModified": "2026-11-05",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -1785,7 +1785,8 @@
             后台通道的请求由持有主机权限的扩展发出，页面拿到的是扩展构造的响应，因此不会触发页面侧 CORS 校验。仅重写 URL
             的请求仍是一次普通的跨域请求：浏览器对重定向后的响应套用同源策略，依然要求
             <code>Access-Control-Allow-Origin</code>
-            覆盖你的源。若目标环境不允许你的源，给规则加上任一能力（加一个响应头覆盖代价最小），它就换到后台通道。
+            覆盖你的源。若目标环境不允许你的源，给规则加上任一能力（加一个响应头覆盖代价最小），它就换到后台通道。按报错原话分流的完整判据——三种失败、五种解法与各自代价——写在
+            <a href="cors.html">《CORS 报错的 5 种解法》</a>。
           </p>
           <div class="callout callout--warn">
             <svg
@@ -3670,9 +3671,9 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
           </p>
           <div class="footer-meta">
             <span>MIT 开源协议</span>
-            <span>v1.6.0</span>
+            <span>v1.8.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-10-28</span>
+            <span>最后更新 2026-11-05</span>
             <span
               ><a
                 href="en.html"
@@ -3736,6 +3737,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
           >
           <a href="privacy.html">隐私政策</a>
           <a href="alternatives.html">与 dev-server 代理、mitmproxy、API 客户端对比</a>
+          <a href="cors.html">blocked by CORS 报错：排查判据与五种解法</a>
           <a href="llms.txt">llms.txt</a>
           <a href="llms-full.txt">llms-full.txt</a>
           <button
