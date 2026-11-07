@@ -72,6 +72,7 @@
       :read-failed="configReadFailed"
       :highlight-rule-id="highlightRuleId"
       :search-text="searchText"
+      :active-tags="tagsFilter"
       :hit-stats="hitStatsByRule"
       :dnr-stats-state="dnrStatsState"
       :shadowed-rule-ids="shadowedRuleIds"
@@ -87,6 +88,7 @@
       @reorder="handleReorder"
       @refresh="fetchConfig"
       @clear-filters="clearRuleFilters"
+      @tag-click="handleTagChipClick"
     />
 
     <!-- 弹窗与抽屉（全部异步组件，首屏不加载） -->
@@ -475,6 +477,19 @@ const filterActive = computed(() =>
 /** 筛选下拉与表单候选都从这一份来：条数与排序的判据只住 `collectRuleTags` */
 const availableTags = computed(() => collectRuleTags(rules.value));
 const tagNames = computed(() => availableTags.value.map(entry => entry.tag));
+
+/**
+ * 行内标签 chip 的一次点击 = 把这个标签加进或移出筛选（与下拉共用 `tagsFilter` 那一份状态）。
+ * 先归一到 `tagNames` 里的拼法（`collectRuleTags` 保留的第一次写法）再增删——不归一的话，
+ * 同一条规则上的 `FAT` 与下拉里那条 `fat` 会被记成两项：OR 语义下多一个空转的选中集，
+ * 而勾选框与 chip 的点亮态从此对不上账。
+ */
+function handleTagChipClick(tag: string) {
+  const canonical = tagNames.value.find(candidate => candidate.toLowerCase() === tag.toLowerCase()) ?? tag;
+  const index = tagsFilter.value.findIndex(selected => selected.toLowerCase() === canonical.toLowerCase());
+  if (index >= 0) tagsFilter.value.splice(index, 1);
+  else tagsFilter.value.push(canonical);
+}
 
 const enabledCount = computed(() => rules.value.filter(r => r.enabled).length);
 

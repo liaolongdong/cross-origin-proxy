@@ -351,313 +351,223 @@
           </div>
         </el-form-item>
 
-        <!-- 请求体覆盖 -->
-        <el-form-item :label="t('requestBodyOverrideLabel')">
-          <div class="override-section">
-            <el-switch
-              v-model="enableRequestBodyOverride"
-              :active-text="t('enabled')"
-            />
-            <el-input
-              v-if="enableRequestBodyOverride"
-              v-model="form.requestBodyOverride"
-              type="textarea"
-              :rows="3"
-              :placeholder="t('requestBodyOverridePlaceholder')"
-              class="override-textarea"
-            />
-          </div>
-        </el-form-item>
+        <!--
+          高级能力分组：这六格要么改回包、要么改发法，全是「后台代发才做得到」的能力，
+          平时用不到，却占了表单后半屏。折叠只是收纳——六格的位置、开关与校验一位不动。
+          组头那颗徽标数的是「此刻开着几项」，收起状态也压不住已经生效的能力。
+        -->
+        <button
+          type="button"
+          class="advanced-toggle"
+          :aria-expanded="advancedOpen ? 'true' : 'false'"
+          aria-controls="advanced-panel"
+          @click="advancedOpen = !advancedOpen"
+        >
+          <el-icon
+            class="advanced-toggle__chevron"
+            :class="{ 'is-open': advancedOpen }"
+            ><ArrowDown
+          /></el-icon>
+          <span class="advanced-toggle__label">{{ t('advancedSectionTitle') }}</span>
+          <span
+            v-if="advancedActiveCount > 0"
+            class="advanced-toggle__badge"
+          >
+            {{ t('advancedSectionCount', String(advancedActiveCount)) }}
+          </span>
+        </button>
+        <transition name="el-fade-in">
+          <div
+            v-show="advancedOpen"
+            id="advanced-panel"
+            class="advanced-body"
+          >
+            <p class="advanced-body-hint">{{ t('advancedSectionHint') }}</p>
 
-        <!-- 响应覆盖 -->
-        <el-form-item :label="t('responseOverridesLabel')">
-          <div class="override-section">
-            <el-switch
-              v-model="enableResponseOverrides"
-              :active-text="t('enabled')"
-            />
-            <div
-              v-if="enableResponseOverrides"
-              class="response-overrides"
-            >
-              <div class="response-field">
-                <label class="response-field-label">{{ t('responseStatusOverride') }}</label>
-                <el-input-number
-                  v-model="form.responseStatus"
-                  :min="200"
-                  :max="599"
-                  :placeholder="t('responseStatusPlaceholder')"
-                  controls-position="right"
-                  style="width: 160px"
+            <!-- 请求体覆盖 -->
+            <el-form-item :label="t('requestBodyOverrideLabel')">
+              <div class="override-section">
+                <el-switch
+                  v-model="enableRequestBodyOverride"
+                  :active-text="t('enabled')"
+                />
+                <el-input
+                  v-if="enableRequestBodyOverride"
+                  v-model="form.requestBodyOverride"
+                  type="textarea"
+                  :rows="3"
+                  :placeholder="t('requestBodyOverridePlaceholder')"
+                  class="override-textarea"
                 />
               </div>
-              <div class="response-field">
-                <label class="response-field-label">{{ t('responseStatusTextOverride') }}</label>
-                <el-input
-                  v-model="form.responseStatusText"
-                  :placeholder="t('responseStatusTextPlaceholder')"
-                  maxlength="120"
-                  show-word-limit
+            </el-form-item>
+
+            <!-- 响应覆盖 -->
+            <el-form-item :label="t('responseOverridesLabel')">
+              <div class="override-section">
+                <el-switch
+                  v-model="enableResponseOverrides"
+                  :active-text="t('enabled')"
                 />
-                <!-- 状态行必须是一段 ByteString：`utils/proxyResponse.ts` 会在构造 Response 前
+                <div
+                  v-if="enableResponseOverrides"
+                  class="response-overrides"
+                >
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('responseStatusOverride') }}</label>
+                    <el-input-number
+                      v-model="form.responseStatus"
+                      :min="200"
+                      :max="599"
+                      :placeholder="t('responseStatusPlaceholder')"
+                      controls-position="right"
+                      style="width: 160px"
+                    />
+                  </div>
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('responseStatusTextOverride') }}</label>
+                    <el-input
+                      v-model="form.responseStatusText"
+                      :placeholder="t('responseStatusTextPlaceholder')"
+                      maxlength="120"
+                      show-word-limit
+                    />
+                    <!-- 状态行必须是一段 ByteString：`utils/proxyResponse.ts` 会在构造 Response 前
                      把码点 > 255 的字符与换行剔除（不剔除的话 `new Response` 当场抛 TypeError，
                      抛出点在拦截器的 resolve 回调里，页面从此永久 pending）。这里不拦保存，
                      只把「实际发出去的是哪一句」摆在眼前——存量导入规则里那种中文状态行
                      不该反过来把无关的编辑（改优先级、改名）顶在门外。 -->
-                <div
-                  v-if="statusTextEffective !== null"
-                  class="field-hint field-hint-warning"
-                >
-                  {{ t('responseStatusTextStripped') }}
-                  <code class="field-hint-value">{{ statusTextEffective || t('responseStatusTextEmpty') }}</code>
-                </div>
-              </div>
-              <div class="response-field">
-                <label class="response-field-label">{{ t('responseHeadersOverride') }}</label>
-                <div
-                  v-for="(header, index) in responseHeaderList"
-                  :key="header.uid"
-                  class="header-pair"
-                >
-                  <el-input
-                    v-model="header.key"
-                    :placeholder="t('headerNamePlaceholder')"
-                    style="width: 40%"
-                  />
-                  <el-input
-                    v-model="header.value"
-                    :placeholder="t('headerValuePlaceholder')"
-                    style="width: 40%"
-                  />
-                  <el-button
-                    type="danger"
-                    link
-                    :aria-label="t('removeResponseHeaderA11y', index + 1)"
-                    @click="responseHeaderList.splice(index, 1)"
-                  >
-                    <el-icon><Delete /></el-icon>
-                  </el-button>
-                </div>
-                <el-button
-                  type="primary"
-                  link
-                  @click="addResponseHeader"
-                >
-                  <el-icon><Plus /></el-icon>
-                  {{ t('addHeader') }}
-                </el-button>
-              </div>
-              <div class="response-field">
-                <label class="response-field-label">{{ t('responseBodyReplacements') }}</label>
-                <div
-                  v-for="(replacement, index) in bodyReplacementList"
-                  :key="replacement.uid"
-                  class="header-pair"
-                >
-                  <el-input
-                    v-model="replacement.path"
-                    :placeholder="t('jsonPathPlaceholder')"
-                    style="width: 30%"
-                  />
-                  <el-input
-                    v-model="replacement.value"
-                    :placeholder="t('jsonValuePlaceholder')"
-                    style="width: 50%"
-                  />
-                  <el-button
-                    type="danger"
-                    link
-                    :aria-label="t('removeBodyReplacementA11y', index + 1)"
-                    @click="bodyReplacementList.splice(index, 1)"
-                  >
-                    <el-icon><Delete /></el-icon>
-                  </el-button>
-                </div>
-                <el-button
-                  type="primary"
-                  link
-                  @click="addBodyReplacement"
-                >
-                  <el-icon><Plus /></el-icon>
-                  {{ t('addReplacement') }}
-                </el-button>
-                <!-- 整段替换与逐项替换是同一格「响应正文」的两种写法，引擎只认前者
+                    <div
+                      v-if="statusTextEffective !== null"
+                      class="field-hint field-hint-warning"
+                    >
+                      {{ t('responseStatusTextStripped') }}
+                      <code class="field-hint-value">{{ statusTextEffective || t('responseStatusTextEmpty') }}</code>
+                    </div>
+                  </div>
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('responseHeadersOverride') }}</label>
+                    <div
+                      v-for="(header, index) in responseHeaderList"
+                      :key="header.uid"
+                      class="header-pair"
+                    >
+                      <el-input
+                        v-model="header.key"
+                        :placeholder="t('headerNamePlaceholder')"
+                        style="width: 40%"
+                      />
+                      <el-input
+                        v-model="header.value"
+                        :placeholder="t('headerValuePlaceholder')"
+                        style="width: 40%"
+                      />
+                      <el-button
+                        type="danger"
+                        link
+                        :aria-label="t('removeResponseHeaderA11y', index + 1)"
+                        @click="responseHeaderList.splice(index, 1)"
+                      >
+                        <el-icon><Delete /></el-icon>
+                      </el-button>
+                    </div>
+                    <el-button
+                      type="primary"
+                      link
+                      @click="addResponseHeader"
+                    >
+                      <el-icon><Plus /></el-icon>
+                      {{ t('addHeader') }}
+                    </el-button>
+                  </div>
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('responseBodyReplacements') }}</label>
+                    <div
+                      v-for="(replacement, index) in bodyReplacementList"
+                      :key="replacement.uid"
+                      class="header-pair"
+                    >
+                      <el-input
+                        v-model="replacement.path"
+                        :placeholder="t('jsonPathPlaceholder')"
+                        style="width: 30%"
+                      />
+                      <el-input
+                        v-model="replacement.value"
+                        :placeholder="t('jsonValuePlaceholder')"
+                        style="width: 50%"
+                      />
+                      <el-button
+                        type="danger"
+                        link
+                        :aria-label="t('removeBodyReplacementA11y', index + 1)"
+                        @click="bodyReplacementList.splice(index, 1)"
+                      >
+                        <el-icon><Delete /></el-icon>
+                      </el-button>
+                    </div>
+                    <el-button
+                      type="primary"
+                      link
+                      @click="addBodyReplacement"
+                    >
+                      <el-icon><Plus /></el-icon>
+                      {{ t('addReplacement') }}
+                    </el-button>
+                    <!-- 整段替换与逐项替换是同一格「响应正文」的两种写法，引擎只认前者
                      （`entrypoints/background/proxyHandler.ts` 的 `applyResponseOverrides` 里
                      `bodyRaw` 命中后，逐项替换那一段在 `else if` 分支里根本不执行）。
                      两份都留在表单里是为了「把整段清空就回到逐项替换」这条退路，
                      但那一刻必须说出来，否则用户看到的是「路径替换填了却没生效」。 -->
-                <div
-                  v-if="bodyRawShadowsReplacements"
-                  class="field-hint field-hint-warning"
-                >
-                  {{ t('responseBodyRawShadowsReplacements') }}
+                    <div
+                      v-if="bodyRawShadowsReplacements"
+                      class="field-hint field-hint-warning"
+                    >
+                      {{ t('responseBodyRawShadowsReplacements') }}
+                    </div>
+                  </div>
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('responseBodyRawLabel') }}</label>
+                    <el-input
+                      v-model="form.responseBodyRaw"
+                      type="textarea"
+                      :rows="4"
+                      :placeholder="t('responseBodyRawPlaceholder')"
+                    />
+                    <div class="field-hint">
+                      {{ t('responseBodyRawHint') }}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="response-field">
-                <label class="response-field-label">{{ t('responseBodyRawLabel') }}</label>
-                <el-input
-                  v-model="form.responseBodyRaw"
-                  type="textarea"
-                  :rows="4"
-                  :placeholder="t('responseBodyRawPlaceholder')"
-                />
-                <div class="field-hint">
-                  {{ t('responseBodyRawHint') }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-form-item>
+            </el-form-item>
 
-        <!-- Mock 响应 -->
-        <el-form-item :label="t('mockResponseLabel')">
-          <div class="override-section">
-            <el-switch
-              v-model="enableMockResponse"
-              :active-text="t('enabled')"
-            />
-            <div
-              v-if="enableMockResponse"
-              class="response-overrides"
-            >
-              <div class="response-field">
-                <label class="response-field-label">{{ t('mockStatus') }}</label>
-                <el-input-number
-                  v-model="form.mockStatus"
-                  :min="200"
-                  :max="599"
-                  controls-position="right"
-                  style="width: 160px"
+            <!-- Mock 响应 -->
+            <el-form-item :label="t('mockResponseLabel')">
+              <div class="override-section">
+                <el-switch
+                  v-model="enableMockResponse"
+                  :active-text="t('enabled')"
                 />
-              </div>
-              <div class="response-field">
-                <label class="response-field-label">{{ t('mockContentType') }}</label>
-                <el-select
-                  v-model="form.mockContentType"
-                  style="width: 220px"
-                >
-                  <el-option
-                    label="application/json"
-                    value="application/json"
-                  />
-                  <el-option
-                    label="text/plain"
-                    value="text/plain"
-                  />
-                  <el-option
-                    label="text/html"
-                    value="text/html"
-                  />
-                  <el-option
-                    label="application/xml"
-                    value="application/xml"
-                  />
-                </el-select>
-              </div>
-              <div class="response-field">
-                <label class="response-field-label">{{ t('mockBody') }}</label>
-                <el-input
-                  v-model="form.mockBody"
-                  type="textarea"
-                  :rows="5"
-                  :placeholder="t('mockBodyPlaceholder')"
-                />
-              </div>
-              <!-- 条件化 Mock 响应 -->
-              <div class="response-field">
-                <label class="response-field-label">{{ t('mockConditions') }}</label>
                 <div
-                  v-for="(cond, index) in mockConditions"
-                  :key="cond.uid"
-                  class="mock-condition-card"
+                  v-if="enableMockResponse"
+                  class="response-overrides"
                 >
-                  <div class="condition-header">
-                    <span class="condition-index">#{{ index + 1 }}</span>
-                    <el-button
-                      type="danger"
-                      link
-                      :aria-label="t('removeMockConditionA11y', index + 1)"
-                      @click="mockConditions.splice(index, 1)"
-                    >
-                      <el-icon><Delete /></el-icon>
-                    </el-button>
-                  </div>
-                  <el-input
-                    v-model="cond.matchUrl"
-                    :placeholder="t('condMatchUrl')"
-                    style="width: 100%"
-                  />
-                  <el-select
-                    v-model="cond.matchMethod"
-                    clearable
-                    :placeholder="t('condMatchMethod')"
-                    style="width: 160px"
-                  >
-                    <el-option
-                      label="GET"
-                      value="GET"
-                    />
-                    <el-option
-                      label="POST"
-                      value="POST"
-                    />
-                    <el-option
-                      label="PUT"
-                      value="PUT"
-                    />
-                    <el-option
-                      label="DELETE"
-                      value="DELETE"
-                    />
-                  </el-select>
-                  <div
-                    v-for="(qp, qi) in cond.queryPairs"
-                    :key="qp.uid"
-                    class="header-pair"
-                  >
-                    <el-input
-                      v-model="qp.key"
-                      :placeholder="t('queryKeyPlaceholder')"
-                      style="width: 40%"
-                    />
-                    <el-input
-                      v-model="qp.value"
-                      :placeholder="t('queryValuePlaceholder')"
-                      style="width: 40%"
-                    />
-                    <el-button
-                      type="danger"
-                      link
-                      :aria-label="t('removeMockQueryParamA11y', qi + 1)"
-                      @click="cond.queryPairs.splice(qi, 1)"
-                    >
-                      <el-icon><Delete /></el-icon>
-                    </el-button>
-                  </div>
-                  <el-button
-                    type="primary"
-                    link
-                    @click="addMockQueryPair(cond)"
-                  >
-                    {{ t('addQueryMatch') }}
-                  </el-button>
-                  <el-input
-                    v-model="cond.body"
-                    type="textarea"
-                    :rows="3"
-                    :placeholder="t('condMockBody')"
-                  />
-                  <div style="display: flex; gap: 8px; align-items: center">
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('mockStatus') }}</label>
                     <el-input-number
-                      v-model="cond.status"
+                      v-model="form.mockStatus"
                       :min="200"
                       :max="599"
                       controls-position="right"
-                      style="width: 120px"
+                      style="width: 160px"
                     />
+                  </div>
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('mockContentType') }}</label>
                     <el-select
-                      v-model="cond.contentType"
-                      style="width: 200px"
+                      v-model="form.mockContentType"
+                      style="width: 220px"
                     >
                       <el-option
                         label="application/json"
@@ -671,90 +581,215 @@
                         label="text/html"
                         value="text/html"
                       />
+                      <el-option
+                        label="application/xml"
+                        value="application/xml"
+                      />
                     </el-select>
                   </div>
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('mockBody') }}</label>
+                    <el-input
+                      v-model="form.mockBody"
+                      type="textarea"
+                      :rows="5"
+                      :placeholder="t('mockBodyPlaceholder')"
+                    />
+                  </div>
+                  <!-- 条件化 Mock 响应 -->
+                  <div class="response-field">
+                    <label class="response-field-label">{{ t('mockConditions') }}</label>
+                    <div
+                      v-for="(cond, index) in mockConditions"
+                      :key="cond.uid"
+                      class="mock-condition-card"
+                    >
+                      <div class="condition-header">
+                        <span class="condition-index">#{{ index + 1 }}</span>
+                        <el-button
+                          type="danger"
+                          link
+                          :aria-label="t('removeMockConditionA11y', index + 1)"
+                          @click="mockConditions.splice(index, 1)"
+                        >
+                          <el-icon><Delete /></el-icon>
+                        </el-button>
+                      </div>
+                      <el-input
+                        v-model="cond.matchUrl"
+                        :placeholder="t('condMatchUrl')"
+                        style="width: 100%"
+                      />
+                      <el-select
+                        v-model="cond.matchMethod"
+                        clearable
+                        :placeholder="t('condMatchMethod')"
+                        style="width: 160px"
+                      >
+                        <el-option
+                          label="GET"
+                          value="GET"
+                        />
+                        <el-option
+                          label="POST"
+                          value="POST"
+                        />
+                        <el-option
+                          label="PUT"
+                          value="PUT"
+                        />
+                        <el-option
+                          label="DELETE"
+                          value="DELETE"
+                        />
+                      </el-select>
+                      <div
+                        v-for="(qp, qi) in cond.queryPairs"
+                        :key="qp.uid"
+                        class="header-pair"
+                      >
+                        <el-input
+                          v-model="qp.key"
+                          :placeholder="t('queryKeyPlaceholder')"
+                          style="width: 40%"
+                        />
+                        <el-input
+                          v-model="qp.value"
+                          :placeholder="t('queryValuePlaceholder')"
+                          style="width: 40%"
+                        />
+                        <el-button
+                          type="danger"
+                          link
+                          :aria-label="t('removeMockQueryParamA11y', qi + 1)"
+                          @click="cond.queryPairs.splice(qi, 1)"
+                        >
+                          <el-icon><Delete /></el-icon>
+                        </el-button>
+                      </div>
+                      <el-button
+                        type="primary"
+                        link
+                        @click="addMockQueryPair(cond)"
+                      >
+                        {{ t('addQueryMatch') }}
+                      </el-button>
+                      <el-input
+                        v-model="cond.body"
+                        type="textarea"
+                        :rows="3"
+                        :placeholder="t('condMockBody')"
+                      />
+                      <div style="display: flex; gap: 8px; align-items: center">
+                        <el-input-number
+                          v-model="cond.status"
+                          :min="200"
+                          :max="599"
+                          controls-position="right"
+                          style="width: 120px"
+                        />
+                        <el-select
+                          v-model="cond.contentType"
+                          style="width: 200px"
+                        >
+                          <el-option
+                            label="application/json"
+                            value="application/json"
+                          />
+                          <el-option
+                            label="text/plain"
+                            value="text/plain"
+                          />
+                          <el-option
+                            label="text/html"
+                            value="text/html"
+                          />
+                        </el-select>
+                      </div>
+                    </div>
+                    <el-button
+                      type="primary"
+                      link
+                      @click="addMockCondition"
+                    >
+                      <el-icon><Plus /></el-icon>
+                      {{ t('addMockCondition') }}
+                    </el-button>
+                  </div>
                 </div>
-                <el-button
-                  type="primary"
-                  link
-                  @click="addMockCondition"
+              </div>
+            </el-form-item>
+
+            <!-- 请求延迟 -->
+            <el-form-item :label="t('delayLabel')">
+              <div class="override-section">
+                <el-switch
+                  v-model="enableDelay"
+                  :active-text="t('enabled')"
+                />
+                <div
+                  v-if="enableDelay"
+                  style="display: flex; gap: 8px; align-items: center"
                 >
-                  <el-icon><Plus /></el-icon>
-                  {{ t('addMockCondition') }}
-                </el-button>
+                  <el-input-number
+                    v-model="form.delayMs"
+                    :min="0"
+                    :max="60000"
+                    :step="100"
+                    controls-position="right"
+                    style="width: 160px"
+                  />
+                  <span style="font-size: 13px; color: var(--el-text-color-secondary)">ms</span>
+                </div>
               </div>
-            </div>
-          </div>
-        </el-form-item>
+            </el-form-item>
 
-        <!-- 请求延迟 -->
-        <el-form-item :label="t('delayLabel')">
-          <div class="override-section">
-            <el-switch
-              v-model="enableDelay"
-              :active-text="t('enabled')"
-            />
-            <div
-              v-if="enableDelay"
-              style="display: flex; gap: 8px; align-items: center"
-            >
-              <el-input-number
-                v-model="form.delayMs"
-                :min="0"
-                :max="60000"
-                :step="100"
-                controls-position="right"
-                style="width: 160px"
+            <!-- 请求重试 -->
+            <el-form-item :label="t('retryLabel')">
+              <div class="override-section">
+                <el-switch
+                  v-model="enableRetry"
+                  :active-text="t('enabled')"
+                />
+                <div
+                  v-if="enableRetry"
+                  class="retry-fields"
+                >
+                  <div class="retry-field-row">
+                    <label class="response-field-label">{{ t('retryCount') }}</label>
+                    <el-input-number
+                      v-model="form.retryCount"
+                      :min="1"
+                      :max="5"
+                      controls-position="right"
+                      style="width: 120px"
+                    />
+                  </div>
+                  <div class="retry-field-row">
+                    <label class="response-field-label">{{ t('retryDelay') }}</label>
+                    <el-input-number
+                      v-model="form.retryDelay"
+                      :min="100"
+                      :max="30000"
+                      :step="500"
+                      controls-position="right"
+                      style="width: 160px"
+                    />
+                    <span style="font-size: 13px; color: var(--el-text-color-secondary)">ms</span>
+                  </div>
+                </div>
+              </div>
+            </el-form-item>
+
+            <!-- 请求阻断 -->
+            <el-form-item :label="t('blockLabel')">
+              <el-switch
+                v-model="form.blocked"
+                :active-text="t('blockActiveText')"
               />
-              <span style="font-size: 13px; color: var(--el-text-color-secondary)">ms</span>
-            </div>
+            </el-form-item>
           </div>
-        </el-form-item>
-
-        <!-- 请求重试 -->
-        <el-form-item :label="t('retryLabel')">
-          <div class="override-section">
-            <el-switch
-              v-model="enableRetry"
-              :active-text="t('enabled')"
-            />
-            <div
-              v-if="enableRetry"
-              class="retry-fields"
-            >
-              <div class="retry-field-row">
-                <label class="response-field-label">{{ t('retryCount') }}</label>
-                <el-input-number
-                  v-model="form.retryCount"
-                  :min="1"
-                  :max="5"
-                  controls-position="right"
-                  style="width: 120px"
-                />
-              </div>
-              <div class="retry-field-row">
-                <label class="response-field-label">{{ t('retryDelay') }}</label>
-                <el-input-number
-                  v-model="form.retryDelay"
-                  :min="100"
-                  :max="30000"
-                  :step="500"
-                  controls-position="right"
-                  style="width: 160px"
-                />
-                <span style="font-size: 13px; color: var(--el-text-color-secondary)">ms</span>
-              </div>
-            </div>
-          </div>
-        </el-form-item>
-
-        <!-- 请求阻断 -->
-        <el-form-item :label="t('blockLabel')">
-          <el-switch
-            v-model="form.blocked"
-            :active-text="t('blockActiveText')"
-          />
-        </el-form-item>
+        </transition>
 
         <el-form-item :label="t('enabledLabel')">
           <el-switch v-model="form.enabled" />
@@ -869,7 +904,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Delete, Plus, Close } from '@element-plus/icons-vue';
+import { ArrowDown, Delete, Plus, Close } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { ProxyRule } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
@@ -1121,6 +1156,19 @@ const enableResponseOverrides = ref(false);
 const enableMockResponse = ref(false);
 const enableDelay = ref(false);
 const enableRetry = ref(false);
+/**
+ * 高级能力分组的开合：打开那一刻按「六项里有没有开着的」给初值（见 visible watcher 尾部），
+ * 之后由组头那颗按钮管。存量规则带着任一能力时打开就是展开的——折叠不许把「这条规则有 Mock」
+ * 藏成用户看不见、却在下次保存时原样交回去的东西。
+ */
+const advancedOpen = ref(false);
+/** 组里此刻开着几项：组头徽标与折叠初值共用这一份判据 */
+const advancedActiveCount = computed(
+  () =>
+    [enableRequestBodyOverride, enableResponseOverrides, enableMockResponse, enableDelay, enableRetry].filter(
+      flag => flag.value,
+    ).length + (form.blocked ? 1 : 0),
+);
 const mockConditions = ref<MockConditionRow[]>([]);
 
 // 规则级 HTTP 方法白名单（空=任意方法）与查询参数追加/覆盖列表
@@ -1436,6 +1484,8 @@ watch(
       showTestPanel.value = false;
       testUrl.value = '';
       testResult.value = null;
+      // 折叠初值在两支分派**之后**算：两支都会改那六个开关，先算拿到的就是上一条规则的残留
+      advancedOpen.value = advancedActiveCount.value > 0;
     }
   },
   { immediate: true },
@@ -1833,6 +1883,62 @@ function runTest() {
   flex-direction: column;
   gap: 12px;
   width: 100%;
+}
+
+/* 高级能力分组的组头：整行可点的收纳把手，视觉上与响应覆盖那块的浅色底板同族，
+   读起来是「这一块可以打开」，而不是又一条表单字段。 */
+.advanced-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  margin-top: 4px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cop-text-color-primary);
+  text-align: left;
+  cursor: pointer;
+  background: var(--cop-bg-color-secondary, var(--el-fill-color-lighter, #f5f7fa));
+  border: 1px solid var(--el-border-color-lighter, #ebeef5);
+  border-radius: 8px;
+}
+
+.advanced-toggle:hover {
+  border-color: var(--cop-primary-border, var(--el-border-color));
+}
+
+.advanced-toggle:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 1px;
+}
+
+/* 收起时箭头朝右、展开时朝下：开合状态不只靠箭头旋转表达，`aria-expanded` 同步在说 */
+.advanced-toggle__chevron {
+  color: var(--cop-text-color-secondary);
+  transform: rotate(-90deg);
+  transition: transform var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+.advanced-toggle__chevron.is-open {
+  transform: rotate(0deg);
+}
+
+.advanced-toggle__badge {
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg, #ecf5ff);
+  border-radius: 8px;
+}
+
+.advanced-body-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-text-color-secondary);
 }
 
 .override-textarea {
