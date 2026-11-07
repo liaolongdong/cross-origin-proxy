@@ -1450,6 +1450,8 @@
   const lbGallery = document.querySelector('.gallery[data-lightbox-close]');
 
   if (lbGallery && typeof document.createElement('dialog').showModal === 'function') {
+    // 光标那层 affordance 挂在这个类上：它许的是「点开看大图」，所以只在灯箱真会建起来时给
+    lbGallery.classList.add('supports-lightbox');
     const lbSlides = Array.from(lbGallery.querySelectorAll('.slide')).map(slide => {
       const img = slide.querySelector('img');
       const title = slide.querySelector('figcaption b');

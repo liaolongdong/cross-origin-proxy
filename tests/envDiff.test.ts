@@ -426,7 +426,7 @@ describe('接线契约（无 jsdom 的那一层的形状）', () => {
     expect(bg).not.toContain('trackRuleHit');
   });
 
-  it('弹窗：非安全方法先问一句（判据复用重放那一份），关面板时掐掉在途', () => {
+  it('弹窗：非安全方法先问一句（判据复用重放那一份），关面板时掐掉在途并把 visible 交回去', () => {
     const confirmAt = dialog.indexOf('needsReplayConfirm(method.value)');
     const runAt = dialog.indexOf('runPair(sideInput(urlA.value)');
     expect(confirmAt, '确认闸门不见了：POST 会直接发给两个环境').toBeGreaterThan(-1);
@@ -436,6 +436,14 @@ describe('接线契约（无 jsdom 的那一层的形状）', () => {
       /envDiffConfirmBody.*method|t\('envDiffConfirmBody', \[method/,
     );
     expect(dialog).toContain('if (running.value) stopPair();');
+    // EP 的 X／遮罩只发 `close`，`update:visible` 得由这里回传——漏了它，App 侧旗标永留 true，
+    // 第二次点顶栏／⌘K／深链都不再触发 watcher（评审抓到的那次「弹窗再也打不开」）
+    const closeStart = dialog.indexOf('function handleDialogClose');
+    expect(closeStart).toBeGreaterThan(-1);
+    expect(
+      dialog.slice(closeStart, dialog.indexOf('\n}', closeStart)),
+      '关闭没把 visible 回传给容器：弹窗第二次打不开',
+    ).toContain("emit('update:visible', false)");
   });
 
   it('App：hash、快捷键让位判据与 Escape 级联三处都在', () => {

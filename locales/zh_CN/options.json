@@ -290,6 +290,7 @@
   "detailNoData": "此请求未捕获详细数据",
   "detailBodyBinary": "二进制响应体不保存到本地日志，仅记录文本响应",
   "dragToReorder": "拖拽调整优先级",
+  "dragDisabledWhileSorted": "表头排序进行中：先点表头还原成列表顺序，再拖拽排优先级",
   "hasHeaderOverrides": "包含请求头覆盖",
   "hasSendCredentials": "携带目标环境 Cookie",
   "hasBodyOverride": "包含请求体覆盖",

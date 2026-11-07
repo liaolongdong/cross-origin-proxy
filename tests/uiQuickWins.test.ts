@@ -76,7 +76,18 @@ describe('名称与优先级列的表头排序（源码契约）', () => {
     );
     expect(ruleTable, '名称列没接三档表').toMatch(/prop="name"[\s\S]{0,220}:sort-orders="SORT_ORDERS"/);
     expect(ruleTable, '优先级列没接三档表').toMatch(/prop="priority"[\s\S]{0,220}:sort-orders="SORT_ORDERS"/);
-    expect(ruleTable, '排序没接回重排事件的余地——这里刻意不接：视图排序不该动列表顺序').not.toContain('@sort-change');
+    // `@sort-change` 只许用来翻「排序在场」这一个本地旗标：排序视图与列表顺序是两本账，
+    // 把 sort-change 接到重写上，就是让表头一次点击悄悄改写全体 priority
+    expect(ruleTable).toContain('@sort-change="handleSortChange"');
+    const sortHandler = between(ruleTable, 'function handleSortChange', '\n}\n');
+    expect(sortHandler).toContain('sortActive.value =');
+    expect(sortHandler, '排序事件不许 emit 任何东西').not.toContain('emit');
+    // 排序在场时把手必须收回：`handleReorder` 的下标算在未排序那份数组上，落点与屏幕对不上
+    expect(ruleTable, '排序时拖拽没有收口').toContain(":draggable=\"sortActive ? 'false' : 'true'\"");
+    expect(ruleTable).toContain("t('dragDisabledWhileSorted')");
+    expect(ruleTable, 'onDragStart 没挡排序态').toContain('if (sortActive.value) return;');
+    expect(zhOptions).toContain('"dragDisabledWhileSorted"');
+    expect(enOptions).toContain('"dragDisabledWhileSorted"');
     const byPriority = between(ruleTable, 'function byRulePriority', '\n}\n');
     expect(byPriority, '缺 priority 的存量数据要按默认档参与比较').toContain('DEFAULT_RULE_PRIORITY');
     expect(ruleTable).toContain("import { DEFAULT_RULE_PRIORITY, ROW_STAGGER_MAX_DELAY_MS } from '@/utils/constants';");

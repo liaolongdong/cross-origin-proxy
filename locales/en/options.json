@@ -290,6 +290,7 @@
   "detailNoData": "No detail data captured for this request",
   "detailBodyBinary": "Binary response bodies are not stored in the local log — text responses only",
   "dragToReorder": "Drag to reorder priority",
+  "dragDisabledWhileSorted": "A header sort is active — click the header again to return to list order before dragging",
   "hasHeaderOverrides": "Has header overrides",
   "hasSendCredentials": "Sends the target environment's cookies",
   "hasBodyOverride": "Has request body override",

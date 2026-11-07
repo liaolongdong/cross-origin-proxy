@@ -230,7 +230,7 @@ import { findFirstBodyDiffLine, prettifyEnvDiffBody } from '@/utils/envDiff';
  */
 const props = defineProps<{ visible: boolean }>();
 
-defineEmits<{
+const emit = defineEmits<{
   'update:visible': [value: boolean];
 }>();
 
@@ -308,6 +308,10 @@ function stopPair() {
 
 function handleDialogClose() {
   if (running.value) stopPair();
+  // 与兄弟弹窗同一条收口：EP 的 X／遮罩只发 `close`，`update:visible` 必须在这里回传，
+  // 否则 App 侧的旗标永留 true——第二次点顶栏／⌘K／深链都不再触发 watcher，弹窗永远打不开，
+  // 而 `anyOverlayOpen` 卡真会把 ⌘K / N / / 一起拖哑
+  emit('update:visible', false);
 }
 
 function prettyBody(side: SideKey): string | null {

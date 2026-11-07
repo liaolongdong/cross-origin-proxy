@@ -88,6 +88,7 @@
         row-key="id"
         class="rule-table"
         @selection-change="(selection: ProxyRule[]) => $emit('selectionChange', selection)"
+        @sort-change="handleSortChange"
         @dragover.prevent="onTableDragOver"
         @drop.prevent="onTableDrop"
       >
@@ -111,7 +112,8 @@
           <template #default="{ row }">
             <span
               class="drag-handle"
-              draggable="true"
+              :draggable="sortActive ? 'false' : 'true'"
+              :title="sortActive ? t('dragDisabledWhileSorted') : ''"
               @dragstart="onDragStart($event, row as ProxyRule)"
               @dragend="onDragEnd"
               >⠿</span
@@ -487,6 +489,18 @@ function byRulePriority(a: unknown, b: unknown): number {
 }
 
 /**
+ * 表头排序一旦生效，行拖拽的落点就和屏幕对不上：`handleReorder` 按**列表顺序**（未排序那份数组）
+ * 找下标并改写 priority，而拖拽事件里递的是**排序视图**中的那一行。与其让用户得到一个
+ * 「拖到 B 前面、却排进了别处」的结果，不如在排序在场时把把手收起——第三档 sort-orders
+ * 让「还原」只是一次点击。`@sort-change` 到这里就停：它只翻这一个本地旗标，不 emit 任何东西。
+ */
+const sortActive = ref(false);
+
+function handleSortChange(payload: { order?: string | null }) {
+  sortActive.value = payload.order != null && payload.order !== '';
+}
+
+/**
  * 规则表格（白色圆角卡片容器）
  *
  * 展示型组件：搜索/筛选已上移到 SearchFilterBar，本组件只接收筛选后的规则。
@@ -706,6 +720,7 @@ const dragFromId = ref<string | null>(null);
 const dragOverId = ref<string | null>(null);
 
 function onDragStart(e: DragEvent, row: ProxyRule) {
+  if (sortActive.value) return;
   dragFromId.value = row.id;
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move';
@@ -1196,6 +1211,17 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   transition:
     color var(--cop-duration-instant) var(--cop-ease-standard),
     background-color var(--cop-duration-instant) var(--cop-ease-standard);
+}
+
+/* 表头排序在场时把手只读（悬停标题会解释为什么）：落点算的是列表顺序，屏幕排的是排序视图。
+   把 `:hover` 一起写是特异度问题：`.drag-handle:hover` 是 (0,2,0) 且排在后面，
+   只压基础那条的话，不能拖的把手悬上去照样点亮——那仍是「可以拖」的邀请，正是这里要收回的话。 */
+.drag-handle[draggable='false'],
+.drag-handle[draggable='false']:hover {
+  color: var(--cop-text-color-placeholder, #c0c4cc);
+  cursor: default;
+  background: transparent;
+  opacity: 0.45;
 }
 
 .drag-handle:hover {

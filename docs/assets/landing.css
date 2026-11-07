@@ -1857,8 +1857,9 @@ html.js .slide {
   color: var(--lp-ink-soft);
 }
 
-/* 点开看大图的 affordance 只在脚本在场时给：无 JS 时图片不可点，光标不该许诺一个不存在的交互。 */
-html.js .slide img {
+/* 点开看大图的 affordance 只在灯箱真会建起来时给：无 JS 时 `.supports-lightbox` 不存在，
+   引擎不支持 `showModal` 时脚本也不加这个类——光标从不许诺一个不会发生的交互。 */
+html.js .gallery.supports-lightbox .slide img {
   cursor: zoom-in;
 }
 
