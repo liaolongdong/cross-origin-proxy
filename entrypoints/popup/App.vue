@@ -355,6 +355,7 @@
     -->
     <div class="action-list">
       <div
+        ref="profileCardRef"
         class="action-card"
         role="button"
         tabindex="0"
@@ -453,12 +454,14 @@
       </div>
 
       <div
+        ref="createRuleCardRef"
         class="action-card"
         role="button"
         tabindex="0"
         :title="createRuleFromTabDesc"
         :class="{ 'is-expanded': apiPicker }"
         :aria-expanded="apiPicker ? 'true' : 'false'"
+        :aria-busy="apiProbePending ? 'true' : 'false'"
         @click="handleCreateRuleFromTab"
         @keydown.enter.space.prevent="handleCreateRuleFromTab"
       >
@@ -467,6 +470,13 @@
         </div>
         <div class="action-card__content">
           <div class="action-card__title">{{ t('actionCreateRuleFromTab') }}</div>
+          <div
+            v-if="apiProbePending"
+            class="action-card__hint"
+            role="status"
+          >
+            {{ t('apiPickerLoading') }}
+          </div>
         </div>
       </div>
 
@@ -1315,10 +1325,12 @@ onMounted(() => {
   void computePageHit();
   // 快照列表先读一份：点卡片时不该有等待。失败不在这里报，留给下一次点击重试
   void refreshProfiles();
+  window.addEventListener('keydown', handlePopupKeydown);
 });
 
 onUnmounted(() => {
   if (autoOffTimer) clearInterval(autoOffTimer);
+  window.removeEventListener('keydown', handlePopupKeydown);
 });
 
 async function handleToggleProxy(value: boolean) {
@@ -1375,6 +1387,12 @@ const createRuleFromTabDesc = computed(() =>
  */
 const apiPicker = ref<{ rows: ApiPickerRow[]; fallback: { origin: string; draft: string } | null } | null>(null);
 
+/** 两次探测在途：卡片下面那句话的唯一判据，同时挡住第二次点击（探测期间再点等于同时跑两轮） */
+const apiProbePending = ref(false);
+/** Esc 收起面板后焦点要回到的两张卡（面板是 `v-if`，收起时里面的焦点会落回文档根部） */
+const createRuleCardRef = ref<HTMLElement | null>(null);
+const profileCardRef = ref<HTMLElement | null>(null);
+
 /** 面板里有没有带「疑似」标记的行：那一句解释只在说得出这件事时出现，没标记就不必自证清白 */
 const apiPickerSuspectVisible = computed(() =>
   apiPicker.value ? apiPicker.value.rows.some(row => row.suspect > 0) : false,
@@ -1395,6 +1413,8 @@ async function chooseApiDraft(draft: string) {
  * 面板用的是**刷新过的那份**疑似清单（与卡片那行说明同一个数，不会点开后少一个标记）。
  */
 async function handleCreateRuleFromTab() {
+  if (apiProbePending.value) return;
+  apiProbePending.value = true;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const url = tab?.url;
@@ -1417,6 +1437,31 @@ async function handleCreateRuleFromTab() {
   } catch (error) {
     logger.error('Create rule from tab failed:', error);
     ElMessage.error(t('createRuleFromTabFailed'));
+  } finally {
+    apiProbePending.value = false;
+  }
+}
+
+/**
+ * Esc 收起两张内联面板（「这一页在调谁」与环境快照）。
+ *
+ * 次序与配置页的 Escape 级联同一条口径：快照面板里的「后果说明」（`pendingProfileId`）跟着
+ * 面板一起收回——只清说明不收面板，等于 Esc 的第一下什么都没做。焦点交还给那张卡：面板是
+ * `v-if`，收起后焦点落回文档根部，键盘用户得从头 Tab 一遍才找得回来。两个面板同时在场时按
+ * 动作区里的次序从下往上收（「这一页在调谁」那张卡排在更后面，它先收）。什么都不在途时不拦 Esc——
+ * 弹窗窗口没有别的层要退，让浏览器自己的行为原样发生。
+ */
+function handlePopupKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return;
+  if (apiPicker.value) {
+    apiPicker.value = null;
+    createRuleCardRef.value?.focus();
+    return;
+  }
+  if (profilePicker.value) {
+    profilePicker.value = false;
+    pendingProfileId.value = '';
+    profileCardRef.value?.focus();
   }
 }
 
@@ -2234,6 +2279,16 @@ async function openOptionsPage(hash = '') {
   font-weight: 600;
   line-height: 1.35;
   color: var(--cop-text-color-primary);
+}
+
+/* 探测在途的那一句（「正在看这一页在调哪些接口…」）：两次探测各有 800ms 上限，
+   点击之后什么都不说，用户读成「没点上」再点一遍——这一行由 `role="status"` 播报，
+   它出现的位置就在卡片标题正下方，视线不用找。 */
+.action-card__hint {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cop-text-color-secondary);
 }
 
 /* 展开中的那张卡用主色边框点一句「面板从这里出来」，收起即复原 */

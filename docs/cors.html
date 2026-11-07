@@ -1,0 +1,945 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#ffffff"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#0e1621"
+    />
+    <meta
+      name="google-site-verification"
+      content="unD6BHVEHRxOhyZ353oO_77V8GXyLInc8gvbrh_ARbI"
+    />
+    <title>Chrome blocked by CORS 报错的 5 种解法 · 跨域代理助手</title>
+    <meta
+      name="description"
+      content="blocked by CORS policy 先分清哪一种失败：缺 ACAO、预检没过，还是改写后 Origin 变成 null。五种解法各改谁、代价是什么，附判据与复现命令。"
+    />
+    <meta
+      name="robots"
+      content="max-image-preview:large"
+    />
+    <meta
+      name="author"
+      content="Better"
+    />
+    <link
+      rel="canonical"
+      href="https://liaolongdong.github.io/cross-origin-proxy/cors.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="en"
+      href="https://liaolongdong.github.io/cross-origin-proxy/en-cors.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="zh"
+      href="https://liaolongdong.github.io/cross-origin-proxy/cors.html"
+    />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://liaolongdong.github.io/cross-origin-proxy/cors.html"
+    />
+    <meta
+      property="og:type"
+      content="article"
+    />
+    <meta
+      property="og:site_name"
+      content="跨域代理助手 Cross-Origin Proxy"
+    />
+    <meta
+      property="og:title"
+      content="Chrome 报 blocked by CORS policy 的排查与 5 种解法"
+    />
+    <meta
+      property="og:description"
+      content="先分清哪一种失败——缺 ACAO、预检没过，还是改写后 Origin 变成 null——再决定改哪一侧。五种解法的代价与判据，附复现命令。"
+    />
+    <meta
+      property="og:url"
+      content="https://liaolongdong.github.io/cross-origin-proxy/cors.html"
+    />
+    <meta
+      property="og:image"
+      content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-zh.png"
+    />
+    <meta
+      property="og:image:width"
+      content="1200"
+    />
+    <meta
+      property="og:image:height"
+      content="630"
+    />
+    <meta
+      property="og:image:alt"
+      content="跨域代理助手品牌图：产品名、标语「免改代码与 CORS，把前端 API 指到任意环境」、四个能力标签与产品站地址"
+    />
+    <meta
+      property="og:locale"
+      content="zh_CN"
+    />
+    <meta
+      property="og:locale:alternate"
+      content="en_US"
+    />
+    <meta
+      name="twitter:card"
+      content="summary_large_image"
+    />
+    <meta
+      name="twitter:title"
+      content="Chrome 报 blocked by CORS policy 的排查与 5 种解法"
+    />
+    <meta
+      name="twitter:description"
+      content="先分清哪一种失败——缺 ACAO、预检没过，还是改写后 Origin 变成 null——再决定改哪一侧。"
+    />
+    <meta
+      name="twitter:image"
+      content="https://liaolongdong.github.io/cross-origin-proxy/assets/og-image-zh.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="跨域代理助手品牌图：产品名、标语「免改代码与 CORS，把前端 API 指到任意环境」、四个能力标签与产品站地址"
+    />
+    <link
+      rel="icon"
+      href="assets/icon.png"
+      sizes="128x128"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="assets/icon.png"
+    />
+    <link
+      rel="stylesheet"
+      href="assets/landing.css"
+    />
+    <script
+      src="assets/landing.js"
+      defer
+    ></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/cors.html#webpage",
+            "url": "https://liaolongdong.github.io/cross-origin-proxy/cors.html",
+            "name": "Chrome blocked by CORS 报错的 5 种解法 · 跨域代理助手",
+            "inLanguage": "zh-CN",
+            "isPartOf": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/#website"
+            },
+            "about": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app"
+            },
+            "datePublished": "2026-11-05",
+            "dateModified": "2026-11-07"
+          },
+          {
+            "@type": "Article",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/cors.html#article",
+            "headline": "Chrome blocked by CORS 报错的 5 种解法",
+            "inLanguage": "zh-CN",
+            "isPartOf": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/cors.html#webpage"
+            },
+            "author": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author"
+            },
+            "datePublished": "2026-11-05",
+            "dateModified": "2026-11-07",
+            "publisher": {
+              "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author"
+            }
+          },
+          {
+            "@type": "BreadcrumbList",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/cors.html#breadcrumb",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "产品介绍页",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "CORS 报错排查与解法",
+                "item": "https://liaolongdong.github.io/cross-origin-proxy/cors.html"
+              }
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://liaolongdong.github.io/cross-origin-proxy/cors.html#faqpage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "服务端日志里能看到请求，页面却说 CORS 被拦，是不是后端的问题？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "两件事都成立。CORS 是浏览器行为：请求确实发出去了，服务端也确实回了，是浏览器在把响应交给页面之前按响应头判了一次。所以后端「我这边一切正常」和页面「我被拦了」同时为真， 修的方向是让响应带上浏览器认的那几个头，或者让请求不再由页面自己发起。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "预检 OPTIONS 回了 200，为什么还是报错？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "因为预检那一笔的响应头才作数，正文与状态码都不作数。回 200 但缺 Access-Control-Allow-Origin，或者 Access-Control-Allow-Headers 没覆盖你实际发出去的那个头，浏览器一样拒绝。带自定义头时最常见的漏法是只放了 Content-Type，忘了你加的那个鉴权头。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "关闭浏览器安全策略来绕过 CORS，为什么不算解法？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "它把整个浏览器实例的防护一起关掉了：那个窗口里所有站点都能互相读写，而不只是你的接口。更麻烦的是它改变了被观测的行为——你在无防护的窗口里看到「好了」，而同事和用户的窗口里仍然是拦的，联调结论不能外推。真要长期用，代价大于收益，它只适合一次性验证某个判断。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "用浏览器扩展代发和开发代理有什么区别？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "开发代理改的是「你本地怎么发」：要在每个项目里配一份，配完是构建期或启动期的事，且请求必须走那个本地端口。扩展改的是「浏览器怎么发」：一条规则对这台机器上所有项目、所有页面生效，不用重启服务，也不动项目文件。代价是它只覆盖浏览器里的流量，手机 App、桌面程序与 CI 里的脚本都不经过它。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "改写之后后端说 Origin 不对，怎么办？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "这是浏览器在网络层完成重定向的结果：把请求改写到另一个原点之后，目标收到的是 Origin: null，而不是页面自己的源（实测于 Chrome for Testing 155；改写后仍落在同一原点内的规则保留真实 Origin）。按来源白名单放行的后端因此拒掉这一笔。回 Access-Control-Allow-Origin: * 的后端接得住这一类改写，但 Chrome 的网络服务还有别的拒绝路径，同一格两次读数不同过，所以既不能当必成，也不能当必败。稳妥的两条路：让后端放行，或者把这条规则改成需要扩展代发的形态（加任一头覆盖即可），由扩展发出这一次请求——后者免掉的是页面那一侧的校验，而目标此刻看到的 Origin 是什么，本机没有量过，所以它是值得一试的修法、不是必然放行。"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <a
+      class="skip-link"
+      href="#main"
+      >跳到主要内容</a
+    >
+    <header class="site-header">
+      <div class="wrap">
+        <a
+          class="brand"
+          href="./"
+        >
+          <img
+            src="assets/icon.png"
+            alt=""
+            width="28"
+            height="28"
+          />
+          <span>跨域代理助手</span>
+        </a>
+        <nav
+          class="site-nav"
+          aria-label="页面导航"
+        >
+          <a href="./">产品说明（中文）</a>
+          <a
+            href="en-cors.html"
+            hreflang="en"
+            >CORS guide (English)</a
+          >
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+      <div
+        class="scroll-progress"
+        aria-hidden="true"
+      >
+        <i></i>
+      </div>
+    </header>
+
+    <main id="main">
+      <section
+        class="hero"
+        aria-labelledby="page-title"
+      >
+        <div class="wrap">
+          <div class="hero-copy">
+            <span class="eyebrow"><span class="dot"></span> 排查手册 · 判据来自实测 · 更新于 2026-11-07</span>
+            <h1 id="page-title">
+              报 <span class="accent">blocked by CORS policy</span> 之后：先分清是哪一种失败，再决定改哪一侧
+            </h1>
+            <p class="lede">
+              这句报错是浏览器在同源策略下拒绝把响应交给页面，不是后端崩了——服务端通常已经收到请求、也已经回了。要选解法，先分清三种情况：简单请求缺
+              <code>Access-Control-Allow-Origin</code>、预检 <code>OPTIONS</code> 没过，或者改写后
+              <code>Origin</code> 变成了 <code>null</code>。三者的修法互相矛盾，混着试只会更久。
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+                >添加到 Chrome</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="#fixes"
+                >五种解法的代价</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="#origin-null"
+                >改写后 Origin 不对</a
+              >
+              <a
+                class="btn btn-ghost"
+                href="./"
+                >产品说明</a
+              >
+            </div>
+            <div class="stat-strip">
+              <div class="stat"><b>5</b><span>种解法，按改动落点排</span></div>
+              <div class="stat"><b>3</b><span>类失败长得一样</span></div>
+              <div class="stat"><b>6</b><span>条边界写在前面</span></div>
+              <div class="stat"><b>1</b><span>条判据分开两侧</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="read-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="read-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="10.5"
+                    cy="10.5"
+                    r="6.5"
+                  />
+                  <path d="M15.4 15.4 20 20" /></svg></span
+              >第一步是读报错原文，而不是「跨域了」
+            </h2>
+            <p class="section-lede">
+              浏览器把好几件不同的事报成同一个形状。下表左边那一串是你会在原样复制的控制台里看到的字，右边给出下一步该做什么。
+            </p>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <caption class="visually-hidden">
+                报错原文、更可能的原因与下一步
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">你看到的</th>
+                  <th scope="col">更可能是</th>
+                  <th scope="col">下一步</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>No 'Access-Control-Allow-Origin' header</code></td>
+                  <td>响应缺这个头，或它的值与页面来源不匹配</td>
+                  <td>看 <a href="#kinds-title">三种失败</a> 的第一种与 <a href="#fixes">五种解法</a></td>
+                </tr>
+                <tr>
+                  <td><code>Response to preflight request doesn't pass</code></td>
+                  <td>预检 <code>OPTIONS</code> 没过</td>
+                  <td>看 <a href="#preflight-title">预检那一笔到底要回什么</a></td>
+                </tr>
+                <tr>
+                  <td><code>net::ERR_FAILED</code>，控制台没有 CORS 文案</td>
+                  <td>连接层失败：DNS、端口、TLS、服务没起</td>
+                  <td>先在终端 <code>curl -v</code> 那个地址，与浏览器无关</td>
+                </tr>
+                <tr>
+                  <td><code>status === 0</code>，页面只拿到一个 <code>error</code></td>
+                  <td>被 CORS 拦、断网、DNS 失败、连接被拒——四种在页面上是同一个形状</td>
+                  <td>看 Network 面板里那一笔有没有响应行；没有就是连接层</td>
+                </tr>
+                <tr>
+                  <td><code>401</code> / <code>403</code>，但请求确实发出去了</td>
+                  <td>后端拒绝了，不是 CORS</td>
+                  <td>看后端日志与凭据，别在浏览器侧找原因</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout callout--key">
+            <p>
+              <strong>一条判据把两侧分开</strong>：CORS
+              是浏览器行为，服务端一定收到了请求（预检那一笔也会到）。如果服务端日志里一笔都没有，问题在网络层，不在
+              CORS——这时候改响应头是白改。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="kinds-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="kinds-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 3 21 8 12 13 3 8Z" />
+                  <path d="M4 12.5 12 17l8-4.5" />
+                  <path d="M4 16.5 12 21l8-4.5" /></svg></span
+              >三种失败长得一样，修法相反
+            </h2>
+            <p class="section-lede">先把眼前这一笔归到其中一类，再动手。三类的判据、改法和代价各不同。</p>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <h3>① 简单请求缺 <code>ACAO</code></h3>
+              <p>
+                GET 且没有自定义头，请求直接发出，响应回来后发现没有
+                <code>Access-Control-Allow-Origin</code>（或值不是这个页面的源）。
+              </p>
+              <p class="muted">
+                改法：让响应带上这个头，或者让请求不由页面发出（见 <a href="#fix-extension">解法 5</a>）。
+              </p>
+            </div>
+            <div class="card">
+              <h3>② 预检没过</h3>
+              <p>
+                带自定义头、<code>Content-Type: application/json</code>、<code>PUT</code> /
+                <code>DELETE</code> 都会先发一笔 <code>OPTIONS</code>。预检的响应要同时给出方法、头与来源，缺一项就拒。
+              </p>
+              <p class="muted">
+                改法：见 <a href="#preflight-title">预检那一笔到底要回什么</a>。这一类最常被误判成「接口挂了」。
+              </p>
+            </div>
+            <div class="card">
+              <h3>③ 改写后 <code>Origin</code> 变成 <code>null</code></h3>
+              <p>
+                用网络层重定向把请求改写到<strong>另一个原点</strong>时，目标收到的是
+                <code>Origin: null</code
+                >，不是页面自己的源。按来源白名单放行的后端会拒——而它拒得有道理，那个源确实不是它认识的任何一个。
+              </p>
+              <p class="muted">
+                实测于 Chrome for Testing 155（2026-10-13）；改写后仍落在同一原点内的规则保留真实
+                <code>Origin</code>。详见 <a href="#origin-null">这一类的现场读数</a>。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="fixes"
+        aria-labelledby="fixes-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="fixes-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M4 6h16" />
+                  <path d="M4 12h16" />
+                  <path d="M4 18h10" /></svg></span
+              >五种解法，按「改动落在谁身上」排
+            </h2>
+            <p class="section-lede">
+              这张表是本页的核心：同一个报错有五种常见解法，它们的区别不是「方不方便」，而是<strong>谁要改、改完影响谁、能不能收回</strong>。
+            </p>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <caption class="visually-hidden">
+                五种解法的改动落点、代价与适用场景
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">解法</th>
+                  <th scope="col">改动落在谁身上</th>
+                  <th scope="col">代价</th>
+                  <th scope="col">什么时候用它</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row"><a href="#fix-backend">1. 后端补 CORS 响应头</a></th>
+                  <td>服务端 / 网关，通常要走一次发版</td>
+                  <td>要改部署配置并让安全侧同意放行范围；临时放开最容易收不回来</td>
+                  <td>这就是线上形态的一部分，或长期需要别的来源也调它</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-devserver">2. 本地开发代理</a></th>
+                  <td>每个项目各一份配置，改动进版本库</td>
+                  <td>逐项目重复；启动期生效，改一次要重启；对已部署的页面无能为力</td>
+                  <td>只有本地一个前端、且后端就在同一台机器上跑</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-gateway">3. 反向代理成同域</a></th>
+                  <td>部署侧（Nginx / 网关 / 负载均衡）</td>
+                  <td>要动环境；域名与路径规划是团队的公共决策</td>
+                  <td>能改部署，且希望所有前端一次性解决</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-noop">4. 关掉浏览器安全策略</a></th>
+                  <td>只有你自己这台机器的一个浏览器实例</td>
+                  <td>整个实例裸奔，且联调结论不可外推——别人正常浏览器里仍然被拦</td>
+                  <td>只想一次性验证「确实是 CORS 卡的」这一个判断</td>
+                </tr>
+                <tr>
+                  <th scope="row"><a href="#fix-extension">5. 浏览器扩展代发 / 重写</a></th>
+                  <td>只有浏览器，不改服务端、不改项目文件</td>
+                  <td>只覆盖浏览器内流量；配置存在个人 profile，不会自己跟着项目走——要分享就得导出一份文件交出去</td>
+                  <td>环境是别人的、代码不能动、只想把这一页的接口指到另一台后端</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="fix-backend">1. 后端补 CORS 响应头——唯一能算「修好了」的那一种</h3>
+          <p>
+            响应需要给出 <code>Access-Control-Allow-Origin</code>（精确来源或 <code>*</code>）、必要时
+            <code>Access-Control-Allow-Methods</code> 与 <code>Access-Control-Allow-Headers</code>；要带 Cookie
+            时还必须回显具体来源并给出 <code>Access-Control-Allow-Credentials: true</code>（<code>*</code>
+            在这一档不算数）。这是唯一让「线上也正常」的解法，其余四种都只解决你此刻这一台浏览器。
+          </p>
+          <p class="muted">
+            复现判据：<code>curl -i -H 'Origin: https://你的前端源' https://接口地址</code>，看回包里有没有那几个头。
+          </p>
+
+          <h3 id="fix-devserver">2. 本地开发代理——把跨域变成同域，代价是每个项目一份</h3>
+          <p>
+            Vite / webpack 的 <code>devServer.proxy</code>、或前端自己起一个小转发，把 <code>/api</code>
+            指到后端，浏览器看到的始终是同源地址。它干净、可 review、能进版本库，团队共享一份配置。
+          </p>
+          <p>
+            两个限制值得先说：<strong>它的键是站点内相对路径</strong>（<code>/api</code>
+            这种），请求始终同源，后端环境从不出现在请求 URL
+            上；以及它只在「页面也是这个本地服务渲染出来的」时成立——你要调的是一个<strong
+              >已经部署在 FAT 上的页面</strong
+            >时，那份配置管不到它。
+          </p>
+
+          <h3 id="fix-gateway">3. 反向代理成同域——一次改完，所有人都受益</h3>
+          <p>
+            在 Nginx / 网关上把前端与接口挂在同一个域下（<code>/api</code>
+            转发到后端），跨域这件事从此不存在。这是几种解法里唯一「做完就不用再想」的，但它要动部署、要排期，而且路径规划是团队级决策，不是个人调试能决定的事。
+          </p>
+
+          <h3 id="fix-noop">4. 关掉安全策略——它解决的是观测，不是问题</h3>
+          <p>
+            <code>--disable-web-security</code>
+            之类的启动参数让浏览器不再做这道校验。看起来最快，代价也最隐蔽：那个窗口里<strong>所有站点</strong>之间的隔离一起没了；而且你观测到的行为已经不是别人那份行为——你在裸奔窗口里看到「通了」，同事与用户的正常窗口里仍然是拦的，联调结论因此不能外推。它只适合一次性确认「确实是
+            CORS 卡的」。
+          </p>
+
+          <h3 id="fix-extension">5. 浏览器扩展代发 / 重写——不改代码也不改后端时的那一条</h3>
+          <p>本扩展做的就是这件事，而且分两条通道，代价不同：</p>
+          <ul>
+            <li>
+              <strong>只做地址重写</strong
+              >的规则编译成浏览器网络层的重定向（<code>declarativeNetRequest</code>）：转发由浏览器网络栈完成，扩展不为这一笔代发，也不留逐条请求日志。
+              <strong>说准确一点</strong
+              >——页面上的请求包装对每一笔都会跑一遍，只是它手里那份规则表压根不含这条规则，所以它只会把请求原样交回原生实现。它改的是「请求发到哪」，页面那一侧仍是一次跨域请求，所以
+              <a href="#origin-null">第 ③ 类失败</a>在这条通道上照样会发生。
+            </li>
+            <li>
+              <strong>带任何高级能力</strong>（改请求头或请求体、改响应、Mock、延迟、阻断、重试、携带
+              Cookie、方法过滤、查询参数注入，以及长连接规则）的，由扩展后台代发：请求由扩展发出、页面拿到扩展构造的响应，<strong>页面这道校验不参与</strong>——第
+              ① ② 两类它直接接得住。第 ③
+              类实践中也常改到这条通道上来，但要说清楚：<strong>后端此刻收到的请求长什么样，我们至今没有量过</strong>（量过的是网络层重定向那一头），所以这一格给的是「值得一试的修法」，不是「必然放行」。
+            </li>
+          </ul>
+          <p class="muted">
+            边界要说在前面：它只管浏览器里的流量。手机 App、桌面程序、CI 里的脚本都不经过它；配置存在你个人的浏览器
+            profile 里，需要分享给同事时走导出 / 导入。完整的取舍在<a href="alternatives.html">同类方案对比页</a>。
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="preflight-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="preflight-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M4 12.5 9 17.5 20 6.5" /></svg></span
+              >预检那一笔到底要回什么
+            </h2>
+            <p class="section-lede">
+              <code>OPTIONS</code> 只在「非简单请求」时发生：自定义头、<code>Content-Type: application/json</code
+              >、<code>PUT</code> / <code>DELETE</code> 都会触发。它要同时满足三项，缺一项就整笔被拒。
+            </p>
+          </div>
+          <ul>
+            <li><code>Access-Control-Allow-Origin</code>：精确来源或 <code>*</code></li>
+            <li><code>Access-Control-Allow-Methods</code>：包含实际使用的那个方法</li>
+            <li>
+              <code>Access-Control-Allow-Headers</code>：包含你实际发出去的那几个头——这一条最常漏，加了鉴权头却只放了
+              <code>Content-Type</code>
+            </li>
+          </ul>
+          <div class="callout callout--warn">
+            <p>
+              <strong>两个坑</strong>：① 预检回了 200
+              但没有那几个头，浏览器照样拒绝——预检的<strong>响应头</strong>才作数，状态码与正文都不作数。② 带凭据时
+              <code>*</code> 不算数，必须回显具体来源，并给出 <code>Access-Control-Allow-Credentials: true</code>。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="origin-null"
+        aria-labelledby="origin-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="origin-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M12 4v10" />
+                  <path d="M8 10.5 12 14.5 16 10.5" />
+                  <circle
+                    cx="12"
+                    cy="18.5"
+                    r="1.4"
+                  /></svg></span
+              >改写之后后端说 <code>Origin</code> 不对
+            </h2>
+            <p class="section-lede">
+              这一条最容易误判，因为它看起来像「代理没生效」，实际是代理生效了、浏览器却不肯把响应交给页面。
+            </p>
+          </div>
+          <p>
+            2026-10-13 在 Chrome for Testing 155
+            上实测：一条把请求改写到<strong>另一个原点</strong>的网络层规则，目标服务收到的是
+            <code>Origin: null</code>（<code>Sec-Fetch-Site: cross-site</code
+            >），不是页面自己的源；改写后仍落在同一原点内的规则保留真实 <code>Origin</code>。
+          </p>
+          <p>于是会出现这种组合，三行彼此不打架：</p>
+          <ul>
+            <li>页面：<code>Failed to fetch</code>，Network 里是 <code>net::ERR_FAILED</code></li>
+            <li>后端：回了 <code>200</code>，但响应里没有 <code>Access-Control-Allow-Origin</code></li>
+            <li>同一后端、同一份凭据直连：<code>200</code> 且头齐全</li>
+          </ul>
+          <p class="muted">
+            服务端侧独立对过账：<code>curl -H 'Origin: null'</code> 打过去回 <code>200</code> 但没有回显来源，换成
+            <code>-H 'Origin: http://localhost:5300'</code> 就回显——这就是「200 但浏览器不给页面读」的形状。
+          </p>
+          <div class="callout callout--warn">
+            <p>
+              <strong>别把它写成一条恒真结论</strong>。回
+              <code>Access-Control-Allow-Origin: *</code>
+              的后端接得住跨原点改写（实测有过这一格），但 Chrome 的网络服务对跨原点 fetch
+              还有别的拒绝路径——同一格在三轮探针里出现过 <code>FAIL</code> 与 <code>200</code>
+              两种读数。所以既不能说「跨原点改写必挂」，也不能说「必不挂」。稳妥的两条路：让后端放行，或者给这条规则加一项头覆盖，让它落到扩展代发那一条通道上。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="limits-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="limits-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <rect
+                    x="4.5"
+                    y="4.5"
+                    width="15"
+                    height="15"
+                    rx="2.5"
+                  />
+                  <path d="M8 16 16 8" /></svg></span
+              >什么时候浏览器方案也解决不了
+            </h2>
+            <p class="section-lede">这几条不是「还没优化」，是这类工具的形状决定的。碰到它们，请回到解法 1 或 3。</p>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <h3>要覆盖非浏览器流量</h3>
+              <p>手机 App、桌面程序、服务端进程发出的请求根本不经过这个浏览器，扩展看不见它们。</p>
+            </div>
+            <div class="card">
+              <h3>配置要能进代码评审</h3>
+              <p>
+                扩展的规则活在你个人的 <code>chrome.storage.local</code>
+                里。团队共用一份转发关系，正确做法是写进仓库的 devServer 配置或网关配置。
+              </p>
+            </div>
+            <div class="card">
+              <h3>接口本身还不存在</h3>
+              <p>需要先跟后端约定字段形状时，可分享的产物是 API 客户端里那份请求定义，不是浏览器里的一条规则。</p>
+            </div>
+            <div class="card">
+              <h3>长连接上的高级能力</h3>
+              <p>
+                WebSocket
+                只有三件事生效：握手地址重写、查询参数注入、阻断（把握手送到一个连不通的地址）。改请求头、改请求体、改响应、Mock、延迟、重试与携带
+                Cookie 在握手上都不生效——这是协议形状，不是待修缺陷。
+              </p>
+            </div>
+            <div class="card">
+              <h3>同步 <code>XHR</code></h3>
+              <p>
+                <code>open()</code> 第三个参数写成 <code>false</code>
+                时，响应必须在调用栈返回前就绪，而代发只能在之后把结果送回，所以这类请求只能原样发出——只有一种例外：那条规则是<strong>阻断</strong>时不回退，因为不回退正是用户要的效果。
+              </p>
+            </div>
+            <div class="card">
+              <h3>超过 10 MB 的正文</h3>
+              <p>
+                请求体与回包各有 10 MB 上限，越界那一笔判失败、<strong>不做截断返回</strong>——削掉一截 JSON
+                只是把错误挪进页面的 <code>JSON.parse</code>。但「判失败」不等于「这一笔没出门」：走
+                <code>fetch</code>
+                时页面会按「代理失败」<strong>回退原生再发一次</strong>，所以页面可能照样拿到一份来自原地址的响应，而扩展日志里记的是失败；<code
+                  >XHR</code
+                >
+                不回退，直接以 <code>status 0</code> 报错。只有<strong>阻断</strong>是真的不发出去。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="faq"
+        aria-labelledby="faq-title"
+      >
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="faq-title">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8.5"
+                  />
+                  <path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.7.2-1.2.9-1.2 1.6v.4" />
+                  <path d="M12 17.2h.01" /></svg></span
+              >常见问题
+            </h2>
+            <p class="section-lede">
+              关于扩展自身的 FAQ（能力边界、隐私、权限、两条通道怎么分流）在<a href="./#faq">产品介绍页</a
+              >；这一节只回答「报错之后怎么办」。
+            </p>
+          </div>
+          <div class="faq-list">
+            <details id="faq-1">
+              <summary>
+                服务端日志里能看到请求，页面却说 CORS 被拦，是不是后端的问题？<a
+                  class="faq-permalink"
+                  href="#faq-1"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                两件事都成立。CORS
+                是浏览器行为：请求确实发出去了，服务端也确实回了，是浏览器在把响应交给页面之前按响应头判了一次。所以后端「我这边一切正常」和页面「我被拦了」同时为真，
+                修的方向是让响应带上浏览器认的那几个头，或者让请求不再由页面自己发起。
+              </p>
+            </details>
+            <details id="faq-2">
+              <summary>
+                预检 OPTIONS 回了 200，为什么还是报错？<a
+                  class="faq-permalink"
+                  href="#faq-2"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                因为预检那一笔的响应头才作数，正文与状态码都不作数。回 200 但缺
+                <code>Access-Control-Allow-Origin</code>，或者
+                <code>Access-Control-Allow-Headers</code>
+                没覆盖你实际发出去的那个头，浏览器一样拒绝。带自定义头时最常见的漏法是只放了
+                <code>Content-Type</code>，忘了你加的那个鉴权头。
+              </p>
+            </details>
+            <details id="faq-3">
+              <summary>
+                关闭浏览器安全策略来绕过 CORS，为什么不算解法？<a
+                  class="faq-permalink"
+                  href="#faq-3"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                它把整个浏览器实例的防护一起关掉了：那个窗口里所有站点都能互相读写，而不只是你的接口。更麻烦的是它改变了被观测的行为——你在无防护的窗口里看到「好了」，而同事和用户的窗口里仍然是拦的，联调结论不能外推。真要长期用，代价大于收益，它只适合一次性验证某个判断。
+              </p>
+            </details>
+            <details id="faq-4">
+              <summary>
+                用浏览器扩展代发和开发代理有什么区别？<a
+                  class="faq-permalink"
+                  href="#faq-4"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                开发代理改的是「你本地怎么发」：要在每个项目里配一份，配完是构建期或启动期的事，且请求必须走那个本地端口。扩展改的是「浏览器怎么发」：一条规则对这台机器上所有项目、所有页面生效，不用重启服务，也不动项目文件。代价是它只覆盖浏览器里的流量，手机
+                App、桌面程序与 CI 里的脚本都不经过它。
+              </p>
+            </details>
+            <details id="faq-5">
+              <summary>
+                改写之后后端说 Origin 不对，怎么办？<a
+                  class="faq-permalink"
+                  href="#faq-5"
+                  aria-label="这一问的直达链接"
+                  data-copy-ok="链接已复制"
+                  data-copy-fail="没能复制到，地址栏里的链接可手动复制"
+                  ><svg
+                    class="faq-permalink-icon"
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6.6 9.4 9.4 6.6" />
+                    <path d="M7.4 4.7l.9-.9a2.2 2.2 0 0 1 3.1 3.1l-.9.9" />
+                    <path d="M8.6 11.3l-.9.9a2.2 2.2 0 0 1-3.1-3.1l.9-.9" /></svg
+                ></a>
+              </summary>
+              <p>
+                这是浏览器在网络层完成重定向的结果：把请求改写到另一个原点之后，目标收到的是
+                <code>Origin: null</code>，而不是页面自己的源（实测于 Chrome for Testing
+                155；改写后仍落在同一原点内的规则保留真实
+                <code>Origin</code>）。按来源白名单放行的后端因此拒掉这一笔。回
+                <code>Access-Control-Allow-Origin: *</code>
+                的后端接得住这一类改写，但 Chrome
+                的网络服务还有别的拒绝路径，同一格两次读数不同过，所以既不能当必成，也不能当必败。稳妥的两条路：让后端放行，或者把这条规则改成需要扩展代发的形态（加任一头覆盖即可），由扩展发出这一次请求——后者免掉的是页面那一侧的校验，而目标此刻看到的
+                Origin 是什么，本机没有量过，所以它是值得一试的修法、不是必然放行。
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div class="footer-main">
+          <p>跨域代理助手 Cross-Origin Proxy · MIT License · 规则与日志只存本机</p>
+          <p class="footer-meta">
+            <span>v1.8.0</span>
+            <span>最后更新 2026-11-07</span>
+          </p>
+        </div>
+        <nav aria-label="页脚导航">
+          <a href="./">产品说明（中文）</a>
+          <a href="en.html">Overview (English)</a>
+          <a
+            href="en-cors.html"
+            hreflang="en"
+            >CORS guide (English)</a
+          >
+          <a href="alternatives.html">同类方案对比</a>
+          <a href="privacy.html">隐私政策</a>
+          <a href="llms.txt">llms.txt</a>
+          <a href="llms-full.txt">llms-full.txt</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

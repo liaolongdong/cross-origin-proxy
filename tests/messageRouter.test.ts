@@ -78,6 +78,15 @@ const CREDENTIAL_READING_TYPES: MessageType[] = [
   MessageType.GET_SITE_STATE,
 ];
 
+/**
+ * 第三档：扩展页面独享的出站动作（环境响应对比）
+ *
+ * gate 的理由既不是「改状态」也不是「回凭据」：这一笔是扩展用自己的 `<all_urls>` 权限替发消息方
+ * 出门，而桥接层的四个出口没有它（`tests/contentBridge.test.ts` 钉着那份清单）——页面今天递不进来，
+ * 但「今天递不进来」是拓扑不是设计，来源判定只认「可信上下文才配让扩展替它发请求」。
+ */
+const EXTENSION_OUTBOUND_TYPES: MessageType[] = [MessageType.ENV_DIFF_REQUEST, MessageType.ENV_DIFF_CANCEL];
+
 /** 刻意不经 gate 的消息：内容脚本要靠它们拉配置与代理，被 gate 住代理当场失效 */
 const UNGATED_REACHABLE: Array<[MessageType, unknown]> = [
   [MessageType.GET_PROXY_CONFIG, undefined],
@@ -257,8 +266,8 @@ describe('isTrustedSender — 只信任以本扩展 URL 根开头的 sender.url'
   });
 });
 
-describe('状态修改类与凭据读取类消息 — 不可信 sender 必须同步拒绝且不触达存储', () => {
-  for (const type of [...MUTATING_TYPES, ...CREDENTIAL_READING_TYPES]) {
+describe('状态修改类、凭据读取类与扩展独享出站消息 — 不可信 sender 必须同步拒绝且不触达存储', () => {
+  for (const type of [...MUTATING_TYPES, ...CREDENTIAL_READING_TYPES, ...EXTENSION_OUTBOUND_TYPES]) {
     it(`${type} 由外部页面发出：回传 Unauthorized sender 且不写存储`, () => {
       const { sendResponse, keepChannelOpen } = dispatch(type, EXTERNAL_PAGE_URL);
 
@@ -278,13 +287,15 @@ describe('状态修改类与凭据读取类消息 — 不可信 sender 必须同
     });
   }
 
-  it(`枚举里被 gate 拦住的类型恰好等于预期的 ${MUTATING_TYPES.length + CREDENTIAL_READING_TYPES.length} 个`, () => {
+  it(`枚举里被 gate 拦住的类型恰好等于预期的 ${MUTATING_TYPES.length + CREDENTIAL_READING_TYPES.length + EXTENSION_OUTBOUND_TYPES.length} 个`, () => {
     const gated = new Set<MessageType>();
     for (const type of Object.values(MessageType)) {
       const { sendResponse } = dispatch(type, EXTERNAL_PAGE_URL, { enabled: false });
       if (lastResponse(sendResponse)?.error === 'Unauthorized sender') gated.add(type);
     }
-    expect([...gated].sort()).toEqual([...MUTATING_TYPES, ...CREDENTIAL_READING_TYPES].sort());
+    expect([...gated].sort()).toEqual(
+      [...MUTATING_TYPES, ...CREDENTIAL_READING_TYPES, ...EXTENSION_OUTBOUND_TYPES].sort(),
+    );
   });
 
   it('不可信 sender 的任何消息类型（含未来新增的）都不得写入存储', async () => {

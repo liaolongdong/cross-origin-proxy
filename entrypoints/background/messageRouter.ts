@@ -7,6 +7,7 @@ import {
   handleProxyRequest,
   proxyRequestKey,
 } from './proxyHandler';
+import { cancelEnvDiff, runEnvDiff } from './envDiff';
 import { sampleAggregate, sampleForTab } from './dnrSampler';
 import { describeDnrInstallState } from './dnrManager';
 import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
@@ -280,6 +281,17 @@ const CREDENTIAL_READING_TYPES = new Set([
 ]);
 
 /**
+ * 扩展页面独享的**出站动作**消息：同样过 `isTrustedSender`
+ *
+ * 这两条既不是状态修改，也不读凭据，判据是第三件事：它们让扩展用自己的 `<all_urls>` 权限
+ * 替发消息方出门，回包是目标服务器的正文。桥接层的四个出口没有它们（见
+ * `tests/contentBridge.test.ts` 末尾那份清单），页面因此永远递不进来——但「现在递不进来」
+ * 是当下拓扑，不是设计约束；gate 认的是这件事本身不该由可信上下文之外发起。
+ * 将来给桥接层加出口的人必须回来重判分档，与那条测试同一句话。
+ */
+const EXTENSION_OUTBOUND_TYPES = new Set([MessageType.ENV_DIFF_REQUEST, MessageType.ENV_DIFF_CANCEL]);
+
+/**
  * 统一处理异步消息响应：resolve 时回传结果，reject 时回传 { success: false, error }
  * @returns true（告知 chrome 需保持消息通道开放以异步响应）
  */
@@ -314,9 +326,11 @@ export function setupMessageRouter(): void {
   chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
     logger.debug('Message received:', message.type);
 
-    // 状态修改类与「回的是凭据真值」的读取类消息：校验 sender 来源
+    // 状态修改类、回包是凭据或本地数据的读取类、以及扩展页面独享的出站动作：校验 sender 来源
     if (
-      (STATE_MUTATING_TYPES.has(message.type) || CREDENTIAL_READING_TYPES.has(message.type)) &&
+      (STATE_MUTATING_TYPES.has(message.type) ||
+        CREDENTIAL_READING_TYPES.has(message.type) ||
+        EXTENSION_OUTBOUND_TYPES.has(message.type)) &&
       !isTrustedSender(sender)
     ) {
       sendResponse({ success: false, error: 'Unauthorized sender' });
@@ -735,6 +749,18 @@ export function setupMessageRouter(): void {
           sendResponse,
           saveVariables(message.data?.variables).then(({ dropped }) => ({ success: true, dropped })),
         );
+
+      case MessageType.ENV_DIFF_REQUEST: {
+        // 「环境响应对比」的一侧。载荷在后台重判（协议、方法、头形、体积——`envDiff.ts` 文件头
+        // 写了为什么界面那一遍不算数）；这笔不写日志、不抬 `swProxied` 基线，理由同在那份文件头。
+        return respondAsync(sendResponse, runEnvDiff(message.data));
+      }
+
+      case MessageType.ENV_DIFF_CANCEL: {
+        // 取消只回一个布尔：掐住了、还是这笔早已落定。两种都不用处理第二遍，静默即可。
+        sendResponse({ success: cancelEnvDiff(String(message.data?.requestId ?? '')) });
+        return false;
+      }
 
       default:
         logger.warn('Unknown message type:', message.type);

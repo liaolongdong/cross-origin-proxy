@@ -33,6 +33,7 @@
   "autoOffSet": "Auto-off set to $1",
   "autoOffCancelled": "Auto-off turned off",
   "createRuleFromTabFailed": "Cannot create a rule for this page",
+  "apiPickerLoading": "Checking which APIs this page calls…",
   "apiPickerTitle": "Pick an API this page calls to create a rule:",
   "apiPickerCount": "×$1",
   "apiPickerSuspect": "$1 suspect",

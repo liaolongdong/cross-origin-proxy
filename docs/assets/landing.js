@@ -15,7 +15,7 @@
  * 6. 一键复制：微信号与预演面板共用同一条剪贴板路径（按钮文字不保证被播报，结果另写进
  *    `role="status"` 区域，4 秒后收回）；无 JS 时按钮不出现，号码本身是可选中的文本；
  * 7. 页头下沿的滚动进度条，以及页头离顶后的投影（无 JS 时两者都不出现）；
- * 8. 首屏流程图的「数据包巡航」只在真正滚进视口后才放行（样式默认按住，循环动效不在没人看的地方跑）；
+ * 8. 首屏流程图与工作原理详图的循环亮环只在真正滚进视口后才放行（样式默认按住，循环动效不在没人看的地方跑）；
  * 9. 卡片的指针追光：把光斑坐标按帧写进 `--lp-x/--lp-y`（卡片外框按悬停缓存，不逐事件量），
  *    触摸设备与减弱动效下不绑定；
  * 10. 重写预演：把界面上四项输入交给 `assets/preview-engine.js`（`utils/urlMatcher.ts` 与
@@ -35,6 +35,11 @@
  *     只给右缘渐隐——左那一列是钉住的，淡掉它反而读不出比的是哪一家。
  * 15. 分享这一页：系统分享优先，失败回落到复制当前地址；结果写进 `role="status"` 并显形成轻提示。
  * 16. 移动端安装条：窄屏滚过首屏后出现，页脚/菜单/关闭时让位，关闭只活本次访问、不写 storage。
+ * 17. 首屏统计数滚进视口后从 0 数到终值：终值始终写在 HTML 里（无 JS / 减弱动效直接读到正确数字），
+ *     脚本只负责那一次入场计数，数到一半偏好翻成减弱就立刻落到终值。
+ * 18. 截图 lightbox：点廊里的图用原生 <dialog> 放大，左右方向键 / 按钮切换，Esc 与点遮罩关闭、
+ *     焦点交还触发的那张图；打开期间轮播让位。dialog 由脚本建、文案从 gallery 的 data-* 现读，
+ *     无 JS 时整层不存在，截图廊退回轮播 / 横滑。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
@@ -656,9 +661,11 @@
   };
 
   /* 流程图（页面 → 通道 → 目标环境）与它下面那条 CORS 两态各自入账：
-     两叠卡片的可见度不一样，共用一个闸门会让半截动画在没人看的时候照跑。 */
+     两叠卡片的可见度不一样，共用一个闸门会让半截动画在没人看的时候照跑。
+     工作原理详图另接同一道闸门：它的节点接力只在滚到那一节时才播。 */
   cruiseWhenVisible(document.querySelector('.hero-visual .flow'));
   cruiseWhenVisible(document.querySelector('.hero-outcome'));
+  cruiseWhenVisible(document.querySelector('#how-it-works .flow'));
 
   /* ─────────────── 9. 卡片指针追光 ─────────────── */
 
@@ -1381,5 +1388,197 @@
         installBar.classList.remove('is-visible');
       });
     }
+  }
+
+  /* ─────────────── 17. 首屏统计数入场计数 ─────────────── */
+
+  /* 终值始终写在 HTML 里（无 JS / 无 IntersectionObserver / 减弱动效时读到的就是正确答案），
+     脚本只做那一次「滚进视口才从 0 数上去」的入场。每一帧现问 reduceMotion()：
+     数到一半偏好翻成减弱就立刻落到终值，不登记 onMotionChange——这里的偏好检查
+     发生在计数循环内部，循环外的登记反而要多养一份回调。 */
+  const statNumbers = all('.stat-strip .stat b')
+    .map(el => ({ el, target: Number(el.textContent.trim()) }))
+    .filter(item => Number.isFinite(item.target) && item.target > 0);
+
+  if (statNumbers.length && 'IntersectionObserver' in window) {
+    /** 入场时长：比一次翻页的过渡略长，让「数上去」这件事被看见又不拖住阅读。 */
+    const STAT_COUNT_MS = 900;
+
+    /**
+     * 把一个数字从 0 数到终值；减弱动效（含中途翻转）直接落到终值。
+     * @param {{ el: HTMLElement, target: number }} item 要计数的读数
+     */
+    const countUp = ({ el, target }) => {
+      if (reduceMotion()) return;
+      const startedAt = Date.now();
+      const tick = () => {
+        const progress = Math.min(1, (Date.now() - startedAt) / STAT_COUNT_MS);
+        if (reduceMotion() || progress >= 1) {
+          el.textContent = String(target);
+          return;
+        }
+        // easeOutCubic：起步快、收尾慢，数字「落定」的那一下不拖
+        const eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = String(Math.round(target * eased));
+        requestAnimationFrame(tick);
+      };
+      el.textContent = '0';
+      requestAnimationFrame(tick);
+    };
+
+    const statObserver = new IntersectionObserver(
+      (entries, observer) => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return;
+          observer.unobserve(entry.target);
+          const item = statNumbers.find(candidate => candidate.el === entry.target);
+          if (item) countUp(item);
+        });
+      },
+      { threshold: 0.4 },
+    );
+    statNumbers.forEach(item => statObserver.observe(item.el));
+  }
+
+  /* ─────────────── 18. 截图 lightbox ─────────────── */
+
+  /* 点廊里的图放大读细节。整层由脚本用 createElement 建（不写 innerHTML），
+     文案从 gallery 的 data-lightbox-* 现读，脚本里不留第二份界面语言。
+     原生 <dialog> 自带焦点圈闭与 Esc 关闭；不支持 showModal 的引擎整段不绑定，
+     截图廊退回轮播 / 横滑，图片照常可读。打开期间给廊挂 lightbox-open，
+     样式按住进度条——轮播让位，关闭后从暂停处续播而不是重新计时。 */
+  const lbGallery = document.querySelector('.gallery[data-lightbox-close]');
+
+  if (lbGallery && typeof document.createElement('dialog').showModal === 'function') {
+    // 光标那层 affordance 挂在这个类上：它许的是「点开看大图」，所以只在灯箱真会建起来时给
+    lbGallery.classList.add('supports-lightbox');
+    const lbSlides = Array.from(lbGallery.querySelectorAll('.slide')).map(slide => {
+      const img = slide.querySelector('img');
+      const title = slide.querySelector('figcaption b');
+      const desc = slide.querySelector('figcaption span');
+      return {
+        src: img ? img.getAttribute('src') || '' : '',
+        alt: img ? img.getAttribute('alt') || '' : '',
+        title: title ? title.textContent.trim() : '',
+        desc: desc ? desc.textContent.trim() : '',
+        trigger: img,
+      };
+    });
+
+    const lbCloseLabel = lbGallery.getAttribute('data-lightbox-close') || 'Close';
+    const lbPrevLabel = lbGallery.getAttribute('data-lightbox-prev') || 'Previous';
+    const lbNextLabel = lbGallery.getAttribute('data-lightbox-next') || 'Next';
+    const lbCountTemplate = lbGallery.getAttribute('data-lightbox-count') || '$1 / $2';
+
+    const dialog = document.createElement('dialog');
+    dialog.className = 'lightbox';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'lightbox-close';
+    closeBtn.setAttribute('aria-label', lbCloseLabel);
+    closeBtn.textContent = '×';
+
+    const bigImg = document.createElement('img');
+    bigImg.decoding = 'async';
+
+    const caption = document.createElement('p');
+    caption.className = 'lightbox-caption';
+    const captionTitle = document.createElement('b');
+    caption.appendChild(captionTitle);
+    const captionDesc = document.createTextNode('');
+    caption.appendChild(captionDesc);
+
+    const bar = document.createElement('div');
+    bar.className = 'lightbox-bar';
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'lightbox-nav';
+    prevBtn.setAttribute('aria-label', lbPrevLabel);
+    prevBtn.textContent = '‹';
+    const count = document.createElement('span');
+    count.className = 'lightbox-count';
+    count.setAttribute('aria-live', 'polite');
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'lightbox-nav';
+    nextBtn.setAttribute('aria-label', lbNextLabel);
+    nextBtn.textContent = '›';
+    bar.append(prevBtn, count, nextBtn);
+
+    dialog.append(closeBtn, bigImg, caption, bar);
+    document.body.appendChild(dialog);
+
+    let lbIndex = 0;
+    let lbTrigger = null;
+
+    /**
+     * 画第 i 张（自动环绕）：大图、图注与「第几张 / 共几张」一起换。
+     * @param {number} i 目标序号
+     */
+    const lbRender = i => {
+      lbIndex = (i + lbSlides.length) % lbSlides.length;
+      const slide = lbSlides[lbIndex];
+      bigImg.src = slide.src;
+      bigImg.alt = slide.alt;
+      captionTitle.textContent = slide.title;
+      captionDesc.textContent = slide.desc ? ` — ${slide.desc}` : '';
+      count.textContent = lbCountTemplate.replace('$1', String(lbIndex + 1)).replace('$2', String(lbSlides.length));
+    };
+
+    /**
+     * 打开 lightbox：记住触发的那张图，关闭时焦点原样交还。
+     * @param {number} i 从哪一张开始
+     * @param {HTMLElement | null} trigger 触发打开的图片元素
+     */
+    const lbOpen = (i, trigger) => {
+      lbTrigger = trigger;
+      lbRender(i);
+      lbGallery.classList.add('lightbox-open');
+      dialog.showModal();
+    };
+
+    const lbClose = () => dialog.close();
+
+    closeBtn.addEventListener('click', lbClose);
+    prevBtn.addEventListener('click', () => lbRender(lbIndex - 1));
+    nextBtn.addEventListener('click', () => lbRender(lbIndex + 1));
+
+    /* 点遮罩关闭：只有事件落在 dialog 自己的盒子上才算（内容里的点击不关）。
+       Esc 由原生 dialog 自己处理，这里只接 close 做善后。 */
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) lbClose();
+    });
+    dialog.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        lbRender(lbIndex - 1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        lbRender(lbIndex + 1);
+      }
+    });
+    dialog.addEventListener('close', () => {
+      lbGallery.classList.remove('lightbox-open');
+      if (lbTrigger) lbTrigger.focus({ preventScroll: true });
+      lbTrigger = null;
+    });
+
+    /* 键盘可达：JS 在场时给每张图补 tabindex 与按钮语义，Enter / Space 打开。
+       无 JS 时这些属性不存在，图片就是图片。 */
+    lbSlides.forEach((slide, i) => {
+      const img = slide.trigger;
+      if (!img) return;
+      img.setAttribute('tabindex', '0');
+      img.setAttribute('role', 'button');
+      img.setAttribute('aria-haspopup', 'dialog');
+      img.addEventListener('click', () => lbOpen(i, img));
+      img.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          lbOpen(i, img);
+        }
+      });
+    });
   }
 })();

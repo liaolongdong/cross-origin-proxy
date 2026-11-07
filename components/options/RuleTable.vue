@@ -88,6 +88,7 @@
         row-key="id"
         class="rule-table"
         @selection-change="(selection: ProxyRule[]) => $emit('selectionChange', selection)"
+        @sort-change="handleSortChange"
         @dragover.prevent="onTableDragOver"
         @drop.prevent="onTableDrop"
       >
@@ -111,7 +112,8 @@
           <template #default="{ row }">
             <span
               class="drag-handle"
-              draggable="true"
+              :draggable="sortActive ? 'false' : 'true'"
+              :title="sortActive ? t('dragDisabledWhileSorted') : ''"
               @dragstart="onDragStart($event, row as ProxyRule)"
               @dragend="onDragEnd"
               >⠿</span
@@ -122,6 +124,9 @@
           prop="name"
           :label="t('colName')"
           :min-width="narrowCols ? 100 : compactCols ? 140 : 120"
+          sortable
+          :sort-orders="SORT_ORDERS"
+          :sort-method="byRuleName"
         >
           <template #default="{ row }">
             <span class="rule-name-cell">
@@ -153,18 +158,25 @@
                 </template>
                 <span class="dnr-dead-tag">{{ t('dnrSkippedTag') }}</span>
               </el-tooltip>
-              <!-- 标签最多露两枚，其余收成 +N（悬停给全表）：一行的信息密度上限比"看全"重要 -->
+              <!-- 标签最多露两枚，其余收成 +N（悬停给全表）：一行的信息密度上限比"看全"重要。
+                   露出的每一枚是真按钮：点一下就把这个标签加进筛选（再点取消），与下拉里
+                   那一项是同一个状态，只是入口离这一行更近。 -->
               <span
                 v-if="rowTags(row).length > 0"
                 class="rule-tags"
                 :title="rowTags(row).join(' · ')"
               >
-                <span
+                <button
                   v-for="tag in rowTags(row).slice(0, ROW_TAG_VISIBLE)"
                   :key="tag"
+                  type="button"
                   class="rule-tag"
-                  >{{ tag }}</span
+                  :class="{ 'rule-tag--active': isTagActive(tag) }"
+                  :aria-label="t('filterByTagA11y', tag)"
+                  @click="$emit('tagClick', tag)"
                 >
+                  {{ tag }}
+                </button>
                 <span
                   v-if="rowTags(row).length > ROW_TAG_VISIBLE"
                   class="rule-tag rule-tag--more"
@@ -291,6 +303,9 @@
           :label="t('colPriority')"
           width="80"
           align="center"
+          sortable
+          :sort-orders="SORT_ORDERS"
+          :sort-method="byRulePriority"
         />
         <el-table-column
           v-if="!narrowCols"
@@ -423,7 +438,7 @@ import type { TableInstance } from 'element-plus';
 import type { DnrSkipReason } from '@/utils/dnrSupport';
 import type { RuleHitStats } from '@/utils/ruleStats';
 import { isDnrCountReadable, type DnrSampleState } from '@/utils/dnrSample';
-import { ROW_STAGGER_MAX_DELAY_MS } from '@/utils/constants';
+import { DEFAULT_RULE_PRIORITY, ROW_STAGGER_MAX_DELAY_MS } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
 import { useDnrSkipText } from '@/composables/useDnrSupport';
 import { isSimpleRule, isWebSocketRule } from '@/utils/urlMatcher';
@@ -438,9 +453,51 @@ import TableSkeleton from './TableSkeleton.vue';
 /** 一行上能露出的标签数；其余收成 +N，全表走悬停（一行的高度上限比"看全所有标签"重要） */
 const ROW_TAG_VISIBLE = 2;
 
+/** 表头排序的档位：升 → 降 → 还原列表顺序（缺第三档时排过就退不回去，README 那句话就不成立） */
+const SORT_ORDERS: ('ascending' | 'descending' | null)[] = ['ascending', 'descending', null];
+
 /** 标签从 storage 来，可能是被手改过的任何形状：非数组/非字符串一律当没有（判据同 `configRules()`） */
 function rowTags(row: unknown): string[] {
   return visibleTags((row as { tags?: unknown }).tags);
+}
+
+/**
+ * chip 的点亮态：按小写键比对——筛选判据（`ruleMatchesTagFilter`）本来就大小写不敏感，
+ * 而同一个标签在规则里可能写成 `FAT`、在下拉的选中集里是当初第一条规则写下的 `fat`。
+ */
+const activeTagKeys = computed(() => new Set((props.activeTags ?? []).map(tag => tag.toLowerCase())));
+
+function isTagActive(tag: string): boolean {
+  return activeTagKeys.value.has(tag.toLowerCase());
+}
+
+/**
+ * 两列表头排序的比较器。只在表格里排屏幕上这份数组，不写回 storage——
+ * 列表顺序（拖拽那本账）与 priority 数值是两件事，排序视图不该动到前者。
+ * `priority` 类型上必填，但 storage 原文可能没有这个键（手改/旧数据），缺的按默认档参与比较。
+ */
+function byRuleName(a: unknown, b: unknown): number {
+  const first = (a as Partial<ProxyRule>)?.name ?? '';
+  const second = (b as Partial<ProxyRule>)?.name ?? '';
+  return String(first).localeCompare(String(second));
+}
+
+function byRulePriority(a: unknown, b: unknown): number {
+  const first = (a as Partial<ProxyRule>)?.priority ?? DEFAULT_RULE_PRIORITY;
+  const second = (b as Partial<ProxyRule>)?.priority ?? DEFAULT_RULE_PRIORITY;
+  return first - second;
+}
+
+/**
+ * 表头排序一旦生效，行拖拽的落点就和屏幕对不上：`handleReorder` 按**列表顺序**（未排序那份数组）
+ * 找下标并改写 priority，而拖拽事件里递的是**排序视图**中的那一行。与其让用户得到一个
+ * 「拖到 B 前面、却排进了别处」的结果，不如在排序在场时把把手收起——第三档 sort-orders
+ * 让「还原」只是一次点击。`@sort-change` 到这里就停：它只翻这一个本地旗标，不 emit 任何东西。
+ */
+const sortActive = ref(false);
+
+function handleSortChange(payload: { order?: string | null }) {
+  sortActive.value = payload.order != null && payload.order !== '';
 }
 
 /**
@@ -473,6 +530,8 @@ const props = defineProps<{
   highlightRuleId?: string | null;
   /** 搜索关键字（用于高亮，以及「筛选无结果」那一格点名是谁筛空的） */
   searchText: string;
+  /** 标签筛选当前的选中集（chip 点亮态；比对按小写键，与 `ruleMatchesTagFilter` 同一口径） */
+  activeTags?: string[];
   /** 规则命中统计（ruleId → 分通道读数，**不相加**） */
   hitStats: Map<string, RuleHitStats>;
   /** 网络层采样的五态：决定那一格画数字、「—」还是提示「不知道 / 没有这类规则」 */
@@ -495,6 +554,8 @@ const emit = defineEmits<{
   reorder: [fromId: string, toId: string];
   /** 「读取失败」那一格里的刷新按钮 */
   refresh: [];
+  /** 行内标签 chip 被点击（父组件把它加进/移出标签筛选——筛选状态在容器层，这里只交出一个意图） */
+  tagClick: [tag: string];
   /** 「筛选无结果」那一格里的清除筛选按钮（四格筛选由父组件持有，这里只交出一个意图） */
   clearFilters: [];
 }>();
@@ -659,6 +720,7 @@ const dragFromId = ref<string | null>(null);
 const dragOverId = ref<string | null>(null);
 
 function onDragStart(e: DragEvent, row: ProxyRule) {
+  if (sortActive.value) return;
   dragFromId.value = row.id;
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move';
@@ -1151,6 +1213,17 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
     background-color var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
+/* 表头排序在场时把手只读（悬停标题会解释为什么）：落点算的是列表顺序，屏幕排的是排序视图。
+   把 `:hover` 一起写是特异度问题：`.drag-handle:hover` 是 (0,2,0) 且排在后面，
+   只压基础那条的话，不能拖的把手悬上去照样点亮——那仍是「可以拖」的邀请，正是这里要收回的话。 */
+.drag-handle[draggable='false'],
+.drag-handle[draggable='false']:hover {
+  color: var(--cop-text-color-placeholder, #c0c4cc);
+  cursor: default;
+  background: transparent;
+  opacity: 0.45;
+}
+
 .drag-handle:hover {
   color: var(--cop-primary, #409eff);
   background: var(--cop-primary-bg, #ecf5ff);
@@ -1188,6 +1261,7 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
 
 .rule-tag {
   padding: 0 5px;
+  font-family: inherit;
   font-size: 11px;
   line-height: 16px;
   color: var(--cop-text-color-secondary);
@@ -1195,6 +1269,32 @@ function showsHttpOnlyBadge(rule: ProxyRule): boolean {
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color);
   border-radius: 8px;
+}
+
+/* 露出的两枚是「点这里筛它」的按钮，`+N` 那枚仍是读数：可点态只挂在 button 上 */
+button.rule-tag {
+  cursor: pointer;
+  transition:
+    color var(--cop-duration-fast) var(--cop-ease-standard),
+    background-color var(--cop-duration-fast) var(--cop-ease-standard),
+    border-color var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+button.rule-tag:hover {
+  color: var(--cop-primary);
+  border-color: var(--cop-primary);
+}
+
+button.rule-tag:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 1px;
+}
+
+/* 点亮态 = 这个标签此刻正在筛（与下拉勾选共用 `tagsFilter` 一份状态） */
+.rule-tag--active {
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg);
+  border-color: var(--cop-primary);
 }
 
 .rule-tag--more {

@@ -33,6 +33,7 @@
   "autoOffSet": "自动关闭已设为 $1",
   "autoOffCancelled": "已取消自动关闭",
   "createRuleFromTabFailed": "无法在当前页面创建规则",
+  "apiPickerLoading": "正在看这一页在调哪些接口…",
   "apiPickerTitle": "这一页在调这些接口，选一个建规则：",
   "apiPickerCount": "$1 次",
   "apiPickerSuspect": "疑似 $1 笔",

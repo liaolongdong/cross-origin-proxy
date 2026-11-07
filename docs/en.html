@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-28"
+            "dateModified": "2026-11-07"
           },
           {
             "@type": "SoftwareApplication",
@@ -175,7 +175,7 @@
             "applicationCategory": "DeveloperApplication",
             "applicationSubCategory": "Browser Extension",
             "operatingSystem": "Google Chrome (Manifest V3)",
-            "softwareVersion": "1.6.0",
+            "softwareVersion": "1.8.0",
             "url": "https://liaolongdong.github.io/cross-origin-proxy/en.html",
             "codeRepository": "https://github.com/liaolongdong/cross-origin-proxy",
             "downloadUrl": "https://github.com/liaolongdong/cross-origin-proxy/releases",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-10-28",
+            "dateModified": "2026-11-07",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -914,7 +914,9 @@
             </p>
             <ol>
               <li>
-                <code>No 'Access-Control-Allow-Origin' header is present on the requested resource.</code>
+                <a href="en-cors.html#kinds-title"
+                  ><code>No 'Access-Control-Allow-Origin' header is present on the requested resource.</code></a
+                >
                 <span>
                   The backend never echoed <code>fat-web.example.com</code> into
                   <code>Access-Control-Allow-Origin</code>. Give the rule any advanced capability and the request is
@@ -922,9 +924,11 @@
                 </span>
               </li>
               <li>
-                <code
-                  >Request header field "x-token" is not allowed by Access-Control-Allow-Headers in preflight
-                  response.</code
+                <a href="en-cors.html#preflight-title"
+                  ><code
+                    >Request header field "x-token" is not allowed by Access-Control-Allow-Headers in preflight
+                    response.</code
+                  ></a
                 >
                 <span>
                   The preflight was answered too narrowly: you sent something outside the simple-request header set, and
@@ -934,9 +938,11 @@
                 </span>
               </li>
               <li>
-                <code
-                  >The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*'
-                  when the request's credentials mode is 'include'.</code
+                <a href="en-cors.html#preflight-title"
+                  ><code
+                    >The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*'
+                    when the request's credentials mode is 'include'.</code
+                  ></a
                 >
                 <span>
                   The strictest case, with cookies attached: <code>Access-Control-Allow-Origin</code> may not be
@@ -945,6 +951,10 @@
                 </span>
               </li>
             </ol>
+            <p class="error-map-more">
+              How to triage each message, plus five fixes (including the one that changes neither code nor backend), in
+              the <a href="en-cors.html#fixes">CORS troubleshooting guide</a>.
+            </p>
           </div>
         </div>
       </section>
@@ -1451,7 +1461,13 @@
               click away; the credential variable table stores each token exactly once, on this machine.
             </p>
           </div>
-          <div class="gallery reveal">
+          <div
+            class="gallery reveal"
+            data-lightbox-close="Close"
+            data-lightbox-prev="Previous"
+            data-lightbox-next="Next"
+            data-lightbox-count="$1 / $2"
+          >
             <div
               class="gallery-progress"
               data-gallery-progress
@@ -1869,6 +1885,8 @@
             cross-origin request: the browser applies the same-origin policy to the redirected response and still needs
             <code>Access-Control-Allow-Origin</code> to cover your origin. If a target environment does not allow your
             origin, give the rule any capability (a response header override is the cheapest) and it changes channels.
+            The full triage by error text — three look-alike failures, five fixes and what each costs — is in
+            <a href="en-cors.html">CORS triage and five fixes</a>.
           </p>
           <div class="callout callout--warn">
             <svg
@@ -3838,9 +3856,9 @@ pnpm assets       # regenerate store and landing images</code></pre>
           </p>
           <div class="footer-meta">
             <span>MIT licensed</span>
-            <span>v1.6.0</span>
+            <span>v1.8.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-10-28</span>
+            <span>Last updated 2026-11-07</span>
             <span
               ><a
                 href="./"
@@ -3906,6 +3924,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
           >
           <a href="privacy.html">Privacy policy</a>
           <a href="en-alternatives.html">vs. dev-server proxy, mitmproxy, API clients</a>
+          <a href="en-cors.html">blocked by CORS policy: triage and five fixes</a>
           <a href="llms.txt">llms.txt</a>
           <a href="llms-full.txt">llms-full.txt</a>
           <button

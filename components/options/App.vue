@@ -8,6 +8,7 @@
       @add-rule="handleAddRule"
       @open-logs="openLogs"
       @open-url-test="showUrlTest = true"
+      @open-env-diff="showEnvDiff = true"
       @open-import-export="showImportExport = true"
       @open-profiles="showProfiles = true"
       @open-settings="showSettings = true"
@@ -72,6 +73,7 @@
       :read-failed="configReadFailed"
       :highlight-rule-id="highlightRuleId"
       :search-text="searchText"
+      :active-tags="tagsFilter"
       :hit-stats="hitStatsByRule"
       :dnr-stats-state="dnrStatsState"
       :shadowed-rule-ids="shadowedRuleIds"
@@ -87,6 +89,7 @@
       @reorder="handleReorder"
       @refresh="fetchConfig"
       @clear-filters="clearRuleFilters"
+      @tag-click="handleTagChipClick"
     />
 
     <!-- 弹窗与抽屉（全部异步组件，首屏不加载） -->
@@ -119,6 +122,7 @@
       :dnr-support-read="dnrSupportRead"
       :proxy-enabled="proxyEnabled"
     />
+    <EnvDiffDialog v-model:visible="showEnvDiff" />
     <SelfCheckDialog
       v-model:visible="showSelfCheck"
       :tab-id="selfCheckTabId"
@@ -231,6 +235,7 @@ const ImportExportDialog = defineAsyncComponent(() => import('./ImportExportDial
 const ProfilesDialog = defineAsyncComponent(() => import('./ProfilesDialog.vue'));
 const SettingsDialog = defineAsyncComponent(() => import('./SettingsDialog.vue'));
 const UrlTestDialog = defineAsyncComponent(() => import('./UrlTestDialog.vue'));
+const EnvDiffDialog = defineAsyncComponent(() => import('./EnvDiffDialog.vue'));
 const SelfCheckDialog = defineAsyncComponent(() => import('./SelfCheckDialog.vue'));
 const LogDrawer = defineAsyncComponent(() => import('./LogDrawer.vue'));
 const AboutDrawer = defineAsyncComponent(() => import('./AboutDrawer.vue'));
@@ -311,6 +316,8 @@ const generatingRules = ref(false);
 const showProfiles = ref(false);
 const showSettings = ref(false);
 const showUrlTest = ref(false);
+/** 环境响应对比：它问的是「两个环境各回了什么」，不碰规则匹配，与 URL 预演是前后两步 */
+const showEnvDiff = ref(false);
 /** 自检面板：它问的是「那一页」，所以页 id 与开关分开存（从配置页自己的按钮进来时就是 `null`） */
 const showSelfCheck = ref(false);
 const selfCheckTabId = ref<number | null>(null);
@@ -353,6 +360,7 @@ const anyOverlayOpen = computed(
     showProfiles.value ||
     showSettings.value ||
     showUrlTest.value ||
+    showEnvDiff.value ||
     showLogs.value ||
     showMigrate.value ||
     showSelfCheck.value ||
@@ -476,6 +484,19 @@ const filterActive = computed(() =>
 const availableTags = computed(() => collectRuleTags(rules.value));
 const tagNames = computed(() => availableTags.value.map(entry => entry.tag));
 
+/**
+ * 行内标签 chip 的一次点击 = 把这个标签加进或移出筛选（与下拉共用 `tagsFilter` 那一份状态）。
+ * 先归一到 `tagNames` 里的拼法（`collectRuleTags` 保留的第一次写法）再增删——不归一的话，
+ * 同一条规则上的 `FAT` 与下拉里那条 `fat` 会被记成两项：OR 语义下多一个空转的选中集，
+ * 而勾选框与 chip 的点亮态从此对不上账。
+ */
+function handleTagChipClick(tag: string) {
+  const canonical = tagNames.value.find(candidate => candidate.toLowerCase() === tag.toLowerCase()) ?? tag;
+  const index = tagsFilter.value.findIndex(selected => selected.toLowerCase() === canonical.toLowerCase());
+  if (index >= 0) tagsFilter.value.splice(index, 1);
+  else tagsFilter.value.push(canonical);
+}
+
 const enabledCount = computed(() => rules.value.filter(r => r.enabled).length);
 
 /** 规则列表命中列：两条通道分开读，不相加（窗口不同，相加的数字不属于任何一段时间） */
@@ -524,6 +545,9 @@ function handleCommandAction(action: CommandPaletteAction) {
       break;
     case 'url-test':
       showUrlTest.value = true;
+      break;
+    case 'env-diff':
+      showEnvDiff.value = true;
       break;
     case 'import-export':
       showImportExport.value = true;
@@ -593,7 +617,7 @@ onMounted(async () => {
   void loadRecentTargets();
 
   // Popup 直达支持：#add-rule 打开添加规则弹窗，#logs 打开日志抽屉，#import-export 打开导入导出，
-  // #profiles 打开环境配置，#url-test 打开 URL 匹配预演，#logs?url=<encoded> 带地址预筛日志，
+  // #profiles 打开环境配置，#url-test 打开 URL 匹配预演，#env-diff 打开环境响应对比，#logs?url=<encoded> 带地址预筛日志，
   // #add-rule-from-tab=<url> 按当前标签页地址预填通配符规则；
   // 监听 hashchange：popup 复用已打开的 Options 标签页时通过更新 hash 触发同文档导航。
   // 监听器排在首屏 hash 读取**之前**登记：`handleHashNavigation` 里任何一步抛出都不该把
@@ -659,7 +683,7 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Escape：关闭最上层的弹窗/抽屉（优先级：命令面板 > 规则弹窗 > 导入导出 > 环境配置 > 设置 > URL 测试 > 日志）
+  // Escape：关闭最上层的弹窗/抽屉（优先级：命令面板 > 规则弹窗 > 导入导出 > 环境配置 > 设置 > URL 测试 > 环境对比 > 自检 > 迁移 > 日志）
   if (e.key === 'Escape') {
     // 确认框在场时整条级联让位：它由 ElMessageBox 自己的焦点陷阱接管 Escape，
     // 而这个监听器挂在 window 上、看不见模态层级，照常往下走就是
@@ -677,6 +701,8 @@ function handleKeydown(e: KeyboardEvent) {
       showSettings.value = false;
     } else if (showUrlTest.value) {
       showUrlTest.value = false;
+    } else if (showEnvDiff.value) {
+      showEnvDiff.value = false;
     } else if (showSelfCheck.value) {
       showSelfCheck.value = false;
     } else if (showMigrate.value) {
@@ -708,6 +734,9 @@ function handleHashNavigation() {
     showProfiles.value = true;
   } else if (hash === '#url-test') {
     showUrlTest.value = true;
+  } else if (hash === '#env-diff') {
+    // 与顶栏那颗按钮同一个开关：深链不额外预填任何东西，这一屏的第一输入位永远是地址 A
+    showEnvDiff.value = true;
   } else if (hash === '#self-check' || hash.startsWith('#self-check?tab=')) {
     // popup 把它当时看到的那个标签页 id 带过来：自检里有三行问的是「那一页」，而配置页自己就是
     // `tabs.query({ active })` 眼里的那一页，拿它当被检查的对象会把「这一页还没收到配置」指向扩展页面。
