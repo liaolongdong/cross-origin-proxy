@@ -1665,7 +1665,24 @@ html.js .compare tbody tr.reveal {
   margin-bottom: 0;
 }
 
-.error-map li > code {
+.error-map li > span {
+  display: block;
+  margin-top: 7px;
+  font-size: 14.2px;
+  color: var(--lp-ink-soft);
+}
+
+/* 报错原话本身是通往排查页的入口：链接包住 code，块级外观不变，
+   悬停/聚焦才显出描边与右上角箭头——静态阅读时它仍只是一段报错。
+   透明边框先占住位置，悬停描边不引起布局抖动。 */
+.error-map li > a {
+  position: relative;
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.error-map li > a code {
   display: block;
   padding: 9px 12px;
   overflow-x: auto;
@@ -1673,14 +1690,34 @@ html.js .compare tbody tr.reveal {
   line-height: 1.55;
   color: var(--lp-code-ink);
   background: var(--lp-code-bg);
+  border: 1px solid transparent;
   border-radius: var(--lp-radius-sm);
+  transition: border-color 0.18s ease;
 }
 
-.error-map li > span {
-  display: block;
-  margin-top: 7px;
-  font-size: 14.2px;
-  color: var(--lp-ink-soft);
+.error-map li > a:hover code,
+.error-map li > a:focus-visible code {
+  border-color: var(--lp-primary);
+}
+
+.error-map li > a::after {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  color: var(--lp-primary-strong);
+  content: '↗';
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.error-map li > a:hover::after,
+.error-map li > a:focus-visible::after {
+  opacity: 1;
+}
+
+.error-map .error-map-more {
+  margin: 14px 0 0;
+  font-size: 14px;
 }
 
 /* ---------- 截图轮播（CSS scroll-snap 为主，JS 只加控件） ---------- */
@@ -1720,6 +1757,12 @@ html.js .gallery-autoable .gallery-progress {
 }
 
 .gallery.gallery-auto.is-paused .gallery-progress i {
+  animation-play-state: paused;
+}
+
+/* lightbox 打开期间轮播让位：焦点进了 dialog，廊自己的 focusout 会把 is-paused 摘掉，
+   所以这一档独立于悬停/聚焦暂停；关闭后从暂停处续播，不重新计时。 */
+.gallery.lightbox-open .gallery-progress i {
   animation-play-state: paused;
 }
 
@@ -1783,11 +1826,12 @@ html.js .slide {
   transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* 悬停放大：廊里的截图按 1200×750 拍，缩进 720px 宽的卡面后界面文字读不动，
-   而静态页没有「点开看大图」的去处（那要一层 lightbox 与一组焦点管理）。
+/* 悬停放大：廊里的截图按 1200×750 拍，缩进 720px 宽的卡面后界面文字读不动。
    就地放大 1.9 倍、以图框中心为锚点，出界的部分由上面那条 `figure { overflow }` 裁掉，
-   看的是「这一块到底写了什么」。锚点取中心是不跟指针的选法：跟指针要往每张图里
-   塞一个包裹层再加一份 pointermove，两处都比这一条规则贵，而收益只是把中心换成边角。
+   看的是「这一块到底写了什么」；要整张读清楚，点一下进 lightbox（脚本建原生 dialog，
+   无 JS 时这层不存在，悬停放大也不绑定——它只给能悬停的设备）。
+   锚点取中心是不跟指针的选法：跟指针要往每张图里塞一个包裹层再加一份 pointermove，
+   两处都比这一条规则贵，而收益只是把中心换成边角。
    只给能悬停的设备——触屏上 `:hover` 会粘在最后一次点击的那张图上收不回去。 */
 @media (hover: hover) and (pointer: fine) {
   .slide:hover img {
@@ -1811,6 +1855,96 @@ html.js .slide {
 .slide figcaption span {
   font-size: 14px;
   color: var(--lp-ink-soft);
+}
+
+/* 点开看大图的 affordance 只在脚本在场时给：无 JS 时图片不可点，光标不该许诺一个不存在的交互。 */
+html.js .slide img {
+  cursor: zoom-in;
+}
+
+/* ---------- 截图 lightbox（原生 <dialog>，由 landing.js 建；无 JS 时整层不存在） ----------
+   不加进场关键帧：放大的图本身就是全部信息，淡入只会延迟阅读；
+   减弱动效因此无需为它多写一条关闭项。 */
+.lightbox {
+  max-width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 16px;
+  overflow: auto;
+  color: var(--lp-ink);
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-lg);
+  box-shadow: var(--lp-shadow-lg);
+}
+
+.lightbox::backdrop {
+  background: rgb(10 12 16 / 72%);
+}
+
+.lightbox img {
+  display: block;
+  width: 100%;
+  max-height: calc(100vh - 190px);
+  object-fit: contain;
+  border-radius: var(--lp-radius-sm);
+}
+
+.lightbox-caption {
+  margin: 10px 2px 12px;
+  font-size: 14px;
+  color: var(--lp-ink-soft);
+}
+
+.lightbox-caption b {
+  color: var(--lp-ink);
+}
+
+.lightbox-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-count {
+  min-width: 56px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lp-ink-faint);
+  text-align: center;
+}
+
+.lightbox-close,
+.lightbox-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 17px;
+  color: var(--lp-ink-soft);
+  cursor: pointer;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-line);
+  border-radius: 50%;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.lightbox-close:hover,
+.lightbox-nav:hover {
+  color: var(--lp-primary-strong);
+  background: var(--lp-primary-faint);
+  border-color: var(--lp-primary);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
 }
 
 .gallery-bar {
@@ -3707,7 +3841,7 @@ html.js .site-header.is-scrolled {
 /* 首屏流程图：一个数据包沿「页面 → 通道 → 目标环境」循环巡航，被命中的节点同一刻亮一圈光。
    6.4s 一轮里只有前 4.5s 有动作，剩下的静默是留给读者读文案的——循环动效最怕催。
    两条泳道先后各亮一次，讲的是「按规则分流」，不是「二选一」。
-   只作用于 .hero-visual：请求生命周期那张详图有八个箭头和若干无修饰节点，套同一批延迟会乱序。 */
+   只作用于 .hero-visual：工作原理那张详图节点更多，另有一套自己的接力延迟（见下方 #how-it-works）。 */
 .hero-visual .flow-node,
 .hero-visual .flow-arrow {
   position: relative;
@@ -3808,6 +3942,71 @@ html.js .hero-visual .flow-arrow::after {
 
 html.js .hero-visual .flow.is-live .flow-node::before,
 html.js .hero-visual .flow.is-live .flow-arrow::after {
+  animation-play-state: running;
+}
+
+/* 工作原理详图：节点接力点亮。与首屏同一拍（lp-hop / 6.4s），但不飞数据包——
+   详图是竖直主轴加双泳道分叉，几何路径在窄屏会变形，亮环只讲「请求走到哪一步」。
+   主轴三节点自上而下，到分叉处两条泳道同时起步（分流不是二选一），
+   泳道 B 多两跳所以收尾更晚；4.9s 后归于静默，留给读者读文案。
+   延迟按 DOM 次序写死：主轴是 .flow 的第 1/3/5 个孩子，泳道首节点都是第 2 个，
+   改详图结构（增删节点或箭头）必须回来重排这份延迟表。 */
+#how-it-works .flow-node {
+  position: relative;
+}
+
+#how-it-works .flow-node::before {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  content: '';
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--lp-primary) 45%, transparent),
+    0 0 16px color-mix(in srgb, var(--lp-primary) 26%, transparent);
+  opacity: 0;
+  animation: lp-hop 6.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+#how-it-works .flow > .flow-node:nth-child(3)::before {
+  animation-delay: 700ms;
+}
+
+#how-it-works .flow > .flow-node:nth-child(5)::before {
+  animation-delay: 1400ms;
+}
+
+#how-it-works .flow-lane > .flow-node:nth-child(2)::before {
+  animation-delay: 2100ms;
+}
+
+#how-it-works .flow-lane:first-child > .flow-node:nth-child(4)::before {
+  animation-delay: 2800ms;
+}
+
+#how-it-works .flow-lane:first-child > .flow-node:nth-child(6)::before {
+  animation-delay: 3500ms;
+}
+
+#how-it-works .flow-lane:last-child > .flow-node:nth-child(4)::before {
+  animation-delay: 2700ms;
+}
+
+#how-it-works .flow-lane:last-child > .flow-node:nth-child(6)::before {
+  animation-delay: 3300ms;
+}
+
+#how-it-works .flow-lane:last-child > .flow-node:nth-child(8)::before {
+  animation-delay: 3900ms;
+}
+
+/* 与首屏同一道入视闸门：脚本在场先按住，滚进视口由 landing.js 放行；
+   禁用 JS 时这条 paused 规则不匹配，亮环照常播。 */
+html.js #how-it-works .flow-node::before {
+  animation-play-state: paused;
+}
+
+html.js #how-it-works .flow.is-live .flow-node::before {
   animation-play-state: running;
 }
 
@@ -4142,13 +4341,15 @@ html.js .tool-card:hover::before {
     }
   }
 
-  /* 新增的五条同样逐项停：巡航的亮环与圆点、按下的亮边、数字落定、图标光晕、两态亮环。 */
+  /* 循环与一次性亮环同样逐项停：首屏巡航的亮环与圆点、按下的亮边、数字落定、图标光晕、
+     两态亮环，以及工作原理详图的节点接力。 */
   .hero-visual .flow-node::before,
   .hero-visual .flow-arrow::after,
   .btn-primary:active::before,
   .hero-visual .stat b,
   .feature-card:hover .feature-icon::after,
-  .hero-outcome-row::before {
+  .hero-outcome-row::before,
+  #how-it-works .flow-node::before {
     animation: none;
   }
 
@@ -4210,7 +4411,11 @@ html.js .tool-card:hover::before {
   html.js .tool-card::before,
   .site-nav > a::after,
   summary::before,
-  summary::after {
+  summary::after,
+  .error-map li > a code,
+  .error-map li > a::after,
+  .lightbox-close,
+  .lightbox-nav {
     transition: none;
   }
 
