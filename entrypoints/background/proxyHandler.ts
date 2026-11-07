@@ -76,7 +76,7 @@ export function exceedsBodyCap(text: string): boolean {
  * 页面取消／30s 截止（`controller.abort()`）期间 `read()` 以 AbortError 落回：让它的拒绝原样冒出去，
  * 调用处的 catch 仍按超时／取消处理，与改动前 `text()` 抛错同形——这里不吞，吞了就成了「静默空正文 200」。
  */
-async function readBodyWithinCap(response: Response): Promise<Uint8Array<ArrayBuffer> | null> {
+export async function readBodyWithinCap(response: Response): Promise<Uint8Array<ArrayBuffer> | null> {
   if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

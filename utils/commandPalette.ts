@@ -3,6 +3,7 @@ export type CommandPaletteAction =
   | 'add-rule'
   | 'logs'
   | 'url-test'
+  | 'env-diff'
   | 'import-export'
   | 'profiles'
   | 'settings'

@@ -60,6 +60,14 @@
       >
         {{ t('urlTest') }}
       </el-button>
+      <!-- 环境响应对比排在 URL 测试之后：那颗回答「这条地址会被改成什么」，这颗回答
+           「两个环境对同一输入各回了什么」——同一条排查路上的后半步。 -->
+      <el-button
+        :icon="Switch"
+        @click="$emit('openEnvDiff')"
+      >
+        {{ t('envDiffShort') }}
+      </el-button>
       <el-button
         :icon="FolderOpened"
         @click="$emit('openImportExport')"
@@ -96,6 +104,7 @@ import {
   Plus,
   Document,
   Search,
+  Switch,
   FolderOpened,
   Collection,
   Setting,
@@ -109,7 +118,7 @@ import { GITHUB_RELEASES_PAGE_URL } from '@/utils/urls';
  * Options 页头部组件（135° 主题渐变通栏）
  *
  * 包含标题、可点击的版本徽标、代理状态信号灯（与代理总开关同一行），
- * 第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/导入导出/环境配置/设置/关于）。
+ * 第二行工具栏：主操作（添加规则）与一组玻璃质感工具按钮（日志/URL 测试/环境对比/导入导出/环境配置/设置/关于）。
  * 「关于」是这一排的最右一颗，点开的是右侧那枚抽屉——项目外链收在那里，不在这一屏摆两排出口。
  * 间距与按钮皮肤对齐 account-password-helper 的顶栏实现；总开关刻意不套胶囊，见样式里的说明。
  */
@@ -129,6 +138,8 @@ defineEmits<{
   openLogs: [];
   /** 打开 URL 匹配测试弹窗 */
   openUrlTest: [];
+  /** 打开环境响应对比弹窗 */
+  openEnvDiff: [];
   /** 打开导入导出弹窗 */
   openImportExport: [];
   /** 打开环境配置弹窗 */

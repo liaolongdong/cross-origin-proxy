@@ -135,6 +135,7 @@ const features = computed(() => [
   t('aboutFeature5'),
   t('aboutFeature6'),
   t('aboutFeature7'),
+  t('aboutFeature8'),
 ]);
 
 const facts = computed(() => [

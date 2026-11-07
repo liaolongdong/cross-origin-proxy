@@ -152,6 +152,7 @@ const actionEntries = computed<CommandPaletteActionEntry[]>(() => {
     { key: 'add-rule', label: t('addRule') },
     { key: 'logs', label: t('tabLogs') },
     { key: 'url-test', label: t('urlTest') },
+    { key: 'env-diff', label: t('envDiffTitle') },
     { key: 'import-export', label: t('importExportConfig') },
     { key: 'profiles', label: t('openProfiles') },
     { key: 'settings', label: t('tabSettings') },

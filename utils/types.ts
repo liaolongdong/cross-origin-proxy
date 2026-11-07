@@ -230,6 +230,18 @@ export enum MessageType {
    */
   GET_SITE_STATE = 'GET_SITE_STATE',
   SET_SITE_STATE = 'SET_SITE_STATE',
+
+  /**
+   * Options → SW：环境响应对比的出站请求（同一输入按扩展权限原样发给这一个地址）
+   *
+   * 刻意过 `isTrustedSender`（`EXTENSION_OUTBOUND_TYPES` 一档）：判据是「桥接层的四个出口没有这一条，
+   * 页面永远不会问它」，而这一笔是扩展用自己的权限替用户出门——不过这道 gate，同页脚本一旦能把它
+   * 递进来，等于把 `<all_urls>` 借给页面。它**不经过规则匹配**：对比的是环境本身，命中与重写会把
+   * 两边都搬到同一个环境里去，那正是用户想排除的情形。
+   */
+  ENV_DIFF_REQUEST = 'ENV_DIFF_REQUEST',
+  /** Options → SW：掐掉在途的那一笔对比（键是弹窗自己生成的 `requestId`，与页面拦截器计数器无关） */
+  ENV_DIFF_CANCEL = 'ENV_DIFF_CANCEL',
 }
 
 /**
@@ -653,6 +665,55 @@ export interface SetSiteStateMessage {
   data: { mode: SiteScopeMode; hosts: string[] };
 }
 
+/**
+ * 环境响应对比的单侧请求载荷（Options → SW）
+ *
+ * 载荷属不可信输入：界面判过一遍，后台仍要按 `utils/envDiff.ts` 的 `prepareEnvDiffRequest`
+ * 重判（`IMPORT_HAR` 的 `targetOrigin` 同一条先例）。`{{NAME}}` 引用的展开只发生在 SW
+ * 发请求这一刻，与凭据「只在最后一刻展开」的全仓口径一致。
+ */
+export interface EnvDiffRequestPayload {
+  /** 弹窗自己生成的登记键（`generateId`），取消与在途账共用它 */
+  requestId: string;
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body?: string;
+  /** 严格 `true` 才带目标站 Cookie——与规则侧 `sendCredentials` 同一条判据 */
+  sendCredentials?: boolean;
+}
+
+/** 对比失败的原因编码：内部编码，唯一读者是 EnvDiffDialog 的文案档位表（`noAnswer` = 回包本身不成形状） */
+export type EnvDiffErrorCode =
+  'url' | 'method' | 'headers' | 'body' | 'bodyTooLarge' | 'timeout' | 'cancelled' | 'network' | 'noAnswer';
+
+/** 环境响应对比的单侧结果（SW → Options）：`ok:false` 时 `error` 必在档位内 */
+export interface EnvDiffResultPayload {
+  requestId: string;
+  ok: boolean;
+  /** 0 是「没拿到响应」；真状态码原样交回（包括 4xx/5xx——那正是对比要看的） */
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  /** 文本正文；204/205/304 或空响应为 null；越界且已掐流时按 `truncated` 说 */
+  body: string | null;
+  truncated: boolean;
+  durationMs: number;
+  error?: EnvDiffErrorCode;
+}
+
+/** 环境响应对比：发一侧 */
+export interface EnvDiffRequestMessage {
+  type: MessageType.ENV_DIFF_REQUEST;
+  data: EnvDiffRequestPayload;
+}
+
+/** 环境响应对比：掐一侧 */
+export interface EnvDiffCancelMessage {
+  type: MessageType.ENV_DIFF_CANCEL;
+  data: { requestId: string };
+}
+
 /** HAR 导入载荷 */
 export interface HarImportPayload {
   log: {
@@ -717,7 +778,9 @@ export type RuntimeMessage =
   | SetVariablesMessage
   | GetRecentTargetsMessage
   | GetSiteStateMessage
-  | SetSiteStateMessage;
+  | SetSiteStateMessage
+  | EnvDiffRequestMessage
+  | EnvDiffCancelMessage;
 
 /**
  * 请求日志条目

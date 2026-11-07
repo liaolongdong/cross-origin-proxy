@@ -932,6 +932,10 @@ describe('[Async dialog init] props.visible watcher 必须 immediate', () => {
     // 命令面板：分片可能在键盘按下后才取回，带着 visible === true 挂载；查询重置与聚焦
     // 全靠这一次 immediate watcher，没有它就会带着上一次的查询与焦点打开。
     'components/options/CommandPalette.vue',
+    // 环境响应对比：`#env-diff` 直达时同一条竞态。它的 watcher 只做聚焦（不拉数据），
+    // 但「分片带着 visible===true 挂载」这一条对所有 visible watcher 都成立——不带 immediate
+    // 就是深链进来焦点永远不落进地址 A。
+    'components/options/EnvDiffDialog.vue',
   ];
 
   it('承担初始化/数据拉取的 props.visible watcher 一律带 immediate', () => {
