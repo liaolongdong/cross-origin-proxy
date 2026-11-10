@@ -311,6 +311,8 @@ function chooseAction(action: CommandPaletteAction) {
 }
 
 .command-search {
+  /* 原生 input 默认 content-box（仓库无全局 border-box）：不带这条，width:100% + 内边距 + 边框会把 body 撑宽 26px 出横滚 */
+  box-sizing: border-box;
   width: 100%;
   height: 40px;
   padding: 0 12px;
