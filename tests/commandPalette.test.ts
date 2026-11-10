@@ -106,4 +106,15 @@ describe('⌘K 命令面板（源码契约）', () => {
     expect(palette).toContain("import { ruleMatchesKeyword } from '@/utils/ruleSearch';");
     expect(palette).toContain('ruleMatchesKeyword(rule, query.value)');
   });
+
+  it('搜索框自带 border-box：原生 input 的 width:100% 缺这条会把 body 撑宽出横滚', () => {
+    // 仓库与 Element Plus 都没有全局 box-sizing（content-box），而这枚是原生 input 不是 el-input：
+    // width:100% + padding 0 12px + border 1px 在 content-box 下外宽 = 内容宽 + 26px，
+    // .el-dialog__body 的 overflow-y:auto 按 CSS 规则把 overflow-x 算成 auto，接住这 26px 变成一条横滚。
+    const start = palette.indexOf('.command-search {');
+    expect(start, '.command-search 样式块不见了').toBeGreaterThan(-1);
+    const block = palette.slice(start, palette.indexOf('}', start));
+    expect(block).toContain('width: 100%;');
+    expect(block, '少了 border-box：26px 横滚回归（真机量过）').toContain('box-sizing: border-box;');
+  });
 });
