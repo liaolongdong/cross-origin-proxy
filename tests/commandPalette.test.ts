@@ -95,6 +95,24 @@ describe('⌘K 命令面板（源码契约）', () => {
     expect(palette).toContain("event.key === 'Enter'");
   });
 
+  it('键盘处理挂在面板在场期间的 document 上：搜索框失焦后 ↑↓ 不失灵', () => {
+    // 根因回归守卫：`@keydown` 只绑 <input> 时，搜索框一失焦（点了面板空白导致 blur、或 Tab 落到
+    // option 按钮）↑↓/Home/End/Enter 就进不到 handler——用户报的正是这个。现在打开挂 document、
+    // 关闭摘（同一个 visible watcher），卸载再兜一次；导航键触发先把焦点拉回搜索框。
+    expect(palette).toContain("document.addEventListener('keydown', handleKeydown)");
+    expect(palette).toContain("document.removeEventListener('keydown', handleKeydown)");
+    // 「关闭摘」必须与「打开挂」成对，漏掉就是离开面板后箭头仍在全局抢键
+    expect(palette).toMatch(
+      /if \(visible\) document\.addEventListener\('keydown', handleKeydown\);[\s\S]*?else document\.removeEventListener\('keydown', handleKeydown\);/,
+    );
+    // 把焦点拉回 combobox 的键盘目标（输入框），否则失焦后按过一次箭头，后续打字又断了
+    expect(palette).toContain('if (document.activeElement !== inputRef.value) inputRef.value?.focus();');
+    // 非导航键必须放行，别把打字与其它组合键一起吃掉
+    expect(palette).toContain("['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(event.key)");
+    // 输入框不再自带 `@keydown`：两处都绑会把同一次按键处理两遍（双 move）
+    expect(palette).not.toMatch(/<input[\s\S]*?@keydown="handleKeydown"/);
+  });
+
   it('搜索框有鼠标入口，设置页有快捷键说明', () => {
     expect(searchBar).toContain("$emit('openCommandPalette')");
     expect(searchBar).toContain('command-hint');

@@ -25,7 +25,6 @@
       :aria-activedescendant="activeOptionId"
       :placeholder="t('commandPalettePlaceholder')"
       :aria-label="t('commandPalettePlaceholder')"
-      @keydown="handleKeydown"
     />
 
     <div
@@ -236,13 +235,18 @@ function reset() {
 
 onUnmounted(() => {
   if (focusTimer !== undefined) window.clearTimeout(focusTimer);
+  document.removeEventListener('keydown', handleKeydown);
 });
 
 // 分片可能带着 visible === true 挂载（键盘在分片取回前按下），所以必须 immediate
+// 键盘处理挂在 document（而非仅输入框）：面板是模态，在场期间 ↑↓/Home/End/Enter 从任意焦点位置
+// 都应生效——只绑输入框就会出现「搜索框一失焦箭头就失灵」。打开挂、关闭摘，与组件卸载一起收口。
 watch(
   () => props.visible,
   visible => {
     if (visible) reset();
+    if (visible) document.addEventListener('keydown', handleKeydown);
+    else document.removeEventListener('keydown', handleKeydown);
   },
   { immediate: true },
 );
@@ -266,6 +270,11 @@ function move(delta: number) {
 }
 
 function handleKeydown(event: KeyboardEvent) {
+  // 导航键之外的（打字、其它组合）一律放行，交给输入框原生处理
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(event.key)) return;
+  // combobox 的键盘目标本就该是搜索框：焦点漂到别处（点了面板空白导致 blur、或 Tab 落到
+  // option）时先把焦点拉回来，↑↓ 与之后的打字才都接着可用——用户报的正是失焦后 ↑↓ 失灵。
+  if (document.activeElement !== inputRef.value) inputRef.value?.focus();
   if (event.key === 'ArrowDown') {
     event.preventDefault();
     move(1);
