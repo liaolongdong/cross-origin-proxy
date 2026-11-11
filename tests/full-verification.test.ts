@@ -1422,6 +1422,26 @@ describe('[Batch 5] 命中数排序的键只有一份来源（源码契约）', 
     expect(column).not.toContain('prop=');
   });
 
+  it('这一列不给降序那一档：比较结果会被 EP 整体乘方向，降序会把「读不到」顶到最上面', () => {
+    expect(ruleTableSrc).toContain("const HIT_SORT_ORDERS: ('ascending' | null)[] = ['ascending', null]");
+    const column = ruleTableSrc.slice(
+      ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"'),
+      ruleTableSrc.indexOf('<template #default="{ row }">', ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"')),
+    );
+    expect(column, '命中数列用的还是三档 SORT_ORDERS：unknown 会在降序里浮到第一眼').toContain(
+      ':sort-orders="HIT_SORT_ORDERS"',
+    );
+  });
+
+  it('比较本身住在可测的那一层，组件里不重排符号', () => {
+    expect(ruleTableSrc).toContain('compareHitSortKeys(keyA, keyB, byRuleName(a, b))');
+    const comparator = ruleTableSrc.slice(
+      ruleTableSrc.indexOf('function byHitCount'),
+      ruleTableSrc.indexOf('\n}', ruleTableSrc.indexOf('function byHitCount')),
+    );
+    expect(comparator, '组件里自己写符号：EP 乘方向时这一层翻的是什么没人对账').not.toMatch(/return 1;/);
+  });
+
   it('排序键只问 hitSortKeyOf 的那一份产物，组件里不重算通道、不相加', () => {
     expect(ruleTableSrc).toContain('hitSortKeyOf({ onNet, readable, stat })');
     const comparator = ruleTableSrc.slice(
@@ -1431,14 +1451,5 @@ describe('[Batch 5] 命中数排序的键只有一份来源（源码契约）', 
     expect(comparator).toContain('sortKey');
     expect(comparator, '比较器自己再去问一遍通道，就是第二份判据').not.toContain('isSimpleRule');
     expect(ruleTableSrc).not.toMatch(/stat\.net\s*\+\s*stat\.ext/);
-  });
-
-  it('读不到（null）在升降序里都沉底：两条分支各回一个符号，而不是一起当 0', () => {
-    const comparator = ruleTableSrc.slice(
-      ruleTableSrc.indexOf('function byHitCount'),
-      ruleTableSrc.indexOf('}\n', ruleTableSrc.indexOf('function byHitCount')),
-    );
-    expect(comparator).toContain('return 1');
-    expect(comparator).toContain('return -1');
   });
 });

@@ -46,7 +46,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeLogStats, groupHitStatsByRule, hitSortKeyOf } from '@/utils/ruleStats';
+import { compareHitSortKeys, computeLogStats, groupHitStatsByRule, hitSortKeyOf } from '@/utils/ruleStats';
 import type { RequestLogEntry } from '@/utils/types';
 
 function makeLog(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
@@ -161,5 +161,39 @@ describe('hitSortKeyOf — 排序键只属于自己那条通道', () => {
     ];
     expect(sums).toEqual([1, 99, null]);
     expect(sums).not.toContain(100);
+  });
+});
+
+/**
+ * 比较器这一层要钉的不是「排得对不对」，而是**为什么这一列不能给降序**。
+ *
+ * Element Plus 把比较结果整体乘上方向（`util.mjs` 里 `return order * +reverse`），
+ * 所以同一个「让读不到的沉底」的意图，在降序下会被翻成「让读不到的置顶」。
+ * 那一步在源码上完全看不出来——两条分支对称、单测里升序也全对，只有乘一下才现形。
+ * 下面最后一条就是把那次乘法显式跑一遍：它是 `HIT_SORT_ORDERS` 只有两档的证据。
+ */
+describe('compareHitSortKeys — 说不出数的不参与比较', () => {
+  it('两个真数按大小比，与传入顺序的方向无关', () => {
+    expect(compareHitSortKeys(2, 7, 0)).toBe(-5);
+    expect(compareHitSortKeys(7, 2, 0)).toBe(5);
+  });
+
+  it('升序里 unknown 沉底：a 说不出数就排到 b 之后', () => {
+    expect(compareHitSortKeys(null, 3, 0)).toBe(1);
+    expect(compareHitSortKeys(3, null, 0)).toBe(-1);
+  });
+
+  it('两个都说不出数时不比大小，交回调用方给的稳定次序（否则点一次表头换一批顺序）', () => {
+    expect(compareHitSortKeys(null, null, 42)).toBe(42);
+  });
+
+  it('两个真数相等时也走那个稳定次序，不返回 0', () => {
+    expect(compareHitSortKeys(5, 5, -1)).toBe(-1);
+  });
+
+  it('把结果乘一下就是 EP 降序做的事：unknown 会翻到最前——所以这一列不给降序那一档', () => {
+    const ascending = compareHitSortKeys(null, 3, 0);
+    expect(ascending, '升序里 unknown 必须在后（正数）').toBe(1);
+    expect(ascending * -1, '同一个返回值在降序下变成 unknown 在前：这一档不能开').toBe(-1);
   });
 });

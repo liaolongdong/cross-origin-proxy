@@ -82,3 +82,23 @@ export function hitSortKeyOf({ onNet, readable, stat }: HitSortKeyInput): number
   if (onNet) return readable ? stat.net : null;
   return stat.ext;
 }
+
+/**
+ * 命中数那一列的比较器：`null`（说不出数）与真数之间没有大小关系
+ *
+ * 抽成纯函数的唯一理由是**这一格里有一个只在运行时才看得见的坑**：Element Plus 把比较结果整体
+ * 乘上方向（`element-plus/es/components/table/src/util.mjs` 里 `return order * +reverse`，
+ * 降序时 `reverse` 是 `-1`），所以「让 unknown 沉底」这个意图在降序下会被翻成「unknown 置顶」。
+ * 最直接的写法（升序返回 1、降序返回 -1）在源码上看着完全对称，实际会把这一列最没信息量的那一格
+ * 摆到第一眼——而把它排上去的理由恰恰是「谁命中得少」。
+ *
+ * 因此调用方必须同时满足两条：只提供**升序**与**还原**两档（见 `RuleTable.vue` 的
+ * `HIT_SORT_ORDERS`），以及把 unknown 放在比较之外而不是当成一个极小/极大的数。
+ * 相等时交回 `whenEqual`，由调用方给一个稳定次序（名称），否则每点一次表头就换一批顺序。
+ */
+export function compareHitSortKeys(keyA: number | null, keyB: number | null, whenEqual: number): number {
+  if (keyA === null && keyB === null) return whenEqual;
+  if (keyA === null) return 1;
+  if (keyB === null) return -1;
+  return keyA === keyB ? whenEqual : keyA - keyB;
+}
