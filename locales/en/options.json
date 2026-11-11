@@ -581,6 +581,7 @@
   "envDiffPickBadMethod": "This entry has no readable method",
   "envDiffPickBadShape": "This entry isn't a readable shape",
   "envDiffPickApplied": "Filled from this $1 request",
+  "envDiffPickBusy": "A comparison is still in flight — cancel it or wait for the answer before changing the inputs.",
   "envDiffPickNote": "The filled values may carry credentials. This dialog writes no logs and stores nothing.",
   "envDiffLineDiff": "This line differs between the two environments",
   "batchMigrate": "Migrate Target",

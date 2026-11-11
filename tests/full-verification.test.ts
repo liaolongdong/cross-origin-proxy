@@ -1387,6 +1387,17 @@ describe('[Batch 5] 环境对比的输入通路（源码契约）', () => {
     expect(envDiffSrc).toContain("t('envDiffLineDiff')");
     expect(envDiffSrc).toContain('aria-hidden="true"');
   });
+
+  it('在途那一轮不会被一次挑单整批改掉，而第二次打开会重读那份列表', () => {
+    const at = envDiffSrc.indexOf('function applyPick');
+    const apply = envDiffSrc.slice(at, envDiffSrc.indexOf('\n}', at));
+    expect(apply, '少了在途闸门：回包会落在一组已被整批改掉的输入上，同一屏两句话各说各的').toContain(
+      "t('envDiffPickBusy')",
+    );
+    expect(envDiffSrc, '打开弹窗不重读：上一屏的旧账会被当现状画回去').toContain(
+      'if (pickOpen.value) void loadPicks();',
+    );
+  });
 });
 
 /**

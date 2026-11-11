@@ -410,6 +410,12 @@ function pickRowLabel(row: EnvDiffPickRow): string {
 
 function applyPick(row: EnvDiffPickRow) {
   if (!row.prefill.ok) return;
+  // 在途那一轮的读数描述的是**发出那一刻**的四项输入。此刻整批改掉，回话落下来就与屏幕上的表单
+  // 各说各话——一句「先等它回话」比那个错便宜得多，也比默默取消用户那一轮诚实（取消有它自己的入口）。
+  if (running.value) {
+    ElMessage.warning(t('envDiffPickBusy'));
+    return;
+  }
   const { url, method: pickedMethod, headers, body } = row.prefill.draft;
   urlA.value = url;
   method.value = pickedMethod;
@@ -556,11 +562,15 @@ function sideMetaNote(side: SideKey): string {
 // 打开时把焦点放到地址 A：这一屏的第一件事永远是先交出那两个地址。
 // hash 直达时分片带着 visible === true 挂载，`@open` 在那条路径上不保证触发——所以本弹窗
 // 不靠 `@open`，聚焦挂在带 immediate 的 visible watcher 上（与四个带初始化 watcher 的弹窗
-// 同一条竞态纪律；它只聚焦、不拉数据，没有「没读到」那一面可画）。
+// 同一条竞态纪律）。
+// 后来这里多了第二件事：折叠区上一次是展开的，那就在每次打开时重读一遍最近请求——
+// 不重读的话，第二次打开弹窗看到的还是上一屏那几条，而它长得和新鲜读数一模一样。
+// `immediate` 那一拍 `pickOpen` 还是 `false`，所以挂载即见的那条路径不会多发一次消息。
 watch(
   () => props.visible,
   visible => {
     if (!visible) return;
+    if (pickOpen.value) void loadPicks();
     void nextTick(() => {
       document.getElementById('env-diff-a')?.focus();
     });

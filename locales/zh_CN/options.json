@@ -581,6 +581,7 @@
   "envDiffPickBadMethod": "这条记录读不出方法名",
   "envDiffPickBadShape": "这条记录读不出完整形状",
   "envDiffPickApplied": "已填入这一笔的 $1 请求",
+  "envDiffPickBusy": "这一轮对比还在等回包，先取消或等它回话，再换输入。",
   "envDiffPickNote": "填入的内容可能带着凭据；本弹窗不写日志、也不落盘。",
   "envDiffLineDiff": "这一行两个环境的回包不一致",
   "batchMigrate": "迁移目标",
