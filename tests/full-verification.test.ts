@@ -1339,3 +1339,117 @@ describe('[Batch 4] 抽屉暂停自动刷新与导入闸门（源码契约）', 
     expect(body).toContain("t('importHarTooManyEntries'");
   });
 });
+
+/**
+ * 环境对比那条输入通路（源码契约）
+ *
+ * 这五条钉的都是本仓反复踩过、且渲染层没有运行时对应物的面：凭据不进地址栏、只读不写、
+ * 低频入口不白读、四档状态各有一句、差异不只靠颜色。判据本身由
+ * `tests/envDiffPrefill.test.ts` 与 `tests/composablesEnvDiffPick.test.ts` 按运行时测。
+ */
+describe('[Batch 5] 环境对比的输入通路（源码契约）', () => {
+  const envDiffSrc = fs.readFileSync('components/options/EnvDiffDialog.vue', 'utf-8');
+
+  it('那条通路只读日志：不出现写操作，也不碰 storage 键', () => {
+    expect(envDiffSrc).not.toContain('CLEAR_REQUEST_LOG');
+    expect(envDiffSrc).not.toContain('STORAGE_KEYS');
+    expect(envDiffSrc).not.toMatch(/type:\s*MessageType\.(?!GET_REQUEST_LOG)/);
+  });
+
+  it('预填不进地址栏——日志里的请求头是原值，进 hash 就是进浏览器历史', () => {
+    expect(envDiffSrc).not.toMatch(/location\.hash/);
+    expect(envDiffSrc).not.toMatch(/encodeURIComponent\(/);
+  });
+
+  it('折叠区是低频入口：第一次展开才去读，且读与不读由 everRead / loading 一起收口', () => {
+    const toggle = envDiffSrc.slice(
+      envDiffSrc.indexOf('function togglePick'),
+      envDiffSrc.indexOf('function rowBlockedReason'),
+    );
+    expect(toggle).toContain('!pickEverRead.value');
+    expect(toggle).toContain('!pickLoading.value');
+    expect(toggle).toContain('void loadPicks()');
+  });
+
+  it('读数四档按次序说话：读取中 → 读失败 → 没有记录 → 列表（读不到绝不能落进「没有」）', () => {
+    const loading = envDiffSrc.indexOf('pickLoading && !pickEverRead');
+    const failed = envDiffSrc.indexOf('v-else-if="pickReadFailed"');
+    const empty = envDiffSrc.indexOf('v-else-if="pickRows.length === 0"');
+    const list = envDiffSrc.indexOf('env-diff-pick-list');
+    expect([loading, failed, empty, list]).not.toContain(-1);
+    expect(loading).toBeLessThan(failed);
+    expect(failed).toBeLessThan(empty);
+    expect(empty).toBeLessThan(list);
+  });
+
+  it('差异行不只靠颜色：真文本节点的 `≠` 与就近那句屏读句子都在场', () => {
+    expect(envDiffSrc).toContain('env-diff-line-mark');
+    expect(envDiffSrc).toContain("t('envDiffLineDiff')");
+    expect(envDiffSrc).toContain('aria-hidden="true"');
+  });
+
+  it('在途那一轮不会被一次挑单整批改掉，而第二次打开会重读那份列表', () => {
+    const at = envDiffSrc.indexOf('function applyPick');
+    const apply = envDiffSrc.slice(at, envDiffSrc.indexOf('\n}', at));
+    expect(apply, '少了在途闸门：回包会落在一组已被整批改掉的输入上，同一屏两句话各说各的').toContain(
+      "t('envDiffPickBusy')",
+    );
+    expect(envDiffSrc, '打开弹窗不重读：上一屏的旧账会被当现状画回去').toContain(
+      'if (pickOpen.value) void loadPicks();',
+    );
+  });
+});
+
+/**
+ * 命中数排序（源码契约）
+ *
+ * EP 2.14.3 的 `sortable` 不要求列带 `prop`（`style.helper.mjs:46` 只按 `column.sortable` 挂
+ * `is-sortable`，`orderBy` 里 `sortMethod` 排在取值之前），所以这一列刻意**不带 `prop`**——
+ * 行对象上根本没有 `hitCount` 这个字段，编一个名字就是给下一次「按 prop 取值」留门。
+ */
+describe('[Batch 5] 命中数排序的键只有一份来源（源码契约）', () => {
+  const ruleTableSrc = fs.readFileSync('components/options/RuleTable.vue', 'utf-8');
+
+  it('sortable 与 byHitCount 成对出现，且该列不冒充一个行上并不存在的字段', () => {
+    const column = ruleTableSrc.slice(
+      ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"'),
+      ruleTableSrc.indexOf('<template #default="{ row }">', ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"')),
+    );
+    expect(column).toContain('sortable');
+    expect(column, '只有 sortable 没有 sort-method：EP 会去按 prop 取值，而行上没有那个字段').toContain(
+      ':sort-method="byHitCount"',
+    );
+    expect(column).not.toContain('prop=');
+  });
+
+  it('这一列不给降序那一档：比较结果会被 EP 整体乘方向，降序会把「读不到」顶到最上面', () => {
+    expect(ruleTableSrc).toContain("const HIT_SORT_ORDERS: ('ascending' | null)[] = ['ascending', null]");
+    const column = ruleTableSrc.slice(
+      ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"'),
+      ruleTableSrc.indexOf('<template #default="{ row }">', ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"')),
+    );
+    expect(column, '命中数列用的还是三档 SORT_ORDERS：unknown 会在降序里浮到第一眼').toContain(
+      ':sort-orders="HIT_SORT_ORDERS"',
+    );
+  });
+
+  it('比较本身住在可测的那一层，组件里不重排符号', () => {
+    expect(ruleTableSrc).toContain('compareHitSortKeys(keyA, keyB, byRuleName(a, b))');
+    const comparator = ruleTableSrc.slice(
+      ruleTableSrc.indexOf('function byHitCount'),
+      ruleTableSrc.indexOf('\n}', ruleTableSrc.indexOf('function byHitCount')),
+    );
+    expect(comparator, '组件里自己写符号：EP 乘方向时这一层翻的是什么没人对账').not.toMatch(/return 1;/);
+  });
+
+  it('排序键只问 hitSortKeyOf 的那一份产物，组件里不重算通道、不相加', () => {
+    expect(ruleTableSrc).toContain('hitSortKeyOf({ onNet, readable, stat })');
+    const comparator = ruleTableSrc.slice(
+      ruleTableSrc.indexOf('function byHitCount'),
+      ruleTableSrc.indexOf('function ', ruleTableSrc.indexOf('function byHitCount') + 1),
+    );
+    expect(comparator).toContain('sortKey');
+    expect(comparator, '比较器自己再去问一遍通道，就是第二份判据').not.toContain('isSimpleRule');
+    expect(ruleTableSrc).not.toMatch(/stat\.net\s*\+\s*stat\.ext/);
+  });
+});

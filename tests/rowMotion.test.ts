@@ -239,3 +239,52 @@ describe('行级过渡的形状约束（失效全部无声，只能按源码钉�
     expect(unmount, '卸载没把 settleTimer 摘掉').toContain('clearTimeout(settleTimer)');
   });
 });
+
+/**
+ * 全仓错峰阶梯只有一把尺（本轮新增）
+ *
+ * AGENTS 早就写明这一族延迟有**两套**：`RuleTable` 那一份有人对账，`EmptyGuide` 那一份没有——
+ * 「改任何一处都得回来把另一处一起对」全靠人记。本轮又长出第三处（`ProfilesDialog` 的快照列表），
+ * 三处靠注释互相提醒已经不够用了：把 180 改成 200 的那一刻，JS 侧摘类名的时限就落后于 CSS，
+ * 结果是最后一档永远看不到动画收尾，而界面上没有任何报错。
+ *
+ * 所以这里按**实际出现过的值**对账，而不是按文件名点名：新增一处阶梯自动进入射程，
+ * 少一处也不会空转（下面的自证要求至少读到三处，读到 0 处即为守卫失效）。
+ */
+describe('错峰阶梯的档位全仓只有一把尺', () => {
+  const laddered = [
+    'components/options/RuleTable.vue',
+    'components/options/EmptyGuide.vue',
+    'components/options/ProfilesDialog.vue',
+  ];
+
+  /** 每个文件里出现过的 `animation-delay: Nms` 档位 */
+  const delaysByFile = laddered.map(file => {
+    const src = readFileSync(file, 'utf8');
+    const values = [...src.matchAll(/animation-delay:\s*(\d+)ms/g)].map(match => Number(match[1]));
+    return { file, values };
+  });
+
+  it('三处阶梯都读得到延迟（读不到就是守卫在空转，不是「没问题」）', () => {
+    for (const { file, values } of delaysByFile) {
+      expect(values.length, `${file} 里一条 animation-delay 都没读到，这条对账形同不存在`).toBeGreaterThan(0);
+    }
+  });
+
+  it('每一档只能是那三个节拍值：60 / 120 / 180', () => {
+    const allowed = [60, 120, 180];
+    for (const { file, values } of delaysByFile) {
+      for (const value of values) {
+        expect(allowed, `${file} 里出现 ${value}ms，不在全仓共用的三档节拍上`).toContain(value);
+      }
+    }
+  });
+
+  it('最高一档在每一处都等于 JS 摘类名用的那个数', () => {
+    for (const { file, values } of delaysByFile) {
+      expect(Math.max(...values), `${file} 的顶档与 ROW_STAGGER_MAX_DELAY_MS 不再是同一个数`).toBe(
+        ROW_STAGGER_MAX_DELAY_MS,
+      );
+    }
+  });
+});

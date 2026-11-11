@@ -150,7 +150,7 @@
               "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app"
             },
             "datePublished": "2026-11-05",
-            "dateModified": "2026-11-07"
+            "dateModified": "2026-11-11"
           },
           {
             "@type": "Article",
@@ -164,7 +164,7 @@
               "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author"
             },
             "datePublished": "2026-11-05",
-            "dateModified": "2026-11-07",
+            "dateModified": "2026-11-11",
             "publisher": {
               "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author"
             }
@@ -285,7 +285,7 @@
       >
         <div class="wrap">
           <div class="hero-copy">
-            <span class="eyebrow"><span class="dot"></span> 排查手册 · 判据来自实测 · 更新于 2026-11-07</span>
+            <span class="eyebrow"><span class="dot"></span> 排查手册 · 判据来自实测 · 更新于 2026-11-11</span>
             <h1 id="page-title">
               报 <span class="accent">blocked by CORS policy</span> 之后：先分清是哪一种失败，再决定改哪一侧
             </h1>
@@ -661,6 +661,13 @@
               两种读数。所以既不能说「跨原点改写必挂」，也不能说「必不挂」。稳妥的两条路：让后端放行，或者给这条规则加一项头覆盖，让它落到扩展代发那一条通道上。
             </p>
           </div>
+          <p>
+            上面那三行读数不必靠猜。<strong>环境响应对比</strong>（配置页顶栏，见
+            <a href="./#features">能力清单里那一节</a>）把同一份地址、方法、请求头与正文
+            <strong>原样</strong>发给两个环境，并排给出状态码与逐行正文——它不匹配规则、不写请求日志，也不进命中统计，
+            所以读回来的是那两个环境自己怎么说，而不是扩展替它们怎么说。而「这笔到底走没走代理、走的哪条通道」是另一问，
+            那两问分别由<strong>自检</strong>与 <strong>URL 匹配预演</strong>回答。
+          </p>
         </div>
       </section>
 
@@ -922,7 +929,7 @@
           <p>跨域代理助手 Cross-Origin Proxy · MIT License · 规则与日志只存本机</p>
           <p class="footer-meta">
             <span>v1.8.0</span>
-            <span>最后更新 2026-11-07</span>
+            <span>最后更新 2026-11-11</span>
           </p>
         </div>
         <nav aria-label="页脚导航">

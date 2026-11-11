@@ -64,6 +64,7 @@
     <ul
       v-else
       class="profile-list"
+      :class="{ 'is-stagger': profiles.length <= MAX_ANIMATED_ROWS }"
     >
       <li
         v-for="profile in profiles"
@@ -124,6 +125,7 @@ import type { EnvironmentProfile, ProxyConfig } from '@/utils/types';
 import { generateId } from '@/utils/generateId';
 import { formatLocaleDateTime } from '@/utils/formatters';
 import { isFailureEnvelope } from '@/utils/messageResult';
+import { MAX_ANIMATED_ROWS } from '@/utils/constants';
 import { logger } from '@/utils/logger';
 import { useI18n } from '@/composables/useI18n';
 import { useProfiles } from '@/composables/useProfiles';
@@ -374,6 +376,31 @@ async function handleDeleteProfile(profile: ProfileView) {
   transition:
     border-color var(--cop-duration-fast) var(--cop-ease-standard),
     box-shadow var(--cop-duration-fast) var(--cop-ease-standard);
+}
+
+/* 载入后那一屏按既有阶梯落位，而不是刷一下全出现。消费令牌层那一份 `cop-rise-in`：
+   第二份同族定义就是下一次「同一个动作在两个界面差 130ms」的起点。
+   `backwards` 而不是 `both`——后者会把 `transform` 冻在末帧，而动画在级联里排在 `:hover` 之前，
+   下面那条 hover 抬升当场失效且无报错。
+   闸门与规则表同一份预算（`MAX_ANIMATED_ROWS`）：快照条数没有上限常量，
+   几十份快照各挂一次动画就是把这个弹窗变成满负载表格那个实测坏点的小型版。 */
+.profile-list.is-stagger .profile-item {
+  animation: cop-rise-in var(--cop-duration-base) var(--cop-ease-enter) backwards;
+}
+
+/* 阶梯每一级写 `:nth-child(n + k)`（第 k 张起）而不是逐个点名：逐个点名在今天完全正确，
+   将来列表多一张卡没有规则命中它，延迟回落到 0、跟第一张同时出现，阶梯走到末尾倒着跳一次
+   且无报错。顶档与 `ROW_STAGGER_MAX_DELAY_MS` 对账由 `tests/rowMotion.test.ts` 负责。 */
+.profile-list.is-stagger .profile-item:nth-child(n + 2) {
+  animation-delay: 60ms;
+}
+
+.profile-list.is-stagger .profile-item:nth-child(n + 3) {
+  animation-delay: 120ms;
+}
+
+.profile-list.is-stagger .profile-item:nth-child(n + 4) {
+  animation-delay: 180ms;
 }
 
 .profile-item:hover {

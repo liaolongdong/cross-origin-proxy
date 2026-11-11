@@ -191,6 +191,7 @@ import { MAX_RULES, MAX_RECENT_TARGETS, DELETE_UNDO_WINDOW_MS } from '@/utils/co
 import { distinctTargetOrigins, sanitizeRecentTargets } from '@/utils/recentTargets';
 import { useRuleManagement } from '@/composables/useRuleManagement';
 import { useDeleteUndo } from '@/composables/useDeleteUndo';
+import { captureEnabled, captureOrder, captureTargets, planRevertToggles } from '@/utils/actionUndo';
 import { useDnrSupport, useDnrSkipText } from '@/composables/useDnrSupport';
 import { checkDnrRule } from '@/utils/dnrSupport';
 import { useRequestLog } from '@/composables/useRequestLog';
@@ -961,6 +962,67 @@ function runDeleteUndo(ruleIds: string[], send: () => Promise<unknown>, texts: D
   return true;
 }
 
+/**
+ * 「已经写进去了，5 秒内可以反着再写一次」的撤销外壳
+ *
+ * 与 `runDeleteUndo` 分着两份而不是共用：那一条是**乐观移除 + 到期落库**（窗口期内存储里那条还在），
+ * 这一条是**已落库 + 反向再写**（窗口期内存储已经是新值）。两条时序的失败面根本不同——前者失败要把行
+ * 放回列表并说「没能保存」，后者失败只能如实说没改回去。共用一份就是把两种语义压成谁也不准的判据。
+ *
+ * 回写用的正是正向操作那三条现成的消息（`BATCH_UPDATE_TARGETS` / `BATCH_TOGGLE_RULES` /
+ * `REORDER_RULES`），不新增消息类型、不碰恢复点：界面在这里不该长出第二套「规则会怎么被改」的模型，
+ * 而一个动作两份账正是恢复点列表最坏的形态。
+ *
+ * @param promptText 已经落库那一句（沿用正向操作原本要说的话，不另造第二套措辞）
+ * @param revertedText 改回去之后的那一句
+ * @param revert 反向写入；抛错或回包 `success: false` 都算没改回去
+ * @param count 涉及的条数；为 0 时一句都不画——那是一次空操作，画出来的撤销按钮点了没反应
+ * @returns 有没有画出带撤销的那句。没有画时调用方必须补一句纯结果，
+ *   否则操作明明成功了而界面一声不响（本仓「用户可见失败要给反馈」的反方向同样成立）。
+ */
+function runRevertUndo(
+  promptText: string,
+  revertedText: string,
+  revert: () => Promise<unknown>,
+  count: number,
+): boolean {
+  if (count === 0) return false;
+  let settled = false;
+  const handle = ElMessage({
+    message: h('div', [
+      h('span', `${promptText} `),
+      h(
+        'button',
+        {
+          type: 'button',
+          style: UNDO_BUTTON_STYLE,
+          onClick: async () => {
+            // 提示的离场动画期间按钮仍可能被点到，那一刻窗口已过、话已经说完，不能再假装还能反悔
+            if (settled) return;
+            settled = true;
+            handle.close();
+            try {
+              await revert();
+              ElMessage.success(revertedText);
+            } catch (error) {
+              logger.error('Undo of a batch action failed:', error);
+              ElMessage.error(t('undoPartialFailure'));
+            }
+          },
+        },
+        t('undo'),
+      ),
+    ]),
+    // 存续时长与撤销窗口是同一个常量：提示先没而窗口还开着，读者就再也找不到那个入口
+    duration: DELETE_UNDO_WINDOW_MS,
+    showClose: false,
+    onClose: () => {
+      settled = true;
+    },
+  });
+  return true;
+}
+
 /** 单条删除：措辞沿用既有的「规则已删除 / 规则已恢复」，不提条数。 */
 function handleDeleteRule(ruleId: string) {
   runDeleteUndo([ruleId], () => deleteRule(ruleId), {
@@ -999,9 +1061,23 @@ async function handleBatchToggle(enabled: boolean) {
       return; // 用户取消
     }
   }
+  // 旧状态必须在写之前抓：混合的旧值一笔盖不回去（`planRevertToggles` 按旧值分组，至多两笔）
+  const snapshot = captureEnabled(rules.value, ids);
   try {
     await batchToggleRules(ids, enabled);
-    ElMessage.success(t(enabled ? 'batchEnableSuccess' : 'batchDisableSuccess', [count]));
+    const prompt = t(enabled ? 'batchEnableSuccess' : 'batchDisableSuccess', [count]);
+    if (
+      !runRevertUndo(
+        prompt,
+        t('batchUndoSuccess', [count]),
+        async () => {
+          for (const step of planRevertToggles(snapshot)) await batchToggleRules(step.ruleIds, step.enabled);
+        },
+        count,
+      )
+    ) {
+      ElMessage.success(prompt);
+    }
   } catch (error) {
     ElMessage.error(t('toggleFailed'));
     logger.error('Batch toggle failed:', error);
@@ -1025,9 +1101,27 @@ async function handleToggleAll(enabled: boolean) {
       return; // 用户取消
     }
   }
+  // 「全部启用/停用」与上面那条批量启停是同一个动作的两种规模，退路必须同档：
+  // 只差一个确认框的有无，而确认框只在条数越过阈值时才出现
+  const snapshot = captureEnabled(
+    rules.value,
+    rules.value.map(rule => rule.id),
+  );
   try {
     await toggleAllRules(enabled);
-    ElMessage.success(t('toggleAllSuccess', [enabled ? t('toggleAllEnabled') : t('toggleAllDisabled')]));
+    const prompt = t('toggleAllSuccess', [enabled ? t('toggleAllEnabled') : t('toggleAllDisabled')]);
+    if (
+      !runRevertUndo(
+        prompt,
+        t('batchUndoSuccess', [snapshot.length]),
+        async () => {
+          for (const step of planRevertToggles(snapshot)) await batchToggleRules(step.ruleIds, step.enabled);
+        },
+        snapshot.length,
+      )
+    ) {
+      ElMessage.success(prompt);
+    }
   } catch (error) {
     ElMessage.error(t('toggleFailed'));
     logger.error('Toggle all failed:', error);
@@ -1058,13 +1152,28 @@ async function handleBatchDelete() {
   clearRuleSelection();
 }
 
-/** 批量迁移目标 URL：接收弹窗预览的变更集，一次写入并提示结果 */
+/** 批量迁移目标 URL：接收弹窗预览的变更集，一次写入并提示结果（5 秒内可反着写回旧目标） */
 async function handleMigrateApply(updates: { id: string; targetUrl: string }[]) {
   if (updates.length === 0) return;
+  // 快照必须在写之前拿：写完再读回来，手里那份就已经是新值，拿它当旧值回写等于什么都没做
+  const snapshot = captureTargets(
+    rules.value,
+    updates.map(item => item.id),
+  );
   try {
     await batchUpdateTargets(updates);
-    ElMessage.success(t('migrateSuccess', [updates.length]));
     clearRuleSelection();
+    const prompt = t('migrateSuccess', [updates.length]);
+    if (
+      !runRevertUndo(
+        prompt,
+        t('undoneMigrated', [snapshot.length]),
+        () => batchUpdateTargets(snapshot),
+        snapshot.length,
+      )
+    ) {
+      ElMessage.success(prompt);
+    }
   } catch (error) {
     ElMessage.error(t('migrateFailed'));
     logger.error('Batch migrate targets failed:', error);
@@ -1239,6 +1348,8 @@ function handleCreateMockFromLog(draft: Omit<ProxyRule, 'id' | 'createdAt' | 'up
 }
 
 async function handleReorder(fromId: string, toId: string) {
+  // 顺序快照同样排在动笔之前：`REORDER_RULES` 收的是一份 id 顺序，回写同形状
+  const previousOrder = captureOrder(rules.value);
   const visibleRules = [...filteredRules.value];
   const fromIdx = visibleRules.findIndex(r => r.id === fromId);
   if (fromIdx < 0) return;
@@ -1252,6 +1363,17 @@ async function handleReorder(fromId: string, toId: string) {
 
   try {
     await reorderRules(newFull.map(r => r.id));
+    const prompt = t('undoReordered', [newFull.length]);
+    if (
+      !runRevertUndo(
+        prompt,
+        t('undoneReordered', [previousOrder.length]),
+        () => reorderRules(previousOrder),
+        previousOrder.length,
+      )
+    ) {
+      ElMessage.success(prompt);
+    }
   } catch {
     ElMessage.error(t('operationFailed'));
   }

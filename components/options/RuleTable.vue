@@ -312,6 +312,9 @@
           :label="t('hitCountLabel')"
           width="96"
           align="center"
+          sortable
+          :sort-orders="HIT_SORT_ORDERS"
+          :sort-method="byHitCount"
         >
           <template #default="{ row }">
             <span
@@ -436,7 +439,7 @@ import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
 import type { TableInstance } from 'element-plus';
 import type { DnrSkipReason } from '@/utils/dnrSupport';
-import type { RuleHitStats } from '@/utils/ruleStats';
+import { compareHitSortKeys, hitSortKeyOf, type RuleHitStats } from '@/utils/ruleStats';
 import { isDnrCountReadable, type DnrSampleState } from '@/utils/dnrSample';
 import { DEFAULT_RULE_PRIORITY, ROW_STAGGER_MAX_DELAY_MS } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
@@ -455,6 +458,16 @@ const ROW_TAG_VISIBLE = 2;
 
 /** 表头排序的档位：升 → 降 → 还原列表顺序（缺第三档时排过就退不回去，README 那句话就不成立） */
 const SORT_ORDERS: ('ascending' | 'descending' | null)[] = ['ascending', 'descending', null];
+
+/**
+ * 命中数那一列的档位只有两档：升序与还原。
+ *
+ * 不是省事，是那一格里有一个只在运行时才看得见的坑：EP 把比较结果整体乘方向
+ * （`element-plus/es/components/table/src/util.mjs` 里 `return order * +reverse`），
+ * 于是「让读不到的沉底」在降序下会变成「让读不到的置顶」——那一格既不是「命中最多」也不是
+ * 「没命中」，是一格不知道，不该占据第一眼。想问「哪些规则根本没在干活」，升序那一次问的就是它。
+ */
+const HIT_SORT_ORDERS: ('ascending' | null)[] = ['ascending', null];
 
 /** 标签从 storage 来，可能是被手改过的任何形状：非数组/非字符串一律当没有（判据同 `configRules()`） */
 function rowTags(row: unknown): string[] {
@@ -486,6 +499,19 @@ function byRulePriority(a: unknown, b: unknown): number {
   const first = (a as Partial<ProxyRule>)?.priority ?? DEFAULT_RULE_PRIORITY;
   const second = (b as Partial<ProxyRule>)?.priority ?? DEFAULT_RULE_PRIORITY;
   return first - second;
+}
+
+/**
+ * 按命中数排序：只比两个真读数，说不出数的那几条沉底。
+ *
+ * 键的来源只有 `hitCells` 那一份（内部再问 `hitSortKeyOf`）——那一列在屏幕上画什么就由它决定，
+ * 排序若去问第二份判据，就会出现「画的是 `—` 而按 0 参了比」这种自己跟自己打架。
+ * 比较本身在 `compareHitSortKeys` 里，那一层带着这一列只给升序的理由。
+ */
+function byHitCount(a: unknown, b: unknown): number {
+  const keyA = hitCells.value[(a as Partial<ProxyRule>)?.id ?? '']?.sortKey ?? null;
+  const keyB = hitCells.value[(b as Partial<ProxyRule>)?.id ?? '']?.sortKey ?? null;
+  return compareHitSortKeys(keyA, keyB, byRuleName(a, b));
 }
 
 /**
@@ -601,7 +627,15 @@ const hitCells = computed(() => {
 
   const cells: Record<
     string,
-    { net: string; ext: string; netTip: string; extTip: string; netUnknown: boolean; extUnknown: boolean }
+    {
+      net: string;
+      ext: string;
+      netTip: string;
+      extTip: string;
+      netUnknown: boolean;
+      extUnknown: boolean;
+      sortKey: number | null;
+    }
   > = {};
   for (const [ruleId, stat] of props.hitStats) {
     // 不在当前列表里的规则（已删或被筛掉）不会渲染，判不了通道就按扩展通道处理
@@ -621,6 +655,9 @@ const hitCells = computed(() => {
       extTip: onNet ? t('hitStatsExtNotApplicable') : t('hitStatsExtTip'),
       netUnknown,
       extUnknown,
+      // 排序键与屏幕上那一格说同一件事：被上面三条 `continue` 摘掉的规则不进 `cells`，
+      // 在比较里也就 `null`（沉底），不会有人把它们当成 0 排进「一次都没命中」那一堆
+      sortKey: hitSortKeyOf({ onNet, readable, stat }),
     };
   }
   return cells;

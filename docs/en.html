@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-07"
+            "dateModified": "2026-11-11"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-07",
+            "dateModified": "2026-11-11",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -1422,6 +1422,119 @@
                 proxy, <span class="kbd">N</span> new rule, <span class="kbd">/</span> focus search,
                 <span class="kbd">Esc</span> close. The single-key shortcuts are deliberate — ⌘/Ctrl+N opens a browser
                 window and a page cannot capture it.
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--cyan"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 7h6M14 7h6" />
+                  <path d="M4 17h6M14 17h6" />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="2"
+                  /></svg
+              ></span>
+              <h3>What two environments answer for the same request</h3>
+              <p>
+                The <strong>Compare environments</strong> button in the header sends one address, method, header set and
+                body <strong>verbatim</strong> to two environments, then lines the status codes up and diffs the bodies
+                line by line — a differing line does not only change colour, it also carries a <code>≠</code> after the
+                line number, so screen readers and screenshots get "this line differs between the two environments" as
+                well. It deliberately matches no rule, writes no request log and is not counted in hits: the question is
+                how each environment answers on its own, while matching and rewriting would move both sides into the
+                same environment — exactly the thing this step has to rule out. Those four inputs can now be filled from
+                the request log on the A side (the B side — the other environment — stays yours to type; entries whose
+                URL, headers or body were cut short are not offered, and the reason sits on that row). Anything other
+                than <code>GET</code> / <code>HEAD</code> / <code>OPTIONS</code> asks first: this will really be sent.
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--purple"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="3"
+                    y="5"
+                    width="18"
+                    height="14"
+                    rx="3"
+                  />
+                  <path d="M7 10l3 3-3 3" />
+                  <path d="M13 16h4" /></svg
+              ></span>
+              <h3>⌘K is a door, not a second pipeline</h3>
+              <p>
+                Press <span class="kbd">⌘K</span> / <span class="kbd">Ctrl K</span> on the options page: jump to a rule
+                by name, match pattern or target URL, or open the request log, the URL matcher, import/export,
+                environments, settings, self-check and About, focus the search box, clear the filters. Deleting,
+                clearing and batch operations are not listed, nothing is written to storage and no message is sent — the
+                palette only points at the doors; the work still happens where it always did. Rule matching uses the
+                <strong>same</strong> keyword logic as the main search, at most 6 rules in list order, with no second
+                scoring model in the panel. And while the rules have not been read yet, or could not be read, it says so
+                — in the same words the table on the same screen uses, because two different sentences for one situation
+                just makes the user guess which one to trust.
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--green"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 7h16" />
+                  <path d="M4 12h10" />
+                  <path d="M4 17h7" />
+                  <circle
+                    cx="19"
+                    cy="15"
+                    r="3"
+                  /></svg
+              ></span>
+              <h3>Three small things once the rules pile up</h3>
+              <p>
+                <strong>Tags</strong>: up to 10 per rule, for filing only — they match nothing and decide nothing. Click
+                a tag chip on a row to add it to the filter, click it again to drop it, and it is the
+                <em>same</em> state as the tag dropdown above, so the two can never disagree. <strong>Sorting</strong>:
+                the name and priority headers sort in three gears (ascending / descending / restore); the hit-count
+                header offers two — ascending and restore. Why one is missing: the browser multiplies the comparator
+                result by the direction, so descending would float "no reading" into the very first row, and that cell
+                is neither most-hit nor never-hit. The hit column sorts on each rule's <strong>own channel</strong> only
+                — the network layer is a rolling five-minute window while the background counts since the last config
+                change, so adding them would describe no period at all; on screen they stay in two cells and in sorting
+                each keeps its own, with rules that have no reading sunk to the bottom instead of pretending "never
+                hit". Drag-to-prioritise is put away while a sort is in effect: the visual row order and the priority
+                actually in force must not both claim to be the order. <strong>Collapse</strong>: header / body /
+                response overrides, Mock, delay, block and retry start folded on a new rule and open themselves when you
+                edit a rule that already uses them. Batch target migration, batch and global enable/disable and
+                drag-reordering each get a 5-second undo, which just writes the old values back — it does not leave a
+                second entry under Settings → Config restore points.
               </p>
             </article>
           </div>
@@ -3858,7 +3971,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.8.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-11-07</span>
+            <span>Last updated 2026-11-11</span>
             <span
               ><a
                 href="./"
