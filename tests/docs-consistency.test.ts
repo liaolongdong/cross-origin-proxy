@@ -1231,7 +1231,7 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
   });
 
   /**
-   * 两张整宽的卡各占满一行，剩下 10 张三列卡正好排出 3+3+3+1，最后一行只落一张、
+   * 两张整宽的卡各占满一行，剩下 13 张三列卡正好排出 3+3+3+3+1，最后一行只落一张、
    * 靠左悬着，右边空出三分之二。把它摆进中间那一格（`grid-column: 3 / span 2`）
    * 这一行才读成收尾。中英两页在 1000px 与 1280px 处量过：左右两侧留白逐像素相等
    * （326 / 326 与 379 / 379），行数仍是 5。
@@ -3735,13 +3735,20 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         decl: 'grid-column: 1 / -1',
       },
       {
+        // 首页/英文页 15 张（2 整宽 + 13 普通）在这一档是两列：13 排成 6 行 + 落单一张，
+        // 落单那张必须铺满最后一行，否则右半格空着读起来像没排完
+        cond: '(width >= 658px) and (width <= 975px)',
+        sel: '.feature-grid > :nth-child(15):nth-last-child(1)',
+        decl: 'grid-column: 1 / -1',
+      },
+      {
         cond: '(width >= 976px) and (width <= 999px)',
-        sel: '.feature-grid > :nth-child(12):nth-last-child(1)',
+        sel: '.feature-grid > :nth-child(15):nth-last-child(1)',
         decl: 'grid-column: 2',
       },
     ] as const;
 
-    it('五条区间规则都在，声明一个字不差', () => {
+    it('六条区间规则都在，声明一个字不差', () => {
       for (const b of BANDS) {
         expect(declOf(b.cond, b.sel), `规则漂了：${b.sel} @ ${b.cond}`).toBe(norm(b.decl));
       }
@@ -3790,8 +3797,8 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       ['docs/en.html', '<div class="grid">', 'card', 3],
       ['docs/alternatives.html', '<div class="grid">', 'card', 6],
       ['docs/en-alternatives.html', '<div class="grid">', 'card', 6],
-      ['docs/index.html', '<div class="feature-grid">', 'feature-card', 12],
-      ['docs/en.html', '<div class="feature-grid">', 'feature-card', 12],
+      ['docs/index.html', '<div class="feature-grid">', 'feature-card', 15],
+      ['docs/en.html', '<div class="feature-grid">', 'feature-card', 15],
       ['docs/alternatives.html', '<div class="feature-grid">', 'feature-card', 5],
       ['docs/en-alternatives.html', '<div class="feature-grid">', 'feature-card', 5],
     ];
@@ -3801,8 +3808,9 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         .filter(Boolean)
         .map(Number)
         .sort((a, b) => a - b);
-      // 三个锚点各自守着一张「卡数固定」的网格：3（首页 .grid）、5（对比页 .feature-grid）、12（首页 .feature-grid）
-      expect(anchors).toEqual([3, 5, 12]);
+      // 四个锚点各自守着一张「卡数固定」的网格：3（首页 .grid）、5（对比页 .feature-grid）、
+      // 15（首页/英文页 .feature-grid，两列与三列那两档各一条）
+      expect(anchors).toEqual([3, 5, 15, 15]);
       for (const n of anchors) {
         const hit = GRIDS.filter(([, , , count]) => count === n);
         expect(hit.length, `CSS 里的 :nth-child(${n}) 锚点在这五页上找不到对应的网格`).toBeGreaterThan(0);

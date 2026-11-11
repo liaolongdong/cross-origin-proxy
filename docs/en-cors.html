@@ -150,7 +150,7 @@
               "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#app"
             },
             "datePublished": "2026-11-05",
-            "dateModified": "2026-11-07"
+            "dateModified": "2026-11-11"
           },
           {
             "@type": "Article",
@@ -164,7 +164,7 @@
               "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author"
             },
             "datePublished": "2026-11-05",
-            "dateModified": "2026-11-07",
+            "dateModified": "2026-11-11",
             "publisher": {
               "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author"
             }
@@ -286,7 +286,7 @@
         <div class="wrap">
           <div class="hero-copy">
             <span class="eyebrow"
-              ><span class="dot"></span> Triage guide · judgements from measurements · updated 2026-11-07</span
+              ><span class="dot"></span> Triage guide · judgements from measurements · updated 2026-11-11</span
             >
             <h1 id="page-title">
               After <span class="accent">blocked by CORS policy</span>: name the failure first, then pick which side
@@ -720,6 +720,15 @@
               the rule so it falls onto the extension's own channel.
             </p>
           </div>
+          <p>
+            Those three readings are not guesswork. <strong>Compare environments</strong> (the options-page header; see
+            <a href="./en.html#features">that part of the feature list</a>) sends one address, method, header set and
+            body <strong>verbatim</strong> to two environments and lines up the status codes with a line-by-line body
+            diff — it matches no rule, writes no request log and is not counted in hits, so what comes back is what
+            those two environments actually say, not what the extension says on their behalf. Whether a request went
+            through the proxy at all, and on which channel, is a different question: those two are answered by
+            <strong>self-check</strong> and the <strong>URL matcher</strong>.
+          </p>
         </div>
       </section>
 
@@ -1005,7 +1014,7 @@
           <p>Cross-Origin Proxy · MIT License · rules and logs stay on your machine</p>
           <p class="footer-meta">
             <span>v1.8.0</span>
-            <span>Last updated 2026-11-07</span>
+            <span>Last updated 2026-11-11</span>
           </p>
         </div>
         <nav aria-label="Footer navigation">

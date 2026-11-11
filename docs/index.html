@@ -165,7 +165,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-07"
+            "dateModified": "2026-11-11"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +200,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-07",
+            "dateModified": "2026-11-11",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -1371,6 +1371,110 @@
                   >Esc</span
                 >
                 关闭。单键快捷键是有意为之——⌘/Ctrl+N 会被浏览器保留用于新建窗口，页面捕获不到。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--cyan"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 7h6M14 7h6" />
+                  <path d="M4 17h6M14 17h6" />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="2"
+                  /></svg
+              ></span>
+              <h3>两个环境对同一笔请求各回了什么</h3>
+              <p>
+                顶栏那颗「环境对比」把同一份地址、方法、请求头与正文<strong>原样</strong>发给两个环境，
+                并排读回状态码与逐行正文——不一样的那一行不只换个颜色，行号后面还跟着一个
+                <code>≠</code>，屏读与截图都拿得到「这一行两边不一致」这句话。它刻意不匹配规则、不写请求日志，
+                也不进命中统计：问的是「这两个环境自己怎么回」，而命中与重写会把两边搬进同一个环境，
+                恰是这一步要排除的情形。四项输入现在也能从请求日志里挑一笔直接填进 A 侧（B
+                侧那一个「另一个环境」留给你填，扩展不猜；被裁过半截的记录不给挑，理由写在它那一行上）； 除
+                <code>GET</code> / <code>HEAD</code> / <code>OPTIONS</code>
+                之外的方法，发出去之前先确认一句「这会真的发出」。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--purple"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="3"
+                    y="5"
+                    width="18"
+                    height="14"
+                    rx="3"
+                  />
+                  <path d="M7 10l3 3-3 3" />
+                  <path d="M13 16h4" /></svg
+              ></span>
+              <h3>⌘K 是一扇门，不是一条新流水线</h3>
+              <p>
+                配置页按 <span class="kbd">⌘K</span> / <span class="kbd">Ctrl K</span>
+                打开命令面板：按名字、匹配模式或目标地址跳规则，也直接打开请求日志、URL
+                匹配预演、导入导出、环境配置、偏好设置、自检与「关于」，或者聚焦搜索框、清除筛选。它不列删除、
+                清空与批量操作，不写存储、也不发消息——面板只指出门在哪，动手仍然回到原来的地方。规则的关键字判据与页面主搜索
+                <strong>同一份</strong>，最多列 6 条并按列表当前顺序，不在面板里另做一套打分。而如果规则还没读到 /
+                读不到，它说的是「正在读取」与「暂时读不到」，和同一屏的表格用同一句话——两屏两种说法等于让
+                用户自己猜该信哪一个。
+              </p>
+            </article>
+            <article class="feature-card reveal">
+              <span class="feature-icon feature-icon--green"
+                ><svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 7h16" />
+                  <path d="M4 12h10" />
+                  <path d="M4 17h7" />
+                  <circle
+                    cx="19"
+                    cy="15"
+                    r="3"
+                  /></svg
+              ></span>
+              <h3>规则多起来之后的三件小事</h3>
+              <p>
+                <strong>标签</strong>：一条规则最多打 10 枚标签，它只是分类，不参与匹配、分流与任何判定；
+                列表里点某一行上那枚标签就把它加进筛选、再点取消，与上方「按标签筛选」的下拉是同一份状态，
+                所以两边永远不会各说各话。<strong>排序</strong>：名称、优先级与命中数三列表头都能排序，
+                第三击还原列表原来的顺序；命中数那一列只按这条规则<strong>自己那条通道</strong>的数排—— 网络层是近 5
+                分钟的滚动窗口、后台是自上次配置变更以来的累计，两个数相加不属于任何一段时间，
+                所以界面上它们各占一格、排序时也各归各，而暂时读不到数的那些条沉在底部，不冒充「一次都没命中」。
+                排序在场时拖拽把手收起：屏幕上的行序与真正生效的优先级不许同时各排各的。<strong>折叠</strong>：
+                新建规则时请求头 / 请求体 /
+                响应覆盖、Mock、延迟、阻断与重试那一组默认收起，编辑一条已经用了它们的规则时自动展开。
+                此外，批量迁移目标地址、批量与全部启用 / 停用、拖拽排序都有一次 5 秒撤销——
+                撤销只是把旧值反着再写一次，不会在「设置 → 配置恢复点」里多留一份账。
               </p>
             </article>
           </div>
@@ -3689,7 +3793,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.8.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-11-07</span>
+            <span>最后更新 2026-11-11</span>
             <span
               ><a
                 href="en.html"
