@@ -1876,6 +1876,13 @@ function runTest() {
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
+
+  /* 「加一行」这个动作在表单里有五处（请求头 / 查询参数 / Mock 条件等），它们共用这一个类，
+     所以一拍也只有一份定义——逐处各写一遍就是下一次某处忘了加的开头。
+     只有新建的那一行会重挂（key 是 uid），所以不需要额外的「哪一行是新的」判据。
+     这一处刻意不抢焦点：`insertVariableRef` 也会经 `addHeader` 补一行并往值格里写字，
+     那句「点变量名把它接进最后一行」的既有落点比一个新加的聚焦更准确。 */
+  animation: cop-rise-in var(--cop-duration-fast) var(--cop-ease-enter) backwards;
 }
 
 .override-section {

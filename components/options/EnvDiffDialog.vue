@@ -334,6 +334,12 @@ const headerRows = ref<HeaderRow[]>([]);
 
 function addHeaderRow() {
   headerRows.value.push({ uid: ++headerSeed, key: '', value: '' });
+  // 新行落下那一拍之后，焦点跟着进它的第一格：表单是编辑场所，落点本身就是动作的一部分。
+  // 走 id 而不是查询最后一个 `.el-input`——最后一格此刻可能还在过渡里，而 id 是唯一寻址。
+  const uid = headerSeed;
+  void nextTick(() => {
+    document.getElementById(`env-diff-header-key-${uid}`)?.focus();
+  });
 }
 
 const methodCarriesNoBody = computed(() => {
@@ -617,6 +623,10 @@ watch(
   gap: 8px;
   align-items: center;
   padding-left: 74px;
+
+  /* 只有新建的那一行会重挂（key 是 `row.uid`），所以这一拍天然只给新行——
+     不需要额外的类名，也就不需要第二份「哪一行是新的」的判据 */
+  animation: cop-rise-in var(--cop-duration-fast) var(--cop-ease-enter) backwards;
 }
 
 .env-diff-hint {
