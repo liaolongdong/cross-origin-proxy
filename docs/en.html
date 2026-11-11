@@ -1522,17 +1522,19 @@
                 <strong>Tags</strong>: up to 10 per rule, for filing only — they match nothing and decide nothing. Click
                 a tag chip on a row to add it to the filter, click it again to drop it, and it is the
                 <em>same</em> state as the tag dropdown above, so the two can never disagree. <strong>Sorting</strong>:
-                the name, priority and hit-count headers sort, and the third click restores the list order. The hit
-                column sorts on each rule's <strong>own channel</strong> only — the network layer is a rolling
-                five-minute window while the background counts since the last config change, so adding them would
-                describe no period at all; on screen they stay in two cells and in sorting each keeps its own, with
-                rules that have no reading sunk to the bottom instead of pretending "never hit". Drag-to-prioritise is
-                put away while a sort is in effect: the visual row order and the priority actually in force must not
-                both claim to be the order. <strong>Collapse</strong>: header / body / response overrides, Mock, delay,
-                block and retry start folded on a new rule and open themselves when you edit a rule that already uses
-                them. Batch target migration, batch and global enable/disable and drag-reordering each get a 5-second
-                undo, which just writes the old values back — it does not leave a second entry under Settings → Config
-                restore points.
+                the name and priority headers sort in three gears (ascending / descending / restore); the hit-count
+                header offers two — ascending and restore. Why one is missing: the browser multiplies the comparator
+                result by the direction, so descending would float "no reading" into the very first row, and that cell
+                is neither most-hit nor never-hit. The hit column sorts on each rule's <strong>own channel</strong> only
+                — the network layer is a rolling five-minute window while the background counts since the last config
+                change, so adding them would describe no period at all; on screen they stay in two cells and in sorting
+                each keeps its own, with rules that have no reading sunk to the bottom instead of pretending "never
+                hit". Drag-to-prioritise is put away while a sort is in effect: the visual row order and the priority
+                actually in force must not both claim to be the order. <strong>Collapse</strong>: header / body /
+                response overrides, Mock, delay, block and retry start folded on a new rule and open themselves when you
+                edit a rule that already uses them. Batch target migration, batch and global enable/disable and
+                drag-reordering each get a 5-second undo, which just writes the old values back — it does not leave a
+                second entry under Settings → Config restore points.
               </p>
             </article>
           </div>

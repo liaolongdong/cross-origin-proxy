@@ -198,6 +198,7 @@
       <template v-if="pair">
         <p
           class="env-diff-verdict"
+          :class="{ 'is-arrive': verdictArrives }"
           role="status"
         >
           {{ verdictSentence }}
@@ -500,6 +501,15 @@ function diffLineFlags(side: SideKey): boolean[] {
   return side === 'a' ? diffFlagsA.value : diffFlagsB.value;
 }
 
+/**
+ * 结论落定那一次要不要响一拍
+ *
+ * 只在**两侧都真读到正文**时响。一侧超时、一侧回话，或者两侧都没读到（`noAnswer`）那一刻，
+ * 屏幕上换成的是一句「两侧没有都拿到可读的回包」——给一句「没读到」配一次「看这里」，
+ * 是拿动效替那一侧担保它没担保的事，与本仓「读不到绝不画成结论」同一条线。
+ */
+const verdictArrives = computed(() => prettyA.value !== null && prettyB.value !== null);
+
 function sideLines(side: SideKey): string[] {
   return side === 'a' ? aLines.value : bLines.value;
 }
@@ -743,10 +753,14 @@ watch(
   color: var(--cop-text-color-primary);
   background: var(--cop-primary-bg, #ecf5ff);
   border-radius: 6px;
+}
 
-  /* 结论块整块重挂（`v-if="pair"`），所以这一拍只在「新读数落定」那一刻出现，逐行滚动与换侧都不重放。
-     光晕刻意压在块上而不是逐行：正文可以有几百万行，逐行动画就是把 `MAX_ANIMATED_ROWS` 那笔账
-     在另一个界面重新犯一次；非颜色的差异线索已由行号后那个 `≠` 承担。 */
+/* 结论块整块重挂（`v-if="pair"`），所以这一拍只在「新读数落定」那一刻出现，逐行滚动与换侧都不重放。
+   闸门在 `verdictArrives` 上：有一侧没读到正文时不响——给一句「没读到」配一次「看这里」，
+   等于拿动效替那一侧担保它没担保的事。光晕刻意压在块上而不是逐行：正文可以有几百万行，
+   逐行动画就是把 `MAX_ANIMATED_ROWS` 那笔账在另一个界面重新犯一次；非颜色的差异线索
+   已由行号后那个 `≠` 承担。 */
+.env-diff-verdict.is-arrive {
   animation: cop-rise-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
