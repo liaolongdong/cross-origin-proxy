@@ -81,6 +81,7 @@
           class="env-diff-header-row"
         >
           <el-input
+            :id="`env-diff-header-key-${row.uid}`"
             v-model="row.key"
             :placeholder="t('headerNamePlaceholder')"
             autocomplete="off"
@@ -120,6 +121,74 @@
         <p class="env-diff-hint">
           {{ t('envDiffVarHint') }}
         </p>
+      </div>
+
+      <div class="env-diff-pick">
+        <button
+          type="button"
+          class="env-diff-pick-toggle"
+          :aria-expanded="pickOpen ? 'true' : 'false'"
+          @click="togglePick"
+        >
+          {{ t('envDiffPickToggle') }}
+        </button>
+        <div
+          v-show="pickOpen"
+          class="env-diff-pick-body"
+        >
+          <p
+            v-if="pickLoading && !pickEverRead"
+            class="env-diff-pick-state"
+            role="status"
+          >
+            {{ t('envDiffPickLoading') }}
+          </p>
+          <template v-else-if="pickReadFailed">
+            <p
+              class="env-diff-pick-state"
+              role="status"
+            >
+              {{ t('envDiffPickReadFailed') }}
+            </p>
+            <el-button
+              size="small"
+              @click="loadPicks"
+              >{{ t('refresh') }}</el-button
+            >
+          </template>
+          <p
+            v-else-if="pickRows.length === 0"
+            class="env-diff-pick-state"
+          >
+            {{ t('envDiffPickEmpty') }}
+          </p>
+          <ul
+            v-else
+            class="env-diff-pick-list"
+          >
+            <li
+              v-for="row in pickRows"
+              :key="row.id"
+              class="env-diff-pick-item"
+            >
+              <button
+                type="button"
+                class="env-diff-pick-btn"
+                :disabled="!row.prefill.ok"
+                :title="rowBlockedReason(row) || row.url"
+                @click="applyPick(row)"
+              >
+                {{ pickRowLabel(row) }}
+              </button>
+              <span
+                v-if="row.blocked"
+                class="env-diff-pick-blocked"
+                >{{ rowBlockedReason(row) }}</span
+              >
+            </li>
+          </ul>
+          <p class="env-diff-pick-note">{{ t('envDiffPickNote') }}</p>
+        </div>
       </div>
 
       <p class="env-diff-boundary">
@@ -164,7 +233,17 @@
                     class="env-diff-line-no"
                     aria-hidden="true"
                     >{{ index + 1 }}</span
-                  ><span class="env-diff-line-text">{{ line }}</span>
+                  ><span
+                    v-if="diffLineFlags(side)[index]"
+                    class="env-diff-line-mark"
+                    aria-hidden="true"
+                    >≠</span
+                  ><span class="env-diff-line-text">{{ line }}</span
+                  ><span
+                    v-if="diffLineFlags(side)[index]"
+                    class="env-diff-visually-hidden"
+                    >{{ t('envDiffLineDiff') }}</span
+                  >
                 </p>
               </template>
               <p
@@ -209,12 +288,14 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { Delete, Plus } from '@element-plus/icons-vue';
 import type { TagProps } from 'element-plus';
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from '@/composables/useI18n';
 import { useEnvDiff, type EnvDiffSideInput } from '@/composables/useEnvDiff';
+import { useEnvDiffPick } from '@/composables/useEnvDiffPick';
+import type { EnvDiffPickRow } from '@/utils/envDiffPrefill';
 import type { EnvDiffResultPayload } from '@/utils/types';
 import { HTTP_METHODS } from '@/utils/types';
-import { getStatusColor } from '@/utils/formatters';
+import { formatClock, getStatusColor } from '@/utils/formatters';
 import { needsReplayConfirm } from '@/utils/requestReplay';
 import { findFirstBodyDiffLine, prettifyEnvDiffBody } from '@/utils/envDiff';
 
@@ -270,6 +351,69 @@ interface PairReadings {
 const pair = ref<PairReadings | null>(null);
 /** 取消的那一轮：手里没有新读数时也要说得出「这一轮没下文了」，而不是沉默回表单 */
 const roundCancelled = ref(false);
+
+/**
+ * 「从最近请求挑一笔」：存在的理由只有一句——这一屏最费手的不是读回包，是抄那四项输入。
+ *
+ * 三条刻意的边界：
+ * ① 只在第一次展开时才去读日志（低频入口不该每次打开弹窗都读一遍 500 条）；
+ * ② 预填只动 A 侧与方法 / 头 / 正文，**B 侧留给用户填**——那一个「另一个环境」是这条功能
+ *    唯一的问题本身，扩展不猜；
+ * ③ 不走地址栏深链：日志里的请求头是原值，进 hash 就是进浏览器历史。
+ */
+const {
+  rows: pickRows,
+  loading: pickLoading,
+  readFailed: pickReadFailed,
+  everRead: pickEverRead,
+  load: loadPicks,
+} = useEnvDiffPick();
+const pickOpen = ref(false);
+
+function togglePick() {
+  pickOpen.value = !pickOpen.value;
+  if (pickOpen.value && !pickEverRead.value && !pickLoading.value) void loadPicks();
+}
+
+/**
+ * 四种拒绝各说一句不同的话：它们的修法相反，合成一句「不能用」等于把用户推回猜。
+ *
+ * 分支一律写字面量 key——拼出来的键 `tests/i18n.test.ts` 扫不到，打错一个字母就是屏幕上
+ * 一串裸键名，而那一格恰恰只在数据出问题时才出现，没人会去核对它。
+ */
+function rowBlockedReason(row: EnvDiffPickRow): string {
+  switch (row.blocked) {
+    case 'truncated':
+      return t('envDiffPickTruncated');
+    case 'unsupportedProtocol':
+      return t('envDiffPickBadProtocol');
+    case 'noMethod':
+      return t('envDiffPickBadMethod');
+    case 'badUrl':
+      return t('envDiffPickBadShape');
+    default:
+      return '';
+  }
+}
+
+/** 行上的读数：方法 + 地址 + 时刻。地址是原始那一条（草稿取的就是它），不是重写后的 */
+function pickRowLabel(row: EnvDiffPickRow): string {
+  const time = row.timestamp ? formatClock(row.timestamp) : '';
+  return [row.method || '—', row.url || '—', time].filter(Boolean).join(' · ');
+}
+
+function applyPick(row: EnvDiffPickRow) {
+  if (!row.prefill.ok) return;
+  const { url, method: pickedMethod, headers, body } = row.prefill.draft;
+  urlA.value = url;
+  method.value = pickedMethod;
+  headerRows.value = headers.map(item => ({ uid: ++headerSeed, ...item }));
+  bodyText.value = body;
+  // 手里那一屏读数说的是上一次的两格，换了输入就不该继续挂在屏幕上
+  pair.value = null;
+  roundCancelled.value = false;
+  ElMessage.success(t('envDiffPickApplied', [pickedMethod]));
+}
 
 function sideInput(url: string): EnvDiffSideInput {
   const headers: Record<string, string> = {};
@@ -482,6 +626,84 @@ watch(
   color: var(--cop-text-color-secondary);
 }
 
+/* 「从最近请求挑一笔」：捷径不是这一屏的主角，所以默认收起、文字入口、不加边框卡片重量。
+   被拒的那条仍出现在列表里，只是按钮不画——看不见的那条拒绝等于没说过。 */
+.env-diff-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.env-diff-pick-toggle {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 13px;
+  color: var(--cop-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.env-diff-pick-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: 8px;
+}
+
+.env-diff-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.env-diff-pick-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.env-diff-pick-btn {
+  max-width: 100%;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--cop-text-color-primary);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--cop-bg-color);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: 6px;
+}
+
+.env-diff-pick-btn:disabled {
+  color: var(--cop-text-color-secondary);
+  cursor: not-allowed;
+}
+
+.env-diff-pick-btn:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 1px;
+}
+
+.env-diff-pick-blocked,
+.env-diff-pick-state,
+.env-diff-pick-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cop-text-color-secondary);
+}
+
 /* 边界那句话在表单底部：它决定的是「这两笔是什么身份」，读完再点发送才来得及 */
 .env-diff-boundary {
   padding: 8px 10px;
@@ -501,6 +723,11 @@ watch(
   color: var(--cop-text-color-primary);
   background: var(--cop-primary-bg, #ecf5ff);
   border-radius: 6px;
+
+  /* 结论块整块重挂（`v-if="pair"`），所以这一拍只在「新读数落定」那一刻出现，逐行滚动与换侧都不重放。
+     光晕刻意压在块上而不是逐行：正文可以有几百万行，逐行动画就是把 `MAX_ANIMATED_ROWS` 那笔账
+     在另一个界面重新犯一次；非颜色的差异线索已由行号后那个 `≠` 承担。 */
+  animation: cop-rise-in var(--cop-duration-slow) var(--cop-ease-enter);
 }
 
 .env-diff-cols {
@@ -552,6 +779,26 @@ watch(
 .env-diff-line.is-diff {
   color: var(--el-color-danger, #f56c6c);
   background: rgb(245 108 108 / 8%);
+}
+
+/* 差异不只由颜色说：字色与底色是同一条通道上的两个读数，色觉与截图场景都读不出来。
+   行号后那个 `≠` 是真文本节点（不是 CSS `content`，屏读得到），另配一句就近的屏读句子。 */
+.env-diff-line-mark {
+  flex-shrink: 0;
+  min-width: 1.2em;
+  font-weight: 700;
+}
+
+.env-diff-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip-path: inset(50%);
 }
 
 .env-diff-line-no {
