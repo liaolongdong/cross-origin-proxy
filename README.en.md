@@ -19,7 +19,7 @@
 
 <img src="./docs/assets/img/rules-overview.jpg" alt="Cross-Origin Proxy options page: seven demo rules covering a FAT to UAT wildcard rewrite, an injected credential variable, a mocked API, an added delay, a blocked tracker and a WebSocket rewrite, plus the global switch and search filters" width="100%" />
 
-**▶ [Watch the 50-second capture](https://github.com/liaolongdong/cross-origin-proxy/releases/download/v1.8.0/promo-en-1280.mp4)**: rule table → request log → URL match test → rule form → full-page theme switch → the proxy switch (the Chinese take is in [README.md](./README.md))
+**▶ [Watch the 50-second capture](https://github.com/liaolongdong/cross-origin-proxy/releases/download/media/promo-en-1280.mp4)**: rule table → request log → URL match test → rule form → full-page theme switch → the proxy switch (the Chinese take is in [README.md](./README.md))
 
 **[🛒 Add to Chrome](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg) · [📥 Install options](#-install) · [⚡ First rule in one minute](#first-rule-in-one-minute) · [🌐 Product site](https://liaolongdong.github.io/cross-origin-proxy/en.html) · [💬 Community](#-community--feedback)**
 

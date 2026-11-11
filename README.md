@@ -19,7 +19,7 @@
 
 <img src="./docs/assets/img/rules-overview.jpg" alt="跨域代理助手配置页规则总览：七条演示规则覆盖 FAT → UAT 通配符重写、注入凭据变量、Mock API、延迟、阻断埋点与 WebSocket 转发，顶部代理总开关与搜索筛选" width="100%" />
 
-**▶ [看 50 秒实拍](https://github.com/liaolongdong/cross-origin-proxy/releases/download/v1.8.0/promo-zh-1280.mp4)**：规则表 → 请求日志 → URL 匹配预演 → 规则表单 → 整页换肤 → 总开关（英文那一条在 [README.en.md](./README.en.md)）
+**▶ [看 50 秒实拍](https://github.com/liaolongdong/cross-origin-proxy/releases/download/media/promo-zh-1280.mp4)**：规则表 → 请求日志 → URL 匹配预演 → 规则表单 → 整页换肤 → 总开关（英文那一条在 [README.en.md](./README.en.md)）
 
 **[🛒 从 Chrome 应用商店添加](https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg) · [📥 三种安装方式](#-安装) · [⚡ 一分钟配出第一条规则](#一分钟配出第一条规则) · [🌐 产品站](https://liaolongdong.github.io/cross-origin-proxy/) · [💬 交流群](#-交流与反馈)**
 

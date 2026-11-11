@@ -2557,6 +2557,36 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       }
     });
 
+    /**
+     * 宣传片链接必须住在**固定 tag** 上，不许回到「按版本取资产」。
+     *
+     * 2026-11-05 加的那两行指向 `releases/download/v1.8.0/…`，而「把片子传到那一次 tag」
+     * 这一步从来没执行过，于是首屏那枚链接公开 404。`releases/latest/download/…` 不是解药：
+     * 实测它**只解析 tag、不校验资产在不在**，照样 302 到一个 404，所以换别名只是把
+     * 「记得改 README」换成「记得每次发版都传片子」，而 CI 出不了这条片子。
+     *
+     * 这里钉的是**形状**（固定 tag + 固定文件名 + 中英各一条）：资产在不在只能由上传那一步
+     * 保证，测试不出网。台账里那句 `--latest=false` 一起钉，因为它是这条路的承重动作——
+     * latest 按 `created_at` 排序，固定 tag 那支建得最晚，不显式排除就抢走版本发布的位置。
+     */
+    it('README 的宣传片链接指向固定 tag，中英对称且不带版本号', () => {
+      const PROMO_TAG = 'media';
+      const pairs = [
+        ['README.md', 'promo-zh-1280.mp4'],
+        ['README.en.md', 'promo-en-1280.mp4'],
+      ] as const;
+      for (const [file, asset] of pairs) {
+        const urls = [...read(file).matchAll(/https:\/\/github\.com\/[^\s)]*\/releases\/download\/[^\s)]*\.mp4/g)].map(
+          m => m[0],
+        );
+        expect(urls.length, `${file} 里一条宣传片链接都没读到，这条守卫等于空转`).toBe(1);
+        expect(urls[0], `${file} 的宣传片链接必须住在固定 tag ${PROMO_TAG} 上`).toBe(
+          `${REPO_BASE}/releases/download/${PROMO_TAG}/${asset}`,
+        );
+      }
+      expect(read(STORE_DOC), '商店台账必须记下建 Release 时排除 latest 那一步').toContain('--latest=false');
+    });
+
     it('商店文档里的包名模板与 wxt zip 的产物命名一致', () => {
       // wxt 默认产物：`<package-name>-<version>-<browser>.zip`
       expect(read(STORE_DOC)).toContain(`${pkg.name}-<version>-chrome.zip`);
