@@ -46,7 +46,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeLogStats, groupHitStatsByRule } from '@/utils/ruleStats';
+import { computeLogStats, groupHitStatsByRule, hitSortKeyOf } from '@/utils/ruleStats';
 import type { RequestLogEntry } from '@/utils/types';
 
 function makeLog(overrides: Partial<RequestLogEntry> = {}): RequestLogEntry {
@@ -122,5 +122,44 @@ describe('groupHitStatsByRule — 同规则多条读数是累加而不是覆盖'
     );
     expect(stats.size).toBe(1);
     expect(stats.get('r1')).toEqual({ net: 3, ext: 0 });
+  });
+});
+
+/**
+ * 「按命中数排序」的键：只取自己那一格，读不到不参与比较
+ *
+ * `groupHitStatsByRule` 交出的 `net` / `ext` 都是**非空数字**——「0 次」与「不知道」的分界不在数据层，
+ * 而在视图侧那一句 `readable`。所以这一格最容易犯的错不是算错，而是把两者并成一档：
+ * 网络层读不到时把 0 交出去，「这一列暂时说不出话」就冒充了「这些规则一次都没命中」，
+ * 用户按降序排下去，最没信息量的那几条恰好排在最前面。
+ */
+describe('hitSortKeyOf — 排序键只属于自己那条通道', () => {
+  it('网络层规则且采样读得到：取 net，与 ext 有没有数无关', () => {
+    expect(hitSortKeyOf({ onNet: true, readable: true, stat: { net: 7, ext: 99 } })).toBe(7);
+  });
+
+  it('网络层规则但采样读不到：null，不是 0', () => {
+    expect(hitSortKeyOf({ onNet: true, readable: false, stat: { net: 0, ext: 3 } })).toBeNull();
+    expect(hitSortKeyOf({ onNet: true, readable: false, stat: { net: 12, ext: 0 } })).toBeNull();
+  });
+
+  it('后台通道规则取 ext，且不受网络层那份采样状态影响', () => {
+    expect(hitSortKeyOf({ onNet: false, readable: false, stat: { net: 50, ext: 4 } })).toBe(4);
+    expect(hitSortKeyOf({ onNet: false, readable: true, stat: { net: 50, ext: 0 } })).toBe(0);
+  });
+
+  it('统计里根本没有这条规则：null（界面上那一格折叠成「-」，说不出话就不参与比较）', () => {
+    expect(hitSortKeyOf({ onNet: false, readable: true, stat: undefined })).toBeNull();
+    expect(hitSortKeyOf({ onNet: true, readable: true, stat: undefined })).toBeNull();
+  });
+
+  it('两格都有值时也只取自己那一格：任何输入都排不出「两格之和」那样的数', () => {
+    const sums = [
+      hitSortKeyOf({ onNet: true, readable: true, stat: { net: 1, ext: 99 } }),
+      hitSortKeyOf({ onNet: false, readable: true, stat: { net: 1, ext: 99 } }),
+      hitSortKeyOf({ onNet: true, readable: false, stat: { net: 1, ext: 99 } }),
+    ];
+    expect(sums).toEqual([1, 99, null]);
+    expect(sums).not.toContain(100);
   });
 });

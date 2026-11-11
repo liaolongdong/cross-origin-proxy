@@ -56,3 +56,29 @@ export function groupHitStatsByRule(
   for (const stat of swStats) touch(stat.ruleId).ext += stat.hitCount;
   return map;
 }
+
+/** {@link hitSortKeyOf} 的入参：三条都已在视图侧算好，这里不重算、只回答「用哪个数参与比较」 */
+export interface HitSortKeyInput {
+  /** 这条规则走不走网络层（`isSimpleRule` 的结果；刻意不经总开关，与 `hitCells` 同一口径） */
+  onNet: boolean;
+  /** 网络层那份采样这一轮读不读得到（`isDnrCountReadable` 的结果） */
+  readable: boolean;
+  /** 这条规则的分通道读数；统计里根本没有它时是 `undefined` */
+  stat: RuleHitStats | undefined;
+}
+
+/**
+ * 这一条规则拿哪个数参与「按命中数排序」
+ *
+ * 只取**自己那一格**，读不到就是 `null`。两格绝不相加：网络层是近 5 分钟滚动窗口，后台是自上次
+ * 配置变更以来的累计，相加出来的数不属于任何一段时间——那正是 `groupHitStatsByRule` 的注释
+ * 早就写死的边界，排序键不是新增的第一处例外，也不许成为第二处。
+ *
+ * `null` 说的是「这一行说不出数」，不是一个可以和 7 比的数：把它当 0 参与比较，就等于在同一列里
+ * 让「不知道」挤进「一次都没命中」那一堆，而那两格今天费力分开的恰恰就是这两件事。
+ */
+export function hitSortKeyOf({ onNet, readable, stat }: HitSortKeyInput): number | null {
+  if (!stat) return null;
+  if (onNet) return readable ? stat.net : null;
+  return stat.ext;
+}

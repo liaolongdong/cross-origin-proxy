@@ -1388,3 +1388,46 @@ describe('[Batch 5] 环境对比的输入通路（源码契约）', () => {
     expect(envDiffSrc).toContain('aria-hidden="true"');
   });
 });
+
+/**
+ * 命中数排序（源码契约）
+ *
+ * EP 2.14.3 的 `sortable` 不要求列带 `prop`（`style.helper.mjs:46` 只按 `column.sortable` 挂
+ * `is-sortable`，`orderBy` 里 `sortMethod` 排在取值之前），所以这一列刻意**不带 `prop`**——
+ * 行对象上根本没有 `hitCount` 这个字段，编一个名字就是给下一次「按 prop 取值」留门。
+ */
+describe('[Batch 5] 命中数排序的键只有一份来源（源码契约）', () => {
+  const ruleTableSrc = fs.readFileSync('components/options/RuleTable.vue', 'utf-8');
+
+  it('sortable 与 byHitCount 成对出现，且该列不冒充一个行上并不存在的字段', () => {
+    const column = ruleTableSrc.slice(
+      ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"'),
+      ruleTableSrc.indexOf('<template #default="{ row }">', ruleTableSrc.indexOf(':label="t(\'hitCountLabel\')"')),
+    );
+    expect(column).toContain('sortable');
+    expect(column, '只有 sortable 没有 sort-method：EP 会去按 prop 取值，而行上没有那个字段').toContain(
+      ':sort-method="byHitCount"',
+    );
+    expect(column).not.toContain('prop=');
+  });
+
+  it('排序键只问 hitSortKeyOf 的那一份产物，组件里不重算通道、不相加', () => {
+    expect(ruleTableSrc).toContain('hitSortKeyOf({ onNet, readable, stat })');
+    const comparator = ruleTableSrc.slice(
+      ruleTableSrc.indexOf('function byHitCount'),
+      ruleTableSrc.indexOf('function ', ruleTableSrc.indexOf('function byHitCount') + 1),
+    );
+    expect(comparator).toContain('sortKey');
+    expect(comparator, '比较器自己再去问一遍通道，就是第二份判据').not.toContain('isSimpleRule');
+    expect(ruleTableSrc).not.toMatch(/stat\.net\s*\+\s*stat\.ext/);
+  });
+
+  it('读不到（null）在升降序里都沉底：两条分支各回一个符号，而不是一起当 0', () => {
+    const comparator = ruleTableSrc.slice(
+      ruleTableSrc.indexOf('function byHitCount'),
+      ruleTableSrc.indexOf('}\n', ruleTableSrc.indexOf('function byHitCount')),
+    );
+    expect(comparator).toContain('return 1');
+    expect(comparator).toContain('return -1');
+  });
+});

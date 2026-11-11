@@ -312,6 +312,9 @@
           :label="t('hitCountLabel')"
           width="96"
           align="center"
+          sortable
+          :sort-orders="SORT_ORDERS"
+          :sort-method="byHitCount"
         >
           <template #default="{ row }">
             <span
@@ -436,7 +439,7 @@ import { EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
 import type { ProxyRule } from '@/utils/types';
 import type { TableInstance } from 'element-plus';
 import type { DnrSkipReason } from '@/utils/dnrSupport';
-import type { RuleHitStats } from '@/utils/ruleStats';
+import { hitSortKeyOf, type RuleHitStats } from '@/utils/ruleStats';
 import { isDnrCountReadable, type DnrSampleState } from '@/utils/dnrSample';
 import { DEFAULT_RULE_PRIORITY, ROW_STAGGER_MAX_DELAY_MS } from '@/utils/constants';
 import { useI18n } from '@/composables/useI18n';
@@ -486,6 +489,24 @@ function byRulePriority(a: unknown, b: unknown): number {
   const first = (a as Partial<ProxyRule>)?.priority ?? DEFAULT_RULE_PRIORITY;
   const second = (b as Partial<ProxyRule>)?.priority ?? DEFAULT_RULE_PRIORITY;
   return first - second;
+}
+
+/**
+ * 按命中数排序：只比两个真读数，说不出数的那几条沉底。
+ *
+ * 键的来源只有 `hitCells` 那一份（内部再问 `hitSortKeyOf`）——那一列在屏幕上画什么就由它决定，
+ * 排序若去问第二份判据，就会出现「画的是 `—` 而按 0 参了比」这种自己跟自己打架。
+ * `null` 在升降序里都沉底：它说的是「这一行说不出数」，不是一个可以和 7 比的数；
+ * 当 0 用就等于让「不知道」挤进「一次都没命中」那一堆，而那正是这一列费力分开的两件事。
+ * 两个真数相等时回落名称，避免每点一次表头就换一批顺序。
+ */
+function byHitCount(a: unknown, b: unknown): number {
+  const first = hitCells.value[(a as Partial<ProxyRule>)?.id ?? '']?.sortKey ?? null;
+  const second = hitCells.value[(b as Partial<ProxyRule>)?.id ?? '']?.sortKey ?? null;
+  if (first === null && second === null) return byRuleName(a, b);
+  if (first === null) return 1;
+  if (second === null) return -1;
+  return first === second ? byRuleName(a, b) : first - second;
 }
 
 /**
@@ -601,7 +622,15 @@ const hitCells = computed(() => {
 
   const cells: Record<
     string,
-    { net: string; ext: string; netTip: string; extTip: string; netUnknown: boolean; extUnknown: boolean }
+    {
+      net: string;
+      ext: string;
+      netTip: string;
+      extTip: string;
+      netUnknown: boolean;
+      extUnknown: boolean;
+      sortKey: number | null;
+    }
   > = {};
   for (const [ruleId, stat] of props.hitStats) {
     // 不在当前列表里的规则（已删或被筛掉）不会渲染，判不了通道就按扩展通道处理
@@ -621,6 +650,9 @@ const hitCells = computed(() => {
       extTip: onNet ? t('hitStatsExtNotApplicable') : t('hitStatsExtTip'),
       netUnknown,
       extUnknown,
+      // 排序键与屏幕上那一格说同一件事：被上面三条 `continue` 摘掉的规则不进 `cells`，
+      // 在比较里也就 `null`（沉底），不会有人把它们当成 0 排进「一次都没命中」那一堆
+      sortKey: hitSortKeyOf({ onNet, readable, stat }),
     };
   }
   return cells;
