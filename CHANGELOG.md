@@ -139,6 +139,35 @@ Collect changes that are not in a released version yet here, in Chinese and Engl
 
   **The filter's hint now names both keys it actually honors.** It used to advertise only `/` — the "press Esc to clear and get all 21 back" path was knowledge you had to already have. All four filter pages now read "press `/` to jump to it, `Esc` to clear" (zh: 「按 `/` 直达、`Esc` 清空」), reusing the existing key-cap style. A new guard requires every key cap in that hint to be a key the script really compares, and pins the four pages to exactly these two. **The first draft of that guard was toothless**: it asked whether _anywhere in the script_ something compared `Escape`, and the hamburger menu has its own Esc listener — deleting the filter's comparison stayed green. It now locates `faqFilter.addEventListener('keydown'` first and only asks inside that stretch; the mutation reddens, together with the pre-existing "filter works by hiding" case, the two pointing at each other. Live in Chrome for Testing 155 with real `Input.dispatchKeyEvent`, all four pages: before `/` the active element is BODY, after it the filter input with an empty value; inserting `CORS` makes the status line read "3 / 21 问匹配" (comparison pages: "1 / 5"); after Esc the value is empty again and 21 questions (5 there) are visible again. At 390 and 1280 across four pages: zero clipped key caps, zero page-level horizontal overflow, measured cap widths 23.8 and 39.5 px. The existing guard that reconciles "these 21 questions" in the label with the page's actual `<details>` count was untouched — that number didn't move.
 
+## [1.9.0](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.8.1...v1.9.0) (2026-11-11)
+
+
+### Added
+
+* **diff:** 环境响应对比——同一份输入原样发给两个环境，并排看回包 ([6067e40](https://github.com/liaolongdong/cross-origin-proxy/commit/6067e400e1f677c825db7f2a1d7535f01c00a434))
+* **docs:** 产品站首屏动效、截图灯箱、报错直达链接与排查页内链闭环 ([91df504](https://github.com/liaolongdong/cross-origin-proxy/commit/91df50487270e825a51b18cb1738e3b932078716))
+* **env-diff:** 最近请求读数按四档收口，低频入口不白读整把日志 ([c1eabe1](https://github.com/liaolongdong/cross-origin-proxy/commit/c1eabe16a070ee510624bf1860c8f3f1b816bb94))
+* **env-diff:** 对比可从最近请求挑一笔，差异行补非颜色线索与落定一拍 ([736104c](https://github.com/liaolongdong/cross-origin-proxy/commit/736104ca379a613af01c705e4ac34e9deb9e295d))
+* **env-diff:** 对比输入的判据先落成纯函数——取原始地址、截断一律拒、只取请求侧 ([0c232db](https://github.com/liaolongdong/cross-origin-proxy/commit/0c232db48c2f8ddb8b48162cb7cd70af205cec32))
+* **options:** 命中数可按自己那格的数排序，读不到沉底而不是冒充 0 ([d38361d](https://github.com/liaolongdong/cross-origin-proxy/commit/d38361d81c6625fc424f85edf6b619b3598d571e))
+* **options:** 迁移/批量启停/全部启停/拖拽排序各给 5 秒撤销，只反写不另立恢复点 ([693ac18](https://github.com/liaolongdong/cross-origin-proxy/commit/693ac18deca1b017d9d5872b6510eb1baa719baa))
+* **ui:** 快照列表按既有阶梯落位，新增覆盖行给一拍与焦点落点 ([a01b85d](https://github.com/liaolongdong/cross-origin-proxy/commit/a01b85de2d2f299dae7185ccb62e4a96706d9a82))
+* **ui:** 标签 chip 点击筛选、表头排序、弹窗 Esc 与表单高级能力分组 ([a5f12de](https://github.com/liaolongdong/cross-origin-proxy/commit/a5f12dec2e866102c3239491d05465645235c476))
+* 产品站动效与灯箱 + 扩展 UI 快赢 + 环境响应对比（四提交） ([ccb6000](https://github.com/liaolongdong/cross-origin-proxy/commit/ccb6000190199fa4bc90fef1fdd964be40f2e510))
+* 对比挑单 / 批量撤销 / 命中数排序，落地页补口与宣传片固定链接 ([9dd7703](https://github.com/liaolongdong/cross-origin-proxy/commit/9dd770311afc17ed252da9b285b179d6cd3ce4a5))
+
+
+### Fixed
+
+* **env-diff:** 在途那一轮不被挑单整批改掉，二次打开重读最近请求 ([765b84e](https://github.com/liaolongdong/cross-origin-proxy/commit/765b84ee73c4ba8840557f6e93b74f1b600666bd))
+* **options:** 命中数排序只给升序与还原两档——EP 把比较结果乘方向，降序会把读不到的置顶 ([a6608eb](https://github.com/liaolongdong/cross-origin-proxy/commit/a6608eb47a6ff03e80610f49635ccc4622d49533))
+* **palette:** 命令面板搜索框补 border-box，消掉底部横向滚动条 ([9c2001f](https://github.com/liaolongdong/cross-origin-proxy/commit/9c2001fb8a4498e1c124647747e2522395489c5a))
+* **palette:** 命令面板搜索框补 border-box，消掉底部横向滚动条 ([2773376](https://github.com/liaolongdong/cross-origin-proxy/commit/27733768ad591b01247495809543ca91f220e14e))
+* **palette:** 命令面板键盘导航改挂 document，消掉失焦后 ↑↓/Enter 失灵 ([670a109](https://github.com/liaolongdong/cross-origin-proxy/commit/670a10965322182d987110b13e118406350f9889))
+* **palette:** 命令面板键盘导航改挂 document，消掉搜索框失焦后 ↑↓/Enter 失灵 ([58c363b](https://github.com/liaolongdong/cross-origin-proxy/commit/58c363bc367611cdef554f95401121c144c391bc))
+* **review:** 对比落定一拍加读数闸门、快照阶梯带上行数预算、三处注释与文档改口 ([d7a6d43](https://github.com/liaolongdong/cross-origin-proxy/commit/d7a6d430e93c0e0476e6f2097bb2a615ae8c1abb))
+* **review:** 评审轮三处收口——EnvDiff 关闭回传、排序在场收起把手、灯箱光标与措辞 ([ea999e8](https://github.com/liaolongdong/cross-origin-proxy/commit/ea999e86ceb53952a8304940585d7f2b0d629c7c))
+
 ## [1.8.1](https://github.com/liaolongdong/cross-origin-proxy/compare/v1.8.0...v1.8.1) (2026-11-03)
 
 ### Fixed
