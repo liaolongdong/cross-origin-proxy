@@ -170,19 +170,8 @@ body .el-button {
   overflow-y: auto;
 }
 
-/* 弹窗滚动条：4px 宽度浅灰色 */
-.el-dialog__body::-webkit-scrollbar {
-  width: 4px;
-}
-
-.el-dialog__body::-webkit-scrollbar-thumb {
-  background: var(--cop-scrollbar-thumb);
-  border-radius: 2px;
-}
-
-.el-dialog__body::-webkit-scrollbar-thumb:hover {
-  background: var(--cop-scrollbar-thumb-hover);
-}
+/* 弹窗与抽屉正文的滚动条外观住在 `assets/theme/tokens.css` 的「滚动条：整站一套」那一节：
+   弹窗、抽屉、规则表、日志表与命令面板共用同一组令牌，留在这里就只覆盖了其中两处。 */
 
 .dialog-footer {
   display: flex;
@@ -200,22 +189,9 @@ body .el-button {
   overflow-y: visible;
 }
 
-/* 抽屉 body 滚动：内容超长时出现滚动条 + 4px 浅灰滚动条 */
+/* 抽屉 body 滚动：内容超长时出现滚动条（外观同上，住在令牌层） */
 .el-drawer__body {
   overflow-y: auto;
-}
-
-.el-drawer__body::-webkit-scrollbar {
-  width: 4px;
-}
-
-.el-drawer__body::-webkit-scrollbar-thumb {
-  background: var(--cop-scrollbar-thumb);
-  border-radius: 2px;
-}
-
-.el-drawer__body::-webkit-scrollbar-thumb:hover {
-  background: var(--cop-scrollbar-thumb-hover);
 }
 
 /* ==================== 弹窗与抽屉的进场动效 ==================== */

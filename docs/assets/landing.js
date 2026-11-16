@@ -31,6 +31,8 @@
  *     一句都筛不到那一刻给两条下一步——页内/仓库的出口，加上从本页分类标题现取的几枚直达小片
  *     （没有 JS 就没有筛选，也就没有这一刻与高亮：都默认不画，只由脚本按「命中数为 0」显影）
  *     （无 JS 时整块不出现，问答照旧全部可读、可点、可滚）。
+ *     筛选同时是一个可分享的地址：`?q=` 进来即填回框里并筛好，打字后防抖写回地址栏，
+ *     地址栏里的 q 永远等于框里那一串（清空、分类直达、带锚点进来都走同一个写地址的出口）。
  * 14. 窄屏下对比表的横滑提示：与第 3 项共用同一份「截断在哪一侧」的判据，
  *     只给右缘渐隐——左那一列是钉住的，淡掉它反而读不出比的是哪一家。
  * 15. 分享这一页：系统分享优先，失败回落到复制当前地址；结果写进 `role="status"` 并显形成轻提示。
@@ -40,6 +42,8 @@
  * 18. 截图 lightbox：点廊里的图用原生 <dialog> 放大，左右方向键 / 按钮切换，Esc 与点遮罩关闭、
  *     焦点交还触发的那张图；打开期间轮播让位。dialog 由脚本建、文案从 gallery 的 data-* 现读，
  *     无 JS 时整层不存在，截图廊退回轮播 / 横滑。
+ * 19. 404 页那份失败请求信封里的地址：把访客真正敲的那一串填进去（`textContent`，不用
+ *     innerHTML——路径来自地址栏，属不可信输入），过长时截短留痕；无 JS 时留在 `/…`。
  *
  * 零依赖、零外链；`prefers-reduced-motion` 下不自动轮播、不平滑滚动、不错峰淡入，
  * 巡航与追光同样不启动。而且这个偏好是**实时**读的：系统开关在会话中途被翻动，
@@ -1009,8 +1013,11 @@
         const url = `${location.href.split('#')[0]}#${item.id}`;
         item.open = true;
         /* 地址栏跟着走，读者看得见自己刚复制出去的是什么。用 replaceState 而不是
-           直接改 `location.hash`：后者会触发 hashchange，那一轮又要滚一次。 */
-        if (location.hash !== `#${item.id}`) history.replaceState(null, '', `#${item.id}`);
+           直接改 `location.hash`：后者会触发 hashchange，那一轮又要滚一次。
+           `location.search` 必须一起带上：`?q=` 落地之后只写 hash 就把那个参数抹了，
+           于是地址栏与刚复制到剪贴板的那一串（下面那句 `url` 用的是整个 href）不是同一个地址。 */
+        if (location.hash !== `#${item.id}`)
+          history.replaceState(null, '', `${location.pathname}${location.search}#${item.id}`);
         const copied = await copyText(url);
 
         if (!status) {
@@ -1225,6 +1232,42 @@
     };
 
     faqFilter.addEventListener('input', apply);
+
+    /* `?q=` —— 把这一格的筛选做成一个可分享、可被引用的地址。
+       此前它只活在读者的手指下：从搜索结果、AI 回答或同事的消息里点进来，最窄也只能落到
+       整节 21 问，而「只讲 CORS 的那三问」这种入口根本给不出去。四张有筛选框的页共用这一份。
+
+       一条不变量：**地址栏里的 q 永远等于框里那一串**。所以写地址只有 `writeQuery` 一个出口，
+       凡是清空框的地方（Esc、分类直达压过筛选、带锚点进来）都顺手叫它一次——否则读者复制
+       出去的地址与他屏幕上看到的不是同一份筛选，那比没有这个参数更糟。
+       `replaceState` 而不是 `pushState`：打二十个字不该往回退栈里塞二十条记录。
+       防抖也是承重的：Chrome 对 pushState/replaceState 有约 100 次 / 30 秒的节流，
+       逐键直写会在快打字时抛 SecurityError，把后面几段脚本一起带走。 */
+    const MAX_FAQ_QUERY = 200;
+    const FAQ_URL_SYNC_DELAY = 400;
+    let syncTimer = null;
+    const cancelSync = () => {
+      if (syncTimer === null) return;
+      clearTimeout(syncTimer);
+      syncTimer = null;
+    };
+    /** 把框里的词写回地址栏（空词就删掉这个参数）；只动 q，别的参数与 hash 原样留着。 */
+    const writeQuery = value => {
+      cancelSync();
+      const params = new URLSearchParams(location.search);
+      if (value) params.set('q', value);
+      else params.delete('q');
+      const search = params.toString();
+      const next = `${location.pathname}${search ? `?${search}` : ''}${location.hash}`;
+      if (next !== `${location.pathname}${location.search}${location.hash}`) history.replaceState(null, '', next);
+    };
+    faqFilter.addEventListener('input', () => {
+      cancelSync();
+      syncTimer = setTimeout(() => {
+        syncTimer = null;
+        writeQuery(faqFilter.value.trim());
+      }, FAQ_URL_SYNC_DELAY);
+    });
     /* Esc 清空并交还焦点归位（浏览器对 `type=search` 的默认行为就是 Esc 清空，
        但只有它有值时我们才接管，免得把「关掉某个还没做的东西」也一起吞掉）。 */
     faqFilter.addEventListener('keydown', event => {
@@ -1232,6 +1275,7 @@
       event.preventDefault();
       faqFilter.value = '';
       apply();
+      writeQuery('');
     });
 
     /* 筛掉的那一条正好是被链的那一问时，筛选让位于深链：点了链接就是要看它，不该被自己
@@ -1248,6 +1292,7 @@
       if (target.tagName !== 'DETAILS' && !target.classList.contains('faq-category')) return;
       faqFilter.value = '';
       apply();
+      writeQuery('');
       target.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
     });
 
@@ -1276,6 +1321,50 @@
       faqFilter.focus({ preventScroll: true });
       faqFilter.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
     });
+
+    /* 入口那一次：把 `?q=` 填回框里再筛。
+       用 `URLSearchParams` 而不是 `decodeURIComponent`：后者对 `%ZZ` 抛 `URIError`，而这一句
+       排在整个装配的最后，抛出就把后面几段脚本一起带走（与本仓 `utils/hashParam.ts` 同族的坑）；
+       前者对畸形百分号串宽容，且顺手把 `+` 读成空格。
+       超长按字符截短而不是整条丢弃：框里显示的就是截短后的那一串，读者看得见自己搜的是什么。 */
+    const initialQuery = (new URLSearchParams(location.search).get('q') || '').slice(0, MAX_FAQ_QUERY);
+    /* 锚点压过筛选：带 `#faq-…` 进来是要看那一问，不该被一个搜索词挡在 `display:none` 里。
+       这里刻意**不解码** hash——本站那些 id 全是 ASCII，裸取就够用，也就不会在这一句上
+       新增第三个 `decodeURIComponent` 抛点。 */
+    const anchorTarget = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+    /* 让位只给 FAQ 里的那一问与分类标题，判据与上面 hashchange 那支同源。`#community`、
+       `#compare` 这些锚点与筛选无关，而分享出去的链接常是「筛好 + 顺手带个锚点」——
+       认任意 id 就把那份筛选静默抹掉了（评审轮抓到的那一处：注释说同源、代码却更宽）。 */
+    const faqAnchor =
+      anchorTarget && (anchorTarget.tagName === 'DETAILS' || anchorTarget.classList.contains('faq-category'))
+        ? anchorTarget
+        : null;
+    if (initialQuery && !faqAnchor) {
+      faqFilter.value = initialQuery;
+      apply();
+      /* 截短之后要把地址也写成截短后的那一串，否则「地址栏等于框里那一串」这条不变量
+         恰好在超长那一档破掉：真机量到框里 200 字符、地址里还是 250。读者复制出去的
+         链接与他屏幕上看到的不是同一份筛选，而超长串正是最可能被复制分享的那一种。
+         顺带把 `+`、畸形百分号串这些写法归一成同一个编码形状。 */
+      writeQuery(initialQuery);
+      /* 只滚不聚焦：`focus()` 在手机上会把键盘顶出来，而读者这一刻要的是结果，不是再打一遍字。
+         落点交给 `section[aria-labelledby]` 那条 `scroll-margin-top: 72px` 躲开吸顶页头。
+         且只有**压根没带锚点**时才由我们滚：带了 `#community` 这类锚点还插手，
+         就是把读者从他要的那一节拽到 FAQ 来（筛选照旧生效，滚动交给浏览器）。 */
+      if (!anchorTarget) {
+        const section = document.getElementById('faq') || faqFilter;
+        section.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+      } else {
+        /* 带的是无关锚点（`#community` 这一类）：筛选照旧生效，但筛完页面变短，浏览器
+           那一次「滚到锚点」滚的是筛之前的版面，所以这里补一次。与上面 hashchange 那支
+           同一个理由，只是那一支滚的是刚从 display:none 里出来的问，这一支滚的是被
+           上方内容缩短挪了位置的那一节。 */
+        anchorTarget.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+      }
+    } else {
+      /* 锚点赢的那一路把 q 抹掉，让地址栏与屏幕说同一件事；没有参数时这一句是空操作。 */
+      writeQuery(faqFilter.value.trim());
+    }
   }
 
   /* ─────────────── 14. 窄屏下的对比表：横滑的那一侧给个信号 ─────────────── */
@@ -1580,5 +1669,27 @@
         }
       });
     });
+  }
+
+  /* ─────────────── 19. 404 页：把访客敲的那一串填进信封 ─────────────── */
+
+  const nfPath = document.querySelector('[data-nf-path]');
+
+  if (nfPath) {
+    /**
+     * 地址来自地址栏，属不可信输入：只走 `textContent`，绝不 `innerHTML`。
+     * 上限 160 个字符后留痕——信封那一行是 `nowrap` + 横滑，超长串会让它变成一条
+     * 读不到头的轨道，而这一行要回答的只是「你敲的是哪个地址」。
+     * 读不到（`pathname` 为空的极端环境）就留在 HTML 里的 `/…`，不画一个空信封。
+     */
+    const NF_PATH_MAX = 160;
+    const raw = `${window.location.pathname}${window.location.search}`;
+    if (raw) {
+      const clipped = raw.length > NF_PATH_MAX;
+      nfPath.textContent = clipped ? `${raw.slice(0, NF_PATH_MAX)}…` : raw;
+      /* 截过才补 title：没截时它已经在屏幕上，多一枚悬停提示只是噪声。
+         卡片里那六枚地址的 title 写在 HTML 里（无 JS 也在），这一枚只有截断这一档需要脚本。 */
+      if (clipped) nfPath.setAttribute('title', raw);
+    }
   }
 })();

@@ -229,6 +229,141 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     });
   });
 
+  /**
+   * 404 恢复页刻意**不在**上面那七页的清单里，也不在 SERP 预算 / 版本徽标 / 微信号那几张清单里：
+   * 它没有自己的内容（`noindex`）、没有「正式地址」（所以不写 canonical / og / JSON-LD、不进 sitemap），
+   * 页脚也不带版本与最后更新。正因为它被所有清单排除在外，这一格得自己把承重的几件事钉住。
+   *
+   * 最贵的那一件是**路径形状**：GitHub Pages 把任何未命中的路径都交给这份 `/404.html`，
+   * 而地址栏仍停在访客敲的那一个。于是 `/cross-origin-proxy/a/b.html` 这一笔里，
+   * `assets/landing.css` 会解析成 `/cross-origin-proxy/a/assets/landing.css` —— 同样 404，
+   * 页面裸奔、六条出口也全点不动。全站只有这一页用根相对地址，别「顺手对齐」成相对地址。
+   */
+  describe('404 恢复页（Pages 把它交给任何未命中的路径）', () => {
+    const html = read('docs/404.html');
+    const css = read('docs/assets/landing.css');
+    const js = read('docs/assets/landing.js');
+    const BASE = '/cross-origin-proxy/';
+
+    const localRefs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+      .map(m => m[1])
+      .filter(v => !/^(https?:|#|mailto:|tel:)/.test(v));
+
+    /** 把根相对地址剥回 `docs/` 下的相对路径；目录按 Pages 的默认文档展开。 */
+    const toDisk = (ref: string): string => {
+      const rel = path.join('docs', ref.slice(BASE.length));
+      return fs.statSync(path.join(ROOT, rel), { throwIfNoEntry: false })?.isDirectory()
+        ? path.join(rel, 'index.html')
+        : rel;
+    };
+
+    it('每一条本地地址都是带路径基的根相对地址', () => {
+      expect(localRefs.length, '这一页应当有资源与出口').toBeGreaterThan(10);
+      expect(
+        localRefs.filter(v => !v.startsWith(BASE)),
+        '相对地址在嵌套的缺失路径下会解析到错误的目录，同样 404',
+      ).toEqual([]);
+    });
+
+    it('页内出口与资源全部落到真实且已入库的文件', () => {
+      const tracked = trackedFiles();
+      const refs = [...new Set(localRefs.map(toDisk))];
+      expect(
+        refs.filter(r => !exists(r)),
+        '出口自己也是 404 的话这一页就白做了',
+      ).toEqual([]);
+      expect(
+        refs.filter(r => !tracked.has(r.split(path.sep).join('/'))),
+        'Pages 部署的是仓库，不是工作区',
+      ).toEqual([]);
+    });
+
+    it('noindex, follow；不写 canonical / hreflang / og / twitter / JSON-LD，也不进 sitemap', () => {
+      expect(html).toContain('content="noindex, follow"');
+      for (const banned of [
+        'rel="canonical"',
+        'rel="alternate"',
+        'property="og:',
+        'name="twitter:',
+        'application/ld+json',
+      ]) {
+        expect(html.includes(banned), `404 不该有 ${banned}：它没有「这一页的正式地址」`).toBe(false);
+      }
+      expect(read('docs/sitemap.xml').includes('404.html'), '404 不进 sitemap').toBe(false);
+    });
+
+    it('刻意留在版本徽标 / 最后更新 / 微信号三张清单之外', () => {
+      for (const banned of ['store-version', '最后更新', 'lld_1025', 'wechat-qr']) {
+        expect(html.includes(banned), `404 不该出现 ${banned}`).toBe(false);
+      }
+    });
+
+    /** 六张目标卡：中英各三张，覆盖本站六个内容页（隐私政策另走 `.nf-aside` 与页脚）。 */
+    const cards = [...html.matchAll(/<a\s+class="nf-target"[\s\S]*?<\/a>/g)].map(m => m[0]);
+
+    it('六张卡中英各三张，地址两两成对且互不重复', () => {
+      expect(cards.length).toBe(6);
+      // `\s` 是承重的：裸 /lang="en"/ 连 hreflang="en" 一起命中，
+      // 于是「只写了 hreflang、忘了 lang」这种半份标注会被数成一份完整的。
+      const en = cards.filter(c => /\slang="en"/.test(c));
+      expect(en.length, '英文卡必须带 lang 与 hreflang').toBe(3);
+      expect(en.every(c => /\shreflang="en"/.test(c))).toBe(true);
+      const hrefs = cards.map(c => (c.match(/href="([^"]+)"/) as RegExpMatchArray)[1]);
+      expect(new Set(hrefs).size, '六张卡不许指向同一页').toBe(6);
+      expect([...hrefs].sort()).toEqual(
+        [
+          BASE,
+          `${BASE}en.html`,
+          `${BASE}alternatives.html`,
+          `${BASE}en-alternatives.html`,
+          `${BASE}cors.html`,
+          `${BASE}en-cors.html`,
+        ].sort(),
+      );
+    });
+
+    it('卡片数被每一档可能的列数整除（末行不许只剩半格）', () => {
+      const flat = css.replace(/\s+/g, ' ');
+      const grid = (flat.match(/\.nf-grid \{([^}]*)\}/) as RegExpMatchArray)[1];
+      const min = Number((grid.match(/minmax\((\d+)px/) as RegExpMatchArray)[1]);
+      const gap = Number((grid.match(/gap: (\d+)px/) as RegExpMatchArray)[1]);
+      const max = Number((flat.match(/--lp-max: (\d+)px/) as RegExpMatchArray)[1]);
+      const pad = Number((flat.match(/\.wrap \{[^}]*padding: 0 (\d+)px/) as RegExpMatchArray)[1]);
+      const content = max - pad * 2;
+      const maxCols = Math.floor((content + gap) / (min + gap));
+      expect(maxCols, '解析口径坏了：算出来的列数不该小于 1').toBeGreaterThanOrEqual(1);
+      for (let cols = 1; cols <= maxCols; cols += 1) {
+        expect(cards.length % cols, `${cards.length} 张卡在 ${cols} 列下末行只剩半格`).toBe(0);
+      }
+    });
+
+    it('.nf-path 拆掉行内 code 胶囊的三件（浅底会吞掉深底用的字色）', () => {
+      const rule = (css.replace(/\s+/g, ' ').match(/\.nf-path \{([^}]*)\}/) as RegExpMatchArray)[1];
+      // 全站那条 `code { background: var(--lp-primary-soft) }` 浅色档是 #ecf5ff，
+      // 而这行的字是深底用的 --lp-code-ink：不拆就是 1.13:1，整条地址读不出来（真机浅色档抓到过）。
+      expect(rule).toContain('background: none');
+      expect(rule).toContain('border-radius: 0');
+      expect(/padding: 0 0 \d+px/.test(rule), '横向那 6px 胶囊内边距也要拆掉').toBe(true);
+      expect(rule).toContain('color: var(--lp-code-ink)');
+    });
+
+    it('地址只走 textContent，截断留痕并补 title（源码契约）', () => {
+      const at = js.indexOf('19. 404 页');
+      expect(at, 'landing.js 里找不到第 19 块').toBeGreaterThan(-1);
+      const block = js.slice(at);
+      expect(block).toContain('nfPath.textContent =');
+      // 按**用法**查而不是按词面查：这一格的注释正写着「绝不 innerHTML」，
+      // 按裸词查会让基线自己红（与上面那组高亮契约同一条读法，第一版也确实这样红过）。
+      expect(block, '地址来自地址栏，属不可信输入').not.toMatch(/\.\s*(innerHTML|outerHTML)\s*(=|\+=)/);
+      expect(block).not.toMatch(/\binsertAdjacentHTML\s*\(/);
+      expect(block).toContain('NF_PATH_MAX');
+      expect(block).toContain("nfPath.setAttribute('title', raw)");
+      // 无 JS 时留在 HTML 里的那一份兜底
+      expect(html).toContain('data-nf-path');
+      expect(html).toMatch(/data-nf-path\s*>\/…</);
+    });
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 中英落地页对等（AGENTS 的硬要求，此前只靠人工）
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1566,9 +1701,9 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
       );
       expect(
         js,
-        '筛选挡在深链前面时深链赢——而且让位之后要把它滚进视野：那一问刚从 display:none 出来，浏览器那一次滚的是空（真机量到停在原地 1691px）',
+        "筛选挡在深链前面时深链赢——而且让位之后要把它滚进视野：那一问刚从 display:none 出来，浏览器那一次滚的是空（真机量到停在原地 1691px）。中间那句 writeQuery('') 是「地址栏的 q 等于框里那一串」这条不变量的一个落点，清空了框却不写地址，读者复制出去的就是他屏幕上没有的那份筛选",
       ).toMatch(
-        /faqFilter\.value = '';\s*apply\(\);\s*target\.scrollIntoView\(\{ behavior: scrollBehavior\(\), block: 'start' \}\)/,
+        /faqFilter\.value = '';\s*apply\(\);\s*writeQuery\(''\);\s*target\.scrollIntoView\(\{ behavior: scrollBehavior\(\), block: 'start' \}\)/,
       );
       expect(js, '读数模板从 HTML 挑，脚本里不该出现任何一句语言').not.toMatch(/问匹配|questions match/);
       expect(js, '「没有匹配」那句也只能住在 HTML：脚本的兜底必须留空，否则中英两页共享同一句写死的语言').toMatch(
@@ -1723,6 +1858,172 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         expect(skips, `${file} 在零命中那一档跳级：${skips.join(', ')}`).toEqual([]);
       }
       expect(read('docs/assets/landing.css')).toMatch(/\.faq-rail-card\s+:is\(h3,\s*h4\)\s*\{/);
+    });
+
+    /**
+     * 筛选的可分享地址 `?q=`。这一格守的不是「有没有这个参数」，而是一条不变量：
+     * **地址栏里的 q 永远等于框里那一串**。参数与屏幕对不上时，读者复制给同事的链接筛出来的是
+     * 另一批问答——那比压根没有这个参数更糟，因为他没有任何理由怀疑那个链接。
+     *
+     * 三处静默失败面各自承重：
+     * ① 入口读参数只能经 `URLSearchParams`。`decodeURIComponent('%ZZ')` 抛 `URIError`，而这一句
+     *    排在整个装配的最后，抛出就把后面几段脚本（横滑提示、分享、安装条、计数、lightbox）一起
+     *    带走，症状是「这一页有几个控件莫名不工作」而不是「搜索坏了」——与本仓 `utils/hashParam.ts`
+     *    同族的坑，那边也是「裸解一次 → 三个监听器一个都没登记」。
+     * ② 写地址只有一个出口，且凡是清空框的地方都叫它一次。少叫一处不报错，只让地址栏说谎。
+     * ③ 防抖不是性能优化而是硬约束：Chrome 对 pushState/replaceState 有约 100 次 / 30 秒的节流，
+     *    逐键直写在快打字时抛 SecurityError，同样把后面的脚本一起带走。
+     */
+    describe('筛选的可分享地址 ?q=', () => {
+      const js = read('docs/assets/landing.js');
+      /** 按**用法**数，不按词面数：上面那几段注释正写着这些名字（与 404 那格同一条读法）。 */
+      const uses = (re: RegExp): number => [...js.matchAll(re)].length;
+      const writeQueryBody = /const writeQuery = value => \{[\s\S]*?\n {4}\};/.exec(js)?.[0] ?? '';
+      const entryBlock = /const initialQuery =[\s\S]*?\n {4}\}\n/.exec(js)?.[0] ?? '';
+
+      it('入口只经 URLSearchParams 读，且超长按字符截短而不是整条丢弃', () => {
+        expect(writeQueryBody, '读不到 writeQuery 的函数体（那两条切块的正则坏了）').not.toBe('');
+        expect(entryBlock, '读不到入口那一段').not.toBe('');
+        expect(entryBlock, '入口读 q 没走 URLSearchParams').toMatch(
+          /new URLSearchParams\(location\.search\)\.get\('q'\)/,
+        );
+        expect(entryBlock, '超长 q 没有收口：框里会被塞进一整条别人拼的地址').toMatch(/\.slice\(0, MAX_FAQ_QUERY\)/);
+        expect(uses(/const MAX_FAQ_QUERY = \d+;/g), 'MAX_FAQ_QUERY 只能有一个声明').toBe(1);
+        expect(
+          uses(/decodeURIComponent\(/g),
+          '解码出口只许两处（都在 hash 上）：在 search 上裸解一次就是把后面几段脚本一起带走的那个抛点',
+        ).toBe(2);
+        expect(js, 'search 上不许出现裸解码').not.toMatch(/decodeURIComponent\(\s*location\.search/);
+      });
+
+      it('写地址只有 writeQuery 一个出口，只动 q，且用 replaceState 不塞回退栈', () => {
+        expect(uses(/const writeQuery = /g), '写地址的出口只能有一个').toBe(1);
+        expect(writeQueryBody).toMatch(/if \(value\) params\.set\('q', value\);/);
+        expect(writeQueryBody).toMatch(/else params\.delete\('q'\);/);
+        expect(writeQueryBody, '别的参数要原样留着：从现有 search 起手，不是新拼一个 ?q=').toMatch(
+          /const params = new URLSearchParams\(location\.search\);/,
+        );
+        expect(writeQueryBody, 'hash 也要原样留着，否则写一次 q 就把读者所在那一问的锚点抹了').toMatch(
+          /const next = `\$\{location\.pathname\}\$\{search \? `\?\$\{search\}` : ''\}\$\{location\.hash\}`;/,
+        );
+        expect(writeQueryBody, '值没变就不写：省掉的是节流预算，也省掉一次无意义的历史条目').toMatch(
+          /if \(next !== `\$\{location\.pathname\}\$\{location\.search\}\$\{location\.hash\}`\) history\.replaceState/,
+        );
+        expect(js, '打二十个字不该往回退栈里塞二十条记录').not.toMatch(/history\.pushState/);
+        expect(uses(/history\.replaceState\(/g), '写地址的两处（筛选与永久链接）之外不许有第三处').toBe(2);
+      });
+
+      it('清空框的三条路都写地址，地址栏因此永远等于屏幕', () => {
+        expect(uses(/writeQuery\(/g), '五个调用点：打字防抖、Esc、分类/深链让位、入口带词、入口锚点赢').toBe(5);
+        expect(js, 'Esc 清空之后没写地址：读者按了 Esc，复制出去的链接却还筛着他刚清掉的词').toMatch(
+          /event\.preventDefault\(\);\s*faqFilter\.value = '';\s*apply\(\);\s*writeQuery\(''\);/,
+        );
+        expect(uses(/writeQuery\(faqFilter\.value\.trim\(\)\)/g), '打字与入口那两处都写框里那一串本身').toBe(2);
+        expect(entryBlock, '锚点赢的那一路要把 q 抹掉，否则地址栏留着一个屏幕上没在筛的词').toMatch(
+          /\} else \{[\s\S]*?writeQuery\(faqFilter\.value\.trim\(\)\);/,
+        );
+      });
+
+      /**
+       * 截短那一档是不变量最容易破的一格，而它恰好是最可能被复制分享的那一种串。
+       * 真机量到过：`?q=` 带 250 个字符进来，框里截到 200、地址里还是 250——读者复制
+       * 出去的链接筛出来的是另一批问答，而他没有任何理由怀疑那个链接。所以入口带词
+       * 那一路也要写一次地址，写的就是**截短后**那一串。
+       */
+      it('入口带词那一路把截短后的串写回地址（超长档不许与屏幕分家）', () => {
+        expect(entryBlock, '填回框里之后要把地址也写成框里那一串，否则超长档地址 250 / 框里 200').toMatch(
+          /faqFilter\.value = initialQuery;\s*apply\(\);\s*(?:\/\*[\s\S]*?\*\/\s*)?writeQuery\(initialQuery\);/,
+        );
+        expect(entryBlock, '写的必须是截短后的那一份，不是从地址里原样读回来的那一串').not.toMatch(
+          /writeQuery\(new URLSearchParams/,
+        );
+        expect(js, '截短只发生在读入口那一处：写地址时再截一次就是两把尺').toMatch(
+          /\.get\('q'\) \|\| ''\)\.slice\(0, MAX_FAQ_QUERY\)/,
+        );
+      });
+
+      it('打字防抖，且在途定时器只许一枚', () => {
+        expect(uses(/const FAQ_URL_SYNC_DELAY = \d+;/g), '防抖时长只能有一个声明').toBe(1);
+        const delay = Number(/const FAQ_URL_SYNC_DELAY = (\d+);/.exec(js)?.[1]);
+        expect(delay, '防抖为 0 等于逐键直写，撞的是 Chrome 那条 100 次 / 30 秒的节流').toBeGreaterThan(0);
+        expect(js, 'input 那一路必须经防抖，不许直接叫 writeQuery').toMatch(
+          /faqFilter\.addEventListener\('input', \(\) => \{\s*cancelSync\(\);\s*syncTimer = setTimeout\(\(\) => \{\s*syncTimer = null;\s*writeQuery\(faqFilter\.value\.trim\(\)\);\s*\}, FAQ_URL_SYNC_DELAY\);/,
+        );
+        expect(js, '新的一次打字要撤掉上一次在途的写，否则几个回调按各自的旧值轮流改地址').toMatch(
+          /const cancelSync = \(\) => \{\s*if \(syncTimer === null\) return;\s*clearTimeout\(syncTimer\);\s*syncTimer = null;/,
+        );
+        expect(writeQueryBody, '直接写地址（Esc / 让位）也要先撤掉在途那一枚，否则它随后把旧词写回去').toMatch(
+          /^const writeQuery = value => \{\s*cancelSync\(\);/,
+        );
+      });
+
+      it('带锚点进来时锚点赢，且落点是滚而不是聚焦', () => {
+        expect(
+          entryBlock,
+          '锚点必须压过筛选：带着 #faq-… 进来是要看那一问，不该被一个搜索词挡在 display:none 里',
+        ).toMatch(/if \(initialQuery && !faqAnchor\)/);
+        /* 让位的范围与 hashchange 那支同源。这一条是评审轮抓出来的：入口此前认**任意** id，
+           于是 `?q=Mock#community`（筛好 + 顺手带个无关锚点，正是分享链接最常见的形状）
+           会把那份筛选静默抹掉，而注释写着「同一条规则」。 */
+        expect(entryBlock, '让位只给 FAQ 里的那一问与分类标题；认任意 id 就把带无关锚点的分享链接清空了').toMatch(
+          /anchorTarget\.tagName === 'DETAILS' \|\| anchorTarget\.classList\.contains\('faq-category'\)/,
+        );
+        expect(entryBlock, '填回框里之后要真的筛一次，否则框里有词而 21 问全在').toMatch(
+          /faqFilter\.value = initialQuery;\s*apply\(\);/,
+        );
+        expect(
+          entryBlock,
+          '落点交给整节，让 scroll-margin-top 躲开吸顶页头；且只在压根没带锚点时才滚，带了别的锚点还插手就是把读者从他要的那一节拽走',
+        ).toMatch(
+          /if \(!anchorTarget\) \{\s*const section = document\.getElementById\('faq'\) \|\| faqFilter;\s*section\.scrollIntoView\(\{ behavior: scrollBehavior\(\), block: 'start' \}\);\s*\}/,
+        );
+        /* 无关锚点那一路的补滚。少这一句的症状不是报错而是落点偏：筛掉 18 问之后整页变短，
+           浏览器那一次「滚到锚点」滚的是筛之前的版面（真机量到 #community 停在视口内 498px
+           处，而不是那一节该在的位置）。与 hashchange 那支同一个理由。 */
+        expect(entryBlock, '带无关锚点时筛完要补滚一次，否则落点是筛之前那份版面的位置').toMatch(
+          /\} else \{\s*(?:\/\*[\s\S]*?\*\/\s*)?anchorTarget\.scrollIntoView\(\{ behavior: scrollBehavior\(\), block: 'start' \}\);\s*\}/,
+        );
+        expect(entryBlock, '入口不许 focus：手机上会把键盘顶出来，而读者这一刻要的是结果不是再打一遍字').not.toMatch(
+          /\.focus\(/,
+        );
+      });
+
+      it('FAQ 永久链接那一句不许把 q 抹掉', () => {
+        expect(js, '只写 hash 就把 ?q= 抹了：地址栏与刚复制到剪贴板的那一串（用的是整个 href）不是同一个地址').toMatch(
+          /history\.replaceState\(null, '', `\$\{location\.pathname\}\$\{location\.search\}#\$\{item\.id\}`\)/,
+        );
+      });
+
+      /**
+       * 站点级实体上那枚 SearchAction。它说的是实话的前提是 `?q=` 真能接住——上面六条守的就是
+       * 那个前提。这里只守「声明与那一页自己的地址对得上」：写成另一页的地址，读 JSON-LD 的引擎
+       * 会把读者送到一个筛不出东西的地方。
+       * 记一笔已核实的边界（2026-11-12 取证）：Google 自 2024-11-21 起移除了站点链接搜索框那个
+       * 视觉元素，所以这枚声明换不来 SERP 上的搜索框；留着它是为 schema.org 语义本身。
+       */
+      it.each(['index.html', 'en.html'])('%s 的 WebSite 挂着一枚指向自己的 SearchAction', file => {
+        const base = `https://liaolongdong.github.io/cross-origin-proxy/${file === 'index.html' ? '' : file}`;
+        const actions: Array<Record<string, unknown>> = [];
+        for (const [, body] of read(`docs/${file}`).matchAll(
+          /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g,
+        )) {
+          const parsed = JSON.parse(body) as { '@graph'?: Array<Record<string, unknown>> };
+          for (const node of parsed['@graph'] ?? []) {
+            if (node['@type'] !== 'WebSite') continue;
+            const action = node.potentialAction as Record<string, unknown> | undefined;
+            if (action) actions.push(action);
+          }
+        }
+        expect(actions.length, `${file} 的 WebSite 上没有 SearchAction`).toBe(1);
+        const [action] = actions;
+        expect(action['@type']).toBe('SearchAction');
+        expect(action['query-input'], 'query-input 是这条声明的必填项，缺了它整枚动作不成立').toBe(
+          'required name=search_term_string',
+        );
+        const target = action.target as { '@type'?: unknown; urlTemplate?: unknown };
+        expect(target['@type']).toBe('EntryPoint');
+        expect(target.urlTemplate, `${file} 的搜索入口没有指向这一页自己的 ?q=`).toBe(`${base}?q={search_term_string}`);
+      });
     });
   });
 
@@ -2197,12 +2498,22 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
     it('两份 llms 文件都还在说锚点这件事', () => {
       const full = read('docs/llms-full.txt');
       const index = read('docs/llms.txt');
+      /* 小节标题现在承诺两件事（锚点 + 关键词地址），中英各一半都钉住：
+         只钉英文那半时，把中文标题改回「可引用锚点」照样绿，而那一节正文已经写了 ?q=。 */
       expect(full, 'llms-full 少了那一节：AI 系统就不知道该引用某一问而不是整页').toMatch(
-        /Citable anchors for every FAQ question/,
+        /## \d+\. Citable anchors and keyword addresses for every FAQ question \/ 每一条问题的可引用锚点与关键词地址/,
       );
       expect(full).toMatch(/cites?|cite the fragment|引用锚点|请引用锚点/);
       expect(index, 'llms.txt 那份简明索引没跟上').toMatch(/锚点/);
       expect(index, 'llms.txt 只留了中文那半句：这份索引是双语一行的，英文半边也要在').toMatch(/citable fragment/i);
+      /* 关键词地址那一行同样是双语一行的，两半都必须在——只写中文那半，英文读者拿到的
+         是一条没有说明的链接。 */
+      const keywordBullet = index.split('\n').find(line => line.includes('?q='));
+      expect(keywordBullet, 'llms.txt 没告诉 AI 系统关键词也能当地址引用').toBeTruthy();
+      expect(keywordBullet, 'llms.txt 的关键词那一行少了英文半边').toMatch(/citable by keyword/i);
+      expect(keywordBullet, 'llms.txt 的关键词那一行没说清哪种锚点优先——读者会以为两者可以叠加').toMatch(
+        /指向某一问的锚点比它优先[\s\S]*a fragment pointing at one question wins over it/,
+      );
     });
 
     it('文中举例的每一个锚点，在中英两页都查得到对应的条目', () => {
@@ -2228,6 +2539,52 @@ describe('[Docs] 仓库自动化与文档一致性', () => {
         expect(actual.length, `${file} 读不到分类标题的 id`).toBeGreaterThan(0);
         expect(unique.sort(), `llms 文件列的分类与 ${file} 实际的分类标题不一致`).toEqual([...actual].sort());
       }
+    });
+
+    /**
+     * 关键词地址那一节把「哪几页有筛选框、各多少问」写成了具体数字，AI 系统会照着它决定
+     * 引用哪一页。数错了不会有任何症状：那一页照样打得开，只是 `?q=` 什么都不做，或者
+     * 引到的问数与读者屏幕上对不上。所以这四个数字必须是从页面数出来的，不是写下去就算。
+     */
+    it('关键词地址那一节的页数与问数，与页面实际一致', () => {
+      const full = read('docs/llms-full.txt');
+      const countOf = (file: string): number => [...read(`docs/${file}`).matchAll(/<details id="faq-/g)].length;
+      const hasBox = (file: string): boolean => read(`docs/${file}`).includes('faq-filter-input');
+
+      const products = ['index.html', 'en.html'];
+      const comparisons = ['alternatives.html', 'en-alternatives.html'];
+      const triage = ['cors.html', 'en-cors.html'];
+
+      for (const file of [...products, ...comparisons]) {
+        expect(hasBox(file), `${file} 没有筛选框，而 llms 说它有——?q= 在这一页什么都不会做`).toBe(true);
+      }
+      for (const file of [...triage, 'privacy.html']) {
+        expect(hasBox(file), `${file} 有筛选框了，llms 那句「在那两页不生效」要跟着重判`).toBe(false);
+      }
+
+      const productCount = countOf(products[0]);
+      const comparisonCount = countOf(comparisons[0]);
+      const triageCount = countOf(triage[0]);
+      for (const file of products) expect(countOf(file), `${file} 与另一份产品页问数不等`).toBe(productCount);
+      for (const file of comparisons) expect(countOf(file), `${file} 与另一份对比页问数不等`).toBe(comparisonCount);
+      for (const file of triage) expect(countOf(file), `${file} 与另一份排查页问数不等`).toBe(triageCount);
+
+      /* 中英两半各钉一次：只改一边的数字，另一边就在替读者说另一件事。 */
+      expect(full, 'llms-full 英文那半的产品页问数与页面不符').toContain(`(${productCount} questions each)`);
+      expect(full, 'llms-full 中文那半的产品页问数与页面不符').toContain(`（各 ${productCount} 问）`);
+      expect(full, 'llms-full 英文那半的对比页问数与页面不符').toContain(`(${comparisonCount} each)`);
+      expect(full, 'llms-full 中文那半的对比页问数与页面不符').toContain(`（各 ${comparisonCount} 问）`);
+      expect(full, 'llms-full 那句「排查页只有五问」要跟着页面走').toMatch(/have five questions and no filter box/);
+      expect(full).toMatch(/只有五问、没有筛选框/);
+      expect(triageCount, '排查页的问数变了，上面那两句拼死的「五问」要一起改').toBe(5);
+
+      const indexBullet = read('docs/llms.txt')
+        .split('\n')
+        .find(line => line.includes('?q='));
+      expect(indexBullet, 'llms.txt 的关键词那一行的问数与页面不符').toContain(
+        `各 ${productCount} 问、两份对比页各 ${comparisonCount} 问`,
+      );
+      expect(indexBullet).toContain(`${productCount} questions on each product page, ${comparisonCount} on each`);
     });
   });
 

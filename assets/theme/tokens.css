@@ -70,8 +70,45 @@
   --cop-scrollbar-thumb: #cbd5e1;
   --cop-scrollbar-thumb-hover: #94a3b8;
 
+  /* 原生滚动条的粗细。Element Plus 那套自绘滚动条的轨道本来就是 6px，
+     两边取同一个数，「弹窗里的细条」与「表格里的细条」才不是两种东西。 */
+  --cop-scrollbar-size: 6px;
+
   /* ====== 语义层：表单 ====== */
   --cop-form-label-color: #2c3e50;
+
+  /* ====== 几何层：圆角 ======
+   * 此前没有这一层，圆角在 `components/` + `entrypoints/` 里散着字面量：2026-11-14 按 HEAD 数，
+   * 90 条 `border-radius` 声明里 83 条带 px 字面量（`border-radius: 8px` 与 `6px` 各 24 条、
+   * `4px` 13 条、`10px` 12 条，其余是多值简写），另外 7 条是 `50%` 的正圆，不归这一层管。
+   * 同一类容器在两张屏上差 2px 不会有任何报错，而「卡片是 8 还是 10」这种问题每改一个界面就要重新查一遍。
+   * 取值不是新发明的栅格，是把现网真在用的那几档原样收上来，所以改用它们不改变观感。
+   *
+   * 刻意**不收字号**：`tests/designTokens.test.ts` 的「字号下沿」按 px 字面量现读全仓
+   * `font-size`，并要求非 px 的声明数恰好为 0——换成 `var()` 那条守卫就读不到数，
+   * 11px 那道地线从此空转。字号继续写字面量，由那条守卫看着。
+   */
+  --cop-radius-xs: 4px;
+  --cop-radius-sm: 6px;
+  --cop-radius-md: 8px;
+  --cop-radius-lg: 10px;
+  --cop-radius-pill: 999px;
+
+  /* ====== 几何层：间距 ======
+   * 4px 栅格，外加 6 / 10 / 14 三个紧凑档——它们是现网真在用的值（弹窗卡片的内边距、
+   * 宫格的间隙、表格行的横向留白），强行归并到 8 / 12 / 16 就是改视觉，不在这一层的职责里。
+   * 序号只是档位编号，不是「乘以 4」：写 `--cop-space-4` 拿到的是 10px 而不是 16px。
+   */
+  --cop-space-1: 4px;
+  --cop-space-2: 6px;
+  --cop-space-3: 8px;
+  --cop-space-4: 10px;
+  --cop-space-5: 12px;
+  --cop-space-6: 14px;
+  --cop-space-7: 16px;
+  --cop-space-8: 20px;
+  --cop-space-9: 24px;
+  --cop-space-10: 32px;
 
   /* ====== 动效层：时长与缓动 ======
    * 时长档按「这次变化离用户的手多近」分级，而不是按元素大小：按压反馈要跟手到像没延迟，
@@ -447,6 +484,58 @@
   to {
     background-position: -50% 0;
   }
+}
+
+/* ==================== 滚动条：整站一套 ====================
+ * 此前只有 options 的弹窗与抽屉正文两处在画滚动条，其余能滚的地方——规则表、日志表、
+ * 下拉浮层、命令面板的结果列表——各自落在两套默认外观上：Element Plus 自绘的那套是
+ * `--el-text-color-secondary` 压到 30% 透明度的一抹灰，原生 `overflow` 容器则是系统蓝。
+ * 同一屏里两种滚动条，正是这层令牌要消掉的东西。
+ *
+ * Element Plus 把那四个变量声明在 `.el-scrollbar` **自己身上**，写在 `:root` 上会被
+ * 它自己的声明盖掉（自定义属性就近者赢，与规则顺序无关），所以这里必须落到同一层；
+ * `body ` 前缀把特异度抬到 (0,1,1)，胜负不再依赖异步 chunk 的注入时机——与本仓
+ * 「覆盖 EP 节奏必须靠特异度赢」同一条理由。
+ */
+body .el-scrollbar {
+  --el-scrollbar-bg-color: var(--cop-scrollbar-thumb);
+  --el-scrollbar-hover-bg-color: var(--cop-scrollbar-thumb-hover);
+  --el-scrollbar-opacity: 1;
+  --el-scrollbar-hover-opacity: 1;
+}
+
+/* 原生滚动区：一条后代选择器收全两个页面的内部滚动容器——弹窗与抽屉正文、命令面板的结果列表、
+   快照列表、迁移预览、环境对比的正文、日志详情的 pre、以及各个 textarea。
+   逐个点组件类名的写法有两个毛病：同一份配方要抄六遍，而且漏掉的那一格静默退回系统蓝，
+   将来新长出来的滚动容器同样没人管。这里反过来——**不点名任何组件**，只认「在 body 里面」。
+
+   写成 `body ::…`（后代）而不是 `body::…`（自身）是承重的：Blink 在 `html` 没有滚动条样式时
+   会把 `body` 自己的那份拿去画视口滚动条，而 `body` 不是自己的后代，所以这条够不着视口。
+   弹窗那 320 / 352 / 368 三个数正是按 macOS 叠加式滚动条量出来的，视口那条一旦变成占位的
+   经典滚动条，内容宽当场少 6px，那一整套「不裁字、不溢出」的读数就不再成立。
+
+   与 Element Plus 自绘的那套并存：`.el-scrollbar__wrap--hidden-default::-webkit-scrollbar`
+   自带 `display: none`，特异度 (0,1,0) 高于这条 (0,0,1)，所以表格/下拉里仍是 EP 的假滚动条，
+   由上面那四个变量上色；两条路各画各的，取值同源。
+
+   轨道留透明，让它落在各自面板的底色上而不是再铺一条灰带；滑块两端全圆，
+   与 6px 的宽度一起读成「一颗胶囊」。 */
+body ::-webkit-scrollbar {
+  width: var(--cop-scrollbar-size);
+  height: var(--cop-scrollbar-size);
+}
+
+body ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body ::-webkit-scrollbar-thumb {
+  background: var(--cop-scrollbar-thumb);
+  border-radius: var(--cop-radius-pill);
+}
+
+body ::-webkit-scrollbar-thumb:hover {
+  background: var(--cop-scrollbar-thumb-hover);
 }
 
 /* ==================== 换肤 / 换语言的整页过渡 ====================

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#ffffff"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#0e1621"
+    />
+    <title>404 页面不存在 / Page not found — 跨域代理助手 Cross-Origin Proxy</title>
+    <meta
+      name="description"
+      content="这个地址没有对应的页面。下面列出本站现存的每一页（中英各一份），以及落到这里的三种真实原因。This address matches no page; every live page is listed below."
+    />
+    <!--
+      这一页刻意 noindex：它没有自己的内容，进索引只会和真正的产品页抢同一批查询。
+      `follow` 保留——落在这一页的爬虫仍应顺着下面那六条出口走到真实页面。
+      同理不写 canonical / hreflang / og / JSON-LD，也不进 sitemap.xml：
+      那几样都要求「这一页的正式地址」，而 404 的地址是访客敲错的那一个。
+    -->
+    <meta
+      name="robots"
+      content="noindex, follow"
+    />
+    <link
+      rel="icon"
+      href="/cross-origin-proxy/assets/icon.png"
+      sizes="128x128"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="/cross-origin-proxy/assets/icon.png"
+    />
+    <!--
+      全站只有这一页用**根相对**地址，别「顺手对齐」成 `assets/landing.css`：
+      GitHub Pages 把任何未命中的路径都交给这份 /404.html，而地址栏仍停在访客敲的那一个。
+      于是 `/cross-origin-proxy/a/b.html` 这一笔里，相对地址会解析成
+      `/cross-origin-proxy/a/assets/landing.css` —— 同样 404，页面裸奔、六条出口也全点不动。
+      路径基与 canonical 里那一份同源（隐私政策 URL 是商店审核项，不会改）。
+    -->
+    <link
+      rel="stylesheet"
+      href="/cross-origin-proxy/assets/landing.css"
+    />
+    <script
+      src="/cross-origin-proxy/assets/landing.js"
+      defer
+    ></script>
+  </head>
+  <body class="nf-page">
+    <a
+      class="skip-link"
+      href="#main"
+      >跳到主要内容</a
+    >
+    <header class="site-header">
+      <div class="wrap">
+        <a
+          class="brand"
+          href="/cross-origin-proxy/"
+        >
+          <img
+            src="/cross-origin-proxy/assets/icon.png"
+            alt=""
+            width="28"
+            height="28"
+          />
+          <span>跨域代理助手</span>
+        </a>
+        <nav
+          class="site-nav"
+          aria-label="页面导航"
+        >
+          <a href="/cross-origin-proxy/">产品说明（中文）</a>
+          <a
+            href="/cross-origin-proxy/en.html"
+            hreflang="en"
+            >Overview (English)</a
+          >
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+      <div
+        class="scroll-progress"
+        aria-hidden="true"
+      >
+        <i></i>
+      </div>
+    </header>
+
+    <main id="main">
+      <section
+        class="nf-stage"
+        aria-labelledby="nf-title"
+      >
+        <div class="wrap">
+          <p class="eyebrow nf-in">404 · Not Found</p>
+          <h1
+            id="nf-title"
+            class="nf-in"
+          >
+            这个地址没有对应的页面<span lang="en">No page matches this address</span>
+          </h1>
+          <div class="nf-lede nf-in">
+            <p>
+              本站是 GitHub Pages 上的一份纯静态目录，没有服务端、也没有重写规则：命中不了文件就直接落到这一页。
+              下面先把这一笔请求原样交回给你，再列出<strong>现存的每一页</strong>——挑一个目标即可。
+            </p>
+            <p lang="en">
+              This site is a plain static directory on GitHub Pages: no server, no rewrite rules. A path that matches no
+              file lands here. Below is the request as it arrived, followed by <strong>every page that exists</strong>.
+            </p>
+          </div>
+
+          <div class="nf-envelope nf-in">
+            <div class="nf-request">
+              <span class="nf-method">GET</span>
+              <code
+                class="nf-path"
+                data-nf-path
+                >/…</code
+              >
+              <span
+                class="nf-caret"
+                aria-hidden="true"
+              ></span>
+            </div>
+            <span
+              class="nf-arrow"
+              aria-hidden="true"
+              >→</span
+            >
+            <div class="nf-verdict">
+              <span class="nf-status">
+                <i
+                  class="nf-ping"
+                  aria-hidden="true"
+                ></i
+                >404
+              </span>
+            </div>
+          </div>
+
+          <p class="nf-note nf-in">
+            没有规则匹配这一笔，地址未被改写——所以它停在了原地。
+            <span lang="en">No rule matched this request, so the address was left exactly as typed.</span>
+          </p>
+
+          <div class="cta-row nf-in">
+            <a
+              class="btn btn-primary"
+              href="/cross-origin-proxy/"
+              >回到产品说明</a
+            >
+            <a
+              class="btn btn-ghost"
+              href="https://chromewebstore.google.com/detail/dednngakllblfilbndkaggphohmpgcbg"
+              >添加到 Chrome</a
+            >
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/liaolongdong/cross-origin-proxy"
+              >GitHub</a
+            >
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="nf-targets">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="nf-targets">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <path d="M4 8h13l-3.5-3.5" />
+                  <path d="M20 16H7l3.5 3.5" /></svg
+              ></span>
+              <span class="nf-h2-text">可用的改写目标<span lang="en">Available rewrite targets</span></span>
+            </h2>
+            <p class="section-lede">
+              六页内容，中英各一份，全部真实存在。
+              <span lang="en">Six pages, three topics, each in Chinese and English.</span>
+            </p>
+          </div>
+
+          <div class="nf-grid">
+            <a
+              class="nf-target"
+              href="/cross-origin-proxy/"
+            >
+              <span class="nf-target-top">
+                <span class="nf-lang">中文</span>
+                <code title="/cross-origin-proxy/">/cross-origin-proxy/</code>
+              </span>
+              <h3>产品说明</h3>
+              <p>这个扩展做什么、两条通道怎么分流、上手三步与常见问题。</p>
+            </a>
+            <a
+              class="nf-target"
+              href="/cross-origin-proxy/en.html"
+              hreflang="en"
+              lang="en"
+            >
+              <span class="nf-target-top">
+                <span class="nf-lang">EN</span>
+                <code title="/cross-origin-proxy/en.html">/cross-origin-proxy/en.html</code>
+              </span>
+              <h3>Overview</h3>
+              <p>What it does, how the two channels split traffic, setup in three steps and the FAQ.</p>
+            </a>
+            <a
+              class="nf-target"
+              href="/cross-origin-proxy/alternatives.html"
+            >
+              <span class="nf-target-top">
+                <span class="nf-lang">中文</span>
+                <code title="/cross-origin-proxy/alternatives.html">/cross-origin-proxy/alternatives.html</code>
+              </span>
+              <h3>同类方案对比</h3>
+              <p>与 dev server 代理、系统级抓包、API 客户端、改头扩展逐项比代价。</p>
+            </a>
+            <a
+              class="nf-target"
+              href="/cross-origin-proxy/en-alternatives.html"
+              hreflang="en"
+              lang="en"
+            >
+              <span class="nf-target-top">
+                <span class="nf-lang">EN</span>
+                <code title="/cross-origin-proxy/en-alternatives.html">/cross-origin-proxy/en-alternatives.html</code>
+              </span>
+              <h3>Alternatives</h3>
+              <p>Dev-server proxy, capture proxy, API clients and header editors, compared by what each one costs.</p>
+            </a>
+            <a
+              class="nf-target"
+              href="/cross-origin-proxy/cors.html"
+            >
+              <span class="nf-target-top">
+                <span class="nf-lang">中文</span>
+                <code title="/cross-origin-proxy/cors.html">/cross-origin-proxy/cors.html</code>
+              </span>
+              <h3>CORS 报错排查</h3>
+              <p>blocked by CORS policy 背后的三种失败形状，以及五种解法各自的代价。</p>
+            </a>
+            <a
+              class="nf-target"
+              href="/cross-origin-proxy/en-cors.html"
+              hreflang="en"
+              lang="en"
+            >
+              <span class="nf-target-top">
+                <span class="nf-lang">EN</span>
+                <code title="/cross-origin-proxy/en-cors.html">/cross-origin-proxy/en-cors.html</code>
+              </span>
+              <h3>CORS troubleshooting</h3>
+              <p>Three failure shapes behind the same console line, and the five fixes with their trade-offs.</p>
+            </a>
+          </div>
+
+          <p class="nf-aside">
+            还有一份双语的<a href="/cross-origin-proxy/privacy.html">隐私政策 / Privacy policy</a>：不收集任何用户数据，
+            规则与日志只存在本机。
+            <span lang="en">Also bilingual: no data collected, rules and logs stay on your device.</span>
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="nf-why">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="nf-why">
+              <span
+                class="section-icon"
+                aria-hidden="true"
+                ><svg viewBox="0 0 24 24">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                  />
+                  <path d="M12 11v5" />
+                  <path d="M12 7.6v.6" /></svg
+              ></span>
+              <span class="nf-h2-text">为什么会落到这一页<span lang="en">Why you ended up here</span></span>
+            </h2>
+            <p class="section-lede">
+              三种真实原因，都不是「网站坏了」。
+              <span lang="en">Three real reasons, none of which means the site is broken.</span>
+            </p>
+          </div>
+
+          <ol class="nf-reasons">
+            <li>
+              <b>地址差一个字符 / One character off</b>
+              <span>
+                大小写、结尾的斜杠、<code>.html</code> 后缀都算不同的地址，静态目录不会替你猜。
+                <span lang="en">
+                  Case, a trailing slash and the <code>.html</code> suffix all make a different address; a static
+                  directory will not guess for you.
+                </span>
+              </span>
+            </li>
+            <li>
+              <b>两条中文旧路径已下线，且没有 301 / Two retired paths, no redirect</b>
+              <span>
+                <code>/zh.html</code> 与 <code>/zh-alternatives.html</code> 已分别合并到站点根与
+                <code>alternatives.html</code>。Pages 是纯静态目录、没有重写规则，所以旧链接不会被自动送到新地址，
+                只会落到这一页——请从上面那一组里重新挑一个。
+                <span lang="en">
+                  <code>/zh.html</code> and <code>/zh-alternatives.html</code> were merged into the site root and
+                  <code>alternatives.html</code>. Pages serves a plain directory with no rewrite rules, so old links are
+                  not forwarded — pick a target above instead.
+                </span>
+              </span>
+            </li>
+            <li>
+              <b>地址来自旧快照或 AI 回答 / From a stale snippet or an AI answer</b>
+              <span>
+                本站现存页面的机器可读清单是 <a href="/cross-origin-proxy/llms.txt">llms.txt</a>（摘要）与
+                <a href="/cross-origin-proxy/llms-full.txt">llms-full.txt</a>（全文），照着取地址就不会再落到这里。
+                <span lang="en">
+                  The machine-readable list of every live page is
+                  <a href="/cross-origin-proxy/llms.txt">llms.txt</a> (summary) and
+                  <a href="/cross-origin-proxy/llms-full.txt">llms-full.txt</a> (full text).
+                </span>
+              </span>
+            </li>
+          </ol>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div><p>跨域代理助手 Cross-Origin Proxy · MIT License · 规则与日志只存本机</p></div>
+        <nav aria-label="页脚导航">
+          <a href="/cross-origin-proxy/">产品说明（中文）</a>
+          <a
+            href="/cross-origin-proxy/en.html"
+            hreflang="en"
+            >Overview (English)</a
+          >
+          <a href="/cross-origin-proxy/alternatives.html">同类方案对比</a>
+          <a
+            href="/cross-origin-proxy/en-alternatives.html"
+            hreflang="en"
+            >Alternatives</a
+          >
+          <a href="/cross-origin-proxy/cors.html">CORS 排查</a>
+          <a
+            href="/cross-origin-proxy/en-cors.html"
+            hreflang="en"
+            >CORS guide</a
+          >
+          <a href="/cross-origin-proxy/privacy.html">隐私政策</a>
+          <a href="https://github.com/liaolongdong/cross-origin-proxy">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

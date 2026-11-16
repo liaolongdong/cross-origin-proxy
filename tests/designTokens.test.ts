@@ -35,6 +35,45 @@ const definedTokens = new Set(
  */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
 
+/**
+ * 按大括号深度切出**顶层**规则：`{` 之前攒下的那段是选择器清单（或 at-rule 的前奏），
+ * 深度回到 0 时那一条才收进结果。at-rule 因此整块算一条——它的嵌套规则不在判据范围内。
+ */
+const topLevelRules = (src: string): Array<{ selectorText: string; body: string }> => {
+  const rules: Array<{ selectorText: string; body: string }> = [];
+  let depth = 0;
+  let pending = '';
+  let selectorText = '';
+  let body = '';
+  for (const char of src) {
+    if (char === '{') {
+      if (depth === 0) {
+        selectorText = pending;
+        pending = '';
+        body = '';
+      } else {
+        body += char;
+      }
+      depth += 1;
+      continue;
+    }
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        rules.push({ selectorText, body });
+        selectorText = '';
+        body = '';
+      } else {
+        body += char;
+      }
+      continue;
+    }
+    if (depth === 0) pending += char;
+    else body += char;
+  }
+  return rules;
+};
+
 describe('令牌引用必须能在 tokens.css 里找到定义', () => {
   it('tokens.css 自身定义了整套 --cop-* 令牌', () => {
     // 数量级守卫：误删整个语义层时，下面的逐文件比对会因为「引用恰好为 0」而假通过
@@ -514,45 +553,6 @@ describe('换肤快照的四层同时长同缓动（漏一层就退回 UA 的 25
   /** 四个快照层，按 `::view-transition-<层>(<名字>)` 认 */
   const LAYER_RE = /^::view-transition-(group|image-pair|old|new)\(([^)]*)\)$/;
   const LAYERS = ['group', 'image-pair', 'old', 'new'].map(layer => `::view-transition-${layer}(root)`);
-
-  /**
-   * 按大括号深度切出**顶层**规则：`{` 之前攒下的那段是选择器清单（或 at-rule 的前奏），
-   * 深度回到 0 时那一条才收进结果。at-rule 因此整块算一条——它的嵌套规则不在判据范围内。
-   */
-  const topLevelRules = (src: string): Array<{ selectorText: string; body: string }> => {
-    const rules: Array<{ selectorText: string; body: string }> = [];
-    let depth = 0;
-    let pending = '';
-    let selectorText = '';
-    let body = '';
-    for (const char of src) {
-      if (char === '{') {
-        if (depth === 0) {
-          selectorText = pending;
-          pending = '';
-          body = '';
-        } else {
-          body += char;
-        }
-        depth += 1;
-        continue;
-      }
-      if (char === '}') {
-        depth -= 1;
-        if (depth === 0) {
-          rules.push({ selectorText, body });
-          selectorText = '';
-          body = '';
-        } else {
-          body += char;
-        }
-        continue;
-      }
-      if (depth === 0) pending += char;
-      else body += char;
-    }
-    return rules;
-  };
 
   it('每一条点名快照层的顶层规则都同时声明 recolour 时长与 standard 缓动', () => {
     const src = readFileSync(TOKENS_FILE, 'utf-8').replace(/\/\*[\s\S]*?\*\//g, ' ');
@@ -1040,5 +1040,108 @@ describe('设置框里那圈色卡描边不能被滚动容器裁掉（算式守�
         `盒宽 ${box}、最严缩放 ${scale}、外扩 ${reach}（选中圈 ${ring} / 焦点环 ${outlineWidth}+${outlineOffset}），` +
         `左右留白至少要 ${needed.toFixed(2)}px，现在只有 ${padding}px`,
     ).toBeGreaterThanOrEqual(needed);
+  });
+});
+
+/**
+ * 滚动条：一份配方、两个画师、够不着视口
+ *
+ * 这一层此前只有 options 的弹窗与抽屉正文两处在画（4px / 圆角 2px 的字面量），其余能滚的地方
+ * 各自落在两套默认外观上：EP 自绘的那套是一抹半透明灰，原生 `overflow` 容器是系统蓝。
+ * 现在两条路都从 `--cop-scrollbar-*` 取值，而**原生那条只有一份**——逐个点组件类名的写法
+ * 要抄六遍，漏掉的那一格静默退回系统蓝，将来新长出来的滚动容器同样没人管。
+ *
+ * 三条判据各自挡一种静默回归：
+ * ① 配方旁生（组件里又写一份 `::-webkit-scrollbar`，两处取值迟早分家）；
+ * ② 够到视口（`body::…` / `html::…` / `:root::…`）——Blink 在 `html` 没有滚动条样式时拿
+ *    `body` 那份去画视口滚动条，叠加式一旦变成占位的经典条，弹窗内容宽当场少 6px，
+ *    而「320 / 352 / 368」那一整套不裁字读数是按叠加式量出来的；
+ * ③ EP 那四个变量写回 `:root`——自定义属性就近者赢，EP 声明在 `.el-scrollbar` 自己身上，
+ *    写在根上等于没写，表格与下拉照旧是它自己那抹灰。
+ */
+describe('滚动条统一走令牌，且不碰视口那条', () => {
+  const SRC = readFileSync(TOKENS_FILE, 'utf-8');
+  const RULES = topLevelRules(stripComments(SRC));
+  const SCROLLBAR_RULES = RULES.filter(rule => rule.selectorText.includes('::-webkit-scrollbar'));
+
+  it('全仓只有令牌层在画原生滚动条（组件里再写一份就是第二处取值）', () => {
+    const offenders = files
+      .filter(file => file !== TOKENS_FILE)
+      .filter(file => stripComments(readFileSync(file, 'utf-8')).includes('::-webkit-scrollbar'));
+    expect(offenders, '这些文件自带一份滚动条配方，请改引 --cop-scrollbar-* 那一组：' + offenders.join('、')).toEqual(
+      [],
+    );
+  });
+
+  it('原生那几条一律是 body 的后代选择器：够不着视口滚动条', () => {
+    // 解析自检：轨道 / 滑块 / 悬停 / 尺寸四条是这套配方的下限，切不出来就是判据空转
+    expect(
+      SCROLLBAR_RULES.length,
+      `只切出 ${SCROLLBAR_RULES.length} 条原生滚动条规则，解析失效`,
+    ).toBeGreaterThanOrEqual(4);
+    for (const rule of SCROLLBAR_RULES) {
+      for (const selector of rule.selectorText.split(',').map(s => s.trim())) {
+        expect(
+          // 承重的是那个空白：`body ::…` 是后代，`body::…` 是自身，两者只差一个空格
+          /^body\s+\S/.test(selector),
+          `${selector} 不是 body 的后代选择器：写成自身或根元素会把视口滚动条变成占位的经典条`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('那几条的取值只有令牌与 transparent，没有第二把尺', () => {
+    for (const rule of SCROLLBAR_RULES) {
+      for (const declaration of rule.body
+        .split(';')
+        .map(d => d.trim())
+        .filter(Boolean)) {
+        const value = declaration.slice(declaration.indexOf(':') + 1).trim();
+        expect(
+          value === 'transparent' || /^var\(--cop-[a-z0-9-]+\)$/.test(value),
+          `${rule.selectorText.trim()} 里的「${declaration}」不是令牌引用：滚动条的粗细与配色只有一处事实源`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('EP 自绘那套的四个变量落在 body .el-scrollbar 上，写在 :root 上等于没写', () => {
+    const epRule = RULES.find(rule => rule.selectorText.trim() === 'body .el-scrollbar');
+    expect(epRule, '找不到 body .el-scrollbar 那条：EP 的假滚动条退回它自己那抹半透明灰').toBeDefined();
+    for (const name of [
+      '--el-scrollbar-bg-color',
+      '--el-scrollbar-hover-bg-color',
+      '--el-scrollbar-opacity',
+      '--el-scrollbar-hover-opacity',
+    ]) {
+      expect(epRule?.body ?? '', `EP 那套少了 ${name}`).toContain(`${name}:`);
+    }
+    // 颜色那两枚必须引令牌；透明度那两枚是「要不要淡」的开关，写成 1 是刻意的（默认 0.3 太虚）
+    expect(epRule?.body ?? '').toContain('--el-scrollbar-bg-color: var(--cop-scrollbar-thumb);');
+    expect(epRule?.body ?? '').toContain('--el-scrollbar-hover-bg-color: var(--cop-scrollbar-thumb-hover);');
+    for (const rule of RULES) {
+      if (!rule.selectorText.includes(':root')) continue;
+      expect(rule.body, `${rule.selectorText.trim()} 在根上声明了 EP 的滚动条变量，会被它自己那层盖掉`).not.toMatch(
+        /--el-scrollbar-[a-z-]+\s*:/,
+      );
+    }
+  });
+
+  it('两个暗色基座各给滚动条两枚令牌一档（跟随系统那条也不能漏）', () => {
+    const darkBases: string[] = [];
+    for (const rule of RULES) {
+      const selector = rule.selectorText.trim();
+      if (selector === ":root[data-mode='dark']") darkBases.push(rule.body);
+      if (selector === '@media (prefers-color-scheme: dark)') {
+        for (const nested of topLevelRules(rule.body)) {
+          if (nested.selectorText.trim() === ':root:not([data-mode])') darkBases.push(nested.body);
+        }
+      }
+    }
+    expect(darkBases.length, '两个暗色基座没都解析出来，这一格已空转').toBe(2);
+    for (const body of darkBases) {
+      expect(body).toMatch(/--cop-scrollbar-thumb:\s*#/);
+      expect(body).toMatch(/--cop-scrollbar-thumb-hover:\s*#/);
+    }
   });
 });

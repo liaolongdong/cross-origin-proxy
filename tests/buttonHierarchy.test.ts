@@ -212,6 +212,66 @@ describe('popup 动作区的形状', () => {
   });
 });
 
+describe('筛选栏：动作组是一个整体，图标按语义成对', () => {
+  const bar = readFileSync('components/options/SearchFilterBar.vue', 'utf8');
+  const tags = buttonTags(bar);
+
+  /** 取出某个动作那枚图标的名字（`:icon="Open"` → `Open`） */
+  const iconOf = (handler: string): string => {
+    const tag = tags.find(item => item.includes(handler));
+    expect(tag, `筛选栏里找不到 ${handler}`).toBeTruthy();
+    return tag!.match(/:icon="(\w+)"/)![1];
+  };
+
+  it('六颗按钮全带 :icon，且取自共用图标包（不再内联 el-icon 手摆间距）', () => {
+    expect(tags, '筛选栏的按钮数变了：加一颗要回来重判「同一容器同一形状」').toHaveLength(6);
+    for (const tag of tags) {
+      expect(/:icon="/.test(tag), `这一颗没有图标：${tag.replace(/\s+/g, ' ')}`).toBe(true);
+    }
+    expect(bar).toContain("from '@element-plus/icons-vue'");
+    expect(bar, '手摆间距的内联 el-icon 又回来了').not.toMatch(/<el-icon style=/);
+  });
+
+  it('同一个动词在两处是同一枚图标（批量启用与全部启用说的是同一件事）', () => {
+    expect(iconOf("$emit('batchToggle', true)")).toBe(iconOf("$emit('toggleAll', true)"));
+    expect(iconOf("$emit('batchToggle', false)")).toBe(iconOf("$emit('toggleAll', false)"));
+  });
+
+  it('这一排没有主行动：破坏性那颗 danger plain，其余五颗一律无型', () => {
+    // 筛选栏里全是「对已有规则动手」，没有提交/生成，所以一颗实心 primary 都不该有
+    expect(tags.filter(tag => /type="danger"/.test(tag) && /\bplain\b/.test(tag))).toHaveLength(1);
+    expect(tags.filter(tag => /type="/.test(tag) && !/type="danger"/.test(tag))).toHaveLength(0);
+  });
+
+  it('两组动作各自包在 .bar-actions 里，且那个类真的有折行规则（只加 markup 等于没分组）', () => {
+    expect(bar.match(/class="bar-actions"/g), '两组动作都要包，只包一组时另一组仍会被甩散').toHaveLength(2);
+    const start = bar.indexOf('.bar-actions {');
+    expect(start, '.bar-actions 只有 markup 没有样式：分组是个空壳').toBeGreaterThan(-1);
+    const css = bar.slice(start, bar.indexOf('}', start));
+    expect(css).toContain('display: flex;');
+    expect(css).toContain('flex-wrap: wrap;');
+    // 组内间距与外层同源：不同源时「一组」在视觉上仍是散落的几颗
+    expect(css).toContain('gap: var(--cop-space-4) var(--cop-space-5);');
+  });
+
+  it('⌘K 那颗仍是 32px 的键帽：它是面板唯一的鼠标入口，不许缩成面板里那种小键帽', () => {
+    const start = bar.indexOf('.command-hint {');
+    expect(start, '.command-hint 样式块不见了').toBeGreaterThan(-1);
+    const css = bar.slice(start, bar.indexOf('}', start));
+    expect(css, '唯一入口被缩小了').toContain('height: 32px;');
+    expect(css, '键帽的底缘厚度没了').toContain('box-shadow: 0 1px 0');
+    expect(bar).toMatch(/\.command-hint:active \{[\s\S]*?transform: translateY\(1px\);/);
+  });
+
+  it('它的焦点环走 outline：box-shadow 那份被键帽厚度占着，写在一起会被 :hover 整条盖掉', () => {
+    const start = bar.indexOf('.command-hint:focus-visible {');
+    expect(start, '这一颗没有显式焦点环').toBeGreaterThan(-1);
+    const css = bar.slice(start, bar.indexOf('}', start));
+    expect(css).toContain('outline: 2px solid var(--cop-primary);');
+    expect(css).not.toContain('box-shadow');
+  });
+});
+
 describe('层级表住在文档里', () => {
   it('AGENTS.md 有一份按钮层级表（规则不能只活在测试里）', () => {
     expect(readFileSync('AGENTS.md', 'utf8')).toContain('按钮层级表');

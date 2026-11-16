@@ -98,7 +98,12 @@
       class="command-footer"
       aria-hidden="true"
     >
-      ↑ ↓ · Enter · Esc
+      <kbd class="command-key">↑</kbd>
+      <kbd class="command-key">↓</kbd>
+      <span class="command-key-sep">·</span>
+      <kbd class="command-key">Enter</kbd>
+      <span class="command-key-sep">·</span>
+      <kbd class="command-key">Esc</kbd>
     </div>
   </el-dialog>
 </template>
@@ -316,7 +321,7 @@ function chooseAction(action: CommandPaletteAction) {
 
 <style scoped>
 .command-palette-dialog :deep(.el-dialog__body) {
-  padding-top: 8px;
+  padding-top: var(--cop-space-3);
 }
 
 .command-search {
@@ -324,13 +329,16 @@ function chooseAction(action: CommandPaletteAction) {
   box-sizing: border-box;
   width: 100%;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 var(--cop-space-5);
   font: inherit;
   color: inherit;
   outline: none;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color-light);
-  border-radius: 8px;
+  border-radius: var(--cop-radius-md);
+  transition:
+    border-color var(--cop-duration-fast) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-fast) var(--cop-ease-standard);
 }
 
 .command-search:focus {
@@ -340,33 +348,40 @@ function chooseAction(action: CommandPaletteAction) {
 
 .command-list {
   max-height: 52vh;
-  margin-top: 12px;
+  margin-top: var(--cop-space-5);
   overflow-y: auto;
 }
 
 .command-group {
-  padding: 8px 8px 4px;
+  padding: var(--cop-space-3) var(--cop-space-3) var(--cop-space-1);
   font-size: 11px;
   color: var(--cop-text-color-secondary);
 }
 
 .command-item {
   display: flex;
-  gap: 10px;
+  gap: var(--cop-space-4);
   align-items: center;
   width: 100%;
-  padding: 9px 10px;
+  padding: 9px var(--cop-space-4);
   font: inherit;
   color: inherit;
   text-align: left;
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--cop-radius-md);
+  transition:
+    background-color var(--cop-duration-instant) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
+/* 活动项在浅底之外再补一道左缘色条：↑↓ 连按时视线停在列表中部，整行浅色在余光里分不出是哪一行，
+   而左缘那道竖线是位置线索。用 inset 阴影而不是 border-left / ::before——前者不占布局，
+   换行时行宽与文字起点都不动（后两者会让每一行在选中那一刻横向抖 2px）。 */
 .command-item.is-active {
   background: var(--cop-primary-bg);
+  box-shadow: inset 2px 0 0 var(--cop-primary);
 }
 
 .command-rule-name {
@@ -403,7 +418,7 @@ function chooseAction(action: CommandPaletteAction) {
 
 /* 「规则那半没说上话」那一句：比空态矮一档，因为它是补话不是主句 */
 .command-note {
-  padding: 12px 8px;
+  padding: var(--cop-space-5) var(--cop-space-3);
   margin: 0;
   font-size: 12px;
   color: var(--cop-text-color-secondary);
@@ -411,11 +426,30 @@ function chooseAction(action: CommandPaletteAction) {
 }
 
 .command-footer {
-  padding-top: 10px;
-  margin-top: 8px;
+  display: flex;
+  gap: var(--cop-space-1);
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: var(--cop-space-4);
+  margin-top: var(--cop-space-3);
   font-size: 11px;
   color: var(--cop-text-color-placeholder);
-  text-align: right;
   border-top: 1px solid var(--cop-border-color-light);
+}
+
+/* 键帽：这一行说的是「怎么按」，画成键帽比一串裸字符更快读成按键而不是说明文字。
+   容器整个 aria-hidden，所以这里只是装饰，不承载读屏文案。 */
+.command-key {
+  padding: 1px var(--cop-space-1);
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--cop-text-color-secondary);
+  background: var(--cop-bg-color-secondary);
+  border: 1px solid var(--cop-border-color-light);
+  border-radius: var(--cop-radius-xs);
+}
+
+.command-key-sep {
+  color: var(--cop-text-color-placeholder);
 }
 </style>

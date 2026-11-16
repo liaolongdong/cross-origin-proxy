@@ -294,6 +294,8 @@ A rule stops being "simple" as soon as it has any of: request header or body ove
 
 ## ❓ FAQ
 
+The [product site](https://liaolongdong.github.io/cross-origin-proxy/en.html)'s FAQ (21 questions in five categories, in both languages) has two **shareable address shapes**: `…/en.html?q=CORS` lands with the filter box filled, the list filtered and the viewport at that section (a case-insensitive substring match over the question **and** its answer, so a word that appears only in an answer still finds the question), while `…/en.html#faq-channels-2` opens one question already expanded. A fragment pointing at one question wins over the keyword (`q` then leaves the address); other on-page fragments coexist with it. The keyword is capped at 200 characters, and the address bar always equals what is in the box. Cite a fragment when answering one question, and a keyword address when the answer spans several.
+
 <details open>
 <summary><strong>Does this bypass CORS?</strong></summary>
 
