@@ -77,6 +77,31 @@
         </el-select>
       </div>
 
+      <!-- 容量上限 -->
+      <div class="setting-section">
+        <div class="setting-label">{{ t('capacityLimitsLabel') }}</div>
+        <p class="setting-hint">{{ t('capacityLimitsHint') }}</p>
+        <div class="capacity-row">
+          <div
+            v-for="field in LIMIT_FIELDS"
+            :key="field.key"
+            class="capacity-item"
+          >
+            <span class="capacity-item-label">{{ t(field.labelKey) }}</span>
+            <el-input-number
+              :model-value="limitsView[field.key]"
+              :min="LIMIT_BOUNDS[field.key].min"
+              :max="LIMIT_BOUNDS[field.key].max"
+              :step="field.step"
+              size="small"
+              :aria-label="t(field.labelKey)"
+              @update:model-value="(val: number | undefined) => handleLimitChange(field.key, val)"
+            />
+          </div>
+        </div>
+        <p class="setting-hint">{{ t('capacityLimitsNote') }}</p>
+      </div>
+
       <!-- 凭据变量 -->
       <div class="setting-section">
         <div class="setting-label">{{ t('variablesLabel') }}</div>
@@ -156,7 +181,7 @@
       <!-- 配置恢复点 -->
       <div class="setting-section">
         <div class="setting-label">{{ t('restorePointsLabel') }}</div>
-        <p class="setting-hint">{{ t('restorePointsHint', MAX_CONFIG_HISTORY) }}</p>
+        <p class="setting-hint">{{ t('restorePointsHint', limitsView.maxConfigHistory) }}</p>
 
         <p
           v-if="historyLoadFailed"
@@ -328,7 +353,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { Sunny, Moon, Monitor, Delete, Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { THEME_OPTIONS, THEME_MODE_OPTIONS, type ThemeName } from '@/utils/theme';
@@ -338,9 +363,15 @@ import {
   MAX_VARIABLES,
   MAX_VARIABLE_NAME_LENGTH,
   MAX_VARIABLE_VALUE_LENGTH,
-  MAX_CONFIG_HISTORY,
 } from '@/utils/constants';
 import { AUTO_OFF_PRESETS, readAutoOffMinutes, writeAutoOffMinutes } from '@/utils/autoOff';
+import {
+  LIMIT_BOUNDS,
+  DEFAULT_CAPACITY_LIMITS,
+  readCapacityLimits,
+  writeCapacityLimits,
+  type CapacityLimits,
+} from '@/utils/limits';
 import { LOCALE_OPTIONS, type LocaleName } from '@/utils/i18n';
 import { DEFAULT_SITE_STATE, sanitizeSiteState, withoutHost } from '@/utils/siteScope';
 import { isStoreInstalled, storeReviewUrl } from '@/utils/storePage';
@@ -587,6 +618,11 @@ watch(
       }
       if (round !== variablesRound) return;
       autoOffMinutes.value = minutes;
+      // 容量上限与自动关闭同一次打开读取：读不到时 `readCapacityLimits` 自己回退默认并保持
+      // 界面可写（写失败有回滚），这一节不需要独立的「读失败」提示
+      const limits = await readCapacityLimits();
+      if (round !== variablesRound) return;
+      Object.assign(limitsView, limits);
       await loadVariablesInto(round);
       if (round !== variablesRound) return;
     } finally {
@@ -801,6 +837,35 @@ async function handleAutoOffChange(val: string | number) {
   ElMessage.error(t('autoOffSaveFailed'));
 }
 
+// ─── 容量上限 ─────────────────────────────────────────────────────────────────
+
+/** 容量上限三个字段（渲染顺序 = 声明顺序） */
+const LIMIT_FIELDS: { key: keyof CapacityLimits; labelKey: string; step: number }[] = [
+  { key: 'maxRules', labelKey: 'maxRulesLabel', step: 10 },
+  { key: 'maxLogEntries', labelKey: 'maxLogEntriesLabel', step: 50 },
+  { key: 'maxConfigHistory', labelKey: 'maxConfigHistoryLabel', step: 1 },
+];
+
+/** 当前显示的容量上限：打开弹窗时从 storage 读，写入失败时回滚到这里之前的值 */
+const limitsView = reactive<CapacityLimits>({ ...DEFAULT_CAPACITY_LIMITS });
+
+/**
+ * 改一项上限：先上屏再落盘，失败回滚——与自动关闭那一档同一套规矩。
+ *
+ * 三项一起写（`writeCapacityLimits` 收整份对象）：这一键在 storage 里只有一个出口，
+ * 单字段各写一份就会让「并发改两项」出现互相覆盖的窗口。
+ */
+async function handleLimitChange(key: keyof CapacityLimits, val: number | undefined): Promise<void> {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return;
+  const previous = limitsView[key];
+  if (val === previous) return;
+  limitsView[key] = val;
+  const ok = await writeCapacityLimits({ ...limitsView });
+  if (ok) return;
+  limitsView[key] = previous;
+  ElMessage.error(t('limitSaveFailed'));
+}
+
 function handleModeChange(val: string | number | boolean | undefined) {
   if (val === 'light' || val === 'dark' || val === 'system') {
     emit('changeThemeMode', val as ThemeMode);
@@ -916,6 +981,24 @@ function handleLocaleChange(val: string | number | boolean | undefined) {
   font-size: 14px;
   font-weight: 500;
   color: var(--cop-text-color-primary);
+}
+
+/* 容量上限三枚步进框：一行三个，窄窗口下自己折行 */
+.capacity-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+
+.capacity-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.capacity-item-label {
+  font-size: 13px;
+  color: var(--cop-text-color-regular);
 }
 
 .setting-hint {

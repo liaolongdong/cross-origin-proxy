@@ -14,6 +14,7 @@ export const STORAGE_KEYS = {
   RECENT_TARGETS: 'recent_targets', // 最近用过的目标环境 origin（便利候选，不参与判定、不进任何导出）
   SITE_STATE: 'site_proxy_state', // 站点维度的生效范围（见 utils/siteScope.ts）；不进任何导出
   WELCOME_DISMISSED: 'welcome_dismissed', // 首装欢迎卡是否被关过；纯界面状态，不参与判定、不进任何导出
+  CAPACITY_LIMITS: 'capacity_limits', // 容量上限覆盖（见 utils/limits.ts）；缺省/读坏时回退本文件的 MAX_* 默认值
 } as const;
 
 // Theme modes
@@ -36,6 +37,15 @@ export const DEFAULT_PROXY_CONFIG: ProxyConfig = {
 // Limits
 export const MAX_LOG_ENTRIES = 500;
 export const MAX_RULES = 200;
+/**
+ * 批量重放一次至多的条数。
+ *
+ * 批量是**串行真实发出**的（并发打向同一环境与「重放要回答现在会怎么走」不是一回事），
+ * 20 条 × 单笔至多 30s 超时意味着一轮的封顶时长可控；而误勾「全选 + 全量筛选」的
+ * 500 条如果直接放行，是一轮 4 小时的真请求。上限拦截在 LogDrawer 的按钮侧（要给
+ * 用户一句话），`composables/useBatchReplay.ts` 里另有兜底。
+ */
+export const BATCH_REPLAY_LIMIT = 20;
 /**
  * 规则标签的两道上限（标签是用户自己起的分类名，只服务筛选，不参与匹配与任何判定）。
  *

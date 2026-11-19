@@ -13,15 +13,14 @@ import type {
 import {
   STORAGE_KEYS,
   DEFAULT_PROXY_CONFIG,
-  MAX_LOG_ENTRIES,
   MAX_LOG_BODY_SIZE,
   MAX_LOG_FIELD_SIZE,
   MAX_LOG_HEADER_COUNT,
   MAX_LOG_TOTAL_SIZE,
-  MAX_RULES,
   MAX_CONFIG_HISTORY,
   MAX_CONFIG_HISTORY_TOTAL_SIZE,
 } from '@/utils/constants';
+import { readCapacityLimits } from '@/utils/limits';
 import { truncateForLog } from '@/utils/formatters';
 import { logger } from '@/utils/logger';
 import { deduplicateRules } from '@/utils/ruleConflicts';
@@ -308,7 +307,8 @@ export async function toggleRule(ruleId: string, enabled?: boolean): Promise<{ s
 export async function addRule(rule: ProxyRule): Promise<void> {
   await withStorageLock(async () => {
     const config = await getProxyConfig();
-    if (config.rules.length >= MAX_RULES) {
+    const { maxRules } = await readCapacityLimits();
+    if (config.rules.length >= maxRules) {
       throw new Error('MAX_RULES_EXCEEDED');
     }
     config.rules.push(rule);
@@ -324,7 +324,8 @@ export async function batchAddRules(rules: ProxyRule[]): Promise<void> {
   if (rules.length === 0) return;
   await withStorageLock(async () => {
     const config = await getProxyConfig();
-    if (config.rules.length + rules.length > MAX_RULES) {
+    const { maxRules } = await readCapacityLimits();
+    if (config.rules.length + rules.length > maxRules) {
       throw new Error('MAX_RULES_EXCEEDED');
     }
     config.rules.push(...rules);
@@ -487,9 +488,10 @@ export async function importProxyConfig(
 ): Promise<ImportProxyConfigResult> {
   return withStorageLock(async () => {
     const config = await getProxyConfig();
+    const { maxRules } = await readCapacityLimits();
     if (options.mode === 'merge') {
       const newRules = deduplicateRules(config.rules, incoming);
-      if (config.rules.length + newRules.length > MAX_RULES) {
+      if (config.rules.length + newRules.length > maxRules) {
         return { success: false, error: 'MAX_RULES_EXCEEDED' };
       }
       await saveProxyConfig({
@@ -498,7 +500,7 @@ export async function importProxyConfig(
       });
       return { success: true, added: newRules.length, skipped: incoming.length - newRules.length };
     }
-    if (incoming.length > MAX_RULES) {
+    if (incoming.length > maxRules) {
       return { success: false, error: 'MAX_RULES_EXCEEDED' };
     }
     // 主写入先落盘，再把「被换掉的那一份」记进恢复点：快照取的是手里这份锁内 `config`，
@@ -587,7 +589,8 @@ export function logEntrySize(log: RequestLogEntry): number {
  * （与 `saveProxyConfig` 的 `finally` 同一判据）。
  */
 export async function saveRequestLogs(logs: RequestLogEntry[]): Promise<void> {
-  const trimmed = trimLogsToBudget(logs.slice(0, MAX_LOG_ENTRIES));
+  const { maxLogEntries } = await readCapacityLimits();
+  const trimmed = trimLogsToBudget(logs.slice(0, maxLogEntries));
   let written = false;
   try {
     await chrome.storage.local.set({ [STORAGE_KEYS.REQUEST_LOGS]: trimmed });
@@ -684,7 +687,8 @@ async function doFlushLogs(): Promise<void> {
     // 快照已从缓冲区取走，直接丢弃等于静默丢日志：按时间顺序放回去等下一次刷写重试。
     // 缓冲区是「最旧在前」的追加序，故收口时切掉头部——配额持续失败也要留下刚发生的请求。
     logger.error('Request log flush failed, keeping entries for retry:', error);
-    logBuffer = [...bufferSnapshot, ...logBuffer].slice(-MAX_LOG_ENTRIES);
+    const { maxLogEntries } = await readCapacityLimits();
+    logBuffer = [...bufferSnapshot, ...logBuffer].slice(-maxLogEntries);
   }
 }
 
@@ -1003,8 +1007,9 @@ export function sanitizeConfigHistory(raw: unknown): ConfigHistoryEntry[] {
 
 async function readConfigHistory(): Promise<ConfigHistoryEntry[]> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.CONFIG_HISTORY);
+  const { maxConfigHistory } = await readCapacityLimits();
   // 写侧已按预算收口，这里只兜住"手改进 storage"这一种来路：列表不无界增长，界面不无界渲染
-  return sanitizeConfigHistory(result[STORAGE_KEYS.CONFIG_HISTORY]).slice(0, MAX_CONFIG_HISTORY);
+  return sanitizeConfigHistory(result[STORAGE_KEYS.CONFIG_HISTORY]).slice(0, maxConfigHistory);
 }
 
 /** 恢复点列表（最新在前），只经消息层给扩展自己的页面读 */
@@ -1052,7 +1057,8 @@ async function pushConfigHistory(reason: ConfigHistoryReason, snapshot: ProxyCon
     ruleCount: snapshot.rules.length,
     config: { enabled: snapshot.enabled, rules: snapshot.rules },
   };
-  const next = capConfigHistory([entry, ...history]);
+  const { maxConfigHistory } = await readCapacityLimits();
+  const next = capConfigHistory([entry, ...history], maxConfigHistory);
   if (!next.length && history.length) {
     // 单份新快照自己就越过预算：那就不记这一份，但**绝不能把已在预算内的旧恢复点一起抹掉**——
     // 用户刚做的正是整套替换，此刻那几份旧账是他唯一的退路
@@ -1080,7 +1086,8 @@ export async function restoreConfigHistory(
   return withStorageLock(async () => {
     const entry = (await readConfigHistory()).find(h => h.id === id);
     if (!entry) return { success: false, error: 'HISTORY_ENTRY_NOT_FOUND' };
-    if (entry.ruleCount > MAX_RULES) {
+    const { maxRules } = await readCapacityLimits();
+    if (entry.ruleCount > maxRules) {
       // 手改过的存储能塞进超限快照；照写会让 DNR 整批被拒，等于回退完代理直接不工作
       return { success: false, error: 'MAX_RULES_EXCEEDED' };
     }

@@ -13,6 +13,7 @@ import { describeDnrInstallState } from './dnrManager';
 import { countProxyRequestForTab, getInterceptorStats, recordInterceptorStats } from './interceptorStats';
 import { clearConfigUnsynced, isConfigUnsynced } from './configSyncState';
 import { IMPORTED_RULE_PRIORITY, SCHEMA_VERSION } from '@/utils/constants';
+import { readCapacityLimits } from '@/utils/limits';
 import {
   getProxyConfig,
   replaceProxyConfig,
@@ -195,6 +196,9 @@ async function handleImportPlan(
   try {
     const config = await getProxyConfig();
     const validRules = normalizeImportedRules(payload.rules);
+    // 预览的上限必须与真实写入侧（importProxyConfig 锁内）同源：用户把规则上限调到 300 后，
+    // 预览还按 200 判「超限」就是在替写入侧回一句它不会说的话
+    const { maxRules } = await readCapacityLimits();
     return {
       success: true,
       // 这里刻意不走 `configRules()`（与 `runProxyRequest` 相反）：现网规则是这份预演的对照物，
@@ -203,7 +207,7 @@ async function handleImportPlan(
       // 当成现网条数。过一遍 `configRules()` 是把前者一律改成后者那种体面的假数（合并报「全部新增」、
       // 替换报 `replaces: 0`），而「预览说几条、实际进几条」正是这支功能存在的全部理由。
       // 三种形状与「调用点本身」由 `tests/importPlan.test.ts` 末尾的现状记录钉住
-      plan: planImport(config.rules, validRules, payload.mode),
+      plan: planImport(config.rules, validRules, payload.mode, maxRules),
     };
   } catch (error) {
     logger.error('Failed to build import plan:', error);
@@ -704,15 +708,24 @@ export function setupMessageRouter(): void {
       case MessageType.SAVE_PROFILE: {
         // 消息体同属不可信输入：形状不全的快照落库之后，列表渲染会在 `rules.length` 上抛、
         // 加载那一步又会拒绝，用户只剩「删掉它」一条路。闸门放在写入之前。
+        // 形状坏（`invalid-rules`）的那一档同步拒绝——判它不需要读 storage，也不该让
+        // 用户等一次往返才听到「这份不行」；只有条数上限那一档需要读用户配置，走异步。
         const candidate = message.data;
-        const inspection = isStoredProfileEntry(candidate) ? inspectProfileRules(candidate) : undefined;
-        if (!inspection?.rules) {
+        if (!isStoredProfileEntry(candidate) || inspectProfileRules(candidate).code === 'invalid-rules') {
           sendResponse({ success: false, error: 'Invalid profile' });
           return false;
         }
         return respondAsync(
           sendResponse,
-          saveProfile({ ...candidate, rules: inspection.rules }).then(() => ({ success: true })),
+          (async () => {
+            const { maxRules } = await readCapacityLimits();
+            const inspection = inspectProfileRules(candidate, maxRules);
+            if (!inspection.rules) {
+              return { success: false, error: 'Invalid profile' };
+            }
+            await saveProfile({ ...candidate, rules: inspection.rules });
+            return { success: true };
+          })(),
         );
       }
 

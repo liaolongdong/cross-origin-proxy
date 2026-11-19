@@ -91,6 +91,14 @@ describe('[Build] 构建产物全量验证', () => {
       expect(manifest.permissions).toContain('alarms');
     });
 
+    // 侧边栏常驻日志：入口在 popup（chrome.sidePanel.open 需要用户手势），
+    // manifest 这一侧由 WXT 按 `entrypoints/sidepanel/` 自动写入——两者任一缺席，
+    // popup 里那枚按钮就只在 API 在场上画得出来、点下去必然失败
+    it('should have sidePanel permission and the side panel path', () => {
+      expect(manifest.permissions).toContain('sidePanel');
+      expect(manifest.side_panel?.default_path).toBe('sidepanel.html');
+    });
+
     it('should have <all_urls> host permission', () => {
       expect(manifest.host_permissions).toContain('<all_urls>');
     });

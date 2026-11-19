@@ -87,5 +87,12 @@
   "siteScopeParentCovered": "这台站点由名单里的父域名覆盖，无法单独切换。请到设置页调整父域名。",
   "siteScopeCapReached": "站点名单已到 $1 条上限，这台加不进去。请到设置页删掉一条再试。",
   "siteScopeSaveFailed": "站点设置保存失败，请重试",
-  "openOptionsPageFailed": "没能打开配置页，请从工具栏图标再试一次"
+  "openOptionsPageFailed": "没能打开配置页，请从工具栏图标再试一次",
+  "activeRulesHint": "当前已启用并参与匹配的规则数",
+  "todayRequestsHint": "今天经扩展 SW 通道代发的请求数；网络层重定向的请求不在这里计数",
+  "recentRequestsEmptyHint": "打开一个会发请求的页面，经扩展代发的请求会出现在这里",
+  "openSidePanel": "在侧边栏常驻查看",
+  "openSidePanelFailed": "没能打开侧边栏，请重试",
+  "sidePanelTitle": "请求日志 · 侧边栏",
+  "sidePanelOpenOptionsForMock": "存为 Mock 要在配置页完成，已为你打开请求日志"
 }

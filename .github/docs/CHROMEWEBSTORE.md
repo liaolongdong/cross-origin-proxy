@@ -15,7 +15,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 | -------- | ---------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 名称     | 75 码点    | 36 / 52                                                  | 只承载品牌 + 三个真实能力词，不再扩张（堆砌是拒审高危字段）                                                                                                                                                                                                                                                                |
 | 摘要     | 132 码点   | 100 / 127                                                | 中文补齐最高意图词「跨域」「联调」，英文补 `retry`；两边都留白以免搜索结果被截断                                                                                                                                                                                                                                           |
-| 详细描述 | 16000 码点 | 中约 5.8K / 英约 16.0K（2026-10-19 现量 5,831 / 15,966） | 中文侧余量充足，**英文侧只剩 34 码点**：中英按「行数 / 条目数 / 段落数」逐行对等同步（`tests/docs-consistency.test.ts` 守卫），所以**扩写瓶颈在英文，不在中文**。往下加新段落的唯一前提是先在英文侧腾出等量空间，见 §0.1；加字只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
+| 详细描述 | 16000 码点 | 中约 5.9K / 英约 16.0K（2026-11-19 现量 5,866 / 15,980） | 中文侧余量充足，**英文侧只剩 20 码点**：中英按「行数 / 条目数 / 段落数」逐行对等同步（`tests/docs-consistency.test.ts` 守卫），所以**扩写瓶颈在英文，不在中文**。往下加新段落的唯一前提是先在英文侧腾出等量空间，见 §0.1；加字只加**新的内容类型**或补本节关键词表已承诺、正文却缺失的落点，不把同一批能力换个说法重述一遍 |
 
 | 目标查询                                                    | 用户怎么搜                     | 落点                                                                  |
 | ----------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ Chrome 应用商店搜索的权重顺序是 **名称 > 摘要（manifest descrip
 
 **这个差不是「中文写得少」**。两份详细描述逐行对等：28 个段落、64 个 `- ` 条目、134 行，一条不多一条不少（`tests/docs-consistency.test.ts` 的「中英详细描述结构对等」按 `{lines, bullets, paragraphs}` 全等断言）。差的只有语言密度——2026-09-22 这一轮新增的五处内容块，中文侧 +852 码点，英文镜像 +2,781 码点，**约 3.3 倍**。所以「把中文字数追到和英文一样」只能靠给中文单独加行，而那当场就会让对等守卫变红；**不要把码点不等当缺陷去"修"**，它和「英文列表以 FAT/UAT 开头」是同一类事实：语言特性，不是覆盖差。
 
-真正的约束因此落在英文那一份上。商店按语言各填一份详细描述、各自吃 16000 上限，中文列表还剩约 10.2K，英文只剩 **34 码点**（2026-10-19 按上面那条命令现量：中 5,831 / 英 15,966）；但因为结构必须对等，**英文一满，中文同时封顶**。
+真正的约束因此落在英文那一份上。商店按语言各填一份详细描述、各自吃 16000 上限，中文列表还剩约 10.1K，英文只剩 **20 码点**（2026-11-19 按上面那条命令现量：中 5,866 / 英 15,980；本轮的限制句按「默认值可调」改写时已做等行数压缩，扩写前先量）；但因为结构必须对等，**英文一满，中文同时封顶**。
 
 要再扩中文，按这个顺序腾空间：
 
@@ -199,7 +199,7 @@ PY
 - 隐私政策：https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - 产品说明页：https://liaolongdong.github.io/cross-origin-proxy/
 
-限制：最多 200 条规则、最近 500 条日志、请求体上限 10MB、延迟 0–60000 毫秒、Mock 与改写的状态码钳制在 200–599（否则前端无法构造有效响应）。需要较新版本的桌面 Google Chrome（Manifest V3）。
+限制：规则默认 200 条、日志默认最近 500 条（两者上限均可在设置页调高：规则至多 500、日志至多 2000）、请求体上限 10MB、延迟 0–60000 毫秒、Mock 与改写的状态码钳制在 200–599（否则前端无法构造有效响应）。需要较新版本的桌面 Google Chrome（Manifest V3）。
 
 问题反馈与源码：https://github.com/liaolongdong/cross-origin-proxy
 
@@ -352,7 +352,7 @@ About your data:
 - Privacy policy: https://liaolongdong.github.io/cross-origin-proxy/privacy.html
 - Product overview: https://liaolongdong.github.io/cross-origin-proxy/
 
-Limits: 200 rules, the last 500 log entries, 10 MB request body, delays of 0–60000 ms, and mocked or overridden status codes clamped to 200–599 so the page can always build a valid response. Requires a recent desktop Google Chrome (Manifest V3).
+Limits: 200 rules / 500 log entries by default (both adjustable in Settings), 10 MB request body, 0–60000 ms delays, and mocked or overridden status codes clamped to 200–599 so the page can build a valid response. Requires recent desktop Chrome (Manifest V3).
 
 Source code and issue tracker: https://github.com/liaolongdong/cross-origin-proxy
 
@@ -439,6 +439,7 @@ Redirects a page's API requests to another backend environment and lets develope
 | `declarativeNetRequestFeedback` | permissions      | Reads which dynamic rules actually matched, to show a per-rule hit count in the request-log drawer. This is the only way the user can see network-layer redirects, because those requests never reach the extension's JavaScript and therefore produce no per-request log entry. Used for display only; results are kept locally.                                                                                                                                            |
 | `alarms`                        | permissions      | Two timers: a keepalive ping so the background worker survives while proxying is active, and the user-configured auto-off countdown that turns proxying off after a set number of minutes. Minimum period is one minute; no second-precision scheduling is used.                                                                                                                                                                                                             |
 | `<all_urls>`                    | host_permissions | The extension must work on whatever origin the developer's frontend runs on — internal domains, `localhost` dev servers and staging hosts cannot be enumerated in advance, and they differ per developer. It is used to (a) inject the request interceptor on pages the user browses and (b) issue proxied requests on the user's behalf for rules the user authored. The extension sends no data to any third-party or developer-controlled server; see the privacy policy. |
+| `sidePanel`                     | permissions      | Shows the same local request log in the browser's side panel so it stays visible while the user debugs in the page's own DevTools (the popup closes as soon as focus moves). Triggered only by a click in the popup's request-log section; the panel reads nothing beyond what the extension already stores locally, and the log keeps its 500-entry buffer and local-only storage. |
 
 **为什么不用更窄的方案**（审核常追问，先答清楚）：`activeTab` 不满足需求——被代理的请求发生在用户浏览任意页面时的 `fetch`/XHR/WebSocket 调用中，不是用户点击扩展图标那一刻；按域名白名单也不可行，目标环境是每个开发者自己的内网域名。若审核要求收窄，可提议改为「用户手动授权当前站点」的降级方案。
 
