@@ -288,7 +288,9 @@
               :model-value="selectedLogIds.has(row.id)"
               :aria-label="t('replaySelectRowA11y')"
               @click.stop
-              @update:model-value="(val: boolean | string | number) => toggleSelectRow(row as RequestLogEntry, val as boolean)"
+              @update:model-value="
+                (val: boolean | string | number) => toggleSelectRow(row as RequestLogEntry, val as boolean)
+              "
             />
           </template>
         </el-table-column>
@@ -1206,14 +1208,22 @@ function batchResultOf(logId: string) {
 }
 
 /** 批量结果三档 tag 的档位（悬停 title 给完整十一档那句话） */
-function batchTagType(result: { running: boolean; reading: ReplayReading | null; transportFailed: boolean }): 'success' | 'danger' | 'info' {
+function batchTagType(result: {
+  running: boolean;
+  reading: ReplayReading | null;
+  transportFailed: boolean;
+}): 'success' | 'danger' | 'info' {
   if (result.running || result.transportFailed || !result.reading) return 'info';
   if (result.reading.outcome === 'failed') return 'danger';
   if (result.reading.outcome === 'answered') return (result.reading.status ?? 0) >= 400 ? 'danger' : 'success';
   return 'info';
 }
 
-function batchResultShort(result: { running: boolean; reading: ReplayReading | null; transportFailed: boolean }): string {
+function batchResultShort(result: {
+  running: boolean;
+  reading: ReplayReading | null;
+  transportFailed: boolean;
+}): string {
   if (result.running) return t('replayRunning');
   if (result.transportFailed || !result.reading) return t('batchReplayUnknown');
   if (result.reading.outcome === 'failed') return t('batchReplayFailed');
@@ -1268,8 +1278,12 @@ async function handleBatchReplay(): Promise<void> {
   // 部分条目被形拒时，汇总后面补一句「N 条没发出去」，而不是让它们安静消失
   const refusedNote = summary.refused > 0 ? ` · ${t('replaySelectedRefused', [String(summary.refused)])}` : '';
   ElMessage.success(
-    t('replaySelectedDone', [String(summary.total), String(summary.ok), String(summary.failed), String(summary.unknown)]) +
-      refusedNote,
+    t('replaySelectedDone', [
+      String(summary.total),
+      String(summary.ok),
+      String(summary.failed),
+      String(summary.unknown),
+    ]) + refusedNote,
   );
 }
 

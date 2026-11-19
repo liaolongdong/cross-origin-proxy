@@ -56,11 +56,7 @@ export function sanitizeCapacityLimits(raw: unknown): CapacityLimits {
   return {
     maxRules: clampLimit(input.maxRules, LIMIT_BOUNDS.maxRules, MAX_RULES),
     maxLogEntries: clampLimit(input.maxLogEntries, LIMIT_BOUNDS.maxLogEntries, MAX_LOG_ENTRIES),
-    maxConfigHistory: clampLimit(
-      input.maxConfigHistory,
-      LIMIT_BOUNDS.maxConfigHistory,
-      MAX_CONFIG_HISTORY,
-    ),
+    maxConfigHistory: clampLimit(input.maxConfigHistory, LIMIT_BOUNDS.maxConfigHistory, MAX_CONFIG_HISTORY),
   };
 }
 
@@ -92,10 +88,7 @@ export async function readCapacityLimits(): Promise<CapacityLimits> {
     return limits;
   } catch (error) {
     // 读不到就按「用户从没改过」走：上限这件事宁可暂时保守，也不能让规则写入整条失败
-    logger.warn(
-      'Failed to read capacity limits, using defaults:',
-      error instanceof Error ? error.name : typeof error,
-    );
+    logger.warn('Failed to read capacity limits, using defaults:', error instanceof Error ? error.name : typeof error);
     return { ...DEFAULT_CAPACITY_LIMITS };
   }
 }
@@ -111,10 +104,7 @@ export async function writeCapacityLimits(next: CapacityLimits): Promise<boolean
     cachedLimits = clean;
     return true;
   } catch (error) {
-    logger.warn(
-      'Failed to write capacity limits:',
-      error instanceof Error ? error.name : typeof error,
-    );
+    logger.warn('Failed to write capacity limits:', error instanceof Error ? error.name : typeof error);
     return false;
   }
 }

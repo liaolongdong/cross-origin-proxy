@@ -1603,9 +1603,7 @@ function openRecentLog(url: string) {
  * `chrome.sidePanel.open` 需要 tabId，且必须在用户手势内调用——这里正是弹窗里的一次点击。
  * API 形状经窄化取用（老版本类型定义里没有这一命名空间）：不在场时入口按钮整个不画。
  */
-const sidePanelApi = (
-  chrome as { sidePanel?: { open: (options: { tabId: number }) => Promise<void> } }
-).sidePanel;
+const sidePanelApi = (chrome as { sidePanel?: { open: (options: { tabId: number }) => Promise<void> } }).sidePanel;
 
 /** 入口按钮只在该 API 真的可用时才画：画出来点不动比没有更糟 */
 const sidePanelSupported = computed(() => !!sidePanelApi && typeof sidePanelApi.open === 'function');

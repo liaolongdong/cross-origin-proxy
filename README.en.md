@@ -353,14 +353,14 @@ Built and tested for Chrome (MV3). Edge runs Chromium extensions so the same bui
 
 ## 🔐 Permissions
 
-| Permission                      | Why needed                                                              |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `storage`                       | Persist rules, logs, profiles and preferences                           |
-| `declarativeNetRequest`         | Network-layer redirects for simple rules (zero JS per request)          |
-| `declarativeNetRequestFeedback` | Rule hit statistics shown in the log drawer                             |
-| `alarms`                        | Service-worker keepalive and the auto-off countdown                     |
+| Permission                      | Why needed                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `storage`                       | Persist rules, logs, profiles and preferences                               |
+| `declarativeNetRequest`         | Network-layer redirects for simple rules (zero JS per request)              |
+| `declarativeNetRequestFeedback` | Rule hit statistics shown in the log drawer                                 |
+| `alarms`                        | Service-worker keepalive and the auto-off countdown                         |
 | `sidePanel`                     | Keeps the request log open in the browser side panel after the popup closes |
-| `<all_urls>` (host permission)  | Proxying must work on any frontend origin; targets are your own domains |
+| `<all_urls>` (host permission)  | Proxying must work on any frontend origin; targets are your own domains     |
 
 Every permission also has a store-facing justification in [CHROMEWEBSTORE.md](./.github/docs/CHROMEWEBSTORE.md).
 

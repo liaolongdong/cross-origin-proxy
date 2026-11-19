@@ -110,10 +110,13 @@ describe('串行与进度', () => {
 describe('对号：快照不属于这一笔时不编结局', () => {
   it('ownerId 对不上号 → 记成「没读到答案」', async () => {
     let view: ReplayViewLike = null;
-    const batch = useBatchReplay(async () => {
-      // 别人的结局：既不是这一笔的回包，也不该照抄
-      view = { ownerId: 'someone-else', running: false, reading: answered200, transportFailed: false, durationMs: 1 };
-    }, () => view);
+    const batch = useBatchReplay(
+      async () => {
+        // 别人的结局：既不是这一笔的回包，也不该照抄
+        view = { ownerId: 'someone-else', running: false, reading: answered200, transportFailed: false, durationMs: 1 };
+      },
+      () => view,
+    );
 
     const summary = await batch.runBatch([entry('a')]);
     expect(summary).toMatchObject({ total: 1, ok: 0, unknown: 1 });
@@ -122,9 +125,12 @@ describe('对号：快照不属于这一笔时不编结局', () => {
 
   it('落定时 running 仍为真 → 同样不收（没等到落定就取快照）', async () => {
     let view: ReplayViewLike = null;
-    const batch = useBatchReplay(async (e: RequestLogEntry) => {
-      view = { ownerId: e.id, running: true, reading: null, transportFailed: false, durationMs: 0 };
-    }, () => view);
+    const batch = useBatchReplay(
+      async (e: RequestLogEntry) => {
+        view = { ownerId: e.id, running: true, reading: null, transportFailed: false, durationMs: 0 };
+      },
+      () => view,
+    );
 
     const summary = await batch.runBatch([entry('a')]);
     expect(summary).toMatchObject({ unknown: 1 });

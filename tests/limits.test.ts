@@ -66,9 +66,7 @@ describe('sanitizeCapacityLimits（纯函数：任意输入 → 合法上限）'
     expect(limits.sanitizeCapacityLimits({ maxRules: '250' }).maxRules).toBe(250);
     // 小数取整：上限是条数，250.7 条没有意义
     expect(limits.sanitizeCapacityLimits({ maxRules: 250.7 }).maxRules).toBe(251);
-    expect(limits.sanitizeCapacityLimits({ maxLogEntries: Number.NaN }).maxLogEntries).toBe(
-      MAX_LOG_ENTRIES,
-    );
+    expect(limits.sanitizeCapacityLimits({ maxLogEntries: Number.NaN }).maxLogEntries).toBe(MAX_LOG_ENTRIES);
   });
 });
 
@@ -95,7 +93,9 @@ describe('readCapacityLimits（读取热路径：缓存与回退）', () => {
 
     // 「设置页写入」：storage 内容换新 + onChanged 广播（本上下文没有写入，只收到广播）
     store[STORAGE_KEYS.CAPACITY_LIMITS] = { maxRules: 400 };
-    changeListeners.forEach(fn => fn({ [STORAGE_KEYS.CAPACITY_LIMITS]: { newValue: store[STORAGE_KEYS.CAPACITY_LIMITS] } }));
+    changeListeners.forEach(fn =>
+      fn({ [STORAGE_KEYS.CAPACITY_LIMITS]: { newValue: store[STORAGE_KEYS.CAPACITY_LIMITS] } }),
+    );
     expect((await limits.readCapacityLimits()).maxRules).toBe(400);
   });
 

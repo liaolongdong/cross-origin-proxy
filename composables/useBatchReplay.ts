@@ -36,9 +36,13 @@ export interface BatchReplaySummary {
 }
 
 /** `useRequestReplay` 落定后的视图形状（只取本层要读的那几个字段） */
-export type ReplayViewLike =
-  | { ownerId: string; running: boolean; reading: ReplayReading | null; transportFailed: boolean; durationMs: number }
-  | null;
+export type ReplayViewLike = {
+  ownerId: string;
+  running: boolean;
+  reading: ReplayReading | null;
+  transportFailed: boolean;
+  durationMs: number;
+} | null;
 
 /**
  * @param runReplay 单笔重放（`useRequestReplay` 的同名函数，串行复用它的轮次令牌）
