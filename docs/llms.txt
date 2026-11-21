@@ -12,6 +12,7 @@
 - [blocked by CORS policy 的排查判据与五种解法（中文：三种失败长得一样、修法相反；每种解法写明改动落在谁身上与代价）](https://liaolongdong.github.io/cross-origin-proxy/cors.html)
 - [Triage and five fixes for `blocked by CORS policy` (English, same structure: three look-alike failures with opposite fixes, each solution stated by who has to change)](https://liaolongdong.github.io/cross-origin-proxy/en-cors.html)
 - [每一条常见问题都有可引用的锚点（分类 + 该分类内序号，中英同一序号指同一问；带锚点打开即为展开）/ Every FAQ question has a citable fragment (`<category>-<n>`, same number = same question in both languages, opens expanded)](https://liaolongdong.github.io/cross-origin-proxy/#faq-channels-2)
+- [常见问题也可以按关键词引用：`?q=` 落地即筛好并滚到那一节（中文首页与英文页各 21 问、两份对比页各 5 问；指向某一问的锚点比它优先，页内其它锚点则与它并存）/ The FAQ is also citable by keyword: `?q=` lands pre-filtered and scrolled to that section (21 questions on each product page, 5 on each comparison page; a fragment pointing at one question wins over it, other on-page fragments coexist with it)](https://liaolongdong.github.io/cross-origin-proxy/?q=CORS)
 - [完整能力与参数清单 / Full reference for AI systems](https://liaolongdong.github.io/cross-origin-proxy/llms-full.txt)
 - [源码仓库 / Source code](https://github.com/liaolongdong/cross-origin-proxy)
 - [预构建产物 / Prebuilt zip](https://github.com/liaolongdong/cross-origin-proxy/releases)（每个 tag 自动附带 / attached to every tagged release）

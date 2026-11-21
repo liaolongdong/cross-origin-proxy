@@ -1,10 +1,19 @@
 <template>
+  <!--
+    常驻（embedded）模式：供 Side Panel 复用本组件的全部日志逻辑。铺满宿主视口、
+    去遮罩与全部关闭路径（model-value 恒真，close 事件没有触发面）；720px 抽屉形态
+    留给 options 页。两种形态共用同一份 body，不复制模板。
+  -->
   <el-drawer
-    :model-value="visible"
+    :model-value="embedded ? true : visible"
     :title="t('tabLogs')"
     direction="rtl"
-    size="720px"
+    :size="embedded ? '100%' : '720px'"
+    :modal="!embedded"
+    :show-close="!embedded"
+    :close-on-press-escape="!embedded"
     class="log-drawer"
+    :class="{ 'log-drawer--embedded': embedded }"
     @close="handleDrawerClose"
   >
     <div class="log-drawer-body">
@@ -15,6 +24,7 @@
             type="danger"
             plain
             :icon="Delete"
+            :disabled="batchRunning"
             @click="handleClear"
           >
             {{ t('clearLogs') }}
@@ -96,6 +106,21 @@
             style="width: 180px"
             @update:model-value="(val: string) => $emit('update:urlFilter', val ?? '')"
           />
+          <!-- 批量重放：串行真实发出，上限与非幂等确认两道闸门在 handleBatchReplay -->
+          <el-button
+            type="primary"
+            plain
+            :icon="VideoPlay"
+            :disabled="selectedLogs.length === 0 || batchRunning || replayBusy"
+            :loading="batchRunning"
+            @click="handleBatchReplay"
+          >
+            {{
+              batchRunning
+                ? t('replaySelectedProgress', [String(batchProgress.done), String(batchProgress.total)])
+                : t('replaySelected')
+            }}
+          </el-button>
         </div>
         <div class="toolbar-right">
           <el-select
@@ -244,6 +269,31 @@
         @keydown="handleTableKeydown"
         @row-click="handleRowClick"
       >
+        <!-- 批量重放的行选择：自画 checkbox 而不用 el-table 的 selection 列——
+             那一列的点击会连带触发 row-click（展开详情），勾一行弹一屏详情不是这里的交互 -->
+        <el-table-column
+          width="38"
+          align="center"
+        >
+          <template #header>
+            <el-checkbox
+              :model-value="selectAllChecked"
+              :indeterminate="selectAllIndeterminate"
+              :aria-label="t('replaySelectAllA11y')"
+              @update:model-value="(val: boolean | string | number) => toggleSelectAll(val as boolean)"
+            />
+          </template>
+          <template #default="{ row }">
+            <el-checkbox
+              :model-value="selectedLogIds.has(row.id)"
+              :aria-label="t('replaySelectRowA11y')"
+              @click.stop
+              @update:model-value="
+                (val: boolean | string | number) => toggleSelectRow(row as RequestLogEntry, val as boolean)
+              "
+            />
+          </template>
+        </el-table-column>
         <el-table-column
           :label="t('colTime')"
           width="150"
@@ -358,6 +408,30 @@
         >
           <template #default="{ row }">
             {{ row.duration ? `${row.duration}ms` : '-' }}
+          </template>
+        </el-table-column>
+        <!-- 批量重放结果：三档 tag，悬停给完整那句话（与单笔重放同一份判据文案） -->
+        <el-table-column
+          :label="t('colReplay')"
+          width="86"
+          align="center"
+        >
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="batchResultOf(row.id)"
+              :content="replayOutcomeSentence(batchResultOf(row.id)!)"
+              placement="top"
+              :show-after="400"
+            >
+              <el-tag
+                :type="batchTagType(batchResultOf(row.id)!)"
+                size="small"
+                class="batch-replay-tag"
+              >
+                {{ batchResultShort(batchResultOf(row.id)!) }}
+              </el-tag>
+            </el-tooltip>
+            <span v-else>-</span>
           </template>
         </el-table-column>
 
@@ -495,6 +569,7 @@
               link
               :icon="VideoPlay"
               :loading="replayBusy"
+              :disabled="batchRunning"
               @click="handleReplay"
             >
               {{ t('replayButton') }}
@@ -678,7 +753,10 @@ import { useRenderWindow } from '@/composables/useRenderWindow';
 import { resolveLogRowKey } from '@/utils/logRowNavigation';
 import { buildMockDraftFromLog } from '@/utils/mockFromLog';
 import { needsReplayConfirm, planReplay, replayBodyUseful } from '@/utils/requestReplay';
+import type { ReplayReading } from '@/utils/requestReplay';
 import { useRequestReplay } from '@/composables/useRequestReplay';
+import { useBatchReplay } from '@/composables/useBatchReplay';
+import { BATCH_REPLAY_LIMIT } from '@/utils/constants';
 import { formatLocaleDateTime, truncateUrl as _truncateUrl } from '@/utils/formatters';
 import TableSkeleton from './TableSkeleton.vue';
 
@@ -690,6 +768,15 @@ import TableSkeleton from './TableSkeleton.vue';
  */
 const props = defineProps<{
   visible: boolean;
+  /**
+   * 侧边栏常驻模式：抽屉铺满宿主视口、禁遮罩与全部关闭路径。
+   *
+   * 只改容器形态不改任何数据行为——筛选、帧续载、详情、重放全部照旧。
+   * 注意这**不是** visible 的替代：两种模式下 visible 都由容器层持有（embedded 时
+   * 容器恒传 true），本组件刻意不长出 `props.visible` 的 watcher（full-verification
+   * 的既有契约），关闭收口只认 el-drawer 的 close 事件这一条路。
+   */
+  embedded?: boolean;
   logs: RequestLogEntry[];
   loading: boolean;
   /** 最近一次读取没拿到答案：空表要说「没读到」而不是「暂无记录」，非空表要说它是上一轮的样本 */
@@ -1009,6 +1096,9 @@ function rowClassName({ row }: { row: RequestLogEntry }): string {
 }
 
 async function handleClear() {
+  // 批量在途时先让它跑完：清空日志会把这屏的账清掉，而队列里剩下的条目仍会真实发出去——
+  // 「点了清空却还在发请求」比「按钮按不动」难解释得多（按钮本身也已 disabled，这里是第二道）
+  if (batchRunning.value) return;
   try {
     await ElMessageBox.confirm(t('confirmClearLogs'), t('confirm'), {
       confirmButtonText: t('confirm'),
@@ -1082,6 +1172,121 @@ const shownReplay = computed(() => {
 /** 重放中不许再点第二下：一趟还没落定的往返，第二次只会让屏幕上的数不知道是谁的 */
 const replayBusy = computed(() => replayView.value?.running === true);
 
+// ─── 批量重放 ─────────────────────────────────────────────────────────────────
+
+/** 行选择：全选按「当前筛选后的全部」算（与工具栏筛选同一份 `filteredLogs`，不看帧续载窗口） */
+const selectedLogIds = ref<Set<string>>(new Set());
+
+/** 选中的日志行（按表格顺序，重放按这个顺序串行） */
+const selectedLogs = computed(() => filteredLogs.value.filter(log => selectedLogIds.value.has(log.id)));
+
+function toggleSelectRow(row: RequestLogEntry, checked: boolean): void {
+  const next = new Set(selectedLogIds.value);
+  if (checked) next.add(row.id);
+  else next.delete(row.id);
+  selectedLogIds.value = next;
+}
+
+/** 表头全选的形态：全勾 / 半勾 / 全空。半勾判据只要存在一条选中的行就成立（含筛选换页后残留的选择） */
+const selectAllChecked = computed(
+  () => filteredLogs.value.length > 0 && filteredLogs.value.every(log => selectedLogIds.value.has(log.id)),
+);
+const selectAllIndeterminate = computed(() => !selectAllChecked.value && selectedLogs.value.length > 0);
+
+function toggleSelectAll(checked: boolean): void {
+  selectedLogIds.value = checked ? new Set(filteredLogs.value.map(log => log.id)) : new Set();
+}
+
+const { batchRunning, batchProgress, batchResults, runBatch, clearBatch } = useBatchReplay(
+  runReplay,
+  () => replayView.value,
+);
+
+/** 行内那一格的取值口：模板按行查一次，`running` 那一档画在途文案 */
+function batchResultOf(logId: string) {
+  return batchResults.value[logId] ?? null;
+}
+
+/** 批量结果三档 tag 的档位（悬停 title 给完整十一档那句话） */
+function batchTagType(result: {
+  running: boolean;
+  reading: ReplayReading | null;
+  transportFailed: boolean;
+}): 'success' | 'danger' | 'info' {
+  if (result.running || result.transportFailed || !result.reading) return 'info';
+  if (result.reading.outcome === 'failed') return 'danger';
+  if (result.reading.outcome === 'answered') return (result.reading.status ?? 0) >= 400 ? 'danger' : 'success';
+  return 'info';
+}
+
+function batchResultShort(result: {
+  running: boolean;
+  reading: ReplayReading | null;
+  transportFailed: boolean;
+}): string {
+  if (result.running) return t('replayRunning');
+  if (result.transportFailed || !result.reading) return t('batchReplayUnknown');
+  if (result.reading.outcome === 'failed') return t('batchReplayFailed');
+  if (result.reading.outcome === 'answered') {
+    return (result.reading.status ?? 0) >= 400 ? t('batchReplayFailed') : t('batchReplayOk');
+  }
+  return t('batchReplayUnknown');
+}
+
+/**
+ * 点「重放选中」：上限、可重放性、非幂等确认三道闸门都在这一侧
+ *
+ * 确认文案只报条数不逐条列地址：弹窗塞 20 条 URL 读不完，而地址本身就在身后的表格里。
+ */
+async function handleBatchReplay(): Promise<void> {
+  // 单笔在途时整轮不许起：第一笔的 `++round` 会把用户正盯着的那一次往返挤成「没读到答案」，
+  // 而详情面板上的读数也会被批量最后一条覆盖——两条路都是真请求，不该互相踩
+  if (batchRunning.value || replayBusy.value) return;
+  const selected = selectedLogs.value;
+  if (selected.length === 0) return;
+
+  const replayable = selected.filter(log => planReplay(log).ok);
+  if (replayable.length === 0) {
+    ElMessage.warning(t('replaySelectedNone'));
+    return;
+  }
+  if (replayable.length > BATCH_REPLAY_LIMIT) {
+    ElMessage.warning(t('replaySelectedTooMany', [String(BATCH_REPLAY_LIMIT)]));
+    return;
+  }
+  const unsafeCount = replayable.filter(log => needsReplayConfirm(log.method)).length;
+  if (unsafeCount > 0) {
+    try {
+      await ElMessageBox.confirm(
+        t('replaySelectedConfirmBody', [String(replayable.length), String(unsafeCount)]),
+        t('replaySelectedConfirmTitle'),
+        {
+          confirmButtonText: t('confirm'),
+          cancelButtonText: t('cancel'),
+          type: 'warning',
+        },
+      );
+    } catch {
+      // 用户取消：一整轮都没有出门，屏幕上什么都不该多出来
+      return;
+    }
+  }
+
+  clearBatch();
+  const summary = await runBatch(selected);
+  if (!summary) return;
+  // 部分条目被形拒时，汇总后面补一句「N 条没发出去」，而不是让它们安静消失
+  const refusedNote = summary.refused > 0 ? ` · ${t('replaySelectedRefused', [String(summary.refused)])}` : '';
+  ElMessage.success(
+    t('replaySelectedDone', [
+      String(summary.total),
+      String(summary.ok),
+      String(summary.failed),
+      String(summary.unknown),
+    ]) + refusedNote,
+  );
+}
+
 /**
  * 一句话说明这一笔到底发生了什么
  *
@@ -1091,6 +1296,21 @@ const replayBusy = computed(() => replayView.value?.running === true);
 const replaySentence = computed(() => {
   const view = shownReplay.value;
   if (!view) return '';
+  return replayOutcomeSentence(view);
+});
+
+/**
+ * 一份重放读数对应的那句话（十一档，每档一句字面量 key）
+ *
+ * 单笔详情（`replaySentence`）与批量结果列的悬停 title 共用这一份——两处各写一遍
+ * switch，下一次加档位时漏掉的会是表格里那一半。签名收「view 形状」而不是 `ReplayView`：
+ * 批量结果的行对象（`BatchReplayRowResult`）与单笔视图字段同构，但类型不同。
+ */
+function replayOutcomeSentence(view: {
+  running: boolean;
+  transportFailed: boolean;
+  reading: ReplayReading | null;
+}): string {
   if (view.running) return t('replayRunning');
   // 往返没走完与「走完了但回包不是信封」合成一句「答案没读到」：
   // 这一档既不是服务器报错，也不是代理没生效，说成任何一边都是在替别人编话
@@ -1122,7 +1342,7 @@ const replaySentence = computed(() => {
     default:
       return t('replayNoAnswer');
   }
-});
+}
 
 /** 那枚状态码标签：在途与「压根没读到一份认得的信封」都不画一个数（`0` 会被读成「服务器回了 0」） */
 const replayStatus = computed(() => shownReplay.value?.reading?.status ?? null);
@@ -1176,7 +1396,8 @@ const replayBody = computed(() => {
 async function handleReplay(): Promise<void> {
   const log = selectedLog.value;
   const plan = replayPlan.value;
-  if (!log || !plan?.ok || replayBusy.value) return;
+  // 批量在途时不接单笔：批量的 `++round` 会让这一笔的落定被丢弃，而它已经真实发出去了
+  if (!log || !plan?.ok || replayBusy.value || batchRunning.value) return;
 
   if (needsReplayConfirm(plan.payload.method)) {
     try {
@@ -1224,7 +1445,14 @@ function displayHeaderValue(name: string, value: string): string {
 // 置 false 那条路径同样会走）而不是 `props.visible` 的 watcher 上——本组件在
 // tests/full-verification.test.ts 的「无 visible watcher」清单里，那个契约不许它长出一个。
 function handleDrawerClose() {
+  // embedded 模式没有关闭路径（无遮罩、无关闭钮、esc 已禁），这行是防御：
+  // 未来若加出关闭入口，常驻面板的收口归容器层管，不由这里 emit visible=false
+  if (props.embedded) return;
   revealSensitive.value = false;
+  // 批量重放与行选择跟单笔重放同一档：只活在这一次打开里（侧边栏常驻模式没有这条关闭路径，
+  // 选择与结果在那里跨「合上再开」保留，与筛选四轴同一待遇）
+  selectedLogIds.value = new Set();
+  clearBatch();
   // 重放那一格跟「显示凭据原值」同一档：只活在这一次打开里，不落任何地方
   clearReplay();
   // 窗口退回首屏那一截：关掉之后表格仍然挂着（`el-drawer` 只在第一次打开时渲染内容，
@@ -1815,5 +2043,12 @@ function copyAsCurl() {
   font-size: 13px;
   color: var(--cop-text-color-placeholder, #c0c4cc);
   text-align: center;
+}
+
+/* 常驻形态：面板贴着浏览器窗口边缘铺满，抽屉那道投影变成了「浮在页面上」的错觉来源。
+   写两枚 class 抬特异度（(0,2,0) > .el-drawer 的 (0,1,0)），胜负不依赖 chunk 注入顺序，
+   与本仓「覆盖 EP 必须靠特异度赢」同一条理由。 */
+.log-drawer.log-drawer--embedded {
+  box-shadow: none;
 }
 </style>

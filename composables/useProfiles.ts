@@ -3,6 +3,7 @@ import { MessageType } from '@/utils/types';
 import type { StoredProfile } from '@/utils/types';
 import { inspectProfileRules, isStoredProfileEntry } from '@/utils/profileValidation';
 import { isFailureEnvelope } from '@/utils/messageResult';
+import { readCapacityLimits } from '@/utils/limits';
 import { logger } from '@/utils/logger';
 
 /**
@@ -59,7 +60,11 @@ export function useProfiles() {
   async function loadProfiles(): Promise<boolean> {
     loadingProfiles.value = true;
     try {
-      const result: unknown = await chrome.runtime.sendMessage({ type: MessageType.GET_PROFILES });
+      // 消息先同步发出、上限读取与这一次往返并行：调用方（及测试）从「调用了 loadProfiles」
+      // 那一刻起就能拿到在途状态，不必先等一次 storage 往返
+      const pending: Promise<unknown> = chrome.runtime.sendMessage({ type: MessageType.GET_PROFILES });
+      const { maxRules } = await readCapacityLimits();
+      const result: unknown = await pending;
       if (Array.isArray(result)) {
         const entries = result.filter(isStoredProfileEntry);
         if (entries.length !== result.length) {
@@ -67,7 +72,9 @@ export function useProfiles() {
           logger.warn(`Ignored ${result.length - entries.length} unaddressable profile entries`);
         }
         profiles.value = entries.map(entry => {
-          const inspection = inspectProfileRules(entry);
+          // 与真实写入闸门（storage 侧 inspectProfileRules 的调用方）同一份上限：
+          // 上限调高后，列表里那份「超限损坏」的快照要跟着变回可加载的样子
+          const inspection = inspectProfileRules(entry, maxRules);
           return { ...entry, damaged: inspection.code !== undefined, ruleCount: inspection.ruleCount };
         });
         return true;

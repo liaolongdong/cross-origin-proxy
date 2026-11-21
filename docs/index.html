@@ -137,6 +137,14 @@
       name="twitter:image:alt"
       content="跨域代理助手品牌图：产品名、标语「免改代码与 CORS，把前端 API 指到任意环境」、四个能力标签与产品站地址"
     />
+    <!--
+      站点级实体上挂一枚 SearchAction：`?q=` 是这一页真能接住的入口（FAQ 那格的筛选框读它、
+      填回去、筛好并滚到那一节），所以这份声明说的是实话，而不是给爬虫画一个不存在的搜索页。
+      记一笔已核实的边界，免得后来人把它读成「我们在 Google 有站内搜索框」：
+      Google 自 2024-11-21 起移除了站点链接搜索框那个视觉元素（Search Central 公告），
+      富媒体结果报告与富媒体测试对它的标注也一并撤了。留着它的理由是 schema.org 语义本身
+      ——它把「本站怎么搜」交给读 JSON-LD 的其它引擎与 AI 回答管线，而不是换一枚 SERP 组件。
+    -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -148,7 +156,15 @@
             "name": "跨域代理助手 Cross-Origin Proxy",
             "inLanguage": "zh-CN",
             "publisher": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
-            "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" }
+            "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#app" },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": "https://liaolongdong.github.io/cross-origin-proxy/?q={search_term_string}"
+              },
+              "query-input": "required name=search_term_string"
+            }
           },
           {
             "@type": "WebPage",
@@ -165,7 +181,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-11"
+            "dateModified": "2026-11-19"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +216,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-11",
+            "dateModified": "2026-11-19",
             "featureList": [
               "按通配符、前缀、正则匹配并重写请求 URL",
               "注入或替换请求头",
@@ -3795,7 +3811,7 @@ pnpm assets       # 重新生成商店与落地页图片</code></pre>
             <span>MIT 开源协议</span>
             <span>v1.8.0</span>
             <span>Manifest V3</span>
-            <span>最后更新 2026-11-11</span>
+            <span>最后更新 2026-11-19</span>
             <span
               ><a
                 href="en.html"

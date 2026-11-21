@@ -72,6 +72,8 @@ export default [
         // FAQ 直达链接那一段要读当前地址、并把 hash 写回去（不新增权限，纯页面内导航）
         location: 'readonly',
         history: 'readonly',
+        // `?q=` 深链：读参数与写回地址栏都走它（对畸形百分号串宽容，不像 decodeURIComponent 会抛）
+        URLSearchParams: 'readonly',
         // 关键词命中高亮只切文本节点，遍历文本要用它给出的常量
         NodeFilter: 'readonly',
       },

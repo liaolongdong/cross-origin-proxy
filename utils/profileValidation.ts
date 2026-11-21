@@ -29,7 +29,15 @@ export interface ProfileRulesInspection {
   rules?: ProxyRule[];
 }
 
-export function inspectProfileRules(profile: Pick<StoredProfile, 'rules'>): ProfileRulesInspection {
+/**
+ * @param profile 待体检的快照
+ * @param maxRules 规则条数上限（默认 `MAX_RULES`；storage 读取侧传 `readCapacityLimits()` 的值，
+ *   与真实写入闸门同源——用户把上限调到 300 后，251 条的快照不该再被界面判成「超限」）
+ */
+export function inspectProfileRules(
+  profile: Pick<StoredProfile, 'rules'>,
+  maxRules: number = MAX_RULES,
+): ProfileRulesInspection {
   const rules = profile.rules;
   if (!Array.isArray(rules)) {
     return { code: 'invalid-rules', ruleCount: null, firstInvalidIndex: -1 };
@@ -38,7 +46,7 @@ export function inspectProfileRules(profile: Pick<StoredProfile, 'rules'>): Prof
   if (firstInvalidIndex >= 0) {
     return { code: 'invalid-rules', ruleCount: rules.length, firstInvalidIndex };
   }
-  if (rules.length > MAX_RULES) {
+  if (rules.length > maxRules) {
     return { code: 'too-many-rules', ruleCount: rules.length, firstInvalidIndex: -1 };
   }
   // 逐条过闸之后才能收窄：`isValidRuleShape` 是类型守卫，`every` 不改变数组元素类型

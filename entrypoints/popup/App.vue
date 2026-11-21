@@ -159,7 +159,10 @@
     <!-- 数据点：活跃规则 / 经扩展请求 / 本页网络层命中 + 拦截器自报活动 -->
     <div class="metrics-block">
       <div class="metrics-row">
-        <div class="metric">
+        <div
+          class="metric"
+          :title="t('activeRulesHint')"
+        >
           <span class="metric-value"
             ><span
               :key="activeRulesText"
@@ -170,7 +173,10 @@
           <span class="metric-label">{{ t('activeRules') }}</span>
         </div>
         <div class="metric-divider"></div>
-        <div class="metric">
+        <div
+          class="metric"
+          :title="t('todayRequestsHint')"
+        >
           <span class="metric-value">{{ swRequestsText }}</span>
           <span class="metric-label">{{ t('todayRequests') }}</span>
         </div>
@@ -628,7 +634,20 @@
 
     <!-- 最近请求 -->
     <div class="recent-section">
-      <div class="recent-title">{{ t('recentRequests') }}</div>
+      <div class="recent-head">
+        <div class="recent-title">{{ t('recentRequests') }}</div>
+        <!-- 侧边栏常驻日志：Side Panel 打开后不随弹窗关闭而消失，配 API 调试时挂在一旁看 -->
+        <button
+          v-if="sidePanelSupported"
+          type="button"
+          class="recent-sidepanel-btn"
+          :title="t('openSidePanel')"
+          :aria-label="t('openSidePanel')"
+          @click="openSidePanel"
+        >
+          <el-icon><Expand /></el-icon>
+        </button>
+      </div>
       <div
         v-if="recentLogs.length === 0"
         class="recent-empty"
@@ -640,6 +659,13 @@
         class="recent-empty-hint"
       >
         {{ t('recentRequestsDnrHint') }}
+      </p>
+      <!-- 没有网络层规则、也确实读到过（空表是真的空）：告诉用户这里的记录从哪儿来 -->
+      <p
+        v-else-if="recentLogs.length === 0 && statusEverRead"
+        class="recent-empty-hint"
+      >
+        {{ t('recentRequestsEmptyHint') }}
       </p>
       <!-- 新请求进来时：顶行淡入落位，下面的行被「挤」下去（move 过渡），而不是整列表换脸。
            不加 appear——popup 每次打开都让八行重新演一遍进场，看起来像加载慢 -->
@@ -749,6 +775,7 @@ import {
   Link,
   CircleCheck,
   ArrowRight,
+  Expand,
 } from '@element-plus/icons-vue';
 import type { TagProps } from 'element-plus';
 import { useProxyStatus } from '@/composables/useProxyStatus';
@@ -1568,6 +1595,32 @@ async function reloadCurrentTab() {
 function openRecentLog(url: string) {
   const clipped = url.slice(0, MAX_LOG_URL_FILTER_LENGTH);
   void openOptionsPage(`#logs?url=${encodeURIComponent(clipped)}`);
+}
+
+/**
+ * 打开常驻侧边栏（Side Panel 的请求日志）
+ *
+ * `chrome.sidePanel.open` 需要 tabId，且必须在用户手势内调用——这里正是弹窗里的一次点击。
+ * API 形状经窄化取用（老版本类型定义里没有这一命名空间）：不在场时入口按钮整个不画。
+ */
+const sidePanelApi = (chrome as { sidePanel?: { open: (options: { tabId: number }) => Promise<void> } }).sidePanel;
+
+/** 入口按钮只在该 API 真的可用时才画：画出来点不动比没有更糟 */
+const sidePanelSupported = computed(() => !!sidePanelApi && typeof sidePanelApi.open === 'function');
+
+async function openSidePanel() {
+  const tabId = activeTabId.value;
+  if (!sidePanelApi || typeof tabId !== 'number') {
+    ElMessage.error(t('openSidePanelFailed'));
+    return;
+  }
+  try {
+    await sidePanelApi.open({ tabId });
+  } catch (error) {
+    // 只记错误类型：这一条路径的 message 可能带上下文，而入口失败已经由 toast 说清
+    logger.warn('打开侧边栏失败:', error instanceof Error ? error.name : typeof error);
+    ElMessage.error(t('openSidePanelFailed'));
+  }
 }
 
 /**
@@ -2479,6 +2532,36 @@ async function openOptionsPage(hash = '') {
 }
 
 /* 最近请求 */
+.recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.recent-head .recent-title {
+  margin-bottom: 0;
+}
+
+.recent-sidepanel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--cop-text-color-secondary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--cop-radius-xs, 4px);
+}
+
+.recent-sidepanel-btn:hover {
+  color: var(--cop-primary);
+  background: var(--cop-primary-bg);
+}
+
 .recent-title {
   margin-bottom: 6px;
   font-size: 13px;

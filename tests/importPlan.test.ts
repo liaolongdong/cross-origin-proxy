@@ -272,8 +272,10 @@ describe('planImport — 现网规则读不出时的两种表现（现状记录�
   it('唯一的调用点仍把 `config.rules` 原样交进去（①②被上面钉住的前提）', () => {
     // 「四处都用 configRules()」这句要是把这里也包进去，②就从体面失败退化成体面谎报，
     // 而全仓没有一条运行时用例会因为那种改动而红——所以按源码钉住调用点本身。
+    // 第 4 参是容量上限（`readCapacityLimits()`，与写入侧同一份）：预览按默认 200、写入按
+    // 用户调过的 300 说话时，「预计新增」与实际进几条就不再是同一件事——那正是这支功能存在的理由。
     const routerSrc = fs.readFileSync('entrypoints/background/messageRouter.ts', 'utf-8');
     expect(routerSrc.match(/planImport\(/g)).toHaveLength(1);
-    expect(routerSrc).toContain('planImport(config.rules, validRules, payload.mode)');
+    expect(routerSrc).toContain('planImport(config.rules, validRules, payload.mode, maxRules)');
   });
 });

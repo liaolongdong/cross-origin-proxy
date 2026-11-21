@@ -15,8 +15,15 @@ import { deduplicateRules, ruleMergeKey } from '@/utils/ruleConflicts';
  * @param current 现网规则（写入那一刻之前的快照）
  * @param incoming 已过结构校验与规范化的导入条目（与写入侧同一份输入）
  * @param mode 导入模式
+ * @param maxRules 规则条数上限（默认 `MAX_RULES`；真实写入侧传 `readCapacityLimits()` 的值，
+ *   预览与写入必须在同一份上限上说话，否则预览说「放得下」、写入回一句超限）
  */
-export function planImport(current: ProxyRule[], incoming: ProxyRule[], mode: ImportMode): ImportPlan {
+export function planImport(
+  current: ProxyRule[],
+  incoming: ProxyRule[],
+  mode: ImportMode,
+  maxRules: number = MAX_RULES,
+): ImportPlan {
   if (mode === 'replace') {
     // 替换模式不做去重：文件整包成为新规则集，现网那批会被换掉（那一份正是恢复点要记的内容）
     return {
@@ -26,7 +33,7 @@ export function planImport(current: ProxyRule[], incoming: ProxyRule[], mode: Im
       conflicts: [],
       duplicatesWithinFile: 0,
       replaces: current.length,
-      exceedsLimit: incoming.length > MAX_RULES,
+      exceedsLimit: incoming.length > maxRules,
     };
   }
 
@@ -68,6 +75,6 @@ export function planImport(current: ProxyRule[], incoming: ProxyRule[], mode: Im
     conflicts,
     duplicatesWithinFile,
     replaces: 0,
-    exceedsLimit: current.length + kept.length > MAX_RULES,
+    exceedsLimit: current.length + kept.length > maxRules,
   };
 }

@@ -92,22 +92,29 @@
       />
     </el-select>
 
-    <!-- 有勾选时出现的批量操作 -->
-    <template v-if="selectedCount > 0">
+    <!-- 有勾选时出现的批量操作。整组包一层：不包的话 flex-wrap 会把「批量删除」单独甩到下一行，
+         四颗本属同一件事的按钮读起来像两件 -->
+    <div
+      v-if="selectedCount > 0"
+      class="bar-actions"
+    >
       <el-button
         class="batch-action"
+        :icon="Open"
         @click="$emit('batchToggle', true)"
       >
         {{ t('batchEnable') }} ({{ selectedCount }})
       </el-button>
       <el-button
         class="batch-action"
+        :icon="TurnOff"
         @click="$emit('batchToggle', false)"
       >
         {{ t('batchDisable') }} ({{ selectedCount }})
       </el-button>
       <el-button
         class="batch-action"
+        :icon="Switch"
         @click="$emit('batchMigrate')"
       >
         {{ t('batchMigrate') }}
@@ -116,23 +123,35 @@
         class="batch-action"
         type="danger"
         plain
+        :icon="Delete"
         @click="$emit('batchDelete')"
       >
         {{ t('batchDelete') }} ({{ selectedCount }})
       </el-button>
-    </template>
+    </div>
 
     <!-- 全部启用/停用（始终可见，有规则时显示） -->
-    <template v-if="totalRules > 0 && selectedCount === 0">
-      <el-button @click="$emit('toggleAll', true)">{{ t('toggleAllEnable') }}</el-button>
-      <el-button @click="$emit('toggleAll', false)">{{ t('toggleAllDisable') }}</el-button>
-    </template>
+    <div
+      v-if="totalRules > 0 && selectedCount === 0"
+      class="bar-actions"
+    >
+      <el-button
+        :icon="Open"
+        @click="$emit('toggleAll', true)"
+        >{{ t('toggleAllEnable') }}</el-button
+      >
+      <el-button
+        :icon="TurnOff"
+        @click="$emit('toggleAll', false)"
+        >{{ t('toggleAllDisable') }}</el-button
+      >
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue';
-import { Search } from '@element-plus/icons-vue';
+import { Search, Open, TurnOff, Switch, Delete } from '@element-plus/icons-vue';
 import { useI18n } from '@/composables/useI18n';
 import { UNTAGGED } from '@/utils/ruleTags';
 
@@ -211,17 +230,31 @@ onUnmounted(() => {
 .search-filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 12px;
+  gap: var(--cop-space-4) var(--cop-space-5);
   align-items: center;
-  padding: 16px 20px;
-  margin: 0 32px 16px;
+  padding: var(--cop-space-7) var(--cop-space-8);
+  margin: 0 var(--cop-space-10) var(--cop-space-7);
   background: var(--cop-bg-color);
-  border-radius: 8px;
+  border-radius: var(--cop-radius-md);
   box-shadow: var(--cop-shadow-md);
 }
 
 .search-filter-bar :deep(.el-button + .el-button) {
   margin-left: 0;
+}
+
+/*
+  一组动作自己是一个整体。外层那条 flex 是「筛选控件排一排」，动作组混在里面时
+  `flex-wrap` 会在任意两颗之间断行——窄窗口下「批量删除」被单独甩到第二行，
+  读起来像另一件事，而它和前三颗说的是同一批勾选中的规则。
+  包一层之后断行只发生在组与组之间；组内仍允许折行（四颗中文按钮在 768px 下放不下），
+  但折的是整组，间距与外层同源。
+*/
+.bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cop-space-4) var(--cop-space-5);
+  align-items: center;
 }
 
 /*
@@ -241,25 +274,48 @@ onUnmounted(() => {
   min-width: 220px;
 }
 
+/*
+  ⌘K 的鼠标入口。画成键帽，与命令面板底部那一排 `kbd` 同一套形状：同一件事在两个界面
+  不该是两种样子，而「这是个按键」比「这是个灰色小方块」更快读出来。
+  高度仍留 32px、与这一排的下拉齐平——它是面板**唯一**的鼠标入口，缩成面板里那种 22px
+  的小键帽等于把唯一入口藏起来。底缘那 1px 是键帽的厚度，按下时收回、本体沉 1px。
+*/
 .command-hint {
   flex-shrink: 0;
   height: 32px;
-  padding: 0 8px;
+  padding: 0 var(--cop-space-3);
   font-family: inherit;
   font-size: 11px;
+  font-weight: 500;
   color: var(--cop-text-color-secondary);
   cursor: pointer;
   background: var(--cop-bg-color-secondary);
   border: 1px solid var(--cop-border-color-light);
-  border-radius: 6px;
+  border-radius: var(--cop-radius-sm);
+  box-shadow: 0 1px 0 var(--cop-border-color-light);
   transition:
     color var(--cop-duration-instant) var(--cop-ease-standard),
-    border-color var(--cop-duration-instant) var(--cop-ease-standard);
+    border-color var(--cop-duration-instant) var(--cop-ease-standard),
+    box-shadow var(--cop-duration-instant) var(--cop-ease-standard),
+    transform var(--cop-duration-instant) var(--cop-ease-standard);
 }
 
 .command-hint:hover {
   color: var(--cop-primary);
   border-color: var(--cop-primary);
+  box-shadow: 0 1px 0 var(--cop-primary);
+}
+
+/* 键帽沉下去那一格：这一颗说的是「按这个键」，跟手的位移比只换个颜色更像按键 */
+.command-hint:active {
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+/* 焦点环走 outline：box-shadow 那一份已经被键帽厚度占着，写在同一处会被 :hover 整条盖掉 */
+.command-hint:focus-visible {
+  outline: 2px solid var(--cop-primary);
+  outline-offset: 2px;
 }
 
 .status-select {
@@ -281,7 +337,7 @@ onUnmounted(() => {
 @media (width <= 768px) {
   .search-filter-bar {
     flex-wrap: wrap;
-    margin: 0 20px 16px;
+    margin: 0 var(--cop-space-8) var(--cop-space-7);
   }
 
   .search-input {

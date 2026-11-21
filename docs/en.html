@@ -137,6 +137,14 @@
       name="twitter:image:alt"
       content="Cross-Origin Proxy brand card: the product name, the tagline “Route frontend API calls to any environment — no code or CORS changes”, four capability chips and the product-site address"
     />
+    <!--
+      The site-level entity carries a SearchAction because `?q=` is an entry this page really
+      honours: the FAQ filter reads it, fills the box, filters and scrolls to that section.
+      Verified boundary, so nobody later reads this as "we have a Google search box": Google
+      removed the sitelinks search box visual element on 2024-11-21 (Search Central notice),
+      along with its rich-result reporting. It stays for the schema.org semantics — it tells
+      other engines and AI answer pipelines how to search this site, not to buy a SERP widget.
+    -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -148,7 +156,15 @@
             "name": "Cross-Origin Proxy",
             "inLanguage": "en",
             "publisher": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
-            "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#app" }
+            "about": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#app" },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": "https://liaolongdong.github.io/cross-origin-proxy/en.html?q={search_term_string}"
+              },
+              "query-input": "required name=search_term_string"
+            }
           },
           {
             "@type": "WebPage",
@@ -165,7 +181,7 @@
               "height": 630
             },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-11"
+            "dateModified": "2026-11-19"
           },
           {
             "@type": "SoftwareApplication",
@@ -200,7 +216,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "author": { "@id": "https://liaolongdong.github.io/cross-origin-proxy/en.html#author" },
             "datePublished": "2026-08-28",
-            "dateModified": "2026-11-11",
+            "dateModified": "2026-11-19",
             "featureList": [
               "Rule-based URL rewriting by wildcard, prefix or regex",
               "Request header injection and replacement",
@@ -3971,7 +3987,7 @@ pnpm assets       # regenerate store and landing images</code></pre>
             <span>MIT licensed</span>
             <span>v1.8.0</span>
             <span>Manifest V3</span>
-            <span>Last updated 2026-11-11</span>
+            <span>Last updated 2026-11-19</span>
             <span
               ><a
                 href="./"

@@ -87,5 +87,12 @@
   "siteScopeParentCovered": "A parent domain in the list also covers this host, so it cannot be switched separately. Adjust the parent domain in Settings.",
   "siteScopeCapReached": "The site list is full at $1 entries, so this host can't be added. Remove one in Settings and try again.",
   "siteScopeSaveFailed": "Could not save the site setting — try again",
-  "openOptionsPageFailed": "Couldn't open the Options page — try again from the toolbar icon"
+  "openOptionsPageFailed": "Couldn't open the Options page — try again from the toolbar icon",
+  "activeRulesHint": "Number of enabled rules currently in effect",
+  "todayRequestsHint": "Requests proxied through the extension's SW channel today; network-layer redirects are not counted here",
+  "recentRequestsEmptyHint": "Open a page that makes requests — anything the extension proxies shows up here",
+  "openSidePanel": "Keep the log open in the side panel",
+  "openSidePanelFailed": "Could not open the side panel — please try again",
+  "sidePanelTitle": "Request log · side panel",
+  "sidePanelOpenOptionsForMock": "Saving as a Mock is done in Options — the request log has been opened for you"
 }
